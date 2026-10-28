@@ -458,6 +458,7 @@ const AppContent = () => {
         <OnboardingGuard>
         <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/index" element={<Navigate to="/" replace />} />
         <Route path="/ai-assistant" element={<AICareerAssistant />} />
         <Route path="/ai-assistant/pricing" element={<AIPublicPricing />} />
         <Route path="/pricing" element={<Pricing />} />
