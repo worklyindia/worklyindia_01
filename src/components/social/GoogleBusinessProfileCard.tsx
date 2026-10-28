@@ -203,6 +203,7 @@ export default function GoogleBusinessProfileCard({ enabled, audience, variant =
       return;
     }
     try {
+      sessionStorage.setItem('gbp_oauth_return', audience ? '/owner-portal/customer-service?tab=social' : '/ai-assistant/connect/google_business/settings');
       await connect('business_profile');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not connect Google Business Profile');
@@ -268,48 +269,8 @@ export default function GoogleBusinessProfileCard({ enabled, audience, variant =
 
   const asAcc = (l: GbpLocation) => ({ platform: 'google_business' as SocialPlatform, accountId: l.name, accountName: l.title || l.name, accountHandle: null, accountPicture: null, accountEmail: conn?.google_email ?? null, followers: 0, following: 0, posts: 0, canPost: false, scopes: null, isDefault: l.name === location });
   const current = locations.find((l) => l.name === location);
-  return (
-    <>
-    {isPage && connected && locations.length > 0 && (
-      <SocialAccountSwitcher
-        platform={'google_business' as SocialPlatform}
-        label="Google Business Profile"
-        accounts={locations.map(asAcc)}
-        current={current ? asAcc(current) : null}
-        onSelect={setLocation}
-        reload={loadLocations}
-        onAdd={() => void handleConnect()}
-        onMakeDefault={async (id) => setLocation(id)}
-        onRemove={async () => handleDisconnect()}
-      />
-    )}
-    <PlatformCard
-      name="Google Business Profile"
-      connectLabel="Connect Business"
-      onSettings={connected && !isPage ? () => (audience ? setShowSettings((v) => !v) : navigate('/ai-assistant/connect/google_business/settings')) : undefined}
-      description="Connect your Google Business Profile so AI can auto-reply to your customer reviews."
-      logo={GoogleBusinessLogo}
-      connected={connected}
-      connectedLabel="Connected"
-      subLabel={connected ? conn?.google_email ?? null : null}
-      onConnect={handleConnect}
-      onDisconnect={conn ? handleDisconnect : undefined}
-      loading={loading || busy === 'business_profile'}
-      brandColor="#4285F4"
-    >
-      {conn?.status === 'needs_reconnect' && (
-        <p className="text-[11px] text-destructive">
-          Your Google Business Profile authorization expired. Please reconnect.
-        </p>
-      )}
-      {!configured && (
-        <p className="text-[11px] text-muted-foreground">
-          Google sign-in is not configured yet for this app.
-        </p>
-      )}
-
-      {connected && showSettings && (
-        <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
+  const settingsBlock = connected && showSettings ? (
+        <div className={isPage ? "space-y-4" : "mt-3 space-y-3 border-t border-border/60 pt-3"}>
           {!audience && (
             <PlatformBusinessProfileCard key={location || 'default'} accountId={location} platform="google_business" label="Google Business Profile" />
           )}
@@ -484,8 +445,51 @@ export default function GoogleBusinessProfileCard({ enabled, audience, variant =
             </>
           )}
         </div>
+  ) : null;
+  return (
+    <>
+    {isPage && connected && locations.length > 0 && (
+      <SocialAccountSwitcher
+        platform={'google_business' as SocialPlatform}
+        label="Google Business Profile"
+        accounts={locations.map(asAcc)}
+        current={current ? asAcc(current) : null}
+        onSelect={setLocation}
+        reload={loadLocations}
+        onAdd={() => void handleConnect()}
+        onMakeDefault={async (id) => setLocation(id)}
+        onRemove={async () => handleDisconnect()}
+      />
+    )}
+    {isPage && connected ? settingsBlock : (
+    <PlatformCard
+      name="Google Business Profile"
+      connectLabel="Connect Business"
+      onSettings={connected && !isPage ? () => (audience ? setShowSettings((v) => !v) : navigate('/ai-assistant/connect/google_business/settings')) : undefined}
+      description="Connect your Google Business Profile so AI can auto-reply to your customer reviews."
+      logo={GoogleBusinessLogo}
+      connected={connected}
+      connectedLabel="Connected"
+      subLabel={connected ? conn?.google_email ?? null : null}
+      onConnect={handleConnect}
+      onDisconnect={conn ? handleDisconnect : undefined}
+      loading={loading || busy === 'business_profile'}
+      brandColor="#4285F4"
+    >
+      {conn?.status === 'needs_reconnect' && (
+        <p className="text-[11px] text-destructive">
+          Your Google Business Profile authorization expired. Please reconnect.
+        </p>
       )}
+      {!configured && (
+        <p className="text-[11px] text-muted-foreground">
+          Google sign-in is not configured yet for this app.
+        </p>
+      )}
+
+      {settingsBlock}
     </PlatformCard>
+    )}
     </>
   );
 }

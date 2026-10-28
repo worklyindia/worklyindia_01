@@ -18,17 +18,24 @@ export default function GoogleReturn() {
   const product = params.get('product') ?? '';
   const error = params.get('error');
   const [countdown, setCountdown] = useState(2);
-  const label = PRODUCT_LABELS[product] ?? 'Google';
+  const label = PRODUCT_LABELS[product] ?? (product === 'business_profile' ? 'Google Business Profile' : 'Google');
+  // Customer Service and AI Connect each return to the page that started the connection.
+  const [backTo] = useState(() => {
+    const saved = product === 'business_profile' ? sessionStorage.getItem('gbp_oauth_return') : null;
+    if (saved) sessionStorage.removeItem('gbp_oauth_return');
+    return saved && saved.startsWith('/') ? saved : '/ai-assistant/connect';
+  });
+  const isSupport = backTo.startsWith('/owner-portal');
 
   useEffect(() => {
     if (!success) return;
     const t = setInterval(() => setCountdown((c) => c - 1), 1000);
-    const to = setTimeout(() => navigate('/ai-assistant/connect', { replace: true }), 2000);
+    const to = setTimeout(() => navigate(backTo, { replace: true }), 2000);
     return () => {
       clearInterval(t);
       clearTimeout(to);
     };
-  }, [success, navigate]);
+  }, [success, navigate, backTo]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-6">
@@ -38,7 +45,7 @@ export default function GoogleReturn() {
             <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-600" />
             <h1 className="text-base font-semibold">{label} connected</h1>
             <p className="text-sm text-muted-foreground">
-              Taking you back to AI Connect{countdown > 0 ? '…' : ''}
+              Taking you back to {isSupport ? 'Customer Service' : 'AI Connect'}{countdown > 0 ? '…' : ''}
             </p>
             <Loader2 className="h-4 w-4 animate-spin mx-auto text-muted-foreground" />
           </>
@@ -49,8 +56,8 @@ export default function GoogleReturn() {
             <p className="text-sm text-muted-foreground">
               {error || 'The authorization did not complete. Please try again.'}
             </p>
-            <Button onClick={() => navigate('/ai-assistant/connect', { replace: true })} className="w-full">
-              Back to AI Connect
+            <Button onClick={() => navigate(backTo, { replace: true })} className="w-full">
+              Back to {isSupport ? 'Customer Service' : 'AI Connect'}
             </Button>
           </>
         )}
