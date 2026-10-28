@@ -74,11 +74,42 @@ async function callGbp<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('unified-google-api', {
     body: { service: 'user_connect', ...body },
   });
-  if (error) throw error;
+  if (error) {
+    let msg = error.message;
+    try {
+      const ctx = (error as { context?: Response }).context;
+      if (ctx && typeof ctx.json === 'function') {
+        const body = await ctx.json();
+        msg = googleErrorMessage(body) || msg;
+      }
+    } catch { /* keep generic message */ }
+    throw new Error(msg);
+  }
   if (data && typeof data === 'object' && 'error' in (data as Record<string, unknown>)) {
-    throw new Error(String((data as Record<string, unknown>).error));
+    throw new Error(googleErrorMessage(data) || String((data as Record<string, unknown>).error));
   }
   return data as T;
+}
+
+/** Turns a Google API error body into a short, readable message. */
+function googleErrorMessage(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const b = body as { error?: unknown; details?: unknown; status?: number };
+  let detail = '';
+  if (typeof b.details === 'string') {
+    try {
+      const parsed = JSON.parse(b.details) as { error?: { message?: string; status?: string } };
+      detail = parsed?.error?.message || '';
+    } catch { detail = b.details.slice(0, 200); }
+  }
+  if (/has not been used|is disabled|SERVICE_DISABLED/i.test(detail)) {
+    return 'Google Business Profile API is not enabled in your Google Cloud project. Enable "My Business Account Management API" and "My Business Business Information API", then try again.';
+  }
+  if (b.status === 429 || /quota|rate/i.test(detail)) {
+    return 'Google Business Profile API quota is 0. Request API access from Google (Business Profile API access form), then try again.';
+  }
+  if (b.status === 403) return detail || 'Google denied access to this Business Profile.';
+  return detail || (typeof b.error === 'string' ? b.error : null);
 }
 
 /**
@@ -98,10 +129,13 @@ export default function GoogleBusinessProfileCard({ enabled }: { enabled: boolea
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<GbpLogItem[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [locError, setLocError] = useState<string | null>(null);
 
   const loadLocations = useCallback(async () => {
     if (!connected) return;
     setLocationsLoading(true);
+    setLocError(null);
     try {
       const accRes = await callGbp<{ connected?: boolean; data?: { accounts?: GbpAccount[] } }>({
         action: 'gbp_accounts',
@@ -123,7 +157,7 @@ export default function GoogleBusinessProfileCard({ enabled }: { enabled: boolea
         toast.info('No business locations found in your Google Business Profile.');
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not load business locations');
+      setLocError(err instanceof Error ? err.message : 'Could not load business locations');
     } finally {
       setLocationsLoading(false);
     }
@@ -227,6 +261,8 @@ export default function GoogleBusinessProfileCard({ enabled }: { enabled: boolea
   return (
     <PlatformCard
       name="Google Business Profile"
+      connectLabel="Connect Business"
+      onSettings={connected ? () => setShowSettings((v) => !v) : undefined}
       description="Connect your Google Business Profile so AI can auto-reply to your customer reviews."
       logo={GoogleBusinessLogo}
       connected={connected}
@@ -248,7 +284,7 @@ export default function GoogleBusinessProfileCard({ enabled }: { enabled: boolea
         </p>
       )}
 
-      {connected && (
+      {connected && showSettings && (
         <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
           <div className="space-y-1.5">
             <Label className="text-xs">Business location</Label>
@@ -257,9 +293,14 @@ export default function GoogleBusinessProfileCard({ enabled }: { enabled: boolea
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your locations…
               </div>
             ) : locations.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">
-                No locations found. Make sure this Google account manages a Business Profile.
-              </p>
+              <div className="space-y-2">
+                <p className={`text-[11px] ${locError ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {locError || 'No locations found. Make sure this Google account manages a Business Profile.'}
+                </p>
+                <Button size="sm" variant="outline" onClick={() => void loadLocations()}>
+                  Try again
+                </Button>
+              </div>
             ) : (
               <Select value={location} onValueChange={setLocation}>
                 <SelectTrigger className="h-9 text-sm">
