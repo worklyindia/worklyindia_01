@@ -23,7 +23,7 @@ export default function GoogleReturn() {
   useEffect(() => {
     if (!success) return;
     const t = setInterval(() => setCountdown((c) => c - 1), 1000);
-    const to = setTimeout(() => navigate('/ai-assistant/connect', { replace: true }), 2000);
+    const to = setTimeout(() => navigate(params.get('product') === 'business_profile' ? '/ai-assistant/connect/google_business/settings' : '/ai-assistant/connect', { replace: true }), 2000);
     return () => {
       clearInterval(t);
       clearTimeout(to);
@@ -49,7 +49,7 @@ export default function GoogleReturn() {
             <p className="text-sm text-muted-foreground">
               {error || 'The authorization did not complete. Please try again.'}
             </p>
-            <Button onClick={() => navigate('/ai-assistant/connect', { replace: true })} className="w-full">
+            <Button onClick={() => navigate(params.get('product') === 'business_profile' ? '/ai-assistant/connect/google_business/settings' : '/ai-assistant/connect', { replace: true })} className="w-full">
               Back to AI Connect
             </Button>
           </>
