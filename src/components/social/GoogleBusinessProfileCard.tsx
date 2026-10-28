@@ -203,7 +203,7 @@ export default function GoogleBusinessProfileCard({ enabled, audience, variant =
       return;
     }
     try {
-      sessionStorage.setItem('gbp_oauth_return', audience ? '/owner-portal/customer-service?tab=social' : '/ai-assistant/connect/google_business/settings');
+      sessionStorage.setItem('gbp_oauth_return', audience ? '/owner-portal/customer-service?tab=social' : '/ai-assistant/connect');
       await connect('business_profile');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not connect Google Business Profile');
