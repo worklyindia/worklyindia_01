@@ -28,7 +28,14 @@ export default function WhatsAppSetupGate({ scope, children }: { scope: 'owner' 
   useEffect(() => { void load(); }, [scope]);
   if (loading) return <div role="status" className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Checking WhatsApp setup…</div>;
   if (error || !profile) return <section className="space-y-3 px-4 py-6"><p role="alert" className="break-words text-sm text-destructive">{error || 'WhatsApp setup status is unavailable.'}</p><Button variant="outline" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Try again</Button></section>;
-  const setup = needsWhatsAppSetup(profile);
+  const pid = (profile as { phone_number_id?: string }).phone_number_id || 'default';
+  const pinKey = `wa_pin_set_${scope}_${pid}`;
+  let pinMarked = false;
+  try { pinMarked = localStorage.getItem(pinKey) === '1'; } catch { /* ignore */ }
+  const registration = needsWhatsAppRegistration(profile);
+  // Meta often keeps reporting is_pin_enabled=false after a successful PIN save; trust our own success.
+  const setup = registration || (needsWhatsAppSetup(profile) && !pinMarked);
+  const markPin = () => { try { localStorage.setItem(pinKey, '1'); } catch { /* ignore */ } };
   return <>
     {needsBusinessVerification(profile) && <section role="alert" className="space-y-3 border-b border-border bg-destructive/5 px-4 py-5 sm:px-6">
       <h2 className="flex items-center gap-2 text-sm font-semibold text-destructive"><AlertTriangle className="h-4 w-4 shrink-0" />Business verification incomplete</h2>
@@ -37,8 +44,10 @@ export default function WhatsAppSetupGate({ scope, children }: { scope: 'owner' 
       <Button variant="outline" className="w-full" asChild><a href="https://business.facebook.com/settings/security" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Complete verification on Meta</a></Button>
     </section>}
     {setup ? <>
-      <section className="space-y-2 px-4 pt-6 sm:px-6"><h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5" />Finish WhatsApp setup</h2><p className="text-sm text-muted-foreground">{needsWhatsAppRegistration(profile) ? 'Activate this number on WhatsApp Cloud API to continue. If a PIN already exists, enter that PIN; do not create a different one.' : 'Create a six-digit security PIN to continue to your profile and settings.'}</p></section>
-      <WhatsAppSecuritySettings scope={scope} setup registration={needsWhatsAppRegistration(profile)} onSaved={load} />
+      <section className="space-y-2 px-4 pt-6 sm:px-6"><h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5" />Finish WhatsApp setup</h2><p className="text-sm text-muted-foreground">{registration ? 'Activate this number on WhatsApp Cloud API to continue. If a PIN already exists, enter that PIN; do not create a different one.' : 'Create a six-digit security PIN to continue to your profile and settings.'}</p></section>
+      <WhatsAppSecuritySettings scope={scope} setup registration={registration} onSaved={async () => { markPin(); await load(); }} />
+      {!registration && <div className="px-4 pb-6 sm:px-6"><Button variant="outline" className="w-full" onClick={() => { markPin(); void load(); }}>PIN already set? Continue</Button></div>}
+
     </> : <>
       {children}
     </>}
