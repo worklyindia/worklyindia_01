@@ -14,6 +14,9 @@ import {
 } from '@/components/ui/select';
 import { Loader2, MapPin, Star, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import SocialAccountSwitcher from '@/components/social/SocialAccountSwitcher';
+import type { SocialPlatform } from '@/hooks/useSocialConnect';
 import { supabase } from '@/integrations/supabase/client';
 import PlatformBusinessProfileCard from '@/components/social/PlatformBusinessProfileCard';
 import {
@@ -117,7 +120,9 @@ function googleErrorMessage(body: unknown): string | null {
  * Google Business Profile connect card with AI review auto-reply.
  * Shown on the AI Connect page and the owner Customer Service page.
  */
-export default function GoogleBusinessProfileCard({ enabled, audience }: { enabled: boolean; audience?: 'support' }) {
+export default function GoogleBusinessProfileCard({ enabled, audience, variant = 'card' }: { enabled: boolean; audience?: 'support'; variant?: 'card' | 'page' }) {
+  const navigate = useNavigate();
+  const isPage = variant === 'page';
   const { get, loading, busy, connect, disconnect, configured } =
     useGoogleUserConnections(enabled, audience);
   const callGbp = <T,>(body: Record<string, unknown>) => callGbpRaw<T>(audience ? { ...body, audience } : body);
@@ -131,7 +136,8 @@ export default function GoogleBusinessProfileCard({ enabled, audience }: { enabl
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<GbpLogItem[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettingsState, setShowSettings] = useState(false);
+  const showSettings = isPage || showSettingsState;
   const [locError, setLocError] = useState<string | null>(null);
 
   const loadLocations = useCallback(async () => {
@@ -260,11 +266,27 @@ export default function GoogleBusinessProfileCard({ enabled, audience }: { enabl
     }
   };
 
+  const asAcc = (l: GbpLocation) => ({ platform: 'google_business' as SocialPlatform, accountId: l.name, accountName: l.title || l.name, accountHandle: null, accountPicture: null, accountEmail: conn?.google_email ?? null, followers: 0, following: 0, posts: 0, canPost: false, scopes: null, isDefault: l.name === location });
+  const current = locations.find((l) => l.name === location);
   return (
+    <>
+    {isPage && connected && locations.length > 0 && (
+      <SocialAccountSwitcher
+        platform={'google_business' as SocialPlatform}
+        label="Google Business Profile"
+        accounts={locations.map(asAcc)}
+        current={current ? asAcc(current) : null}
+        onSelect={setLocation}
+        reload={loadLocations}
+        onAdd={() => void handleConnect()}
+        onMakeDefault={async (id) => setLocation(id)}
+        onRemove={async () => handleDisconnect()}
+      />
+    )}
     <PlatformCard
       name="Google Business Profile"
       connectLabel="Connect Business"
-      onSettings={connected ? () => setShowSettings((v) => !v) : undefined}
+      onSettings={connected && !isPage ? () => (audience ? setShowSettings((v) => !v) : navigate('/ai-assistant/connect/google_business/settings')) : undefined}
       description="Connect your Google Business Profile so AI can auto-reply to your customer reviews."
       logo={GoogleBusinessLogo}
       connected={connected}
@@ -464,5 +486,6 @@ export default function GoogleBusinessProfileCard({ enabled, audience }: { enabl
         </div>
       )}
     </PlatformCard>
+    </>
   );
 }

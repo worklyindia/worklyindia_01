@@ -24,6 +24,7 @@ import { disconnectOutlook, connectOutlook, setOutlookDefault } from '@/hooks/us
 import { disconnectCustomEmail, connectCustomEmail, setCustomEmailDefault, MAIL_PROVIDER_PRESETS } from '@/hooks/useUserCustomEmail';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { unlinkUserBot, linkUserBot, setDefaultUserBot } from '@/hooks/useUserTelegramBot';
+import GoogleBusinessProfileCard from '@/components/social/GoogleBusinessProfileCard';
 import PlatformBusinessProfileCard from '@/components/social/PlatformBusinessProfileCard';
 import EmployerNumberSwitcher from '@/components/employer/whatsapp/EmployerNumberSwitcher';
 import EmployerWhatsAppAISettings from '@/components/employer/whatsapp/EmployerWhatsAppAISettings';
@@ -63,6 +64,7 @@ const TITLES: Record<string, string> = {
   twitch: 'Twitch settings',
   facebook: 'Facebook Page settings',
   instagram: 'Instagram settings',
+  google_business: 'Google Business Profile settings',
 };
 
 const CHAT_BOT_BRAND: Record<ChatBotPlatform, { label: string; color: string }> = {
@@ -363,7 +365,7 @@ export default function AIConnectSettings() {
       )}
 
       <main className="w-full px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-6 sm:max-w-2xl sm:mx-auto space-y-3">
-        {!pageLoading && connected && key !== 'whatsapp' && (
+        {!pageLoading && connected && key !== 'whatsapp' && key !== 'google_business' && (
           <Card>
             <CardContent className="flex items-center justify-between gap-4 p-4">
               <div className="min-w-0">
@@ -397,6 +399,8 @@ export default function AIConnectSettings() {
           <div className="flex justify-center py-12">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
+        ) : key === 'google_business' ? (
+          <GoogleBusinessProfileCard enabled={!!user} variant="page" />
         ) : key === 'whatsapp' && !connected ? (
           <EmployerWhatsAppConnectCard onConnected={() => void whatsapp.reload()} />
         ) : !connected ? (
