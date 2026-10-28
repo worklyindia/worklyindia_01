@@ -79,11 +79,9 @@ export const AIOnlyModeGuard = ({ children }: { children: ReactNode }) => {
   // Public pricing must not wait for a visitor's mode/settings request.
   if (location.pathname.toLowerCase().replace(/\/+$/, '') === '/pricing') return <>{children}</>;
 
-  // Fresh check still pending (and cached value doesn't already say ON):
-  // render a blank screen instead of the website.
-  if (!freshCheckComplete && !enabled) {
-    return <div className="min-h-screen bg-background" aria-hidden="true" />;
-  }
+  // Render the website immediately using the cached mode; a blank interim
+  // screen caused a visible second loading phase on every open.
+  void freshCheckComplete;
 
   // AI-only mode OFF: show the normal website, no loading screen.
   if (!enabled) return <>{children}</>;
