@@ -480,7 +480,12 @@ async function handleEmployer(req: Request, raw: unknown) {
   if (b.action === 'set_pin') {
     const { acc, token } = await loadEmployerCreds();
     if (acc?.status !== 'connected' || !acc.phone_number_id || !token) return json({ success: false, error: 'WhatsApp is not connected' }, 200);
-    await g(`/${acc.phone_number_id}`, token, { method: 'POST', body: { pin: b.pin } });
+    try { await g(`/${acc.phone_number_id}`, token, { method: 'POST', body: { pin: b.pin } }); }
+    catch (e: any) {
+      // Number not yet registered on Cloud API: register it with this PIN instead.
+      if (!/does not exist in Cloud API|\/register/i.test(String(e?.message))) throw e;
+      await g(`/${acc.phone_number_id}/register`, token, { method: 'POST', body: { messaging_product: 'whatsapp', pin: b.pin } });
+    }
     return json({ success: true });
   }
 
@@ -807,6 +812,14 @@ async function handleEmployer(req: Request, raw: unknown) {
   const warnings: string[] = [];
   try { await g(`/${b.waba_id}/subscribed_apps`, token, { method: 'POST' }); }
   catch (e: any) { warnings.push(`Webhook subscribe: ${e.message}`); }
+  // Auto-activate an unregistered number with a random 6-digit PIN so set/change PIN works later.
+  try {
+    const st = await g(`/${b.phone_number_id}`, token, { query: { fields: 'status' } });
+    if (needsWhatsAppRegistration(st)) {
+      const autoPin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000);
+      await g(`/${b.phone_number_id}/register`, token, { method: 'POST', body: { messaging_product: 'whatsapp', pin: autoPin } });
+    }
+  } catch (e: any) { warnings.push(`Auto register: ${e.message}`); }
 
   const { error: accErr } = await admin.from('employer_whatsapp_accounts').upsert({
     company_id: companyId, user_id: uid, waba_id: b.waba_id, phone_number_id: b.phone_number_id,

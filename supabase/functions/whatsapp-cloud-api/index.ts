@@ -564,7 +564,12 @@ async function handle(b: any): Promise<Response> {
       case 'set_pin': {
         const pin = String(b.pin || '');
         if (!/^\d{6}$/.test(pin)) return json({ success: false, error: 'PIN must contain exactly 6 digits.' }, 400);
-        await graph(`/${cfg.phoneNumberId}`, { method: 'POST', body: { pin } });
+        try { await graph(`/${cfg.phoneNumberId}`, { method: 'POST', body: { pin } }); }
+        catch (e: any) {
+          // Number not yet registered on Cloud API: register it with this PIN instead.
+          if (!/does not exist in Cloud API|\/register/i.test(String(e?.message))) throw e;
+          await graph(`/${cfg.phoneNumberId}/register`, { method: 'POST', body: { messaging_product: 'whatsapp', pin } });
+        }
         return json({ success: true });
       }
 
