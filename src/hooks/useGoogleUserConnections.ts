@@ -33,7 +33,8 @@ async function callFn<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 /** Per-user Google connections (AdSense, Search Console, Analytics, Drive). */
-export function useGoogleUserConnections(enabled: boolean) {
+export function useGoogleUserConnections(enabled: boolean, audience?: 'support') {
+  const aud = audience ? { audience } : {};
   const [connections, setConnections] = useState<GoogleConnection[]>([]);
   const [configured, setConfigured] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -46,7 +47,7 @@ export function useGoogleUserConnections(enabled: boolean) {
     }
     setLoading(true);
     try {
-      const data = await callFn<StatusResponse>({ action: 'status' });
+      const data = await callFn<StatusResponse>({ action: 'status', ...aud });
       setConnections(data?.connections ?? []);
       setConfigured(data?.configured !== false);
     } catch {
@@ -54,7 +55,7 @@ export function useGoogleUserConnections(enabled: boolean) {
     } finally {
       setLoading(false);
     }
-  }, [enabled]);
+  }, [enabled, audience]);
 
   useEffect(() => {
     void refresh();
@@ -72,6 +73,7 @@ export function useGoogleUserConnections(enabled: boolean) {
     try {
       const data = await callFn<{ authorizationUrl: string }>({
         action: 'start',
+        ...aud,
         product,
         origin: window.location.origin,
       });
@@ -80,19 +82,19 @@ export function useGoogleUserConnections(enabled: boolean) {
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [audience]);
 
   const disconnect = useCallback(
     async (product: GoogleProduct) => {
       setBusy(product);
       try {
-        await callFn({ action: 'disconnect', product });
+        await callFn({ action: 'disconnect', ...aud, product });
         await refresh();
       } finally {
         setBusy(null);
       }
     },
-    [refresh],
+    [refresh, audience],
   );
 
   return { connections, configured, loading, busy, get, connect, disconnect, refresh };

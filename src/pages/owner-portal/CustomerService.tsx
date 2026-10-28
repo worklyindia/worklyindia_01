@@ -54,7 +54,7 @@ export default function CustomerService() {
           <p className="text-[11px] text-muted-foreground">
             Google Business Profile — AI auto-replies to your Google reviews as website customer support.
           </p>
-          <GoogleBusinessProfileCard enabled={true} />
+          <GoogleBusinessProfileCard enabled={true} audience="support" />
         </TabsContent>
 
         <TabsContent value="mailboxes" className="mt-3 space-y-3">

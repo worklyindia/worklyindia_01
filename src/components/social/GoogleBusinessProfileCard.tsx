@@ -70,7 +70,7 @@ interface GbpLogItem {
   created_at: string;
 }
 
-async function callGbp<T>(body: Record<string, unknown>): Promise<T> {
+async function callGbpRaw<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('unified-google-api', {
     body: { service: 'user_connect', ...body },
   });
@@ -116,9 +116,10 @@ function googleErrorMessage(body: unknown): string | null {
  * Google Business Profile connect card with AI review auto-reply.
  * Shown on the AI Connect page and the owner Customer Service page.
  */
-export default function GoogleBusinessProfileCard({ enabled }: { enabled: boolean }) {
+export default function GoogleBusinessProfileCard({ enabled, audience }: { enabled: boolean; audience?: 'support' }) {
   const { get, loading, busy, connect, disconnect, configured } =
-    useGoogleUserConnections(enabled);
+    useGoogleUserConnections(enabled, audience);
+  const callGbp = <T,>(body: Record<string, unknown>) => callGbpRaw<T>(audience ? { ...body, audience } : body);
   const conn = get('business_profile');
   const connected = !!conn && conn.status !== 'needs_reconnect';
 

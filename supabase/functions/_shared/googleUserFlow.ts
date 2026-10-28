@@ -62,8 +62,19 @@ export async function handleGoogleUserConnect(
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } },
   );
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return json({ error: "Sign in required" }, 401);
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return json({ error: "Sign in required" }, 401);
+  // Customer Service (website support) Google connections live under a separate
+  // owner-only identity so they never mix with the owner's own AI Connect account.
+  let user = { id: authUser.id };
+  if (params.audience === "support") {
+    const { data: adm } = await adminClient().from("admin_users").select("role")
+      .eq("user_id", authUser.id).maybeSingle();
+    if (adm?.role !== "owner") {
+      return json({ error: "Only the owner can manage customer service accounts" }, 403);
+    }
+    user = { id: await supportOwnerId(authUser.id) };
+  }
 
   const action = String(params.action ?? "");
 
