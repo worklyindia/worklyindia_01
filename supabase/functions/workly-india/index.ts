@@ -480,7 +480,12 @@ async function handleEmployer(req: Request, raw: unknown) {
   if (b.action === 'set_pin') {
     const { acc, token } = await loadEmployerCreds();
     if (acc?.status !== 'connected' || !acc.phone_number_id || !token) return json({ success: false, error: 'WhatsApp is not connected' }, 200);
-    await g(`/${acc.phone_number_id}`, token, { method: 'POST', body: { pin: b.pin } });
+    try { await g(`/${acc.phone_number_id}`, token, { method: 'POST', body: { pin: b.pin } }); }
+    catch (e: any) {
+      // Number not yet registered on Cloud API: register it with this PIN instead.
+      if (!/does not exist in Cloud API|\/register/i.test(String(e?.message))) throw e;
+      await g(`/${acc.phone_number_id}/register`, token, { method: 'POST', body: { messaging_product: 'whatsapp', pin: b.pin } });
+    }
     return json({ success: true });
   }
 

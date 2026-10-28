@@ -35,13 +35,12 @@ export default function WhatsAppSetupGate({ scope, children }: { scope: 'owner' 
       <h2 className="flex items-center gap-2 text-sm font-semibold text-destructive"><AlertTriangle className="h-4 w-4 shrink-0" />Business verification incomplete</h2>
       <p className="text-sm text-muted-foreground">Complete business verification in Meta Business Suite → Security Center. Status: {profile.business_verification_status?.replace(/_/g, ' ')}.</p>
       <p className="text-sm text-muted-foreground">Business verification and phone activation are separate. Verification can help qualify your business for a 2,000-recipient messaging limit, but Meta decides eligibility and approval; it is not an automatic upgrade.{profile.messaging_limit ? ` Current Meta limit: ${profile.messaging_limit}.` : ''}</p>
-      <Button variant="outline" asChild><a href="https://business.facebook.com/settings/security" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Complete verification on Meta</a></Button>
+      <Button variant="outline" className="w-full" asChild><a href="https://business.facebook.com/settings/security" target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Complete verification on Meta</a></Button>
     </section>}
     {setup ? <>
       <section className="space-y-2 px-4 pt-6 sm:px-6"><h2 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck className="h-5 w-5" />Finish WhatsApp setup</h2><p className="text-sm text-muted-foreground">{needsWhatsAppRegistration(profile) ? 'Activate this number on WhatsApp Cloud API to continue. If a PIN already exists, enter that PIN; do not create a different one.' : 'Create a six-digit security PIN to continue to your profile and settings.'}</p></section>
       <WhatsAppSecuritySettings scope={scope} setup registration={needsWhatsAppRegistration(profile)} onSaved={load} />
     </> : <>
-      {unknown && <p role="status" className="border-b border-border px-4 py-3 text-sm text-muted-foreground">Meta did not return the PIN status. Check two-step verification in WhatsApp Manager before changing your PIN.</p>}
       {children}
     </>}
   </>;
