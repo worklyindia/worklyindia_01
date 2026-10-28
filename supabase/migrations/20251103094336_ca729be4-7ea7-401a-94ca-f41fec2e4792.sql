@@ -1,0 +1,77 @@
+-- Drop incorrect function
+DROP FUNCTION IF EXISTS get_financial_statistics_by_period(text);
+
+-- Create corrected function without cartesian product
+CREATE OR REPLACE FUNCTION get_financial_statistics_by_period(p_period text DEFAULT 'today')
+RETURNS TABLE (
+  total_wallet_points bigint,
+  total_wallet_purchased bigint,
+  total_wallet_spent bigint,
+  total_referral_balance numeric,
+  total_referral_earned numeric,
+  total_referral_withdrawn numeric,
+  total_users_with_wallet bigint,
+  total_users_with_referral bigint
+) 
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  period_start timestamp with time zone;
+BEGIN
+  -- Calculate period start time
+  period_start := CASE 
+    WHEN p_period = 'today' THEN NOW() - INTERVAL '24 hours'
+    WHEN p_period = 'week' THEN NOW() - INTERVAL '7 days'
+    WHEN p_period = 'month' THEN NOW() - INTERVAL '30 days'
+    ELSE NOW() - INTERVAL '24 hours'
+  END;
+
+  RETURN QUERY
+  SELECT
+    -- Current wallet points balance (all-time, direct sum without join)
+    COALESCE((SELECT SUM(w.balance_points) FROM wallets w), 0)::bigint as total_wallet_points,
+    
+    -- Wallet purchased in period (24h from transactions)
+    COALESCE((
+      SELECT SUM(pt.points_amount)
+      FROM points_transactions pt
+      WHERE pt.transaction_type = 'purchase'
+      AND pt.created_at >= period_start
+    ), 0)::bigint as total_wallet_purchased,
+    
+    -- Wallet spent in period (24h from transactions)
+    COALESCE((
+      SELECT SUM(pt.points_amount)
+      FROM points_transactions pt
+      WHERE pt.transaction_type = 'spend'
+      AND pt.created_at >= period_start
+    ), 0)::bigint as total_wallet_spent,
+    
+    -- Current referral balance (all-time, direct sum without join)
+    COALESCE((SELECT SUM(rw.balance_amount) FROM referral_wallets rw), 0)::numeric as total_referral_balance,
+    
+    -- Referral earned in period (24h from commissions)
+    COALESCE((
+      SELECT SUM(rc.commission_amount)
+      FROM referral_commissions rc
+      WHERE rc.status = 'completed'
+      AND rc.created_at >= period_start
+    ), 0)::numeric as total_referral_earned,
+    
+    -- Referral withdrawn in period (24h from withdrawal requests)
+    COALESCE((
+      SELECT SUM(rwr.amount)
+      FROM referral_withdrawal_requests rwr
+      WHERE rwr.status = 'completed'
+      AND rwr.created_at >= period_start
+    ), 0)::numeric as total_referral_withdrawn,
+    
+    -- Total users with wallet
+    COALESCE((SELECT COUNT(DISTINCT user_id) FROM wallets), 0)::bigint as total_users_with_wallet,
+    
+    -- Total users with referral balance
+    COALESCE((SELECT COUNT(DISTINCT user_id) FROM referral_wallets), 0)::bigint as total_users_with_referral;
+END;
+$$;

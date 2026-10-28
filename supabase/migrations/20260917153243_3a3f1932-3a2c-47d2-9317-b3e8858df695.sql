@@ -1,0 +1,1 @@
+ALTER TABLE public.telegram_audience_bots ADD COLUMN IF NOT EXISTS channel_username text;

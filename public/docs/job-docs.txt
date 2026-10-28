@@ -1,0 +1,143 @@
+Workly India — Jobs API
+Web page: https://worklyindia.devs.surf/developers/job-docs
+
+Workly India Jobs API
+
+Show Workly India jobs on your own website, just like Jooble, Careerjet or Adzuna. Visitors see complete job details on your site, and the Apply button sends them to Workly India to apply.
+
+Setup
+In the Developer Portal, activate an API subscription and create an API key (starts with wfh_).
+Save the key on your server as WORKLY_API_KEY. Never put it in browser code.
+Call the API from your server with the header x-api-key (examples below).
+Show the jobs on your website. Every Apply button must open the job's apply_url.
+
+Base URL: GET https://jubwzelupbntbetpajqb.supabase.co/functions/v1/jobs-api
+
+How it works
+Your website shows the job list and the full job detail page in your own design.
+Every job includes job_url and apply_url pointing to the job on Workly India.
+When a candidate taps Apply, they open Workly India and apply there. The employer receives the application as usual.
+Only active jobs are returned. Expired or closed jobs disappear automatically.
+Endpoints
+Action
+Search jobs
+
+Search active jobs by keyword, location and job type. Optional: page, limit (max 100), search, location, job_type (full-time | part-time | contract | internship | temporary).
+
+Code example
+curl "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/jobs-api/search?search=data%20entry&location=Delhi&job_type=full-time&page=1&limit=20" \
+  -H "x-api-key: wfh_YOUR_API_KEY"
+
+// → { "success": true, "data": { "jobs": [ {
+//      "id": "8f2c...", "title": "Data Entry Operator", "description": "...",
+//      "location": "Delhi", "job_type": "full-time", "salary_min": 15000, "salary_max": 22000,
+//      "skills": ["Typing","Excel"], "created_at": "...",
+//      "companies": { "company_name": "ABC Pvt Ltd", "logo_url": "https://..." },
+//      "job_url":   "https://worklyindia.devs.surf/job/data-entry-operator-delhi?utm_source=api_partner&utm_medium=jobs_api",
+//      "apply_url": "https://worklyindia.devs.surf/job/data-entry-operator-delhi?utm_source=api_partner&utm_medium=jobs_api"
+//    } ],
+//    "pagination": { "page": 1, "limit": 20, "total": 340, "total_pages": 17 } } }
+Action
+Latest jobs
+
+Newest active jobs first, with full company details. Optional: page, limit, location, job_type.
+
+Code example
+curl "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/jobs-api/latest?limit=10" \
+  -H "x-api-key: wfh_YOUR_API_KEY"
+Action
+Trending jobs
+
+Most popular active jobs. Optional: page, limit, location, job_type, experience_level.
+
+Code example
+curl "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/jobs-api/trending?limit=10&location=Mumbai" \
+  -H "x-api-key: wfh_YOUR_API_KEY"
+Action
+Full job details
+
+Everything about one job: description, requirements, responsibilities, benefits, salary, skills and company. Use it for your job detail page.
+
+Code example
+curl "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/jobs-api/detail?job_id=JOB_ID" \
+  -H "x-api-key: wfh_YOUR_API_KEY"
+
+// → { "success": true, "data": { "id": "JOB_ID", "title": "...", "description": "...",
+//      "requirements": "...", "responsibilities": [...], "benefits": "...",
+//      "companies": { "company_name": "...", "logo_url": "...", "industry": "...", "website": "..." },
+//      "apply_url": "https://worklyindia.devs.surf/job/...?utm_source=api_partner&utm_medium=jobs_api" } }
+Build the jobs page on your website
+Action
+Node.js: your server fetches the jobs
+
+Keep the API key on your server (environment variable). Your website calls your own server, never the API with the key from the browser.
+
+Code example
+// GET /api/jobs?search=...&location=...&page=1
+app.get("/api/jobs", async (req, res) => {
+  const qs = new URLSearchParams(req.query).toString();
+  const r = await fetch("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/jobs-api/search?" + qs, {
+    headers: { "x-api-key": process.env.WORKLY_API_KEY },
+  });
+  res.status(r.status).json(await r.json());
+});
+
+// GET /api/jobs/:id  → full details for your detail page
+app.get("/api/jobs/:id", async (req, res) => {
+  const r = await fetch("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/jobs-api/detail?job_id=" + encodeURIComponent(req.params.id), {
+    headers: { "x-api-key": process.env.WORKLY_API_KEY },
+  });
+  res.status(r.status).json(await r.json());
+});
+Action
+Job list on your website
+
+Show jobs like Jooble, Careerjet or Adzuna. The title opens your own detail page; Apply opens Workly India.
+
+Code example
+const { data } = await (await fetch("/api/jobs?search=sales&page=1")).json();
+
+document.querySelector("#jobs").innerHTML = data.jobs.map((job) => `
+  <article class="job">
+    <img src="${job.companies?.logo_url ?? ""}" alt="" width="48" height="48" />
+    <a href="/jobs/${job.id}"><h3>${job.title}</h3></a>
+    <p>${job.companies?.company_name ?? ""} · ${job.location} · ${job.job_type}</p>
+    <a href="${job.apply_url}" target="_blank" rel="noopener">Apply on Workly India</a>
+  </article>`).join("");
+Action
+Job detail page on your website
+
+Show complete job details on your site. The Apply button must use apply_url so the candidate applies on Workly India.
+
+Code example
+const { data: job } = await (await fetch("/api/jobs/" + jobId)).json();
+
+render(`
+  <h1>${job.title}</h1>
+  <p>${job.companies.company_name} · ${job.location}</p>
+  <p>Salary: ₹${job.salary_min} – ₹${job.salary_max}</p>
+  <h2>Description</h2><div>${job.description}</div>
+  <h2>Requirements</h2><div>${job.requirements ?? ""}</div>
+  <a class="apply" href="${job.apply_url}" target="_blank" rel="noopener">Apply Now</a>
+`);
+Action
+React example
+
+Same flow in React.
+
+Code example
+function Jobs() {
+  const [jobs, setJobs] = useState([]);
+  useEffect(() => {
+    fetch("/api/jobs?limit=20").then((r) => r.json()).then((d) => setJobs(d.data.jobs));
+  }, []);
+  return jobs.map((job) => (
+    <div key={job.id}>
+      <h3>{job.title}</h3>
+      <p>{job.companies?.company_name} · {job.location}</p>
+      <a href={job.apply_url} target="_blank" rel="noopener">Apply Now</a>
+    </div>
+  ));
+}
+401: missing, wrong or inactive API key. 400: invalid request. 500: job not found or server error (the message explains why).
+Rate limit headers: X-RateLimit-Limit and X-RateLimit-Remaining. Cache results on your server for a few minutes.

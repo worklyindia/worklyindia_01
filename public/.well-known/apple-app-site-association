@@ -1,0 +1,34 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["app.lovable.2414cbdd36e046908c82ff13ded9fa8e"],
+        "components": [
+          {
+            "/": "*",
+            "comment": "Matches all routes in the WFH India app"
+          },
+          {
+            "/jobs": "*", 
+            "comment": "Matches all job listings"
+          },
+          {
+            "/hot-leads": "*",
+            "comment": "Matches hot leads section"
+          },
+          {
+            "/all-leads": "*",
+            "comment": "Matches all leads section"
+          },
+          {
+            "/activity": "*",
+            "comment": "Matches activity section"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["app.lovable.2414cbdd36e046908c82ff13ded9fa8e"]
+  }
+}

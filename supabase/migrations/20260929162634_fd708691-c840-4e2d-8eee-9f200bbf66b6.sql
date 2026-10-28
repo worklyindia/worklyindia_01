@@ -1,0 +1,1 @@
+ALTER TABLE public.device_info_logs ADD COLUMN IF NOT EXISTS user_type text;

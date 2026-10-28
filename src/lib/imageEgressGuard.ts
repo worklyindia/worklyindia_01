@@ -1,0 +1,124 @@
+/**
+ * Global image egress guard.
+ *
+ * Many <img> tags across the app point straight at full-size Supabase
+ * Storage objects (some 5-6 MB) even when they render inside a 40px
+ * avatar. Every such view is billed as cached egress.
+ *
+ * This guard rewrites those <img src> values at runtime to a resized,
+ * WebP variant served by wsrv.nl (free Cloudflare-backed proxy that
+ * caches globally), so Supabase serves each image roughly once per
+ * region instead of once per page view.
+ *
+ * Safety rules:
+ *  - Only public Supabase Storage http(s) URLs are touched. Local
+ *    assets, data:, blob:, Cloudinary/ImageKit and every other host are
+ *    left exactly as they are.
+ *  - If the proxy ever fails, the original Supabase URL is restored
+ *    automatically (onerror fallback), so images never break.
+ *  - Opt out per element with data-no-img-optimize="true".
+ */
+
+const WSRV_BASE = "https://wsrv.nl/";
+const ORIGINAL_ATTR = "data-img-origin";
+const DONE_ATTR = "data-img-optimized";
+
+function isSupabasePublicStorageUrl(u: string): boolean {
+  return (
+    /^https?:\/\//i.test(u) &&
+    (u.includes(".supabase.co/storage/") || u.includes(".supabase.in/storage/")) &&
+    /\/storage\/v1\/(object|render\/image)\/public\//.test(u)
+  );
+}
+
+function pickWidth(img: HTMLImageElement): number {
+  const candidates = [
+    img.getAttribute("width") ? Number(img.getAttribute("width")) : 0,
+    img.clientWidth,
+    img.parentElement?.clientWidth ?? 0,
+  ].filter((n) => Number.isFinite(n) && n > 0) as number[];
+  const base = candidates.length ? Math.min(...candidates) : 0;
+  if (!base) return 640; // unknown layout — still much smaller than original
+  // Round up to a cache-friendly bucket, cap for big banners.
+  const buckets = [64, 128, 256, 400, 640, 960, 1280];
+  const target = Math.min(1280, Math.ceil(base));
+  return buckets.find((b) => b >= target) ?? 1280;
+}
+
+function proxyUrl(original: string, width: number): string {
+  const upstream = original
+    .split("?")[0]
+    .replace("/storage/v1/render/image/public/", "/storage/v1/object/public/");
+  const params = new URLSearchParams();
+  params.set("url", upstream);
+  params.set("w", String(width));
+  params.set("q", "72");
+  params.set("output", "webp");
+  params.set("dpr", "2");
+  return `${WSRV_BASE}?${params.toString()}`;
+}
+
+function optimize(img: HTMLImageElement): void {
+  if (img.getAttribute(DONE_ATTR) === "true") return;
+  if (img.getAttribute("data-no-img-optimize") === "true") return;
+
+  const src = img.getAttribute("src") || "";
+  if (!src || src.startsWith(WSRV_BASE)) return;
+  if (!isSupabasePublicStorageUrl(src)) return;
+
+  const width = pickWidth(img);
+  img.setAttribute(ORIGINAL_ATTR, src);
+  img.setAttribute(DONE_ATTR, "true");
+
+  // Restore the untouched Supabase URL if the proxy is unavailable.
+  const onError = () => {
+    const origin = img.getAttribute(ORIGINAL_ATTR);
+    img.removeEventListener("error", onError);
+    if (origin && img.src !== origin) img.src = origin;
+  };
+  img.addEventListener("error", onError);
+
+  img.src = proxyUrl(src, width);
+}
+
+function scan(root: ParentNode): void {
+  root.querySelectorAll?.("img").forEach((el) => optimize(el as HTMLImageElement));
+}
+
+let installed = false;
+
+export function installImageEgressGuard(): void {
+  if (installed || typeof window === "undefined") return;
+  installed = true;
+
+  const run = () => scan(document);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", run, { once: true });
+  } else {
+    run();
+  }
+
+  const observer = new MutationObserver((records) => {
+    for (const rec of records) {
+      if (rec.type === "attributes" && rec.target instanceof HTMLImageElement) {
+        // src changed by React — re-evaluate
+        if (rec.target.getAttribute("src") !== rec.target.getAttribute(ORIGINAL_ATTR)) {
+          rec.target.removeAttribute(DONE_ATTR);
+        }
+        optimize(rec.target);
+        continue;
+      }
+      rec.addedNodes.forEach((node) => {
+        if (node instanceof HTMLImageElement) optimize(node);
+        else if (node instanceof HTMLElement) scan(node);
+      });
+    }
+  });
+
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["src"],
+  });
+}

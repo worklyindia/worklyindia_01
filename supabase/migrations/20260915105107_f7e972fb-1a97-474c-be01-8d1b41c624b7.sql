@@ -1,0 +1,1 @@
+ALTER TABLE public.push_lifecycle_templates DROP CONSTRAINT IF EXISTS push_lifecycle_templates_event_type_check;
