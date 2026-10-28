@@ -15,6 +15,7 @@ import {
 import { Loader2, MapPin, Star, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import PlatformBusinessProfileCard from '@/components/social/PlatformBusinessProfileCard';
 import {
   useGoogleUserConnections,
 } from '@/hooks/useGoogleUserConnections';
@@ -287,6 +288,9 @@ export default function GoogleBusinessProfileCard({ enabled, audience }: { enabl
 
       {connected && showSettings && (
         <div className="mt-3 space-y-3 border-t border-border/60 pt-3">
+          {!audience && (
+            <PlatformBusinessProfileCard key={location || 'default'} accountId={location} platform="google_business" label="Google Business Profile" />
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs">Business location</Label>
             {locationsLoading ? (

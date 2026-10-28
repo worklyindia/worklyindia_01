@@ -56,7 +56,10 @@ function clip(v: unknown, n = 2000): string {
 
 export async function getBusinessContext(userId: string | null | undefined, platform?: string, accountId?: string | null): Promise<string> {
   if (!userId) return "";
-  if (platform === 'customer_service') return getWebsiteSupportContext(userId);
+  if (platform === 'customer_service') {
+    const ownerId = await resolveSupportOwner(db(), userId);
+    return getWebsiteSupportContext(ownerId || userId);
+  }
   if (platform === 'facebook' || platform === 'instagram') {
     const ownerId = await resolveSupportOwner(db(), userId);
     if (ownerId) return getWebsiteSupportContext(ownerId);
