@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+
+# Build outputs (regenerated)
+dist/
+
+# Development files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+coverage/
+
+# Documentation
+*.md
+!README.md
+/docs/
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Capacitor native
+android/
+ios/
+
+# Misc
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Legacy Express servers (prevent Vercel treating project as a Node server)
+server.js
+server/
+clarityApi.js

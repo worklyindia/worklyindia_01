@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_profiles ADD COLUMN IF NOT EXISTS gstin text, ADD COLUMN IF NOT EXISTS billing_address_2 jsonb, ADD COLUMN IF NOT EXISTS shipping_address jsonb;

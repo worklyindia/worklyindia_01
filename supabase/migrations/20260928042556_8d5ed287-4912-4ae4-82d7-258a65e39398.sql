@@ -1,0 +1,2 @@
+DELETE FROM public.whatsapp_messages WHERE conversation_id IN (SELECT id FROM public.whatsapp_conversations WHERE audience IN ('job_seeker','employer'));
+DELETE FROM public.whatsapp_conversations WHERE audience IN ('job_seeker','employer');

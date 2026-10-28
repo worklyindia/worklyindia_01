@@ -1,0 +1,4 @@
+- Imported site assets use auto-webp; uploaded banner binaries use egress-optimizer/bannerImage without conversion.
+- StorageManager shares Supabase/R2 UI via egress-optimizer (Owner Secrets S3 keys + R2_API_TOKEN, no new functions); counts persist in storage_usage_stats via add/delete deltas; uploads go browser-direct so edge body limits never cap size.
+- Orphan sweep must list every table column that stores storage URLs in ORPHAN_REF_SOURCES (including developer/referral profile photos), because unlisted files are deleted after the grace period.
+- Owner templates, brand, chat media (incl. inbound WhatsApp) and job images store original bytes in one R2 bucket per scope (_shared/r2Media.ts MEDIA_BUCKETS, auto-created public); keys media/<scope>/<uid>/… map deletes to the bucket; storageCleanup routes R2 URLs to r2-delete-media.

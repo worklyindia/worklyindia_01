@@ -1,0 +1,227 @@
+Workly India — Email API
+Web page: https://worklyindia.devs.surf/developers/email-docs
+
+Workly India Email API
+
+Full email service for your website through the Workly India API — connect Gmail, Outlook or Domain email once on the AI Connect page, then send, read, reply, download attachments and delete with one API key.
+
+Complete email service through your connected mailbox
+
+Works like the WhatsApp API: one API key, and your website gets the full email service through the Workly India API using the Gmail, Outlook or Domain email you connected on the AI Connect page. If nothing is connected, calls return an error. Usage is metered on your API subscription.
+
+In the Developer Portal, activate an API subscription and create an API key (starts with wfh_).
+Connect your Gmail, Outlook or Domain email on the AI Connect page.
+Call the API from your server with the header x-api-key (examples below).
+To get new emails on your website, add a webhook and tick All Gmail / Outlook / domain email events, then choose the mailboxes.
+
+Endpoint: POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api
+
+Action
+Check API status
+
+See which mailbox is connected and will be used as the sender.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"status"}'
+
+// → { "success": true, "connected": true, "accounts": [{ "provider": "gmail", "email": "you@gmail.com" }] }
+Action
+Send an email
+
+The email is sent from your own Gmail, Outlook or Domain email connected on the Workly India AI Connect page. Separate several recipients with commas. Optional provider: gmail | outlook | domain.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_email","to":"candidate@example.com","subject":"Interview scheduled","text":"Hi Rahul, your interview is on Monday at 10 AM."}'
+
+// → { "success": true, "sent": true, "provider": "gmail", "to": "candidate@example.com" }
+Action
+Read the inbox
+
+List emails from your connected mailbox. Optional: offset, limit (max 50), unread_only.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"list_inbox","limit":20,"unread_only":true}'
+
+// → { "success": true, "items": [{ "id": "...", "provider": "gmail", "from": "...", "subject": "...", "text": "...", "date": "...", "unread": true, "has_attachments": false, "attachments": [] }], "has_more": false }
+Action
+Open a conversation
+
+Read all messages of one email thread, including full HTML bodies.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"get_thread","provider":"gmail","id":"MESSAGE_ID"}'
+
+// → { "success": true, "items": [{ "id": "...", "from": "...", "subject": "...", "text": "...", "html": "<p>...</p>", ... }] }
+Action
+Reply to an email
+
+Reply inside an existing conversation. Optional files: up to 5 attachments as base64 ({ name, mimeType, data }).
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"reply","provider":"gmail","id":"MESSAGE_ID","text":"Thanks, we received your application."}'
+
+// → { "success": true, "sent": true, "provider": "gmail", "reply_to": "MESSAGE_ID" }
+Action
+Download an attachment
+
+Get one attachment as base64. You need the email id, the message id and the attachment id from the inbox or thread.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"get_attachment","provider":"gmail","id":"EMAIL_ID","message_id":"MESSAGE_ID","attachment_id":"ATTACHMENT_ID"}'
+
+// → { "success": true, "filename": "resume.pdf", "mime_type": "application/pdf", "data_base64": "JVBERi0x..." }
+Action
+Delete emails
+
+Delete up to 50 emails at once from your connected mailbox.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"delete","provider":"gmail","ids":["EMAIL_ID_1","EMAIL_ID_2"]}'
+
+// → { "success": true, "deleted": 2 }
+Action
+Check usage
+
+See how many emails you sent this month through the API.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"usage"}'
+
+// → { "success": true, "plan": "unlimited", "sent_this_month": 42 }
+Action
+Node.js — send from your website server
+
+Keep the API key in a server environment variable, never in browser code.
+
+Code example
+const res = await fetch("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api", {
+  method: "POST",
+  headers: { "x-api-key": process.env.WORKLY_API_KEY, "Content-Type": "application/json" },
+  body: JSON.stringify({ action: "send_email", to: "candidate@example.com", subject: "Hello", text: "Hi!" }),
+});
+const data = await res.json(); // { success: true, sent: true }
+Action
+Receive new emails on your website (webhook)
+
+Add a webhook in Developer Portal → Webhooks and tick All Gmail, All Outlook or All domain email events (then pick which mailboxes). Events arrive as email.received. New emails arriving in your connected mailbox reach your website within about 1 hour, signed with your webhook secret (X-Webhook-Signature = HMAC-SHA256 of the body).
+
+Code example
+POST https://yourwebsite.com/webhooks/workly
+X-Webhook-Event: email.received
+X-Webhook-Signature: 5f2b...
+
+{
+  "event": "email.received",
+  "created_at": "2026-10-01T10:00:00.000Z",
+  "data": {
+    "id": "18c2f...", "provider": "gmail", "mailbox": "you@gmail.com",
+    "from": "Rahul <rahul@example.com>", "to": "you@gmail.com",
+    "subject": "Job application", "text": "Hello, I want to apply...",
+    "date": "2026-10-01T09:59:12.000Z", "unread": true,
+    "has_attachments": true, "attachments": [{ "id": "ANGj...", "filename": "resume.pdf", "mime_type": "application/pdf", "size": 120334 }]
+  }
+}
+
+// Node.js — verify the signature
+import crypto from "crypto";
+const expected = crypto.createHmac("sha256", process.env.WEBHOOK_SECRET).update(rawBody).digest("hex");
+if (expected !== req.headers["x-webhook-signature"]) return res.status(401).end();
+401 — missing, wrong or expired API key. 402 — API subscription inactive.
+409 (mailbox_not_connected) — no Gmail, Outlook or Domain email connected on the AI Connect page. 400 — invalid request or the mailbox rejected the action (message explains why).
+Multiple Gmail, Outlook and Domain email accounts
+
+You can connect several accounts of each type and choose the account each email is sent from, using the same API key.
+
+How to connect more accounts
+Open AI Connect and connect your first Gmail, Outlook or Domain Email account.
+Tap Settings on that card, open the account menu at the top and choose Add another Gmail / Outlook / Domain email account.
+Gmail / Outlook: sign in with the other Google or Microsoft account. Domain Email: enter the email, password and mail server (Hostinger, GoDaddy, Zoho, cPanel, Google Workspace and others are pre-filled).
+Switch accounts from the same menu. Any connected account can be used by passing its email as account.
+Each account keeps its own AI auto-reply settings. Remove this account appears only when 2 or more accounts are connected.
+Choosing the sender in the API
+account — the exact email address to use. Works on every action.
+provider — gmail, outlook or domain. Optional; account picks the exact mailbox.
+No account — works only when exactly one mailbox is connected.
+Webhook email.received events include mailbox, so you know which account received each email.
+Action
+List all connected accounts
+
+Returns every Gmail, Outlook and Domain email account connected on AI Connect.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"list_accounts"}'
+
+// → { "success": true, "accounts": [
+//     { "provider": "gmail",   "email": "sales@gmail.com"  },
+//     { "provider": "gmail",   "email": "hr@gmail.com" },
+//     { "provider": "outlook", "email": "team@outlook.com"  },
+//     { "provider": "domain",  "email": "jobs@yourcompany.in"  } ] }
+Action
+Send from a specific account
+
+Pass account with the exact email address you want to send from. The type (gmail / outlook / domain) is detected automatically. With several accounts connected, account is required (400 otherwise).
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_email","account":"hr@gmail.com","to":"candidate@example.com","subject":"Interview scheduled","text":"Hi Rahul, your interview is on Monday at 10 AM."}'
+
+// → { "success": true, "sent": true, "provider": "gmail", "from": "hr@gmail.com", "to": "candidate@example.com" }
+Action
+Read, reply, attachments and delete for one account
+
+Add account to list_inbox, get_thread, reply, get_attachment or delete to work with that mailbox only. list_inbox also accepts provider to show only Gmail, Outlook or Domain emails.
+
+Code example
+// Inbox of one account
+{"action":"list_inbox","account":"jobs@yourcompany.in","limit":20}
+
+// Reply from the same account the email arrived in
+{"action":"reply","provider":"domain","account":"jobs@yourcompany.in","id":"MESSAGE_ID","text":"Thanks, we received your application."}
+
+// Unknown account → 404 { "success": false, "error": "Account x@y.com is not connected in AI Connect" }
+Action
+Node.js — choose the sender per email
+
+Use a different account for each kind of email, for example HR mails from hr@ and sales mails from sales@.
+
+Code example
+async function sendFrom(account, to, subject, text) {
+  const res = await fetch("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/email-api", {
+    method: "POST",
+    headers: { "x-api-key": process.env.WORKLY_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "send_email", account, to, subject, text }),
+  });
+  return res.json();
+}
+
+await sendFrom("hr@gmail.com", "candidate@example.com", "Interview", "Monday 10 AM");
+await sendFrom("sales@yourcompany.in", "client@example.com", "Quote", "Please find our quote.");

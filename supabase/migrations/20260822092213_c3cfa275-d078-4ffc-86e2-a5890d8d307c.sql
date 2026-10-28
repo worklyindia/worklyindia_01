@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS github_link text, ADD COLUMN IF NOT EXISTS gitlab_link text;

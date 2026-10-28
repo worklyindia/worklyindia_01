@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.payment_mobile_taken(text);

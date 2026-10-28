@@ -1,0 +1,4 @@
+ALTER TABLE public.social_connections DROP CONSTRAINT IF EXISTS social_connections_platform_check;
+ALTER TABLE public.social_connections ADD CONSTRAINT social_connections_platform_check CHECK (platform = ANY (ARRAY['x'::text,'linkedin'::text,'telegram'::text,'telegram_bot'::text,'gmail'::text]));
+ALTER TABLE public.social_autoreply_settings DROP CONSTRAINT IF EXISTS social_autoreply_settings_platform_check;
+ALTER TABLE public.social_autoreply_settings ADD CONSTRAINT social_autoreply_settings_platform_check CHECK (platform = ANY (ARRAY['x'::text,'linkedin'::text,'telegram_bot'::text,'gmail'::text]));

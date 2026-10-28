@@ -1,0 +1,273 @@
+Workly India — API Troubleshooting
+Web page: https://worklyindia.devs.surf/api-docs/troubleshooting
+
+Back to API Documentation
+Troubleshooting Guide
+
+Solve common API integration issues quickly
+
+Quick Debug Checklist
+
+Before diving deep, run through this checklist:
+
+Verify API key is correct and active in API Documentation
+Check request headers include 'X-Api-Key' and 'Content-Type'
+Ensure request body format matches documentation examples
+Confirm all required parameters are included
+Test with cURL to rule out application-specific issues
+Check API Health Monitor for service status
+Review error response for specific error codes
+Check rate limit headers in response
+Verify endpoint URL is correct
+Look for typos in parameter names or values
+Common Issues & Solutions
+HIGH
+API Key Not Working
+MEDIUM
+Getting 429 Rate Limit Errors
+MEDIUM
+Webhook Not Receiving Events
+LOW
+Slow API Response Times
+MEDIUM
+CORS Errors in Browser
+HTTP Error Codes Reference
+401
+Unauthorized
+
+Invalid or missing API key
+
+Solution: Check X-Api-Key header
+
+403
+Forbidden
+
+Account banned or insufficient permissions
+
+Solution: Contact support
+
+404
+Not Found
+
+Endpoint or resource doesn't exist
+
+Solution: Check URL spelling
+
+429
+Too Many Requests
+
+Rate limit exceeded
+
+Solution: Implement backoff logic
+
+422
+Unprocessable Entity
+
+Validation error in request data
+
+Solution: Check parameter format
+
+500
+Internal Server Error
+
+Server-side error
+
+Solution: Retry or contact support
+
+503
+Service Unavailable
+
+Temporary service issue
+
+Solution: Wait and retry
+
+Still Having Issues?
+
+Our support team is here to help you resolve any problems.
+
+Contact Support
+View FAQ
+API Health Monitor
+Symptoms
+Getting 401 Unauthorized errors
+Authentication failed messages
+Invalid API key responses
+Common Causes
+Missing or incorrect X-Api-Key header
+API key has been revoked or deleted
+Using wrong header name (e.g., 'Authorization' instead of 'X-Api-Key')
+Extra spaces or characters in API key
+Key copied incorrectly from documentation
+Verify header name is exactly 'X-Api-Key' (case-sensitive)
+Check key hasn't been revoked in API Documentation page
+Copy key again from API Documentation (regenerate if needed)
+Remove any trailing/leading whitespace from key
+Test with cURL first to isolate application issues
+Check if key was created for correct environment
+Code Example
+// ✅ CORRECT
+headers: {
+  'X-Api-Key': 'wfh_abc123...',
+  'Content-Type': 'application/json'
+}
+// ❌ WRONG
+  'Authorization': 'Bearer wfh_abc123...',  // Wrong header name
+  'api-key': 'wfh_abc123...'                // Wrong header name
+429 Too Many Requests response
+Rate limit exceeded errors
+Requests being throttled
+Exceeded daily request limit (100 for Free, 10,000 for Pro)
+Too many requests in short time period
+Multiple clients using same API key
+No rate limit handling in application
+Polling instead of using webhooks
+Implement exponential backoff retry logic
+Check X-RateLimit-Remaining header before making requests
+Use Retry-After header value for wait time
+Cache frequently accessed data
+Switch to webhooks for real-time updates
+Upgrade to Pro plan for higher limits
+Implement request queueing in your application
+Batch multiple operations when possible
+// Exponential backoff implementation
+async function makeRequestWithRetry(url, options, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    const response = await fetch(url, options);
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After') || Math.pow(2, i);
+      await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+      continue;
+    return response;
+  throw new Error('Max retries exceeded');
+Webhook endpoint not being called
+Missing webhook events
+No notifications received
+Webhook URL not publicly accessible
+Incorrect URL format or typo
+Webhook endpoint returns non-200 status
+Firewall blocking webhook requests
+SSL certificate issues on webhook endpoint
+Webhook not configured in settings
+Test webhook URL with webhook.site first
+Ensure webhook endpoint returns 200 OK
+Use ngrok for local testing
+Check firewall and security group settings
+Verify SSL certificate is valid
+Add webhook logging to debug issues
+Check webhook signature verification logic
+Ensure endpoint accepts POST requests
+// Webhook endpoint example
+app.post('/webhooks/jobs', async (req, res) => {
+  // 1. Verify webhook signature
+  const signature = req.headers['x-webhook-signature'];
+  // ... verify signature ...
+  // 2. Process webhook data
+  const event = req.body;
+  console.log('Webhook received:', event);
+  // 3. Return 200 OK immediately
+  res.status(200).send('OK');
+  // 4. Process event asynchronously
+  processWebhookAsync(event);
+});
+Requests taking >5 seconds
+Timeout errors
+Poor user experience
+Fetching too much data at once
+No pagination implemented
+Multiple sequential requests instead of batching
+Network latency issues
+No caching implemented
+Complex queries without optimization
+Implement pagination (limit results to 20-50 per page)
+Use caching for frequently accessed data
+Make parallel requests when possible
+Optimize database queries
+Use CDN for static assets
+Implement request timeouts
+Consider upgrading instance size (if using Lovable Cloud)
+Profile and optimize slow code paths
+// Parallel requests example
+async function fetchJobData(jobIds) {
+  // ✅ FAST - Parallel requests
+  const promises = jobIds.map(id => 
+    fetch(`${BASE_URL}/jobs/${id}`, { headers })
+  return Promise.all(promises);
+  // ❌ SLOW - Sequential requests
+  // const results = [];
+  // for (const id of jobIds) {
+  //   results.push(await fetch(`${BASE_URL}/jobs/${id}`, { headers }));
+  // }
+CORS policy blocked
+No 'Access-Control-Allow-Origin' header
+Preflight request failed
+Making API call from different domain
+Browser blocking cross-origin request
+Missing CORS headers in response
+Incorrect request method or headers
+CORS is enabled - check request format
+Ensure Content-Type is application/json
+Use a backend proxy for production apps
+Check browser console for specific error
+Test with Postman/cURL to isolate CORS issue
+Ensure API key is in headers, not URL
+// ✅ CORRECT - Headers for CORS
+const response = await fetch(url, {
+  method: 'GET',
+    'X-Api-Key': API_KEY,
+// 💡 TIP: For production, use a backend proxy
+// Frontend -> Your Backend -> Our API
+// This is more secure and avoids exposing API keys
+
+Verify API key is correct and active in API Documentation
+Check request headers include 'X-Api-Key' and 'Content-Type'
+Ensure request body format matches documentation examples
+Confirm all required parameters are included
+Test with cURL to rule out application-specific issues
+Check API Health Monitor for service status
+Review error response for specific error codes
+Check rate limit headers in response
+Verify endpoint URL is correct
+Look for typos in parameter names or values
+Common Issues & Solutions
+HIGH
+API Key Not Working
+MEDIUM
+Getting 429 Rate Limit Errors
+MEDIUM
+Webhook Not Receiving Events
+LOW
+Slow API Response Times
+MEDIUM
+CORS Errors in Browser
+Symptoms
+CORS policy blocked
+No 'Access-Control-Allow-Origin' header
+Preflight request failed
+Common Causes
+Making API call from different domain
+Browser blocking cross-origin request
+Missing CORS headers in response
+Incorrect request method or headers
+Solutions
+CORS is enabled - check request format
+Ensure Content-Type is application/json
+Use a backend proxy for production apps
+Check browser console for specific error
+Test with Postman/cURL to isolate CORS issue
+Ensure API key is in headers, not URL
+Code Example
+// ✅ CORRECT - Headers for CORS
+const response = await fetch(url, {
+  method: 'GET',
+  headers: {
+    'X-Api-Key': API_KEY,
+    'Content-Type': 'application/json'
+  }
+});
+
+// 💡 TIP: For production, use a backend proxy
+// Frontend -> Your Backend -> Our API
+// This is more secure and avoids exposing API keys
+HTTP Error Codes Reference
+401
+Unauthorized

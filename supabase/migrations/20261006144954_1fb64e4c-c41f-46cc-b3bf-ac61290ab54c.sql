@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.payment_profiles_sync_email() FROM PUBLIC, anon, authenticated;

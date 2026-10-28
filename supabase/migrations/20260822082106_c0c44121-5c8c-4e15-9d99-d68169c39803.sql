@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_mail_context ADD COLUMN IF NOT EXISTS pending_draft jsonb;

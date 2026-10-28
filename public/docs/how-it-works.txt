@@ -1,0 +1,134 @@
+Workly India — How the API Works
+Web page: https://worklyindia.devs.surf/api-docs/how-it-works
+
+Back to API Documentation
+How the API Works
+
+Understand the complete flow from integration to production
+
+Getting Started in 4 Steps
+1
+Get API Key
+
+Generate your API key from the API Documentation page
+
+Sign up or login to your account
+Navigate to API Documentation
+Click 'Generate API Key'
+Choose Free or Pro tier
+Copy and save your key securely
+2
+Integrate SDK
+
+Choose your preferred SDK and integrate with your application
+
+Select JavaScript, Python, or cURL
+Follow SDK-specific documentation
+Add API key to your code
+Configure base URL
+Test your first API call
+3
+Make API Calls
+
+Start making authenticated requests to our endpoints
+
+Search for jobs programmatically
+Create job postings via API
+Submit applications
+Fetch company information
+Monitor API usage
+4
+Production Ready
+
+Scale your integration with production best practices
+
+Handle rate limits properly
+Implement error handling
+Monitor API analytics
+Upgrade to Pro for higher limits
+Use webhooks for events
+API Request Flow
+
+Your App
+
+API Request
+
+HTTP Request with API Key
+
+API Request
+
+Authentication
+
+Validate API Key
+
+Authentication
+
+Rate Limiting
+
+Check Usage Limits
+
+Rate Limiting
+
+Processing
+
+Execute Request
+
+Processing
+
+Your App
+
+JSON Response
+
+Authentication
+API Key Authentication
+
+All API requests must include your API key in the request headers:
+
+headers: {
+  'X-Api-Key': 'your-api-key-here',
+  'Content-Type': 'application/json'
+}
+✓ Free Tier
+• 100 requests per day
+• 1 API key allowed
+• Basic endpoints access
+• Community support
+★ Pro Tier
+• 10,000 requests per day
+• 2 API keys allowed
+• All endpoints access
+• Priority support
+Rate Limiting
+
+API requests are rate-limited based on your tier. When you exceed the limit, you'll receive a 429 status code.
+
+Rate Limit Headers
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1640000000
+Retry-After: 3600
+
+Always check the X-RateLimit-Remaining header to monitor your usage.
+
+Error Responses
+
+401 Unauthorized
+
+Invalid or missing API key
+
+429 Too Many Requests
+
+Rate limit exceeded
+
+400 Bad Request
+
+Invalid request parameters
+
+500 Server Error
+
+Internal server error
+
+Ready to Start?
+Generate API Key
+View JavaScript SDK
+View Python SDK

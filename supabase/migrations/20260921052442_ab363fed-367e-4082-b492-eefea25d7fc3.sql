@@ -1,0 +1,2 @@
+DROP POLICY IF EXISTS "Service role can manage all OTP codes" ON public.otp_codes;
+CREATE POLICY "Service role can manage all OTP codes" ON public.otp_codes FOR ALL TO service_role USING (true) WITH CHECK (true);

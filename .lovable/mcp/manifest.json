@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "sdk_version": "3.0.1",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://jubwzelupbntbetpajqb.supabase.co/auth/v1",
+    "require_oauth_client_claim": false,
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "remix-of-remix-of-remix-of-easy-deployer",
+      "version": "0.1.0",
+      "title": "Remix of Remix of Remix of Easy Deployer"
+    },
+    "tools": [
+      {
+        "name": "search_jobs",
+        "title": "Search jobs",
+        "description": "Search published job listings by keyword, location, job type or work mode.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Keyword matched against the job title."
+            },
+            "location": {
+              "type": "string",
+              "minLength": 1,
+              "description": "City, state or location text to match."
+            },
+            "job_type": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Job type, e.g. full-time or internship."
+            },
+            "work_mode": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Work mode, e.g. remote, hybrid or onsite."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10,
+              "description": "Maximum number of jobs to return."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_job",
+        "title": "Get job details",
+        "description": "Fetch the full details of one job listing by its id or public slug.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The job id (UUID)."
+            },
+            "job_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Alias for id — the job id (UUID)."
+            },
+            "slug": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The job's public slug."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_my_applications",
+        "title": "List my job applications",
+        "description": "List the signed-in user's own job applications, newest first.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Only return applications with this status."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "description": "Maximum number of applications to return."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_my_profile",
+        "title": "Get my profile",
+        "description": "Fetch the signed-in user's own job seeker profile.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

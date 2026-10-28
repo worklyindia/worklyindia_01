@@ -1,0 +1,55 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'supabase/functions/**'
+      - '**.md'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check Vercel secrets
+        id: guard
+        env:
+          T: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$T" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "Vercel secrets (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID) not set — skipping deploy." >> "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v5
+        if: steps.guard.outputs.ok == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.guard.outputs.ok == 'true'
+        with:
+          node-version: 24
+      - name: Install Vercel CLI
+        if: steps.guard.outputs.ok == 'true'
+        run: npm install --global vercel@latest
+      - name: Pull Vercel settings
+        if: steps.guard.outputs.ok == 'true'
+        run: vercel pull --yes --environment=${{ github.event_name == 'pull_request' && 'preview' || 'production' }} --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build
+        if: steps.guard.outputs.ok == 'true'
+        run: vercel build ${{ github.event_name != 'pull_request' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy
+        if: steps.guard.outputs.ok == 'true'
+        run: |
+          url=$(vercel deploy --prebuilt ${{ github.event_name != 'pull_request' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          echo "Deployed: $url" >> "$GITHUB_STEP_SUMMARY"

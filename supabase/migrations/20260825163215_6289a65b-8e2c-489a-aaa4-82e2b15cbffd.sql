@@ -1,0 +1,1 @@
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'domain-offers-selftest';

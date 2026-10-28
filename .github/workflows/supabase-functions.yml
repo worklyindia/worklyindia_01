@@ -1,0 +1,83 @@
+name: Deploy Supabase Edge Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/supabase-functions.yml'
+  workflow_dispatch:
+    inputs:
+      function_name:
+        description: 'Existing function to deploy (for example unified-notifications-api)'
+        required: true
+        default: 'unified-notifications-api'
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Select functions
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FUNCTION_NAME: ${{ inputs.function_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            printf '%s\n' "$FUNCTION_NAME" | tr ', ' '\n\n' | sed '/^$/d' | sort -u > /tmp/functions-to-deploy
+          else
+            if ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              echo 'Cannot identify previous commit. Run this workflow manually for each existing function.' >&2
+              exit 1
+            fi
+            git diff --name-only "$BEFORE" "$AFTER" -- supabase/functions \
+              | awk -F/ '$1 == "supabase" && $2 == "functions" && $3 != "_shared" && NF >= 4 { print $3 }' \
+              | sort -u > /tmp/functions-to-deploy
+            # Shared helpers changed: also deploy every function that imports them.
+            git diff --name-only "$BEFORE" "$AFTER" -- supabase/functions/_shared \
+              | xargs -r -n1 basename | sed 's/\.[^.]*$//' | sort -u > /tmp/shared-changed
+            if [ -s /tmp/shared-changed ]; then
+              while IFS= read -r mod; do
+                grep -rlE "_shared/${mod}(\.tsx?)?['\"]" supabase/functions --include=*.ts --include=*.tsx \
+                  | awk -F/ '$3 != "_shared" { print $3 }'
+              done < /tmp/shared-changed >> /tmp/functions-to-deploy
+              sort -u -o /tmp/functions-to-deploy /tmp/functions-to-deploy
+            fi
+          fi
+          while IFS= read -r function_name; do
+            function_name="$(echo "$function_name" | xargs)"
+            [ -z "$function_name" ] && continue
+            if ! [[ "$function_name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || [ ! -f "supabase/functions/$function_name/index.ts" ]; then
+              echo "Invalid function: $function_name" >&2
+              exit 1
+            fi
+          done < /tmp/functions-to-deploy
+          echo "Selected functions: $(paste -sd ', ' /tmp/functions-to-deploy)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check selected edge functions
+        run: |
+          while IFS= read -r function_name; do
+            deno check --no-config --node-modules-dir=none "supabase/functions/$function_name/index.ts"
+          done < /tmp/functions-to-deploy
+
+      - name: Deploy selected edge functions
+        run: |
+          while IFS= read -r function_name; do
+            echo "Deploying $function_name"
+            npx --yes supabase@latest functions deploy "$function_name" --use-api --project-ref jubwzelupbntbetpajqb
+          done < /tmp/functions-to-deploy
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
