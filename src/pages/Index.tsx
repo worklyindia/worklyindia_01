@@ -211,6 +211,7 @@ const Index = () => {
           canonical="/"
           structured={websiteStructuredData}
         />
+        <h1 className="sr-only">Workly India – free verified remote jobs and hiring platform in India</h1>
         <OrganizationStructuredData />
         <WebSiteStructuredData />
         <LocalBusinessSchemaFull />
