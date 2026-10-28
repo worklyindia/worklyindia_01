@@ -29,7 +29,6 @@ export default function WhatsAppSetupGate({ scope, children }: { scope: 'owner' 
   if (loading) return <div role="status" className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Checking WhatsApp setup…</div>;
   if (error || !profile) return <section className="space-y-3 px-4 py-6"><p role="alert" className="break-words text-sm text-destructive">{error || 'WhatsApp setup status is unavailable.'}</p><Button variant="outline" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Try again</Button></section>;
   const setup = needsWhatsAppSetup(profile);
-  const unknown = profile.is_pin_enabled == null && !needsWhatsAppRegistration(profile);
   return <>
     {needsBusinessVerification(profile) && <section role="alert" className="space-y-3 border-b border-border bg-destructive/5 px-4 py-5 sm:px-6">
       <h2 className="flex items-center gap-2 text-sm font-semibold text-destructive"><AlertTriangle className="h-4 w-4 shrink-0" />Business verification incomplete</h2>

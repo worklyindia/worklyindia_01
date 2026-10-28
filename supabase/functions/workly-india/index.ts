@@ -812,6 +812,14 @@ async function handleEmployer(req: Request, raw: unknown) {
   const warnings: string[] = [];
   try { await g(`/${b.waba_id}/subscribed_apps`, token, { method: 'POST' }); }
   catch (e: any) { warnings.push(`Webhook subscribe: ${e.message}`); }
+  // Auto-activate an unregistered number with a random 6-digit PIN so set/change PIN works later.
+  try {
+    const st = await g(`/${b.phone_number_id}`, token, { query: { fields: 'status' } });
+    if (needsWhatsAppRegistration(st)) {
+      const autoPin = String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000);
+      await g(`/${b.phone_number_id}/register`, token, { method: 'POST', body: { messaging_product: 'whatsapp', pin: autoPin } });
+    }
+  } catch (e: any) { warnings.push(`Auto register: ${e.message}`); }
 
   const { error: accErr } = await admin.from('employer_whatsapp_accounts').upsert({
     company_id: companyId, user_id: uid, waba_id: b.waba_id, phone_number_id: b.phone_number_id,
