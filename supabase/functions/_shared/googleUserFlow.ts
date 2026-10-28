@@ -23,6 +23,8 @@ import {
 import { askAiChain } from "./aiChain.ts";
 import { reserveAiChatMessage } from "./aiChatLimit.ts";
 import { withBusinessContext } from "./businessProfile.ts";
+import { supportOwnerId } from "./supportReplyScope.ts";
+import { resolveSupportOwner } from "./businessProfile.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -461,7 +463,9 @@ async function runGbpAutoReply(
       settings.signature ? `End with: ${settings.signature}` : "",
     ].filter(Boolean).join("\n"),
     userId,
-    "customer_service",
+    // Customer Service identity speaks for the website; AI Connect users use their own business details.
+    (await resolveSupportOwner(adminClient() as never, userId)) ? "customer_service" : "google_business",
+    location,
   );
 
   for (const review of unanswered) {
