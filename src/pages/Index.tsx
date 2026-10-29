@@ -205,15 +205,13 @@ const Index = () => {
     <>
       <div className="min-h-screen bg-background page-enter pb-20 md:pb-0">
         <SEO 
-          title={BRAND_CONFIG.name}
+          title="Workly India"
           description="India's #1 remote job portal. Find verified remote jobs in data entry, customer support, content writing, and more. 100% free for job seekers. Employers post jobs free. Start your remote career today!"
           keywords="remote jobs india, remote jobs india, Workly India jobs 2026, online jobs without investment, data entry jobs, customer support jobs, content writing jobs, part time jobs from home, genuine remote jobs india, legitimate online work india"
           canonical="/"
-          structured={websiteStructuredData}
         />
         <h1 className="sr-only">Workly India – free verified remote jobs and hiring platform in India</h1>
         <OrganizationStructuredData />
-        <WebSiteStructuredData />
         <LocalBusinessSchemaFull />
         
         <Header hideSearch={true} />
