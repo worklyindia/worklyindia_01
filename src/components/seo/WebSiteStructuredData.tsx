@@ -14,8 +14,8 @@ export const WebSiteStructuredData = ({
   const schema = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    "name": `${BRAND_CONFIG.name} - Remote Jobs`,
-    "alternateName": [BRAND_CONFIG.alternateName, BRAND_CONFIG.shortName, "Remote Jobs India"],
+    "name": "Workly India",
+    "alternateName": ["WorklyIndia", "Workly"],
     "url": SITE_URL,
     "description": "India's #1 platform for legitimate remote jobs. Find remote jobs, freelance opportunities, and home-based work across all industries.",
     "potentialAction": {
