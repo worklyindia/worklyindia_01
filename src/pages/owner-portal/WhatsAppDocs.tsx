@@ -248,7 +248,7 @@ async function sendTemplate(to, name) {
     headers: { "x-api-key": KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "send_template", to,
-      template_name: "offer_october", language: "en",
+      template_name: "offer_october", language: "en_US", // exact approved language code
       body_params: [name],
     }),
   });
@@ -276,7 +276,7 @@ H = {"x-api-key": os.environ["WORKLY_API_KEY"]}
 def send_template(to, name):
     j = requests.post(API, json={
         "action": "send_template", "to": to,
-        "template_name": "offer_october", "language": "en",
+        "template_name": "offer_october", "language": "en_US",  # exact approved language code
         "body_params": [name],
     }, headers=H).json()
     if not j.get("success"):
@@ -305,7 +305,8 @@ with open("contacts.csv") as f:
 
 const bulkRules = [
   ["Approved templates only", "Bulk messages to users who have not messaged you in 24 hours must use a Meta-approved template. Free-form text works only inside the 24-hour window."],
-  ["Pace your sends", "Keep about 1 message per second per number. New numbers start with a daily limit (e.g. 250 business-initiated conversations) that Meta raises automatically with good quality."],
+  ["Pace your sends", "Keep about 1 message per second per number. Daily tier limits are explained in Rate limits & messaging tiers below."],
+  ["Exact language code", "Use the exact language code the template was approved with (for example en_US, not en). A different code fails with template not found."],
   ["Phone format", "Digits only, with country code and no +: 919876543210."],
   ["Opt-out", "Stop messaging any user who asks to stop, or Meta will lower your quality rating and may restrict the number."],
 ];
