@@ -248,7 +248,7 @@ async function sendTemplate(to, name) {
     headers: { "x-api-key": KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
       action: "send_template", to,
-      template_name: "offer_october", language: "en",
+      template_name: "offer_october", language: "en_US", // exact approved language code
       body_params: [name],
     }),
   });
@@ -276,7 +276,7 @@ H = {"x-api-key": os.environ["WORKLY_API_KEY"]}
 def send_template(to, name):
     j = requests.post(API, json={
         "action": "send_template", "to": to,
-        "template_name": "offer_october", "language": "en",
+        "template_name": "offer_october", "language": "en_US",  # exact approved language code
         "body_params": [name],
     }, headers=H).json()
     if not j.get("success"):
@@ -305,7 +305,8 @@ with open("contacts.csv") as f:
 
 const bulkRules = [
   ["Approved templates only", "Bulk messages to users who have not messaged you in 24 hours must use a Meta-approved template. Free-form text works only inside the 24-hour window."],
-  ["Pace your sends", "Keep about 1 message per second per number. New numbers start with a daily limit (e.g. 250 business-initiated conversations) that Meta raises automatically with good quality."],
+  ["Pace your sends", "Keep about 1 message per second per number. Daily tier limits are explained in Rate limits & messaging tiers below."],
+  ["Exact language code", "Use the exact language code the template was approved with (for example en_US, not en). A different code fails with template not found."],
   ["Phone format", "Digits only, with country code and no +: 919876543210."],
   ["Opt-out", "Stop messaging any user who asks to stop, or Meta will lower your quality rating and may restrict the number."],
 ];
@@ -478,6 +479,19 @@ ${req('{"action":"usage"}')}` }} copied={copied} onCopy={copy} />
           <p className="mt-3 text-sm leading-6 text-muted-foreground">Add a webhook in Developer Portal → Webhooks and select <code>whatsapp.message.received</code> and/or <code>whatsapp.message.status</code> (or <code>whatsapp.*</code> for all). Each POST has headers <code>X-Webhook-Event</code> and <code>X-Webhook-Signature</code> (HMAC-SHA256 hex of the raw body using your endpoint secret). Reply with HTTP 200 within 8 seconds; slow requests are dropped and not retried.</p>
           <SampleBlock sample={{ title: "Webhook payloads", description: "data.phone_number_id tells you which of your numbers received the event. context is set when the customer quoted one of your messages; reaction is set for emoji reactions (empty emoji = removed).", code: `// Incoming text\n{"event":"whatsapp.message.received","created_at":"2026-10-01T12:00:00Z","data":{\n  "phone_number_id":"111111111111111","from":"919876543210","name":"Rahul",\n  "type":"text","text":"Hi","message_id":"wamid.IN1","timestamp":"1790855000",\n  "media_url":null,"context":null,"raw":{...}}}\n\n// type can be: text, image, video, audio, document, sticker, location, contacts, button, interactive, reaction\n\n// Delivery status (sent | delivered | read | failed)\n{"event":"whatsapp.message.status","created_at":"...","data":{\n  "phone_number_id":"111111111111111","message_id":"wamid.OUT1","status":"read",\n  "recipient":"919876543210","timestamp":"1790855100","errors":null}}` }} copied={copied} onCopy={copy} />
           <SampleBlock sample={{ title: "Verify the signature (Node.js)", description: "Use the raw request body, not re-serialized JSON.", code: `import crypto from "crypto";\napp.post("/workly-webhook", express.raw({ type: "application/json" }), (req, res) => {\n  const expected = crypto.createHmac("sha256", process.env.WORKLY_WEBHOOK_SECRET).update(req.body).digest("hex");\n  const got = req.get("X-Webhook-Signature") || "";\n  if (got.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected))) return res.sendStatus(401);\n  res.sendStatus(200);\n  const { event, data } = JSON.parse(req.body.toString());\n  // handle event...\n});` }} copied={copied} onCopy={copy} />
+          <div className="mt-7 rounded-md border border-border bg-muted/50 p-4">
+            <h4 className="font-semibold">Reliable webhook handling (do not lose events)</h4>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">Responses slower than 8 seconds are dropped and never retried, so your endpoint must only verify, save and acknowledge. Do all real work later from a durable queue.</p>
+            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
+              <li><strong className="text-foreground">Verify, persist, then reply 200:</strong> check X-Webhook-Signature, insert the raw event into a database table, and return 200 immediately (target under 1 second).</li>
+              <li><strong className="text-foreground">Deduplicate:</strong> use a unique key such as <code>message_id</code> + <code>event</code> + status so a repeated delivery is ignored safely (idempotent processing).</li>
+              <li><strong className="text-foreground">Process from a queue:</strong> a separate worker (or queue such as SQS, RabbitMQ, Redis/BullMQ, Cloud Tasks) picks pending rows, handles them and marks them done.</li>
+              <li><strong className="text-foreground">Retry with backoff:</strong> failed rows get attempts+1 and a next_attempt_at (1 min, 5 min, 30 min…). After about 8 attempts move them to a dead-letter state for manual review.</li>
+              <li><strong className="text-foreground">Recover missed events:</strong> if your server was down, reconcile from the API — call <code>status</code>, re-read message state, and use WhatsApp Chat history to backfill messages you never stored.</li>
+              <li><strong className="text-foreground">Monitor:</strong> alert on growing pending/dead-letter counts and on non-200 responses. Webhooks that fail for 24 hours are auto-disabled.</li>
+            </ol>
+          </div>
+          <SampleBlock sample={{ title: "Durable webhook receiver + worker (Node.js + Postgres)", description: "Endpoint stores the event and answers fast; the worker processes, retries with backoff, and dead-letters after repeated failures.", code: `-- Table\ncreate table webhook_events (\n  id bigserial primary key,\n  dedupe_key text unique not null,\n  event text not null,\n  payload jsonb not null,\n  status text not null default 'pending', -- pending | done | dead\n  attempts int not null default 0,\n  next_attempt_at timestamptz not null default now(),\n  last_error text,\n  received_at timestamptz not null default now()\n);\n\n// Receiver: verify -> persist -> 200\napp.post("/workly-webhook", express.raw({ type: "application/json" }), async (req, res) => {\n  if (!validSignature(req)) return res.sendStatus(401);\n  const body = JSON.parse(req.body.toString());\n  const d = body.data || {};\n  const key = [body.event, d.message_id, d.status || ""].join(":");\n  await db.query(\n    "insert into webhook_events (dedupe_key, event, payload) values ($1,$2,$3) on conflict (dedupe_key) do nothing",\n    [key, body.event, body]\n  );\n  res.sendStatus(200); // well under 8 seconds\n});\n\n// Worker: run every few seconds\nasync function work() {\n  const { rows } = await db.query(\n    "update webhook_events set attempts = attempts + 1 where id in (select id from webhook_events where status='pending' and next_attempt_at <= now() order by id limit 20 for update skip locked) returning *"\n  );\n  for (const ev of rows) {\n    try {\n      await handleEvent(ev.payload); // your business logic, must be idempotent\n      await db.query("update webhook_events set status='done' where id=$1", [ev.id]);\n    } catch (e) {\n      const dead = ev.attempts >= 8;\n      const delayMin = Math.min(2 ** ev.attempts, 360);\n      await db.query(\n        "update webhook_events set status=$2, last_error=$3, next_attempt_at=now() + ($4 || ' minutes')::interval where id=$1",\n        [ev.id, dead ? "dead" : "pending", String(e.message || e), delayMin]\n      );\n    }\n  }\n}\nsetInterval(work, 5000);` }} copied={copied} onCopy={copy} />
         </section>
 
         <section id="business-profile" className="scroll-mt-20 border-b border-border py-8">
