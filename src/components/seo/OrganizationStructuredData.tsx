@@ -16,7 +16,8 @@ export const OrganizationStructuredData = ({ brandName }: OrganizationStructured
     "name": name,
     "alternateName": BRAND_CONFIG.alternateName,
     "url": SITE_URL,
-    "logo": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+    "@id": `${SITE_URL.replace(/\/$/, '')}/#organization`,
+    "logo": `${SITE_URL.replace(/\/$/, '')}/workly-india-logo.png`,
     "description": "India's leading platform connecting job seekers with legitimate Workly India opportunities. We verify employers and ensure quality remote job listings.",
     "foundingDate": "2024",
     "founders": [
