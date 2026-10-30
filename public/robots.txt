@@ -139,6 +139,11 @@ Disallow: /employer-settings
 Disallow: /*?*redirect=
 Disallow: /*?*token=
 Disallow: /*?*session=
+Disallow: /*?*_r=
+Disallow: /*?*mode=
+Disallow: /forgot-password
+Disallow: /employer-forgot-password
+Disallow: /activity
 Disallow: /api/
 
 # Bingbot - No Crawl-delay (rarely honored, causes warnings)
