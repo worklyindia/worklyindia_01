@@ -60,10 +60,13 @@ export default async function handler(req, res) {
     '@context': 'https://schema.org', '@type': 'JobPosting', title: job.title, description: strip(job.description) || job.title,
     datePosted: job.created_at, validThrough: job.expires_at || job.application_deadline || undefined,
     employmentType: employmentType(job.job_type),
-    hiringOrganization: { '@type': 'Organization', name: company, logo: job.companies?.logo_url || undefined },
+    hiringOrganization: { '@type': 'Organization', name: company, sameAs: `https://${host}/`, logo: job.companies?.logo_url || undefined },
     ...(String(job.work_mode || '').toLowerCase().includes('remote') ? { jobLocationType: 'TELECOMMUTE', applicantLocationRequirements: { '@type': 'Country', name: 'India' } } : {}),
     jobLocation: { '@type': 'Place', address: { '@type': 'PostalAddress', streetAddress: street, addressLocality: city, addressRegion: state, postalCode: pin, addressCountry: 'IN' } },
     ...(job.salary_min ? { baseSalary: { '@type': 'MonetaryAmount', currency: job.salary_currency || 'INR', value: { '@type': 'QuantitativeValue', value: Math.round((job.salary_min + (job.salary_max || job.salary_min)) / 2), minValue: job.salary_min, maxValue: job.salary_max || job.salary_min, unitText: unit(job.salary_period) } } } : {}),
+    identifier: { '@type': 'PropertyValue', name: 'Workly India', value: job.id },
+    directApply: true,
+    industry: job.category || undefined,
     url,
   };
   let html = shell.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(title)}</title>`)

@@ -12,8 +12,9 @@ import path from 'node:path';
 
 const DOMAIN = process.env.CANONICAL_DOMAIN || 'worklyindia.devs.surf';
 const BASE = `https://${DOMAIN}`;
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+// Publishable (public) key fallback so every build refreshes job URLs even without .env.
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://jubwzelupbntbetpajqb.supabase.co';
+const SUPABASE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o';
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   console.warn('[sitemaps] Missing Supabase env; keeping existing sitemap files');

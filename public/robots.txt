@@ -42,6 +42,7 @@ Allow: /developers
 Allow: /developers/
 Allow: /ai-assistant/pricing
 Allow: /jobs/
+Allow: /job/
 Disallow: /owner-portal/
 Disallow: /admin/
 Disallow: /dashboard/
@@ -57,6 +58,7 @@ Allow: /developers
 Allow: /developers/
 Allow: /ai-assistant/pricing
 Allow: /jobs/
+Allow: /job/
 Allow: /llms.txt
 Allow: /llms-full.txt
 Allow: /seo/
@@ -71,6 +73,7 @@ Allow: /developers
 Allow: /developers/
 Allow: /ai-assistant/pricing
 Allow: /jobs/
+Allow: /job/
 Disallow: /owner-portal/
 Disallow: /admin/
 
@@ -103,6 +106,7 @@ Allow: /
 
 # Googlebot - No Crawl-delay or Host (not supported by Google)
 User-agent: Googlebot
+Allow: /job/
 Allow: /
 Allow: /employer/referral
 Allow: /employer/monthly-competition
@@ -148,6 +152,7 @@ Disallow: /api/
 
 # Bingbot - No Crawl-delay (rarely honored, causes warnings)
 User-agent: Bingbot
+Allow: /job/
 Allow: /
 Allow: /employer/referral
 Allow: /employer/monthly-competition
@@ -188,6 +193,7 @@ Disallow: /api/
 
 # Yandex - No Host directive (deprecated)
 User-agent: Yandex
+Allow: /job/
 Allow: /
 Allow: /employer/referral
 Allow: /employer/monthly-competition
@@ -228,6 +234,7 @@ Disallow: /api/
 
 # All other crawlers
 User-agent: *
+Allow: /job/
 Allow: /
 Allow: /employer/referral
 Allow: /employer/monthly-competition
