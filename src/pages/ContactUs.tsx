@@ -183,7 +183,6 @@ const ContactUs = () => {
               </p>
             </div>
           </div>
-          <AddressMap address={operationalAddress} title="Workly India office" className="mt-6" />
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -279,6 +278,9 @@ const ContactUs = () => {
         </div>
 
       </main>
+      <div className="-mt-20 md:-mt-4 pb-24 md:pb-8">
+        <AddressMap address={operationalAddress} title="Workly India office" />
+      </div>
 
     </div>
   );
