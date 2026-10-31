@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { storageImageUrl } from "@/utils/imageUrl";
+import AddressMap from "@/components/AddressMap";
 import { ArrowLeft, MapPin, Clock, DollarSign, Building, Heart, Phone, Briefcase, Share2, Flag, Lightbulb, MessageCircle, User, ChevronDown, ChevronUp, Copy, Map, Globe, Mail } from "lucide-react";
 import LottieIcon from "@/components/LottieIcon";
 import callAnimation from "@/assets/lottie/call.json";
@@ -1205,6 +1206,7 @@ Best regards,
             <MapPin className="w-3.5 h-3.5 shrink-0" />
             <span className="text-sm">{jobData.precise_address || jobData.location}</span>
           </div>
+          <AddressMap address={jobData.precise_address || jobData.location} title="Job location" className="mt-3" />
 
           {/* Experience + Vacancies, Job Type */}
           <div className="mt-2 space-y-1">

@@ -22,6 +22,7 @@ import { useNavigate } from "react-router-dom";
 import { useContactInfo, useMerchantInfo } from "@/hooks/useSiteSettings";
 import BrandSocialBar from "@/components/BrandSocialBar";
 import SEO from "@/components/SEO";
+import AddressMap from "@/components/AddressMap";
 
 const ContactUs = () => {
   const { data: contactInfo } = useContactInfo();
@@ -182,6 +183,7 @@ const ContactUs = () => {
               </p>
             </div>
           </div>
+          <AddressMap address={operationalAddress} title="Workly India office" className="mt-6" />
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
