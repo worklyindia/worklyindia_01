@@ -1206,7 +1206,6 @@ Best regards,
             <MapPin className="w-3.5 h-3.5 shrink-0" />
             <span className="text-sm">{jobData.precise_address || jobData.location}</span>
           </div>
-          <AddressMap address={jobData.precise_address || jobData.location} title="Job location" className="mt-3" />
 
           {/* Experience + Vacancies, Job Type */}
           <div className="mt-2 space-y-1">
@@ -1701,6 +1700,8 @@ Best regards,
           
           <JobTipsDialog className="flex-1" />
         </div>
+
+        <AddressMap address={jobData.precise_address || jobData.location} title="Job location" className="mb-4" />
 
         {/* Ad below application section - 300x250 Banner */}
         {ADS_CONFIG.enabled && ADS_CONFIG.placements.jobDetail.belowApplication && (
