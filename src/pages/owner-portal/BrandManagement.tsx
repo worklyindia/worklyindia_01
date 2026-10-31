@@ -962,6 +962,8 @@ const BrandManagement = () => {
           undefined
         }
         circularCrop={currentFieldType === 'logo_url' || currentFieldType === 'favicon_url' || currentPwaField === 'notification_badge_icon'}
+        // Keep logo/favicon pixels exactly as uploaded: a white background stays white, a transparent one stays transparent.
+        preservePixels={currentFieldType === 'logo_url' || currentFieldType === 'favicon_url'}
         outputSize={
           currentFieldType === 'logo_url' ? { width: 512, height: 512 } :
           currentFieldType === 'favicon_url' ? { width: 192, height: 192 } :
