@@ -1,6 +1,7 @@
 import { Helmet } from 'react-helmet-async';
 import { CANONICAL_URL } from '@/config/domainConfig';
 import { BRAND_CONFIG } from '@/config/brandConfig';
+import { FOUNDER_NAME } from '@/lib/founderProfile.mjs';
 
 const SITE_URL = CANONICAL_URL;
 
@@ -20,12 +21,13 @@ export const OrganizationStructuredData = ({ brandName }: OrganizationStructured
     "logo": `${SITE_URL.replace(/\/$/, '')}/workly-india-logo.png`,
     "description": "India's leading platform connecting job seekers with legitimate Workly India opportunities. We verify employers and ensure quality remote job listings.",
     "foundingDate": "2024",
-    "founders": [
-      {
-        "@type": "Person",
-        "name": `${name} Team`
-      }
-    ],
+    "founder": {
+      "@type": "Person",
+      "@id": `${SITE_URL.replace(/\/$/, '')}/#founder`,
+      "name": FOUNDER_NAME,
+      "jobTitle": "Founder & CEO",
+      "url": `${SITE_URL.replace(/\/$/, '')}/about-us#founder`
+    },
     "address": {
       "@type": "PostalAddress",
       "addressCountry": "IN",

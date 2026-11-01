@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { readDocumentCatalog, renderDocumentHtml } from './document-pages.mjs';
 import { PUBLIC_CAREER_CONTENT } from '../src/lib/publicCareerContent.mjs';
+import { FOUNDER_NAME, founderSchema } from '../src/lib/founderProfile.mjs';
 
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -17,6 +18,11 @@ export function readRouteSeo() {
 export function renderRouteHtml(template, domain, e) {
   const url = `https://${domain}${e.route === '/' ? '/' : e.route}`;
   const schema = { '@context': 'https://schema.org', '@type': e.type, name: e.title, description: e.description, url, inLanguage: 'en-IN', isPartOf: { '@type': 'WebSite', name: 'Workly India', url: `https://${domain}/` } };
+  if (e.route === '/about-us') {
+    // Static identity stays valid after portrait changes; React supplies the current saved image.
+    const { image, ...person } = founderSchema(`https://${domain}`);
+    schema.mainEntity = person;
+  }
   let html = template.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(e.title)}</title>`);
   html = html.replace(/<link\b[^>]*rel=["']canonical["'][^>]*>/gi, '');
   html = html.replace(/<meta\b[^>]*(?:name|property)=["'](?:title|description|keywords|og:title|og:description|og:url|twitter:title|twitter:description|twitter:url)["'][^>]*>/gi, '');
@@ -31,6 +37,11 @@ export function renderRouteHtml(template, domain, e) {
 <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>
 </head>`);
   const content = PUBLIC_CAREER_CONTENT[e.route];
+  if (e.route === '/about-us') {
+    html = html.replace(/<!-- Comprehensive Noscript Content[\s\S]*?<\/noscript>/i, '');
+    const body = `<noscript><main><h1>About Workly India</h1><section id="founder"><h2>${esc(FOUNDER_NAME)}</h2><p>Founder &amp; CEO, Workly India</p><p>Workly India connects job seekers and employers across India.</p></section><p><a href="/contact-us">Contact Workly India</a></p></main></noscript>`;
+    return html.replace(/<div id="root"><\/div>/, `<div id="root">${body}</div>`);
+  }
   if (!content) return html;
   // Replace the generic homepage fallback with the same facts shown in React.
   html = html.replace(/<!-- Comprehensive Noscript Content[\s\S]*?<\/noscript>/i, '');
