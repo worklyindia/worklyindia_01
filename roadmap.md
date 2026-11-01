@@ -1,3 +1,9 @@
+# Founder photo and identity
+- [x] Show supplied Founder & CEO photo and identity on About Us with linked search metadata.
+- [x] Add owner-editable crop/upload using existing Cloudflare storage without reducing photo resolution.
+- [x] Verify public photo and matching Person metadata on desktop/mobile, no overflow/runtime errors; six focused tests pass and crawler identity validates.
+- [ ] Verify real owner crop → Cloudflare upload → saved photo readback; blocked: external backend authenticated preview access unavailable. Supplied portrait is 841×1051, not Full HD; higher-resolution replacement retains its native crop dimensions. Google/AI indexing depends on deployment and crawling.
+
 # WhatsApp activation and verification
 - [x] Add conditional PIN activation before AI Connect WhatsApp settings/profile.
 - [x] Show English Meta business verification guidance and actual limits without promising approval.

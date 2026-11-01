@@ -1,72 +1,61 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BadgeCheck } from "lucide-react";
-
-export const FOUNDER_NAME = "Vishalbhai Muljibhai Gohil";
-export const FOUNDER_PHOTO_KEY = "founder_photo_url";
-const DEFAULT_PHOTO = "/founder-ceo.jpg";
-const SITE = "https://worklyindia.devs.surf";
+import { CANONICAL_URL } from "@/config/domainConfig";
+import { FOUNDER_NAME, FOUNDER_PHOTO_KEY, DEFAULT_FOUNDER_PHOTO, founderSchema } from "@/lib/founderProfile.mjs";
 
 /** Founder & CEO card; the photo is owner-editable in Brand Management. */
 const FounderSection = ({ className = "" }: { className?: string }) => {
+  const queryClient = useQueryClient();
   const { data: photo } = useQuery({
     queryKey: ["app-setting", FOUNDER_PHOTO_KEY],
     queryFn: async () => {
-      const { data } = await supabase.from("app_settings").select("setting_value").eq("setting_key", FOUNDER_PHOTO_KEY).maybeSingle();
-      return (data?.setting_value as string) || DEFAULT_PHOTO;
+      const { data, error } = await supabase.from("app_settings").select("setting_value").eq("setting_key", FOUNDER_PHOTO_KEY).maybeSingle();
+      if (error) throw error;
+      return data?.setting_value || DEFAULT_FOUNDER_PHOTO;
     },
     staleTime: Infinity,
   });
-  const src = photo || DEFAULT_PHOTO;
-  const absolute = src.startsWith("http") ? src : `${SITE}${src}`;
-
-  const schema = {
-    "@context": "https://schema.org",
-    "@type": "Person",
-    "@id": `${SITE}/#founder`,
-    name: FOUNDER_NAME,
-    alternateName: "Vishal Gohil",
-    jobTitle: "Founder & CEO",
-    image: absolute,
-    url: `${SITE}/about-us`,
-    worksFor: { "@id": `${SITE}/#organization`, "@type": "Organization", name: "Workly India", url: `${SITE}/` },
-    address: { "@type": "PostalAddress", addressLocality: "Patan", addressRegion: "Gujarat", addressCountry: "IN" },
-  };
+  useEffect(() => {
+    const refresh = () => { void queryClient.invalidateQueries({ queryKey: ["app-setting", FOUNDER_PHOTO_KEY] }); };
+    const channel = supabase.channel('public-founder-photo')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings', filter: `setting_key=eq.${FOUNDER_PHOTO_KEY}` }, refresh)
+      .subscribe((status) => { if (status === 'SUBSCRIBED') refresh(); });
+    window.addEventListener('online', refresh);
+    return () => { void supabase.removeChannel(channel); window.removeEventListener('online', refresh); };
+  }, [queryClient]);
+  const src = photo || DEFAULT_FOUNDER_PHOTO;
+  const schema = founderSchema(CANONICAL_URL, src);
 
   return (
-    <section className={className} aria-labelledby="founder-heading">
+    <section id="founder" className={className} aria-labelledby="founder-heading">
       <Helmet>
         <script type="application/ld+json">{JSON.stringify(schema)}</script>
       </Helmet>
-      <Card className="overflow-hidden border border-border/50">
-        <div className="grid md:grid-cols-2">
+        <div className="grid items-center gap-6 border-y border-border py-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] md:gap-8">
           <img
             src={src}
             alt={`${FOUNDER_NAME}, Founder & CEO of Workly India`}
-            className="w-full aspect-[4/5] object-cover"
+            className="w-full max-w-[280px] mx-auto aspect-[4/5] rounded-lg object-cover"
             loading="lazy"
             decoding="async"
             width={1080}
             height={1350}
           />
-          <div className="p-6 md:p-8 flex flex-col justify-center text-center md:text-left">
+          <div className="min-w-0 flex flex-col justify-center text-center md:text-left">
             <Badge variant="secondary" className="w-fit mx-auto md:mx-0 mb-3">Meet the Founder</Badge>
-            <h2 id="founder-heading" className="text-2xl font-bold text-foreground flex items-center gap-2 justify-center md:justify-start">
+            <h2 id="founder-heading" className="text-2xl font-bold text-foreground break-words">
               {FOUNDER_NAME}
-              <BadgeCheck className="w-6 h-6 text-primary" aria-label="Verified" />
             </h2>
             <p className="text-primary font-semibold mt-1">Founder & CEO, Workly India</p>
             <p className="text-muted-foreground mt-4 leading-relaxed">
-              I started Workly India from Patan, Gujarat, so job seekers can find real, verified work without
-              ever paying a fee. Every employer on our platform is checked, and our team is reachable by phone
-              and WhatsApp.
+              Vishalbhai Muljibhai Gohil is the Founder & CEO of Workly India, a platform connecting
+              job seekers and employers across India.
             </p>
           </div>
         </div>
-      </Card>
     </section>
   );
 };
