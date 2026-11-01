@@ -11,6 +11,8 @@ import ParallaxSection from "@/components/animations/ParallaxSection";
 import TextReveal from "@/components/animations/TextReveal";
 import AnimatedCounter from "@/components/animations/AnimatedCounter";
 import Tilt3DCard from "@/components/animations/Tilt3DCard";
+import FounderSection from "@/components/FounderSection";
+import { ROUTE_SEO } from "@/lib/routeSeo";
 
 const AboutUs = () => {
   const { data: merchantInfo } = useMerchantInfo();
@@ -60,9 +62,9 @@ const AboutUs = () => {
   return (
     <div className="min-h-screen bg-background">
       <SEO 
-        title="About Workly India - Leading Remote Job Platform in India"
-        description="Learn about Workly India's mission to connect professionals with legitimate remote-work opportunities. Founded in 2025, serving 75,000+ users across India."
-        keywords="about workly india, Workly India platform india, Workly India company, legitimate online jobs india"
+        title={ROUTE_SEO['/about-us'].title}
+        description={ROUTE_SEO['/about-us'].description}
+        keywords={ROUTE_SEO['/about-us'].keywords}
         canonical="/about-us"
       />
       <PageHeader title="About Us" />
@@ -93,6 +95,8 @@ const AboutUs = () => {
             </div>
           </div>
         </TextReveal>
+
+        <FounderSection className="mb-12" />
 
         {/* Stats Section */}
         <ParallaxSection speed={0.08} fadeIn>

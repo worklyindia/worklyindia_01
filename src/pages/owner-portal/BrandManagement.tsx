@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Palette, Upload, Save, Loader2, X, Share2, ExternalLink, Smartphone, Image } from "lucide-react";
 import { ImageCropDialog } from "@/components/brand/ImageCropDialog";
+import FounderPhotoSettings from "@/components/brand/FounderPhotoSettings";
 import { SocialMediaPreview } from "@/components/brand/SocialMediaPreview";
 import { cleanupBrandAsset } from "@/utils/storageCleanup";
 import { BRAND_CONFIG } from "@/config/brandConfig";
@@ -364,6 +365,7 @@ const BrandManagement = () => {
         )}
 
         <div className="space-y-6">
+          <FounderPhotoSettings />
           {/* Logo Section */}
           <Card>
             <CardHeader>
