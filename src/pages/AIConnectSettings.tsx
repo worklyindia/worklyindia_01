@@ -445,7 +445,10 @@ export default function AIConnectSettings() {
           <PlatformBusinessProfileCard key={ownAccountId || DEFAULT_ID} accountId={ownAccountId} platform="outlook" label="Outlook" />
         ) : key === 'whatsapp' && whatsapp.account ? (
           <WhatsAppSetupGate key={whatsapp.account.phone_number_id || 'default'} scope="employer">
-            <EmployerWhatsAppAISettings account={whatsapp.account} reload={whatsapp.reload} />
+            <div className="space-y-3">
+              <EmployerWhatsAppAISettings account={whatsapp.account} reload={whatsapp.reload} />
+              <PlatformBusinessProfileCard key={`wa-${whatsapp.account.phone_number_id || ''}`} accountId={whatsapp.account.phone_number_id || ''} platform="whatsapp" label="WhatsApp" />
+            </div>
           </WhatsAppSetupGate>
         ) : key === 'email' ? (
           <PlatformBusinessProfileCard key={ownAccountId || DEFAULT_ID} accountId={ownAccountId} platform="email" label="Domain email" />

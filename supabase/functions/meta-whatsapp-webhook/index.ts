@@ -337,7 +337,7 @@ async function aiAutoReply(employer: Omit<NonNullable<Awaited<ReturnType<typeof 
   if (!token) return;
   const history = (rows || []).reverse().map((r: any) => ({ direction: r.direction, content: r.message_content || '' }));
   const accountContext = await whatsappAccountContext(phoneNumberId, token, conversationId, phone);
-  const reply = await generateEmployerReply({ companyName: (company as any)?.name || 'our company', history, settings: employer, businessContext: await getBusinessContext(employer.user_id, audience ? 'customer_service' : 'whatsapp'), accountContext });
+  const reply = await generateEmployerReply({ companyName: (company as any)?.name || 'our company', history, settings: employer, businessContext: await getBusinessContext(employer.user_id, audience ? 'customer_service' : 'whatsapp', audience ? null : phoneNumberId), accountContext });
   if (!reply) return;
   if (audience && !(await loadSupportAccountSettings(supabase, employer.user_id, 'whatsapp', phoneNumberId)).enabled) return;
   const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
