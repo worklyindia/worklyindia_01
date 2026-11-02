@@ -474,45 +474,6 @@ export default function AIConnect() {
             brandColor="#FC6D26"
           />
 
-                    <PlatformCard
-            name="Discord"
-            description="Connect Discord so AI can auto reply to messages for your business."
-            logo={<DiscordLogo size={28} />}
-            connected={discordBot.status.connected}
-            connectedLabel={discordBot.status.botUsername ? `@${discordBot.status.botUsername}` : discordConn?.accountName || 'Connected'}
-            onConnect={() => handleGenericConnect('discord')}
-            onDisconnect={discordBot.status.connected ? () => handleChatBotDisconnect('discord') : discordConn ? () => handleSocialDisconnect('discord') : undefined}
-            onSettings={discordBot.status.connected ? () => navigate('/ai-assistant/connect/discord/settings') : undefined}
-            loading={discordBot.loading || oauthLoading === 'discord'}
-            brandColor="#5865F2"
-          />
-
-                              <PlatformCard
-            name="Twitch"
-            description="Connect Twitch so AI can auto reply to messages for your business."
-            logo={<TwitchLogo size={28} />}
-            connected={twitchBot.status.connected}
-            connectedLabel={twitchBot.status.botUsername ? `@${twitchBot.status.botUsername}` : twitchConn?.accountName || 'Connected'}
-            onConnect={() => handleGenericConnect('twitch')}
-            onDisconnect={twitchBot.status.connected ? () => handleChatBotDisconnect('twitch') : twitchConn ? () => handleSocialDisconnect('twitch') : undefined}
-            onSettings={twitchBot.status.connected || twitchConn ? () => navigate('/ai-assistant/connect/twitch/settings') : undefined}
-            loading={twitchBot.loading || oauthLoading === 'twitch'}
-            brandColor="#9146FF"
-          />
-
-          <PlatformCard
-            name="Slack"
-            description="Connect Slack so AI can auto reply to messages for your business."
-            logo={<SlackLogo size={28} />}
-            connected={slackBot.status.connected}
-            connectedLabel={slackBot.status.botName || slackConn?.accountName || 'Connected'}
-            onConnect={() => handleGenericConnect('slack')}
-            onDisconnect={slackBot.status.connected ? () => handleChatBotDisconnect('slack') : slackConn ? () => handleSocialDisconnect('slack') : undefined}
-            onSettings={slackBot.status.connected ? () => navigate('/ai-assistant/connect/slack/settings') : undefined}
-            loading={slackBot.loading || oauthLoading === 'slack'}
-            brandColor="#4A154B"
-          />
-
                                         <PlatformCard
             name="Telegram"
             description="Connect your own Telegram bot — AI will automatically reply to messages sent to that bot."
