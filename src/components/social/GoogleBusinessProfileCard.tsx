@@ -320,6 +320,7 @@ export default function GoogleBusinessProfileCard({ enabled, audience, variant =
                 />
               </div>
 
+              {audience && (<>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Tone</Label>
@@ -378,6 +379,7 @@ export default function GoogleBusinessProfileCard({ enabled, audience, variant =
                   className="h-9 text-sm"
                 />
               </div>
+              </>)}
 
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="gbp-skip-neg" className="text-xs">
