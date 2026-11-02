@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -100,6 +100,7 @@ const OnboardingGuard = ({ children }: { children: ReactNode }) => {
     refreshCompany,
   } = useEmployerAuth();
 
+  const resolvedUserRef = useRef<string | null>(null);
   const path = location.pathname;
   const redirectTarget = path + location.search;
   const { phoneVerifyEnabled, phoneVerifyLoading } = usePhoneVerifySetting('phone_verify_jobseeker_profile');
@@ -108,12 +109,21 @@ const OnboardingGuard = ({ children }: { children: ReactNode }) => {
   const numberExempt = /^(\/auth|\/employer-auth|\/signup|\/employer-signup|\/forgot-password|\/employer-forgot-password|\/reset-password|\/oauth|\/admin|\/owner-portal|\/banned|\/employer-disabled|\/developers?)(\/|$)/i.test(path)
     || ALWAYS_ALLOWED_EXACT.includes(normalize(path));
 
+  // Only the very first resolve for an account may block; background re-checks
+  // (focus, tab switch, token refresh) must never unmount the open page.
+  const relevantLoading = employerAccount
+    ? (employerLoading || companyLoading) && !company
+    : (loading || profileLoading) && !profile;
+  const stillLoading = phoneVerifyLoading || relevantLoading;
+  if (activeUser && !stillLoading) resolvedUserRef.current = activeUser.id;
+  const firstLoad = !!activeUser && resolvedUserRef.current !== activeUser.id;
+
   // Check before setup/referral exemptions: completed legacy accounts must verify too.
   if (activeUser && !numberExempt) {
     const needsNumber = requiresAccountPhone(phoneVerifyEnabled, activeUser);
     // Sending the OTP refreshes the account; keep the number screen mounted so the OTP boxes stay visible.
     if (!needsNumber || phoneVerifyLoading) {
-      if (phoneVerifyLoading || loading || employerLoading || profileLoading || companyLoading) {
+      if (stillLoading && firstLoad && !isAlwaysAllowed(path)) {
         return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
       }
     }
