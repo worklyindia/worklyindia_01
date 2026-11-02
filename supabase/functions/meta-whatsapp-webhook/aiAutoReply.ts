@@ -1,6 +1,7 @@
 // AI auto reply for employer WhatsApp numbers (connected from AI Connect or the employer WhatsApp page).
 import { createOpenAI } from "npm:@ai-sdk/openai@2";
 import { streamText, type ModelMessage } from "npm:ai@5";
+import { runAiChain } from "../_shared/aiChain.ts";
 
 const MODEL = "openai/gpt-6-astra";
 
@@ -102,7 +103,12 @@ export async function generateEmployerReply(opts: {
     for await (const chunk of result.textStream) text += chunk;
   } catch (e) {
     console.error("[wa-ai] generation failed", e instanceof Error ? e.message : e);
-    return null;
   }
-  return text.trim() || null;
+  if (text.trim()) return text.trim();
+  // Fallback: try every configured provider so a single model failure never drops a reply.
+  const fallback = await runAiChain(
+    [{ role: "system", content: parts.join("\n") }, ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: String(m.content) }))],
+    { label: "wa-ai", maxTokens: 400 },
+  );
+  return fallback?.text?.trim() || null;
 }
