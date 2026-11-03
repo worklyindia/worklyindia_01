@@ -26,14 +26,29 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const day = (v) => (v ? new Date(v).toISOString().slice(0, 10) : null);
 
 async function q(pathWithQuery) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathWithQuery}`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  });
-  if (!res.ok) {
-    console.warn(`[warn] query failed (${res.status}): ${pathWithQuery}`);
-    return [];
+  // Supabase/PostgREST commonly caps responses at 1,000 rows even when
+  // the query asks for more. Fetch pages so large job/company tables are
+  // not silently truncated in the sitemap.
+  const endpoint = new URL(`${SUPABASE_URL}/rest/v1/${pathWithQuery}`);
+  const requestedLimit = Number(endpoint.searchParams.get('limit') || 1000);
+  const pageSize = Math.min(requestedLimit, 1000);
+  const rows = [];
+  for (let offset = 0; offset < requestedLimit; offset += pageSize) {
+    endpoint.searchParams.set('limit', String(pageSize));
+    endpoint.searchParams.set('offset', String(offset));
+    const res = await fetch(endpoint, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    if (!res.ok) {
+      console.warn(`[warn] query failed (${res.status}): ${pathWithQuery}`);
+      return rows;
+    }
+    const page = await res.json();
+    if (!Array.isArray(page) || page.length === 0) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
   }
-  return res.json();
+  return rows;
 }
 
 function urlset(entries) {
