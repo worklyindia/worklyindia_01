@@ -77,14 +77,14 @@ const InstagramLogo = () => (
 export const META_INFO: Record<MetaPlatform, { name: string; description: string; color: string; logo: JSX.Element; inbox: string }> = {
   facebook: {
     name: 'Facebook Page',
-    description: 'Connect your Facebook Page so AI can auto reply to post comments and Messenger inbox messages.',
+    description: 'Connect your Facebook Page so AI can publicly reply to post comments and privately message the commenter, plus auto-reply to Messenger inbox messages.',
     color: '#1877F2',
     logo: <FacebookLogo />,
     inbox: 'Messenger inbox messages',
   },
   instagram: {
     name: 'Instagram',
-    description: 'Connect your Instagram Business account so AI can auto reply to post comments and DMs.',
+    description: 'Connect your Instagram Business account so AI can publicly reply to post comments and privately message the commenter, plus auto-reply to Instagram DMs.',
     color: '#D62976',
     logo: <InstagramLogo />,
     inbox: 'Instagram DMs',
@@ -130,7 +130,7 @@ export function MetaReplyToggles({ account, platform, onSaved, audience }: { acc
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <Label htmlFor={`${account.id}-top-c`} className="text-sm">AI reply to post comments</Label>
+        <Label htmlFor={`${account.id}-top-c`} className="text-sm">AI public comment reply + private DM</Label>
         <Switch id={`${account.id}-top-c`} checked={s.comments} disabled={busy} onCheckedChange={(v) => void toggle('comments', v)} />
       </div>
       <div className="flex items-center justify-between gap-3">
