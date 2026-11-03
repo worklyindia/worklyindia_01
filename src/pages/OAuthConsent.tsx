@@ -16,6 +16,7 @@ const scopeText: Record<string, string> = {
   openid: "Confirm your identity",
   email: "See your email address",
   profile: "See your basic profile (name, photo)",
+  phone: "Access your phone number",
 };
 
 const OAuthConsent = () => {
@@ -86,7 +87,7 @@ const OAuthConsent = () => {
             </p>
             <p className="mt-4 text-sm font-medium">It will be able to:</p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-              {requestedScopes.filter((s) => s !== "phone").map((s) => <li key={s}>{scopeText[s] ?? s}</li>)}
+              {requestedScopes.map((s) => <li key={s}>{scopeText[s] ?? s}</li>)}
             </ul>
             {asksPhone && (
               <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm leading-6 text-destructive">
@@ -97,7 +98,7 @@ const OAuthConsent = () => {
             <p className="mt-4 break-all text-xs text-muted-foreground">You will be sent back to {host}</p>
             <div className="mt-6 flex gap-2">
               <Button variant="outline" className="flex-1" disabled={busy} onClick={() => decide(false)}>Deny</Button>
-              <Button className="flex-1" disabled={busy || asksPhone} onClick={() => decide(true)}>Allow</Button>
+              <Button className="flex-1" disabled={busy} onClick={() => decide(true)}>Allow</Button>
             </div>
           </>
         )}
