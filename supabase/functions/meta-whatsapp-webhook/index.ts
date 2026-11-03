@@ -265,7 +265,7 @@ async function handleInbound(value: any) {
         .eq('user_id', employer.user_id).eq('platform', 'whatsapp').in('account_id', [phoneNumberId ?? '', '']).eq('enabled', true).limit(1);
       profileAiOn = !!prof?.length;
     }
-    if ((employer?.ai_auto_reply || profileAiOn) && type === 'text' && conv?.id) {
+    if (employer && (employer.ai_auto_reply || profileAiOn) && type === 'text' && conv?.id) {
       try { await aiAutoReply(employer, conv.id, phone, phoneNumberId); }
       catch (e) { console.error('[wa-ai] auto reply failed', e instanceof Error ? e.message : e); }
     }
