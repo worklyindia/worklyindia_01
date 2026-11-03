@@ -617,7 +617,7 @@ async function generateSocialReply(opts: { account: any; platform: Platform; kin
     lang,
     length[a.ai_reply_length || ''] || length.short,
     'Never invent prices, dates or promises; if unsure, say the team will get back soon. Plain text only, no markdown.',
-    opts.kind === 'comment' ? 'This reply is public. If the person asks for help, asks us to DM them, or shares a personal matter, do NOT tell them to DM us. The system will send them a private message automatically. Keep the public reply to a brief acknowledgement such as "Sure! We have sent you a private message 😊". Never request or reveal private details publicly.' : '',
+    opts.kind === 'comment' ? 'IMPORTANT: The AI-generated text for a comment event will be sent ONLY as a PRIVATE DM to the commenter, not as a public comment. Write a helpful, personalized direct message that responds to the exact comment text and relevant post/business context. Start naturally (e.g. "Hi! Thanks for reaching out 😊"). Do NOT say "we sent you a private message", do NOT ask them to DM us, and do NOT mention this is an automated reply. If the comment is vague (e.g. "help me"), ask one concise clarifying question in this DM. Protect personal data; never ask for passwords, OTPs, or sensitive financial details.' : '',
   ];
   if (a.ai_business_info?.trim()) parts.push(`Business info:\n${a.ai_business_info.trim().slice(0, 3000)}`);
   if (a.ai_custom_instructions?.trim()) parts.push(`Extra instructions:\n${a.ai_custom_instructions.trim().slice(0, 1500)}`);
@@ -830,7 +830,7 @@ async function processEvent(supabase: SupabaseClient, ev: {
         });
       }
       // Public reply is only an acknowledgement; never ask the commenter to DM us.
-      const publicReply = 'Sure! We have sent you a private message 😊';
+      const publicReply = 'Thanks for reaching out! 😊';
       const path = ev.platform === 'instagram' ? `/${ev.commentId}/replies` : `/${ev.commentId}/comments`;
       await send(`${path}?access_token=${t}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: publicReply }),
