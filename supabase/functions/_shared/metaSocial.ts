@@ -426,7 +426,7 @@ export async function handleMetaSocial(req: Request, raw: any, admin: SupabaseCl
           if (typeof pic === 'string' && pic.startsWith('http')) contact.picture_url = pic;
         };
         // Messenger users (PSIDs) have no username field — asking for it makes Meta reject the whole request.
-        const fields = platform === 'instagram' ? 'name,username,profile_picture_url' : 'name,first_name,last_name,profile_pic';
+        const fields = platform === 'instagram' ? 'name,username,profile_pic' : 'name,first_name,last_name,profile_pic';
         const id = encodeURIComponent(contactId);
         // Ask for everything once; on rejection retry with name only so one unsupported field cannot hide the rest.
         try { take(await g(`/${id}?fields=${fields}&access_token=${t}`)); }
