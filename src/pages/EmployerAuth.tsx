@@ -1559,6 +1559,7 @@ const EmployerAuth = ({ forgotPasswordPage = false, signupPage = false }: { forg
                 className="aspect-video w-full rounded-xl object-cover"
               />
             </div>
+<a href="/watch/hiring-solved" className="mt-3 block text-center text-sm font-medium text-primary underline-offset-4 hover:underline">Watch full video</a>
           </section>
 
           <div className="mt-8 px-4 pb-10">

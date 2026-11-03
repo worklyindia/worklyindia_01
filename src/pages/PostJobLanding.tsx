@@ -92,6 +92,7 @@ export default function PostJobLanding() {
             className="aspect-video w-full rounded-xl object-cover"
           />
         </div>
+<a href="/watch/workly-india-promo" className="mt-3 block text-center text-sm font-medium text-primary underline-offset-4 hover:underline">Watch full video</a>
       </div></section>
     </main>
   </div>;

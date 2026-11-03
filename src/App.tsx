@@ -150,6 +150,8 @@ const RateApp = lazyRetry(() => import("./pages/RateApp"));
 const AllReviews = lazyRetry(() => import("./pages/AllReviews"));
 const ResumeEditor = lazyRetry(() => import("./pages/ResumeEditor"));
 const AboutUs = lazyRetry(() => import("./pages/AboutUs"));
+const VideoWatch = lazyRetry(() => import("./pages/VideoWatch"));
+const VideoHub = lazyRetry(() => import("./pages/VideoWatch").then((m) => ({ default: m.VideoHub })));
 const MissionVision = lazyRetry(() => import("./pages/MissionVision"));
 const Mission = lazyRetry(() => import("./pages/Mission"));
 const Vision = lazyRetry(() => import("./pages/Vision"));
@@ -627,6 +629,8 @@ const AppContent = () => {
         <Route path="/contact" element={<Navigate to="/contact-us" replace />} />
         
         <Route path="/about-us" element={<AboutUs />} />
+        <Route path="/videos" element={<VideoHub />} />
+        <Route path="/watch/:slug" element={<VideoWatch />} />
         <Route path="/mission-vision" element={<MissionVision />} />
         <Route path="/mission" element={<Mission />} />
         <Route path="/vision" element={<Vision />} />

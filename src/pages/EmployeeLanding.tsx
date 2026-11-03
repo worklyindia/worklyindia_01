@@ -51,6 +51,7 @@ export default function EmployeeLanding() {
             className="aspect-video w-full rounded-xl object-cover"
           />
         </div>
+<a href="/watch/hiring-solved" className="mt-3 block text-center text-sm font-medium text-primary underline-offset-4 hover:underline">Watch full video</a>
       </div></section>
       <section className="border-t border-border bg-muted/30"><div className="mx-auto max-w-5xl px-4 py-10">
         <h2 className="text-2xl font-bold">A clear path to your next hire</h2>
