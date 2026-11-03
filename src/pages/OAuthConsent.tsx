@@ -16,7 +16,8 @@ const scopeText: Record<string, string> = {
   openid: "Confirm your identity",
   email: "See your email address",
   profile: "See your basic profile (name, photo)",
-  phone: "Access your phone number",
+  phone: "Requests access to your phone number",
+  phone_number: "Requests access to your phone number",
 };
 
 const OAuthConsent = () => {
@@ -65,7 +66,7 @@ const OAuthConsent = () => {
   try { host = details ? new URL(details.redirect_uri).host : ""; } catch { host = details?.redirect_uri ?? ""; }
 
   const requestedScopes = (details?.scope || "openid").split(" ").filter(Boolean);
-  const asksPhone = requestedScopes.includes("phone");
+  const asksPhone = requestedScopes.some((scope) => scope === "phone" || scope === "phone_number");
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4 py-8 text-foreground">
@@ -90,9 +91,8 @@ const OAuthConsent = () => {
               {requestedScopes.map((s) => <li key={s}>{scopeText[s] ?? s}</li>)}
             </ul>
             {asksPhone && (
-              <p className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm leading-6 text-destructive">
-                This app asked for your phone number. Workly India does not share phone numbers, so this request cannot be approved.
-                Deny it and ask the app to use only <code>openid</code>, <code>email</code> and <code>profile</code>.
+              <p className="mt-3 rounded-md border border-border bg-muted p-3 text-sm leading-6 text-foreground">
+                This app is requesting your phone number. Workly India does not share phone numbers. To protect your privacy, deny this request and ask the app to use only <code>openid</code>, <code>email</code> and <code>profile</code>.
               </p>
             )}
             <p className="mt-4 break-all text-xs text-muted-foreground">You will be sent back to {host}</p>
