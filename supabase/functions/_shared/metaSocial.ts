@@ -823,6 +823,16 @@ async function processEvent(supabase: SupabaseClient, ev: {
       await send(`${path}?access_token=${t}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: reply }),
       });
+      // Meta comment private reply: recipient is comment_id, not the commenter's user ID.
+      // This is limited to one private reply per comment by Meta.
+      if (ev.commentId) {
+        const privateReplyOwner = ev.platform === 'instagram' ? account.ig_user_id : account.page_id;
+        await send(`/${privateReplyOwner}/messages?access_token=${t}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipient: { comment_id: ev.commentId }, message: { text: reply.slice(0, 900) } }),
+        });
+      }
     } else {
       const sender = send === igGraph ? account.ig_user_id : account.page_id;
       await send(`/${sender}/messages?access_token=${t}`, {
