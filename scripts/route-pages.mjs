@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { readDocumentCatalog, renderDocumentHtml } from './document-pages.mjs';
 import { PUBLIC_CAREER_CONTENT } from '../src/lib/publicCareerContent.mjs';
 import { FOUNDER_NAME, founderSchema } from '../src/lib/founderProfile.mjs';
+import { findVideo, videoSchema } from '../src/lib/videoCatalog.mjs';
 
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -23,6 +24,8 @@ export function renderRouteHtml(template, domain, e) {
     const { image, ...person } = founderSchema(`https://${domain}`);
     schema.mainEntity = person;
   }
+  const video = e.route.startsWith('/watch/') ? findVideo(e.route.slice(7)) : null;
+  if (video) schema.mainEntity = videoSchema(`https://${domain}`, video);
   let html = template.replace(/<title>[\s\S]*?<\/title>/i, `<title>${esc(e.title)}</title>`);
   html = html.replace(/<link\b[^>]*rel=["']canonical["'][^>]*>/gi, '');
   html = html.replace(/<meta\b[^>]*(?:name|property)=["'](?:title|description|keywords|og:title|og:description|og:url|twitter:title|twitter:description|twitter:url)["'][^>]*>/gi, '');
@@ -36,6 +39,11 @@ export function renderRouteHtml(template, domain, e) {
 <link rel="canonical" href="${url}" />
 <script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>
 </head>`);
+  if (video) {
+    html = html.replace(/<!-- Comprehensive Noscript Content[\s\S]*?<\/noscript>/i, '');
+    const body = `<main><video src="${esc(video.contentUrl)}" poster="${esc(video.thumbnailUrl)}" controls playsinline width="1280" height="720"></video><h1>${esc(video.title)}</h1><p>${esc(video.description)}</p></main>`;
+    return html.replace(/<div id="root"><\/div>/, `<div id="root">${body}</div>`);
+  }
   const content = PUBLIC_CAREER_CONTENT[e.route];
   if (e.route === '/about-us') {
     html = html.replace(/<!-- Comprehensive Noscript Content[\s\S]*?<\/noscript>/i, '');

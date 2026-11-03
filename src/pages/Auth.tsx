@@ -1718,6 +1718,7 @@ const Auth = ({ forgotPasswordPage = false, signupPage = false }: { forgotPasswo
                 className="aspect-video w-full rounded-xl object-cover object-top"
               />
             </div>
+<a href="/watch/apply-free-candidates" className="mt-3 block text-center text-sm font-medium text-primary underline-offset-4 hover:underline">Watch full video</a>
           </section>
 
           <div className="mt-8 px-4 pb-10">
