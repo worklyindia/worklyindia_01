@@ -820,9 +820,17 @@ async function processEvent(supabase: SupabaseClient, ev: {
     // Instagram Login tokens start with "IG" and use graph.instagram.com.
     const send = ev.platform === 'instagram' && token.startsWith('IG') ? igGraph : graph;
     if (ev.kind === 'comment') {
-      // Send the actual helpful response privately first. Meta allows only one
-      // private reply per comment; recipient must be comment_id (not senderId).
-      if (ev.commentId) {
+      // AI reply is public and contextual; only genuine inquiries get a private DM.
+      const publicReply = reply.split(/\\n+/)[0].slice(0, 500);
+      const path = ev.platform === 'instagram' ? `/${ev.commentId}/replies` : `/${ev.commentId}/comments`;
+      await send(`${path}?access_token=${t}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: publicReply }),
+      });
+      const inquiryPattern = /\\?|\\b(how|what|when|where|who|why|price|pricing|cost|details|link|apply|application|job|vacancy|hire|hiring|contact|number|available|availability|service|support|help|problem|issue|interested|inquiry|inquire|dm|message|send|કેમ|શું|ક્યાં|ક્યારે|કેટલું|નોકરી|જોબ|મદદ|ભાવ|કેવી રીતે)\\b/i;
+      const politeRequest = /(?:please|pls|plz|kindly|can you|could you|mujhe|bataye|batao|jankari|जानकारी|કૃપા|માહિતી)/i;
+      const shouldDM = inquiryPattern.test(ev.text) || politeRequest.test(ev.text);
+      if (shouldDM && ev.commentId) {
+        // Meta permits one private reply per comment; recipient is comment_id.
         const privateReplyOwner = ev.platform === 'instagram' ? account.ig_user_id : account.page_id;
         await send(`/${privateReplyOwner}/messages?access_token=${t}`, {
           method: 'POST',
@@ -830,12 +838,6 @@ async function processEvent(supabase: SupabaseClient, ev: {
           body: JSON.stringify({ recipient: { comment_id: ev.commentId }, message: { text: reply.slice(0, 900) } }),
         });
       }
-      // Public reply is only an acknowledgement; never ask the commenter to DM us.
-      const publicReply = 'Thanks for reaching out! 😊';
-      const path = ev.platform === 'instagram' ? `/${ev.commentId}/replies` : `/${ev.commentId}/comments`;
-      await send(`${path}?access_token=${t}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: publicReply }),
-      });
     } else {
       const sender = send === igGraph ? account.ig_user_id : account.page_id;
       await send(`/${sender}/messages?access_token=${t}`, {
