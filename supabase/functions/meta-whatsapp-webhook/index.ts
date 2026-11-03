@@ -259,7 +259,13 @@ async function handleInbound(value: any) {
     await log('message_received', msg, msg.id);
     if (employer) await forwardToCustomerWebhooks(supabase, employer.user_id, 'whatsapp.message.received', { phone_number_id: phoneNumberId, from: phone, name, type, text: content, message_id: msg.id ?? null, timestamp: msg.timestamp ?? null, media_url: (mediaMetadata as any)?.media_url ?? null, context: msg.context?.id ? { id: msg.context.id, from: msg.context.from ?? null } : null, raw: msg });
     await forwardSubAccount(phoneNumberId, 'whatsapp.message.received', { phone_number_id: phoneNumberId, from: phone, name, type, text: content, message_id: msg.id ?? null, timestamp: msg.timestamp ?? null, media_url: (mediaMetadata as any)?.media_url ?? null, context: msg.context?.id ? { id: msg.context.id, from: msg.context.from ?? null } : null, raw: msg });
-    if (employer?.ai_auto_reply && type === 'text' && conv?.id) {
+    let profileAiOn = false;
+    if (employer && !employer.ai_auto_reply && !audience && type === 'text') {
+      const { data: prof } = await supabase.from('ai_platform_business_profiles').select('enabled')
+        .eq('user_id', employer.user_id).eq('platform', 'whatsapp').in('account_id', [phoneNumberId ?? '', '']).eq('enabled', true).limit(1);
+      profileAiOn = !!prof?.length;
+    }
+    if ((employer?.ai_auto_reply || profileAiOn) && type === 'text' && conv?.id) {
       try { await aiAutoReply(employer, conv.id, phone, phoneNumberId); }
       catch (e) { console.error('[wa-ai] auto reply failed', e instanceof Error ? e.message : e); }
     }

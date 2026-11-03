@@ -269,13 +269,18 @@ export function WhatsAppMessageBubble({
     // Image/Video message with optional caption
     if ((mediaType === 'image' || mediaType === 'video') && mediaUrl) {
       return (
-        <div className="-mx-1 -mt-1 mb-1">
+        <div className="relative overflow-hidden rounded-xl">
           <MediaPreview url={mediaUrl} type={mediaType} fileName={fileName} />
-          {/* Show caption below image/video only if valid user caption */}
-          {shouldShowCaption && (
-            <p className="text-sm px-1 mt-2 whitespace-pre-wrap leading-relaxed">
+          {shouldShowCaption ? (
+            <p className="text-sm px-2 pt-2 whitespace-pre-wrap leading-relaxed">
               {content}
             </p>
+          ) : (
+            <div className="pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-foreground/50 px-2 py-0.5 text-background">
+              {isStarred && <Star className="h-3 w-3 fill-current" />}
+              <span className="text-[10px]">{formatTime12Hour(createdAt)}</span>
+              {isOutgoing && <MessageStatusIcon status={status as MessageStatus} />}
+            </div>
           )}
         </div>
       );
