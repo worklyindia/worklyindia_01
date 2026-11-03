@@ -826,9 +826,13 @@ async function processEvent(supabase: SupabaseClient, ev: {
       await send(`${path}?access_token=${t}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: publicReply }),
       });
-      const inquiryPattern = /\\?|\\b(how|what|when|where|who|why|price|pricing|cost|details|link|apply|application|job|vacancy|hire|hiring|contact|number|available|availability|service|support|help|problem|issue|interested|inquiry|inquire|dm|message|send|કેમ|શું|ક્યાં|ક્યારે|કેટલું|નોકરી|જોબ|મદદ|ભાવ|કેવી રીતે)\\b/i;
-      const politeRequest = /(?:please|pls|plz|kindly|can you|could you|mujhe|bataye|batao|jankari|जानकारी|કૃપા|માહિતી)/i;
-      const shouldDM = inquiryPattern.test(ev.text) || politeRequest.test(ev.text);
+      // Avoid false positives from praise such as "your service is great".
+      // DM only for clear questions, requests, or actionable job/business inquiries.
+      const hasQuestion = /[?？]/.test(ev.text) || /\\b(how|what|when|where|who|why|price|pricing|cost|details|link|apply|application|job|vacancy|hire|hiring|contact|number|available|availability|problem|issue|inquiry|inquire|કેમ|શું|ક્યાં|ક્યારે|કેટલું|નોકરી|જોબ|મદદ|ભાવ|કેવી રીતે)\\b/i.test(ev.text);
+      const explicitRequest = /(?:please|pls|plz|kindly|can you|could you|mujhe|bataye|batao|jankari|जानकारी|કૃપા|માહિતી|dm me|message me|send me)/i.test(ev.text);
+      const praiseOnly = /(?:bahut achi|bahut acchi|achi hai|acchi hai|great|awesome|excellent|love it|nice|thank|shukriya|धन्यवाद|ખૂબ સારું)/i.test(ev.text)
+        && !hasQuestion && !explicitRequest;
+      const shouldDM = !praiseOnly && (hasQuestion || explicitRequest);
       if (shouldDM && ev.commentId) {
         // Meta permits one private reply per comment; recipient is comment_id.
         const privateReplyOwner = ev.platform === 'instagram' ? account.ig_user_id : account.page_id;
