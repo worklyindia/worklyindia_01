@@ -617,7 +617,7 @@ async function generateSocialReply(opts: { account: any; platform: Platform; kin
     lang,
     length[a.ai_reply_length || ''] || length.short,
     'Never invent prices, dates or promises; if unsure, say the team will get back soon. Plain text only, no markdown.',
-    opts.kind === 'comment' ? 'This reply is public: never ask for or reveal private details; invite them to DM for personal matters.' : '',
+    opts.kind === 'comment' ? 'This reply is public. If the person asks for help, asks us to DM them, or shares a personal matter, do NOT tell them to DM us. The system will send them a private message automatically. Keep the public reply to a brief acknowledgement such as "Sure! We have sent you a private message 😊". Never request or reveal private details publicly.' : '',
   ];
   if (a.ai_business_info?.trim()) parts.push(`Business info:\n${a.ai_business_info.trim().slice(0, 3000)}`);
   if (a.ai_custom_instructions?.trim()) parts.push(`Extra instructions:\n${a.ai_custom_instructions.trim().slice(0, 1500)}`);
@@ -819,12 +819,8 @@ async function processEvent(supabase: SupabaseClient, ev: {
     // Instagram Login tokens start with "IG" and use graph.instagram.com.
     const send = ev.platform === 'instagram' && token.startsWith('IG') ? igGraph : graph;
     if (ev.kind === 'comment') {
-      const path = ev.platform === 'instagram' ? `/${ev.commentId}/replies` : `/${ev.commentId}/comments`;
-      await send(`${path}?access_token=${t}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: reply }),
-      });
-      // Meta comment private reply: recipient is comment_id, not the commenter's user ID.
-      // This is limited to one private reply per comment by Meta.
+      // Send the actual helpful response privately first. Meta allows only one
+      // private reply per comment; recipient must be comment_id (not senderId).
       if (ev.commentId) {
         const privateReplyOwner = ev.platform === 'instagram' ? account.ig_user_id : account.page_id;
         await send(`/${privateReplyOwner}/messages?access_token=${t}`, {
@@ -833,6 +829,12 @@ async function processEvent(supabase: SupabaseClient, ev: {
           body: JSON.stringify({ recipient: { comment_id: ev.commentId }, message: { text: reply.slice(0, 900) } }),
         });
       }
+      // Public reply is only an acknowledgement; never ask the commenter to DM us.
+      const publicReply = 'Sure! We have sent you a private message 😊';
+      const path = ev.platform === 'instagram' ? `/${ev.commentId}/replies` : `/${ev.commentId}/comments`;
+      await send(`${path}?access_token=${t}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: publicReply }),
+      });
     } else {
       const sender = send === igGraph ? account.ig_user_id : account.page_id;
       await send(`/${sender}/messages?access_token=${t}`, {
