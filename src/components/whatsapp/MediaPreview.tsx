@@ -43,7 +43,7 @@ export function MediaPreview({ url, type, fileName }: MediaPreviewProps) {
             <img loading="lazy" decoding="async" 
               src={url} 
               alt="Media" 
-              className="block w-[280px] max-w-full max-h-[280px] rounded-lg object-contain"
+              className="block h-auto w-auto max-w-[260px] sm:max-w-[320px] max-h-[360px] rounded-2xl object-cover"
             />
           </div>
         );

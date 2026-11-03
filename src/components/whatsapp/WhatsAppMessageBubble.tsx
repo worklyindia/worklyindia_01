@@ -269,7 +269,7 @@ export function WhatsAppMessageBubble({
     // Image/Video message with optional caption
     if ((mediaType === 'image' || mediaType === 'video') && mediaUrl) {
       return (
-        <div className="relative overflow-hidden rounded-xl">
+        <div className="relative w-fit overflow-hidden rounded-2xl">
           <MediaPreview url={mediaUrl} type={mediaType} fileName={fileName} />
           {shouldShowCaption ? (
             <p className="text-sm px-2 pt-2 whitespace-pre-wrap leading-relaxed">
@@ -427,7 +427,9 @@ export function WhatsAppMessageBubble({
 
         <div
           className={`relative max-w-[85%] md:max-w-[65%] rounded-lg transition-all ${
-            mediaUrl && !isTemplateMessage ? `${isOutgoing ? 'bg-whatsapp-green-light' : 'bg-card'} text-foreground p-1 rounded-xl shadow-sm` : isTemplateMessage 
+            mediaUrl && !isTemplateMessage && (mediaType === 'image' || mediaType === 'video') && !(isValidCaption(content) && !content?.toLowerCase().includes('template') && !content?.toLowerCase().includes('[message'))
+              ? 'w-fit bg-transparent p-0 text-foreground rounded-2xl'
+              : mediaUrl && !isTemplateMessage ? `${isOutgoing ? 'bg-whatsapp-green-light' : 'bg-card'} text-foreground p-1 rounded-xl shadow-sm` : isTemplateMessage 
               ? isOutgoing 
                 ? 'bg-whatsapp-green-light text-foreground rounded-tr-none' 
                 : 'bg-card text-foreground rounded-tl-none'
