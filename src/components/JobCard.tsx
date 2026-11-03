@@ -174,6 +174,8 @@ const JobCard = ({
   const { data: visibility } = useEngagementVisibility();
   
   const jobId = id || encodeURIComponent(title.toLowerCase().replace(/\s+/g, '-'));
+  // Prefer the stable public slug for shareable job-detail URLs; keep UUID for tracking/storage.
+  const jobRouteId = publicSlug || id || jobId;
   
   // Use trending_score (with boost) for display, fallback to base_score, then calculate
   const displayScore = trendingScore !== undefined 
@@ -266,7 +268,7 @@ const JobCard = ({
     };
     
     sessionStorage.setItem(`job_${jobId}`, JSON.stringify(jobData));
-    navigate(`/job/${jobId}`);
+    navigate(`/job/${jobRouteId}`);
   };
 
   const handleApplyClick = async (e: React.MouseEvent) => {
