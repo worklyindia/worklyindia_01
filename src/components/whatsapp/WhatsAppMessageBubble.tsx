@@ -269,13 +269,18 @@ export function WhatsAppMessageBubble({
     // Image/Video message with optional caption
     if ((mediaType === 'image' || mediaType === 'video') && mediaUrl) {
       return (
-        <div className="-mx-1 -mt-1 mb-1">
+        <div className="relative overflow-hidden rounded-xl">
           <MediaPreview url={mediaUrl} type={mediaType} fileName={fileName} />
-          {/* Show caption below image/video only if valid user caption */}
-          {shouldShowCaption && (
-            <p className="text-sm px-1 mt-2 whitespace-pre-wrap leading-relaxed">
+          {shouldShowCaption ? (
+            <p className="text-sm px-2 pt-2 whitespace-pre-wrap leading-relaxed">
               {content}
             </p>
+          ) : (
+            <div className="pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-foreground/50 px-2 py-0.5 text-background">
+              {isStarred && <Star className="h-3 w-3 fill-current" />}
+              <span className="text-[10px]">{formatTime12Hour(createdAt)}</span>
+              {isOutgoing && <MessageStatusIcon status={status as MessageStatus} />}
+            </div>
           )}
         </div>
       );
@@ -422,7 +427,7 @@ export function WhatsAppMessageBubble({
 
         <div
           className={`relative max-w-[85%] md:max-w-[65%] rounded-lg transition-all ${
-            mediaUrl && !isTemplateMessage ? 'bg-transparent text-foreground' : isTemplateMessage 
+            mediaUrl && !isTemplateMessage ? `${isOutgoing ? 'bg-whatsapp-green-light' : 'bg-card'} text-foreground p-1 rounded-xl shadow-sm` : isTemplateMessage 
               ? isOutgoing 
                 ? 'bg-whatsapp-green-light text-foreground rounded-tr-none' 
                 : 'bg-card text-foreground rounded-tl-none'
@@ -448,7 +453,7 @@ export function WhatsAppMessageBubble({
           )}
 
           {/* Message Content */}
-          <div className={`overflow-hidden rounded-lg ${isTemplateMessage ? '' : 'px-3 py-2'}`}>
+          <div className={`overflow-hidden rounded-lg ${isTemplateMessage ? '' : mediaUrl && (mediaType === 'image' || mediaType === 'video') ? '' : 'px-3 py-2'}`}>
             {renderContent()}
             
             {/* Template Message with special styling */}
@@ -464,8 +469,8 @@ export function WhatsAppMessageBubble({
             )}
 
             {/* Time, Star and Status - only show for non-template messages (template has its own) */}
-            {!isTemplateMessage && (
-              <div className={`flex items-center gap-1 mt-1 ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
+            {!isTemplateMessage && !(mediaUrl && (mediaType === 'image' || mediaType === 'video') && !isValidCaption(content)) && (
+              <div className={`flex items-center gap-1 mt-1 ${mediaUrl ? 'px-2 pb-1' : ''} ${isOutgoing ? 'justify-end' : 'justify-start'}`}>
                 {isStarred && (
                   <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                 )}
