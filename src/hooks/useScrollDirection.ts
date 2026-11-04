@@ -6,24 +6,34 @@ export function useScrollDirection() {
 
   useEffect(() => {
     let lastScrollY = window.pageYOffset;
+    let latestScrollY = lastScrollY;
+    let rafId = 0;
 
     const updateScrollDirection = () => {
-      const scrollY = window.pageYOffset;
-      const direction = scrollY > lastScrollY ? "down" : "up";
-      
-      if (direction !== scrollDirection && (scrollY - lastScrollY > 10 || scrollY - lastScrollY < -10)) {
-        setScrollDirection(direction);
-      }
-      
-      setScrollY(scrollY);
-      lastScrollY = scrollY > 0 ? scrollY : 0;
+      latestScrollY = window.pageYOffset;
+      if (rafId) return;
+
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        const currentY = latestScrollY;
+        const delta = currentY - lastScrollY;
+
+        if (Math.abs(delta) > 10) {
+          const direction = delta > 0 ? "down" : "up";
+          setScrollDirection((prev) => (prev === direction ? prev : direction));
+        }
+
+        setScrollY((prev) => (prev === currentY ? prev : currentY));
+        lastScrollY = currentY > 0 ? currentY : 0;
+      });
     };
 
-    window.addEventListener("scroll", updateScrollDirection);
+    window.addEventListener("scroll", updateScrollDirection, { passive: true });
     return () => {
       window.removeEventListener("scroll", updateScrollDirection);
+      if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [scrollDirection]);
+  }, []);
 
   return { scrollDirection, scrollY };
 }
