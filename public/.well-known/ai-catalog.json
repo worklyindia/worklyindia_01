@@ -1,21 +1,22 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "specVersion": "1.0",
   "host": {
     "displayName": "Workly India",
-    "url": "https://worklyindia.devs.surf/"
+    "documentationUrl": "https://worklyindia.devs.surf/developers"
   },
   "entries": [
     {
-      "identifier": "urn:air:worklyindia:website",
+      "identifier": "urn:air:worklyindia.devs.surf:website:public-information",
+      "displayName": "Workly India public website and information",
       "type": "text/html",
-      "url": "https://worklyindia.devs.surf/",
-      "name": "Workly India website"
+      "url": "https://worklyindia.devs.surf/"
     },
     {
-      "identifier": "urn:air:worklyindia:developer-documentation",
-      "type": "text/markdown",
-      "url": "https://worklyindia.devs.surf/llms.txt",
-      "name": "Workly India developer documentation and public product information"
+      "identifier": "urn:air:worklyindia.devs.surf:documentation:developer-guides",
+      "displayName": "Workly India developer documentation",
+      "type": "text/html",
+      "url": "https://worklyindia.devs.surf/developers"
     }
   ]
 }
