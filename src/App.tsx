@@ -50,15 +50,16 @@ import { useAppReady } from "@/hooks/useAppReady";
 
 const isBandwidthSaverMode = import.meta.env.VITE_BANDWIDTH_SAVER !== 'false';
 
-// Critical pages loaded immediately
-import Auth from "./pages/Auth";
-import EmployerAuth from "./pages/EmployerAuth";
-import Welcome from "./pages/Welcome";
-import Index from "./pages/Index";
-import Jobs from "./pages/Jobs";
-import Activity from "./pages/Activity";
-import More from "./pages/More";
-import AICareerAssistant from "./pages/AICareerAssistant";
+// Route-level code splitting: keep the initial application shell small and
+// download page code only when a visitor navigates to that route.
+const Auth = lazyRetry(() => import("./pages/Auth"));
+const EmployerAuth = lazyRetry(() => import("./pages/EmployerAuth"));
+const Welcome = lazyRetry(() => import("./pages/Welcome"));
+const Index = lazyRetry(() => import("./pages/Index"));
+const Jobs = lazyRetry(() => import("./pages/Jobs"));
+const Activity = lazyRetry(() => import("./pages/Activity"));
+const More = lazyRetry(() => import("./pages/More"));
+const AICareerAssistant = lazyRetry(() => import("./pages/AICareerAssistant"));
 const AIVoiceCall = lazyRetry(() => import("./pages/AIVoiceCall"));
 import BannedUser from "./pages/BannedUser";
 import PasswordResetForm from "./components/PasswordResetForm";
