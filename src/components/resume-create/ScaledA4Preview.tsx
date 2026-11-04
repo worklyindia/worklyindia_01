@@ -39,11 +39,18 @@ export const ScaledA4Preview: React.FC<ScaledA4PreviewProps> = ({
           fit === 'cover'
             ? Math.max(w / pageWidth, h / pageHeight)
             : Math.min(w / pageWidth, h / pageHeight);
-        setLayout({
+        const nextLayout = {
           scale: nextScale,
           x: (w - pageWidth * nextScale) / 2,
           y: (h - pageHeight * nextScale) / 2,
-        });
+        };
+        setLayout((prev) =>
+          Math.abs(prev.scale - nextLayout.scale) < 0.001 &&
+          Math.abs(prev.x - nextLayout.x) < 0.1 &&
+          Math.abs(prev.y - nextLayout.y) < 0.1
+            ? prev
+            : nextLayout
+        );
       } else {
         // Fallback: assume container is width-only, derive height from ratio
         const fw = el.clientWidth || el.parentElement?.clientWidth || 280;
@@ -52,11 +59,18 @@ export const ScaledA4Preview: React.FC<ScaledA4PreviewProps> = ({
           fit === 'cover'
             ? Math.max(fw / pageWidth, fh / pageHeight)
             : Math.min(fw / pageWidth, fh / pageHeight);
-        setLayout({
+        const nextLayout = {
           scale: nextScale,
           x: (fw - pageWidth * nextScale) / 2,
           y: (fh - pageHeight * nextScale) / 2,
-        });
+        };
+        setLayout((prev) =>
+          Math.abs(prev.scale - nextLayout.scale) < 0.001 &&
+          Math.abs(prev.x - nextLayout.x) < 0.1 &&
+          Math.abs(prev.y - nextLayout.y) < 0.1
+            ? prev
+            : nextLayout
+        );
       }
     };
     compute();
