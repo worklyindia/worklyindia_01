@@ -12,6 +12,7 @@ export function founderSchema(site, photo = DEFAULT_FOUNDER_PHOTO) {
     jobTitle: 'Founder & CEO',
     image: new URL(photo || DEFAULT_FOUNDER_PHOTO, `${base}/`).href,
     url: `${base}/about-us#founder`,
+    sameAs: ['https://in.linkedin.com/in/gohil-vishal'],
     worksFor: { '@id': `${base}/#organization`, '@type': 'Organization', name: 'Workly India', url: `${base}/` },
   };
 }

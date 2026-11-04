@@ -275,6 +275,7 @@ Disallow: /api/
 
 # Sitemap - Single reference to index (Google 2025 Best Practice)
 Sitemap: https://worklyindia.devs.surf/sitemap-index.xml
+Sitemap: https://worklyindia.devs.surf/sitemap.xml
 
 # ===========================================
 # AI CONTENT ENDPOINTS
