@@ -4,6 +4,7 @@ export interface RouteSeoEntry {
   description: string;
   keywords: string;
   type?: "WebPage" | "AboutPage" | "ContactPage" | "FAQPage" | "CollectionPage" | "TechArticle";
+  robots?: string;
 }
 
 export const ROUTE_SEO: Record<string, RouteSeoEntry> = {
