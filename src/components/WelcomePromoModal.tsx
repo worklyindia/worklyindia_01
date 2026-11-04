@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Sheet,
   SheetContent,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Briefcase, Users, ChevronDown } from "lucide-react";
@@ -86,6 +87,7 @@ const WelcomePromoModal = ({ isLoggedIn, isOpen: externalIsOpen, onClose }: Welc
         side="bottom"
         className="rounded-t-3xl max-h-[90vh] overflow-y-auto border-t-0 px-6 pb-8 pt-4 [&>button]:hidden"
       >
+        <SheetTitle className="sr-only">Welcome to {brandName} — choose whether to find a job or hire people</SheetTitle>
         {/* Close - chevron-down, matching the Quick Login sheet.
             Wrapped in a div so [&>button]:hidden (which targets the default
             Radix close button) does not hide this one too. */}
