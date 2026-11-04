@@ -30,6 +30,9 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
+    // Publish production source maps to make Lighthouse and browser-console
+    // diagnostics actionable. These map files are not loaded by visitors.
+    sourcemap: true,
     // Bundle is large (single big vendor chunk); raise the warning threshold
     // so the deploy log stays clean.
     chunkSizeWarningLimit: 6500,
