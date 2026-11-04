@@ -85,36 +85,39 @@
     <!-- Trustpilot Verification -->
     <meta name="trustpilot-one-time-domain-verification-id" content="c6c2d84c-7252-4bf3-92bd-ad57b771c25f" />
     
-    <!-- Google Analytics 4 (gtag.js) - REQUIRED IN HEAD FOR GSC VERIFICATION -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZLH9GK0L1Y"></script>
+    <!-- Analytics are queued immediately but network scripts load after page startup/idle. -->
     <script>
       window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      
-      // Default consent mode for GDPR compliance
-      gtag('consent', 'default', {
-        'analytics_storage': 'granted',
-        'ad_storage': 'granted',
-        'ad_user_data': 'granted',
-        'ad_personalization': 'granted'
+      window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
+      window.gtag('consent', 'default', {
+        analytics_storage: 'granted', ad_storage: 'granted',
+        ad_user_data: 'granted', ad_personalization: 'granted'
       });
-      
-      gtag('js', new Date());
-      gtag('config', 'G-ZLH9GK0L1Y', {
-        'send_page_view': true,
-        'anonymize_ip': true,
-        'cookie_flags': 'SameSite=None;Secure'
+      window.gtag('js', new Date());
+      window.gtag('config', 'G-ZLH9GK0L1Y', {
+        send_page_view: true, anonymize_ip: true,
+        cookie_flags: 'SameSite=None;Secure'
       });
+      window.dataLayer.push({'gtm.start': new Date().getTime(), event:'gtm.js'});
+      (function(){
+        var loaded=false;
+        function loadAnalytics(){
+          if(loaded || !window.location.hostname.includes('worklyindia')) return;
+          loaded=true;
+          var ga=document.createElement('script');
+          ga.async=true; ga.src='https://www.googletagmanager.com/gtag/js?id=G-ZLH9GK0L1Y';
+          document.head.appendChild(ga);
+          var gtm=document.createElement('script');
+          gtm.async=true; gtm.src='https://www.googletagmanager.com/gtm.js?id=GTM-KL73G5K3';
+          document.head.appendChild(gtm);
+        }
+        window.addEventListener('load',function(){
+          if('requestIdleCallback' in window) requestIdleCallback(loadAnalytics,{timeout:4000});
+          else setTimeout(loadAnalytics,2500);
+        },{once:true});
+      })();
     </script>
-    <!-- End Google Analytics 4 -->
-    
-    <!-- Google Tag Manager -->
-    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','GTM-KL73G5K3');</script>
-    <!-- End Google Tag Manager -->
+    <!-- End deferred Google Analytics / Tag Manager -->
     <!-- Optimized owner-supplied favicon and home-screen icons. -->
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png?v=20261022b">
     <link rel="manifest" href="/manifest.json" />
@@ -673,26 +676,32 @@
     <script>
       // Only load analytics and tracking on production
       if (window.location.hostname.includes('worklyindia')) {
-        // Meta Pixel (Facebook Pixel)
-        !function(f,b,e,v,n,t,s)
-        {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-        n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-        n.queue=[];t=b.createElement(e);t.async=!0;
-        t.src=v;s=b.getElementsByTagName(e)[0];
-        s.parentNode.insertBefore(t,s)}(window, document,'script',
-        'https://connect.facebook.net/en_US/fbevents.js');
-        fbq('init', '728965289960886');
-        fbq('track', 'PageView');
-        
-        // Microsoft Clarity
-        (function(c,l,a,r,i,t,y){
-          c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-          t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-          y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-        })(window, document, "clarity", "script", "sz9dhj2ky3");
-        
-        // GA4 is now loaded in <head> section - no duplicate needed here
+        // Delay Meta Pixel and Clarity until the browser is idle after initial load.
+        var loadMarketing = function() {
+          if (!window.fbq) {
+            !function(f,b,e,v,n,t,s)
+            {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+            if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+            n.queue=[];t=b.createElement(e);t.async=!0;
+            t.src=v;s=b.getElementsByTagName(e)[0];
+            s.parentNode.insertBefore(t,s)}(window, document,'script',
+            'https://connect.facebook.net/en_US/fbevents.js');
+            fbq('init', '728965289960886');
+            fbq('track', 'PageView');
+          }
+          if (!window.clarity) {
+            (function(c,l,a,r,i,t,y){
+              c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+              t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+              y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+            })(window, document, "clarity", "script", "sz9dhj2ky3");
+          }
+        };
+        window.addEventListener('load', function() {
+          if ('requestIdleCallback' in window) requestIdleCallback(loadMarketing,{timeout:5000});
+          else setTimeout(loadMarketing,3500);
+        }, {once:true});
       }
     </script>
     
@@ -810,27 +819,30 @@
     <!-- Tidio Live Chat Widget - PERFORMANCE OPTIMIZED: Deferred loading -->
     <script>
       // Defer Tidio loading for better performance
-      setTimeout(() => {
-        const tidioScript = document.createElement('script');
-        tidioScript.src = '//code.tidio.co/kbqrfjfyoa95g8ettzwfzlsqsjj7oapr.js';
-        tidioScript.async = true;
-        document.body.appendChild(tidioScript);
-        
-        // Configure Tidio after load
-        tidioScript.onload = function() {
-          document.addEventListener('tidioChat-ready', function() {
-            if (window.tidioChatApi) {
-              // Disable notification sounds
-              if (window.tidioChatApi.setSoundEnabled) {
-                window.tidioChatApi.setSoundEnabled(false);
+      (function() {
+        var tidioLoaded = false;
+        function loadTidio() {
+          if (tidioLoaded) return;
+          tidioLoaded = true;
+          const tidioScript = document.createElement('script');
+          tidioScript.src = '//code.tidio.co/kbqrfjfyoa95g8ettzwfzlsqsjj7oapr.js';
+          tidioScript.async = true;
+          document.body.appendChild(tidioScript);
+          tidioScript.onload = function() {
+            document.addEventListener('tidioChat-ready', function() {
+              if (window.tidioChatApi) {
+                if (window.tidioChatApi.setSoundEnabled) window.tidioChatApi.setSoundEnabled(false);
+                window.tidioChatApi.hide();
               }
-              
-              // Hide widget by default - will be shown only on Help Center page
-              window.tidioChatApi.hide();
-            }
-          });
-        };
-      }, 5000); // Load after 5 seconds
+            });
+          };
+        }
+        // Chat is loaded on intent; fallback after 12 seconds for users who don't interact.
+        ['pointerdown','keydown','touchstart','scroll'].forEach(function(eventName) {
+          window.addEventListener(eventName, loadTidio, {once:true, passive:true});
+        });
+        window.addEventListener('load', function() { setTimeout(loadTidio,12000); }, {once:true});
+      })();
     </script>
 
     <!-- Service Worker Registration + stale-bundle self-heal -->
