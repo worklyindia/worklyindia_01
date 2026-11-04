@@ -11,6 +11,25 @@ import { BANNER_CACHE_KEY, BANNER_UPDATED_EVENT, BANNER_STORAGE_KEY } from '@/li
 
 const BANNER_FALLBACK_SRC = bannerFallbackImage;
 
+// Hint the browser to fetch the first hero image as soon as banner data is
+// available (including data returned by Supabase), rather than waiting for
+// carousel paint/hydration to discover the LCP resource.
+const preloadHeroImage = (url?: string | null) => {
+  if (!url || typeof document === 'undefined') return;
+  const normalized = normalizeImageUrl(url);
+  if (!normalized) return;
+  const existing = document.querySelector<HTMLLinkElement>('link[data-hero-preload]');
+  if (existing?.href === normalized) return;
+  existing?.remove();
+  const link = document.createElement('link');
+  link.rel = 'preload';
+  link.as = 'image';
+  link.href = normalized;
+  link.fetchPriority = 'high';
+  link.setAttribute('data-hero-preload', 'true');
+  document.head.appendChild(link);
+};
+
 interface BannerSlide {
   id: string;
   title: string;
@@ -314,6 +333,7 @@ const HeroBanner = () => {
                       alt={slide.title || 'Banner'}
                       className="absolute inset-0 w-full h-full object-contain select-none touch-pan-y"
                       loading={index === 0 ? 'eager' : 'lazy'}
+                      fetchPriority={index === 0 ? 'high' : 'auto'}
                       decoding="async"
                       draggable="false"
                       referrerPolicy="no-referrer"
