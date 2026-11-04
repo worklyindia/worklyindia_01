@@ -1,0 +1,21 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "Workly India",
+    "url": "https://worklyindia.devs.surf/"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:worklyindia:website",
+      "type": "text/html",
+      "url": "https://worklyindia.devs.surf/",
+      "name": "Workly India website"
+    },
+    {
+      "identifier": "urn:air:worklyindia:developer-documentation",
+      "type": "text/markdown",
+      "url": "https://worklyindia.devs.surf/llms.txt",
+      "name": "Workly India developer documentation and public product information"
+    }
+  ]
+}
