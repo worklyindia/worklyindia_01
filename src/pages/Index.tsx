@@ -311,7 +311,9 @@ const Index = () => {
           <img
             src={authImages?.home_seekers_image || homeSeekersAsset.url}
             alt="Grow your business with WhatsApp on Workly India"
-            className="mx-auto mt-4 w-full max-w-3xl bg-transparent px-2 object-contain"
+            width={1200}
+            height={675}
+            className="mx-auto mt-4 h-auto w-full max-w-3xl bg-transparent px-2 object-contain"
             loading="lazy"
             decoding="async"
             draggable={false}
@@ -325,7 +327,9 @@ const Index = () => {
           <img
             src={authImages?.home_hero_image || homeHeroAsset.url}
             alt="Workly India"
-            className="mx-auto w-full max-w-md object-contain"
+            width={800}
+            height={800}
+            className="mx-auto h-auto w-full max-w-md object-contain"
             loading="lazy"
             decoding="async"
             draggable={false}
