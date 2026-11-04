@@ -71,3 +71,29 @@ export function useShortExternalJobUrl(
 
   return shortUrl || fallback;
 }
+
+const shortCache = new Map<string, Promise<string | null>>();
+
+/** Resolve (and cache) the short `/ej/s/:id` URL; null if shortening fails. */
+export function resolveShortExternalJobUrl(job: ExternalJob): Promise<string | null> {
+  const extId = String(job.external_id || '');
+  if (!extId) return Promise.resolve(null);
+  const cached = shortCache.get(extId);
+  if (cached) return cached;
+  const source = ((extId.split('_')[0] || job.source || 'ext').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'ext';
+  const payload = {
+    external_id: extId, title: job.title, company: job.company, location: job.location,
+    salary: job.salary, type: job.type, link: job.link, source: job.source,
+    updated: job.updated ?? null, company_logo: job.company_logo ?? null, category: job.category ?? null,
+  };
+  const p = supabase.functions
+    .invoke('external-job-shorten', { body: { source, ext_id: extId, payload } })
+    .then(({ data, error }) => {
+      const id = (data as { short_id?: string } | null)?.short_id;
+      if (error || !id) { shortCache.delete(extId); return null; }
+      return getExternalJobShortShareUrl(id);
+    })
+    .catch(() => { shortCache.delete(extId); return null; });
+  shortCache.set(extId, p);
+  return p;
+}

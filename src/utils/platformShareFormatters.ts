@@ -53,8 +53,8 @@ const getLocationText = (job: JobShareData): string => {
 // =============================================
 // WHATSAPP - Rich formatted message with emojis
 // =============================================
-export const formatWhatsAppShare = (job: JobShareData, referralCode?: string): string => {
-  const jobUrl = getJobShareUrl(job) + (referralCode ? `?ref=${referralCode}` : '');
+export const formatWhatsAppShare = (job: JobShareData, referralCode?: string, urlOverride?: string, salaryText?: string): string => {
+  const jobUrl = urlOverride || (getJobShareUrl(job) + (referralCode ? `?ref=${referralCode}` : ''));
   
   const parts: string[] = [];
   
@@ -74,7 +74,7 @@ export const formatWhatsAppShare = (job: JobShareData, referralCode?: string): s
   parts.push(`📍 ${getLocationText(job)}`);
   
   // Salary
-  const salary = formatSalary(job);
+  const salary = salaryText || formatSalary(job);
   if (salary) {
     parts.push(`💰 *${salary}*`);
   }

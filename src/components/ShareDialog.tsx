@@ -19,7 +19,7 @@ import {
   getPlatformShareUrl 
 } from "@/utils/platformShareFormatters";
 import { getJobShareUrl, getExternalJobShareUrl } from "@/config/domainConfig";
-import { useShortExternalJobUrl } from "@/hooks/useShortExternalJobUrl";
+import { useShortExternalJobUrl, resolveShortExternalJobUrl } from "@/hooks/useShortExternalJobUrl";
 
 interface ShareDialogProps {
   jobTitle: string;
@@ -146,27 +146,46 @@ const ShareDialog = ({
     }
   ];
 
-  const handleShare = async (option: typeof shareOptions[0]) => {
-    // Track the share in database
-    await trackShare('job', option.platform, jobId);
-    
-    // Call the onShare callback if provided
-    onShare?.();
-    
-    const url = option.getUrl();
-    if (url) {
-      window.open(url, '_blank', 'width=600,height=400');
+  // External jobs: always wait for the short link so a long ?d= URL is never shared.
+  const getExternalUrl = async (): Promise<string> => {
+    const short = externalJob ? await resolveShortExternalJobUrl(externalJob) : null;
+    const base = short || shortExternalBase;
+    return base + (referralCode ? `${base.includes('?') ? '&' : '?'}ref=${referralCode}` : '');
+  };
+  const externalMessage = (url: string) =>
+    formatWhatsAppShare(
+      { ...jobData, location: location || externalJob?.location, job_type: job_type || externalJob?.type },
+      referralCode, url, externalJob?.salary || undefined,
+    );
+  const externalPlatformUrl = (platform: SharePlatform, url: string) => {
+    const text = `🚀 Hiring: ${jobTitle}${company ? ` at ${company}` : ''}\n✅ Free to Apply | Workly India`;
+    switch (platform) {
+      case 'whatsapp': return `https://wa.me/?text=${encodeURIComponent(externalMessage(url))}`;
+      case 'facebook': return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}&quote=${encodeURIComponent(text)}`;
+      case 'twitter': return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+      case 'linkedin': return `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+      default: return '';
     }
+  };
+
+  const handleShare = async (option: typeof shareOptions[0]) => {
+    // Open the window synchronously so popup blockers allow it.
+    const win = isExternal ? window.open('', '_blank', 'width=600,height=400') : null;
+    trackShare('job', option.platform, jobId);
+    onShare?.();
+
+    const url = isExternal ? externalPlatformUrl(option.platform, await getExternalUrl()) : option.getUrl();
+    if (url) {
+      if (win) win.location.href = url;
+      else window.open(url, '_blank', 'width=600,height=400');
+    } else win?.close();
     setIsOpen(false);
   };
 
   const handleCopyLink = async () => {
     try {
-      // Copy formatted message for better sharing. External jobs must copy the
-      // self-contained /ej URL, not the internal /job/:id path (which would
-      // 404 for the recipient).
       const copyText = isExternal
-        ? `${jobTitle} at ${company}\n\n${jobUrl}`
+        ? externalMessage(await getExternalUrl())
         : formatCopyShare(jobData, referralCode);
       await navigator.clipboard.writeText(copyText);
       setCopied(true);
