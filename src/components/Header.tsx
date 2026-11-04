@@ -163,7 +163,7 @@ const Header = ({ hideSearch = false }: HeaderProps) => {
                    return (
                     <span className="inline-flex items-center gap-1.5 align-middle">
                       <span style={{ color: BRAND_CONFIG.firstWordColor }}>{first}</span>{' '}
-                      <span style={{ color: BRAND_CONFIG.secondWordColor }}>{second}</span>
+                      <span className="text-green-800 dark:text-green-300">{second}</span>
                       <Lottie
                         animationData={cuteTigerAnimation}
                         loop
@@ -177,7 +177,7 @@ const Header = ({ hideSearch = false }: HeaderProps) => {
               {brandAssets.isLoading ? (
                 <div className="h-3 xs:h-4 w-24 xs:w-32 rounded bg-muted animate-pulse mt-0.5" />
               ) : (
-                <p className="text-xs xs:text-sm sm:text-sm text-muted-foreground leading-tight truncate shimmer bg-gradient-primary bg-clip-text animate-fade-in animation-delay-300">{brandAssets?.brand_tagline || BRAND_CONFIG.tagline}</p>
+                <p className="text-xs xs:text-sm sm:text-sm text-foreground leading-tight truncate animate-fade-in animation-delay-300">{brandAssets?.brand_tagline || BRAND_CONFIG.tagline}</p>
               )}
             </div>
           </div>
