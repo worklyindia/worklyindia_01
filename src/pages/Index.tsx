@@ -12,13 +12,13 @@ import { useTrustSeekers } from "@/hooks/useTrustSeekers";
 import { useAuthImages } from "@/hooks/useAuthImages";
 import { useHomeSeekersVideo } from "@/hooks/useHomeSeekersVideo";
 import { YouTubeVideoCard } from "@/components/YouTubeVideoCard";
-import HomeResumePreviewStrip from "@/components/HomeResumePreviewStrip";
-import HomeDomainSection from "@/components/HomeDomainSection";
-import HomeCareerCategories from "@/components/HomeCareerCategories";
+const HomeResumePreviewStrip = lazyRetry(() => import("@/components/HomeResumePreviewStrip"));
+const HomeDomainSection = lazyRetry(() => import("@/components/HomeDomainSection"));
+const HomeCareerCategories = lazyRetry(() => import("@/components/HomeCareerCategories"));
 import homeHeroAsset from "@/assets/home-hero.png.asset.json";
 
-import HomeTrustBadges from "@/components/HomeTrustBadges";
-import HomeTrustpilotCard from "@/components/review/HomeTrustpilotCard";
+const HomeTrustBadges = lazyRetry(() => import("@/components/HomeTrustBadges"));
+const HomeTrustpilotCard = lazyRetry(() => import("@/components/review/HomeTrustpilotCard"));
 
 
 import SEO from "@/components/SEO";
@@ -35,9 +35,9 @@ import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { Skeleton } from "@/components/ui/skeleton";
 import Footer from "@/components/Footer";
 import homeSeekersAsset from "@/assets/home-seekers.png.asset.json";
-import MadeWithLoveSection from "@/components/MadeWithLoveSection";
+const MadeWithLoveSection = lazyRetry(() => import("@/components/MadeWithLoveSection"));
 import JobCard from "@/components/JobCard";
-import BrandSocialBar from "@/components/BrandSocialBar";
+const BrandSocialBar = lazyRetry(() => import("@/components/BrandSocialBar"));
 import { useTrendingJobs } from "@/hooks/useTrendingJobs";
 import { JobCardSkeleton } from "@/components/skeletons/JobCardSkeleton";
 import { CANONICAL_URL } from '@/config/domainConfig';
