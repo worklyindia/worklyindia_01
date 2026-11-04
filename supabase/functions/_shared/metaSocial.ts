@@ -821,13 +821,13 @@ async function processEvent(supabase: SupabaseClient, ev: {
     const send = ev.platform === 'instagram' && token.startsWith('IG') ? igGraph : graph;
     if (ev.kind === 'comment') {
       // AI reply is public and contextual; only genuine inquiries get a private DM.
-      const publicReply = reply.split(/\\n+/)[0].slice(0, 500);
+      const publicReply = reply.split(/\n+/)[0].slice(0, 500);
       const path = ev.platform === 'instagram' ? `/${ev.commentId}/replies` : `/${ev.commentId}/comments`;
       await send(`${path}?access_token=${t}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: publicReply }),
       });
       // DM only when there is clear intent; praise/simple reactions remain public.
-      const hasQuestion = /[?？]/.test(ev.text) || /\\b(how|what|when|where|who|why|price|pricing|cost|details|link|apply|application|job|vacancy|hire|hiring|contact|number|available|availability|problem|issue|inquiry|inquire|કેમ|શું|ક્યાં|ક્યારે|કેટલું|નોકરી|જોબ|મદદ|ભાવ|કેવી રીતે)\\b/i.test(ev.text);
+      const hasQuestion = /[?？]/.test(ev.text) || /\b(how|what|when|where|who|why|price|pricing|cost|details|link|apply|application|job|vacancy|hire|hiring|contact|number|available|availability|problem|issue|inquiry|inquire|કેમ|શું|ક્યાં|ક્યારે|કેટલું|નોકરી|જોબ|મદદ|ભાવ|કેવી રીતે)\b/i.test(ev.text);
       const explicitRequest = /(?:please|pls|plz|kindly|can you|could you|mujhe|bataye|batao|jankari|जानकारी|કૃપા|માહિતી|dm me|message me|send me)/i.test(ev.text);
       const praiseOnly = /(?:bahut achi|bahut acchi|achi hai|acchi hai|great|awesome|excellent|love it|nice|thank|shukriya|धन्यवाद|ખૂબ સારું)/i.test(ev.text) && !hasQuestion && !explicitRequest;
       const shouldDM = !praiseOnly && (hasQuestion || explicitRequest);
@@ -835,7 +835,7 @@ async function processEvent(supabase: SupabaseClient, ev: {
         const privateReplyOwner = ev.platform === 'instagram' ? account.ig_user_id : account.page_id;
         const privateReply = await generateSocialReply({
           account: replyAccount, platform: ev.platform, kind: 'comment', text: ev.text,
-          context: `${context}\\n\\nPUBLIC COMMENT REPLY ALREADY POSTED (do not repeat it): ${publicReply}`,
+          context: `${context}\n\nPUBLIC COMMENT REPLY ALREADY POSTED (do not repeat it): ${publicReply}`,
           history, ...( { replyChannel: 'private_dm' } as any ),
         });
         if (privateReply) {
@@ -845,6 +845,7 @@ async function processEvent(supabase: SupabaseClient, ev: {
           });
         }
       }
+    } else {
       const sender = send === igGraph ? account.ig_user_id : account.page_id;
       await send(`/${sender}/messages?access_token=${t}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

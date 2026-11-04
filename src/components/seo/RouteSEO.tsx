@@ -48,7 +48,7 @@ export default function RouteSEO() {
       <title>{seo.title}</title>
       <meta name="description" content={seo.description} />
       <meta name="keywords" content={seo.keywords} />
-      {seo.robots && <meta name="robots" content={seo.robots} />
+      {seo.robots && <meta name="robots" content={seo.robots} />}
       <link rel="canonical" href={url} />
       <meta property="og:title" content={seo.title} />
       <meta property="og:description" content={seo.description} />
