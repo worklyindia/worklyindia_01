@@ -140,6 +140,25 @@ const Index = () => {
   const isMobile = useIsMobile();
   const networkStatus = useNetworkStatus();
   const [showKYC, setShowKYC] = useState(false);
+  const promoVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [loadPromoVideo, setLoadPromoVideo] = useState(false);
+
+  useEffect(() => {
+    const video = promoVideoRef.current;
+    if (!video || loadPromoVideo) return;
+    if (typeof IntersectionObserver === "undefined") {
+      const timer = window.setTimeout(() => setLoadPromoVideo(true), 5000);
+      return () => window.clearTimeout(timer);
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        setLoadPromoVideo(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "300px" });
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [loadPromoVideo]);
   
   // Handle employer OAuth redirect from public/employer-auth.html
   useEffect(() => {
@@ -279,14 +298,15 @@ const Index = () => {
               <p className="mx-auto mt-2 max-w-xl text-center text-muted-foreground">A quick look at how hiring and job search work on the platform.</p>
               <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-2xl border border-border bg-card p-2 shadow-sm sm:p-3">
                 <video
-                  src="https://pub-58e90721f9fe42b38ecde13543c608fc.r2.dev/workly-india-promo-30s-silent.mp4"
+                  ref={promoVideoRef}
+                  src={loadPromoVideo ? "https://pub-58e90721f9fe42b38ecde13543c608fc.r2.dev/workly-india-promo-30s-silent.mp4" : undefined}
                   poster={authImages?.home_hero_image || homeHeroAsset.url}
                   aria-label="Workly India platform overview"
-                  autoPlay
+                  autoPlay={loadPromoVideo}
                   muted
                   loop
                   playsInline
-                  preload="metadata"
+                  preload="none"
                   controls={false}
                   disablePictureInPicture
                   controlsList="nodownload nofullscreen noremoteplayback"
