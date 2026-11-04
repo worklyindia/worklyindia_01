@@ -44,6 +44,13 @@ Allow: /ai-assistant/pricing
 Allow: /jobs/
 Allow: /job/
 Disallow: /owner-portal/
+Disallow: /jobs?*
+Disallow: /auth
+Disallow: /activity
+Disallow: /more
+Disallow: /forgot-password
+Disallow: /employer-forgot-password
+Disallow: /employer-signup?*
 Disallow: /admin/
 Disallow: /dashboard/
 Disallow: /settings/

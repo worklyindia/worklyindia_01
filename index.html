@@ -72,10 +72,6 @@
       })();
     </script>
 
-    <!-- Signature fonts for Cover Letter Builder -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Aguafina+Script&family=Alex+Brush&family=Allura&family=Arizonia&family=Bilbo&family=Bilbo+Swash+Caps&family=Caveat:wght@400;700&family=Cedarville+Cursive&family=Clicker+Script&family=Dancing+Script:wght@400;600;700&family=Euphoria+Script&family=Great+Vibes&family=Herr+Von+Muellerhoff&family=Homemade+Apple&family=Italianno&family=Kaushan+Script&family=Marck+Script&family=Monsieur+La+Doulaise&family=Mrs+Saint+Delafield&family=Pacifico&family=Parisienne&family=Pinyon+Script&family=Qwigley&family=Rochester&family=Sacramento&family=Satisfy&family=Sofia&family=Tangerine:wght@400;700&family=WindSong:wght@400;500&family=Yellowtail&display=swap" rel="stylesheet" />
     
     <!-- Google Search Console Verification -->
     <meta name="google-site-verification" content="googled548c9436462790c" />
@@ -124,26 +120,7 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png?v=20261022" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png?v=20261022" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content" />
-    <script>
-      // Phones (<768px): lock zoom so the mobile layout always looks native.
-      // Tablets and larger: pinch-zoom stays available.
-      (function () {
-        var meta = document.querySelector('meta[name="viewport"]');
-        if (!meta) return;
-        function apply() {
-          var phone = Math.min(window.screen.width || 9999, window.innerWidth || 9999) < 768;
-          meta.setAttribute(
-            'content',
-            phone
-              ? 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content'
-              : 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content'
-          );
-        }
-        apply();
-        window.addEventListener('orientationchange', apply);
-      })();
-    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     
     <!-- Handle redirects from 404.html - CRITICAL for SPA routing on Vercel -->
     <script>
@@ -171,13 +148,6 @@
         overflow-x: hidden;
         width: 100%;
         position: relative;
-        touch-action: pan-x pan-y;
-        -ms-touch-action: pan-x pan-y;
-      }
-      /* Disable pinch zoom */
-      html {
-        -ms-content-zooming: none;
-        -ms-touch-action: pan-x pan-y;
       }
       /* Allow carousels to handle their own touch events */
       .embla-carousel {
@@ -481,7 +451,6 @@
     <link rel="dns-prefetch" href="https://jubwzelupbntbetpajqb.supabase.co" />
     <link rel="preconnect" href="https://jubwzelupbntbetpajqb.supabase.co" crossorigin />
     <link rel="dns-prefetch" href="https://img.youtube.com" />
-    <link rel="preconnect" href="https://img.youtube.com" crossorigin />
     
     <!-- PERFORMANCE FIX: Preload critical resources with highest priority -->
     <!-- NOTE: Do NOT preload /src/index.css here — Vite hashes the CSS at build
@@ -499,7 +468,6 @@
     
     <!-- Razorpay Payment Gateway Optimization -->
     <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
-    <link rel="preconnect" href="https://api.razorpay.com" crossorigin />
     <script src="https://checkout.razorpay.com/v1/checkout.js" async defer></script>
 
     <!-- TrustBox script -->
@@ -928,6 +896,6 @@
       })();
     </script>
 
-    <script src="https://www.anrdoezrs.net/am/101874355/include/allCj/impressions/page/am.js" async></script>
+    <script>window.addEventListener('load',function(){setTimeout(function(){var s=document.createElement('script');s.src='https://www.anrdoezrs.net/am/101874355/include/allCj/impressions/page/am.js';s.async=true;document.body.appendChild(s);},4000);});</script>
   </body>
 </html>

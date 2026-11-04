@@ -47,7 +47,7 @@ const WelcomePromoModal = ({ isLoggedIn, isOpen: externalIsOpen, onClose }: Welc
     // Show modal after a short delay
     const timer = setTimeout(() => {
       setInternalIsOpen(true);
-    }, 500);
+    }, 4000);
 
     return () => clearTimeout(timer);
   }, [isLoggedIn, externalIsOpen]);

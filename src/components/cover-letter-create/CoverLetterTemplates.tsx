@@ -1,3 +1,4 @@
+import "@/lib/signatureFonts";
 import React from 'react';
 import { CoverLetterDraft, CoverLetterTemplate } from '@/hooks/useCoverLetterDraft';
 import { buildCoverLetterText } from './buildCoverLetter';

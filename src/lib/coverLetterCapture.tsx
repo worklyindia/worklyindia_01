@@ -1,3 +1,4 @@
+import "@/lib/signatureFonts";
 /**
  * Off-screen renderer for cover letter templates.
  *
