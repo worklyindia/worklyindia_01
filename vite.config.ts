@@ -30,6 +30,8 @@ export default defineConfig(({ mode }) => ({
     },
   },
   build: {
+    // Target modern browsers to avoid unnecessary legacy transforms/polyfills.
+    target: "es2020",
     // Publish production source maps to make Lighthouse and browser-console
     // diagnostics actionable. These map files are not loaded by visitors.
     sourcemap: true,
