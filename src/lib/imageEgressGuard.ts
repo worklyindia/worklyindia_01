@@ -78,7 +78,13 @@ function optimize(img: HTMLImageElement): void {
   };
   img.addEventListener("error", onError);
 
-  img.src = proxyUrl(src, width);
+  // Keep the original public Supabase URL. wsrv.nl intermittently returns
+  // 404 for valid storage objects and produces console errors in Lighthouse.
+  // Native Supabase render URLs are already resized upstream where available.
+  img.removeAttribute(ORIGINAL_ATTR);
+  img.removeAttribute(DONE_ATTR);
+  img.removeEventListener("error", onError);
+  // No proxy rewrite: avoid third-party image failures and preserve reliability.
 }
 
 function scan(root: ParentNode): void {
