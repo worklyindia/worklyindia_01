@@ -14,8 +14,8 @@ import { UserLocationProvider } from "@/contexts/UserLocationContext";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrandMetaTags } from "@/components/brand/BrandMetaTags";
-import { SpeedInsights } from "@vercel/speed-insights/react";
-import { Analytics } from "@vercel/analytics/react";
+const SpeedInsights = lazyRetry(() => import("@vercel/speed-insights/react").then(m => ({ default: m.SpeedInsights })));
+const Analytics = lazyRetry(() => import("@vercel/analytics/react").then(m => ({ default: m.Analytics })));
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ProtectedEmployerRoute from "@/components/ProtectedEmployerRoute";
 import ProtectedAdminRoute from "@/components/ProtectedAdminRoute";
@@ -1524,8 +1524,10 @@ const App = () => {
             <Toaster />
             <ConfirmDialogHost />
           </SafeErrorBoundary>
-          <SpeedInsights />
-          <Analytics />
+          <Suspense fallback={null}>
+            <SpeedInsights />
+            <Analytics />
+          </Suspense>
           <CursorFollower />
         </ErrorBoundary>
       </TooltipProvider>
