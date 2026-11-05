@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { useNavigate, useLocation } from "react-router-dom";
 import QuickSearch from "@/components/QuickSearch";
 import LazyImage from "@/components/LazyImage";
+import { r2DisplayUrl } from "@/utils/imageUrl";
 import LocationChip from "@/components/LocationChip";
 import LottieSearchIcon from "@/components/LottieSearchIcon";
 import LottieGiftIcon from "@/components/LottieGiftIcon";
@@ -143,7 +144,7 @@ const Header = ({ hideSearch = false }: HeaderProps) => {
                 <div className="w-8 h-8 xs:w-10 xs:h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full bg-muted animate-pulse" />
               ) : (
                 <LazyImage
-                  src={logoUrl}
+                  src={r2DisplayUrl(logoUrl, 128, 75) || logoUrl}
                   sizes="(max-width: 480px) 32px, (max-width: 640px) 40px, (max-width: 768px) 48px, 56px"
                   alt={`${brandAssets?.brand_name || BRAND_CONFIG.name} Logo`} 
                   className="w-8 h-8 xs:w-10 xs:h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full object-cover relative z-10"
