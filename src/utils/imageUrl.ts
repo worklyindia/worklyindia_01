@@ -97,6 +97,26 @@ function isOAuthAvatarHost(u: string): boolean {
   }
 }
 
+/**
+ * Display-only resized WebP copy of a public Cloudflare R2 image (originals
+ * stay untouched in storage). Non-R2 URLs are returned unchanged.
+ */
+export function r2DisplayUrl(
+  url: string | null | undefined,
+  width = 1200,
+  quality = 80,
+): string | null {
+  const normalized = normalizeImageUrl(url);
+  if (!normalized) return null;
+  try {
+    if (!new URL(normalized).host.endsWith(".r2.dev")) return normalized;
+  } catch {
+    return normalized;
+  }
+  const params = new URLSearchParams({ url: normalized, w: String(width), q: String(quality), output: "webp" });
+  return `${WSRV_BASE}?${params.toString()}`;
+}
+
 export function storageImageUrl(
   url: string | null | undefined,
   width = 400,

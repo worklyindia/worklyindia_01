@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Play, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { setCacheData, getCacheData } from '@/utils/offlineCache';
-import { normalizeImageUrl } from '@/utils/imageUrl';
+import { normalizeImageUrl, r2DisplayUrl } from '@/utils/imageUrl';
 import bannerFallbackImage from '@/assets/built-with-love-hero.webp';
 import { BANNER_CACHE_KEY, BANNER_UPDATED_EVENT, BANNER_STORAGE_KEY } from '@/lib/bannerUpdates';
 
@@ -16,7 +16,7 @@ const BANNER_FALLBACK_SRC = bannerFallbackImage;
 // carousel paint/hydration to discover the LCP resource.
 const preloadHeroImage = (url?: string | null) => {
   if (!url || typeof document === 'undefined') return;
-  const normalized = normalizeImageUrl(url);
+  const normalized = r2DisplayUrl(url, 1400, 82);
   if (!normalized) return;
   const existing = document.querySelector<HTMLLinkElement>('link[data-hero-preload]');
   if (existing?.href === normalized) return;
@@ -258,7 +258,7 @@ const HeroBanner = () => {
               const hasGradient = slide.gradient && slide.gradient !== 'none';
               const youtubeId = slide.youtube_url ? extractYouTubeId(slide.youtube_url) : null;
               const isVideoPlaying = playingVideoIndex === index;
-              const normalizedBannerUrl = normalizeImageUrl(slide.image_url);
+              const normalizedBannerUrl = r2DisplayUrl(slide.image_url, 1400, 82);
               const bannerSrc = failedBannerIds[slide.id]
                 ? BANNER_FALLBACK_SRC
                 : (normalizedBannerUrl || BANNER_FALLBACK_SRC);

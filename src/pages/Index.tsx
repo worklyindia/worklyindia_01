@@ -15,6 +15,7 @@ import { YouTubeVideoCard } from "@/components/YouTubeVideoCard";
 const HomeResumePreviewStrip = lazyRetry(() => import("@/components/HomeResumePreviewStrip"));
 const HomeDomainSection = lazyRetry(() => import("@/components/HomeDomainSection"));
 const HomeCareerCategories = lazyRetry(() => import("@/components/HomeCareerCategories"));
+import { r2DisplayUrl } from "@/utils/imageUrl";
 import homeHeroAsset from "@/assets/home-hero.png.asset.json";
 
 const HomeTrustBadges = lazyRetry(() => import("@/components/HomeTrustBadges"));
@@ -300,7 +301,7 @@ const Index = () => {
                 <video
                   ref={promoVideoRef}
                   src={loadPromoVideo ? "https://pub-58e90721f9fe42b38ecde13543c608fc.r2.dev/workly-india-promo-30s-silent.mp4" : undefined}
-                  poster={authImages?.home_hero_image || homeHeroAsset.url}
+                  poster={r2DisplayUrl(authImages?.home_hero_image, 800) || homeHeroAsset.url}
                   aria-label="Workly India platform overview"
                   autoPlay={loadPromoVideo}
                   muted
@@ -329,7 +330,7 @@ const Index = () => {
             defaultImageUrl={authImages?.default_job_seeker_avatar}
           />
           <img
-            src={authImages?.home_seekers_image || homeSeekersAsset.url}
+            src={r2DisplayUrl(authImages?.home_seekers_image, 900) || homeSeekersAsset.url}
             alt="Grow your business with WhatsApp on Workly India"
             width={1200}
             height={675}

@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 // Home card person photos live on the Owner's Cloudflare R2 bucket (immutable,
 // one-year HTTP cache). Browser copies persist via homeCardImageCache so repeat
 // visits hit neither this bucket nor any other source.
-const R2_PHOTOS = "https://pub-3225b45ecaf943b3b9061cd57d754bf2.r2.dev";
+const R2_PHOTOS_ORIGIN = "https://pub-3225b45ecaf943b3b9061cd57d754bf2.r2.dev";
+const R2_PHOTOS = "https://wsrv.nl/?w=600&q=80&output=webp&url=" + R2_PHOTOS_ORIGIN;
 
 const categories = [
   { id: "fresher", title: "Jobs for Freshers", subtitle: "Your first step starts here", label: "FIRST OPPORTUNITY", href: "/jobs?tab=freshers", image: `${R2_PHOTOS}/01-Jobs-for-Freshers.png`, icon: GraduationCap },
