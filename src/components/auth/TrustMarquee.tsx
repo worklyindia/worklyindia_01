@@ -40,7 +40,10 @@ const getInitials = (name: string) => {
 const Tile = ({ item, isSeekers }: { item: TrustItem; isSeekers: boolean; defaultImageUrl?: string | null }) => {
   const initials = getInitials(item.name);
   const [imgFailed, setImgFailed] = useState(false);
-  const showImage = !!item.imageUrl && !imgFailed;
+  // LinkedIn photo links expire and return 403, which logs console errors
+  // (hurts PageSpeed Best Practices). Show initials for them instead.
+  const isExpiringHost = !!item.imageUrl && /(^|\.)licdn\.com\//i.test(item.imageUrl.replace(/^https?:\/\//i, ""));
+  const showImage = !!item.imageUrl && !isExpiringHost && !imgFailed;
 
   return (
     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border shrink-0 whitespace-nowrap">
