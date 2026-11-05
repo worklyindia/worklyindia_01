@@ -51,5 +51,5 @@ jobs:
       - name: Deploy
         if: steps.guard.outputs.ok == 'true'
         run: |
-          url=$(vercel deploy --prebuilt ${{ github.event_name != 'pull_request' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          url=$(vercel deploy --prebuilt --archive=tgz ${{ github.event_name != 'pull_request' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
           echo "Deployed: $url" >> "$GITHUB_STEP_SUMMARY"
