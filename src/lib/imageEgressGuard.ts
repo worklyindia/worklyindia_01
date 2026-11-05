@@ -58,7 +58,27 @@ function proxyUrl(original: string, width: number): string {
   return `${WSRV_BASE}?${params.toString()}`;
 }
 
+function restoreWsrvOriginal(img: HTMLImageElement): void {
+  const src = img.getAttribute("src") || "";
+  if (!src) return;
+
+  try {
+    const parsed = new URL(src, window.location.href);
+    if (parsed.hostname !== "wsrv.nl") return;
+
+    // wsrv.nl wraps the upstream image in its ?url= parameter.
+    // Restore it to avoid proxy 404s and third-party payloads.
+    const original = parsed.searchParams.get("url");
+    if (original && /^https?:\/\//i.test(original)) {
+      img.setAttribute("src", original);
+    }
+  } catch {
+    // Leave malformed URLs unchanged; never break an image at runtime.
+  }
+}
+
 function optimize(img: HTMLImageElement): void {
+  restoreWsrvOriginal(img);
   if (img.getAttribute(DONE_ATTR) === "true") return;
   if (img.getAttribute("data-no-img-optimize") === "true") return;
 
