@@ -46,11 +46,21 @@ const WelcomePromoModal = ({ isLoggedIn, isOpen: externalIsOpen, onClose }: Welc
     }
 
     // Show modal after a short delay
-    const timer = setTimeout(() => {
-      setInternalIsOpen(true);
-    }, 4000);
+    // Open only after the visitor interacts (or 8s), so the sheet never covers first paint.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const events = ['pointerdown', 'keydown', 'touchstart', 'scroll'] as const;
+    const arm = () => {
+      events.forEach((e) => window.removeEventListener(e, arm));
+      if (!timer) timer = setTimeout(() => setInternalIsOpen(true), 1500);
+    };
+    events.forEach((e) => window.addEventListener(e, arm, { once: true, passive: true }));
+    const fallback = setTimeout(() => setInternalIsOpen(true), 8000);
 
-    return () => clearTimeout(timer);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, arm));
+      if (timer) clearTimeout(timer);
+      clearTimeout(fallback);
+    };
   }, [isLoggedIn, externalIsOpen]);
 
   const handleClose = () => {

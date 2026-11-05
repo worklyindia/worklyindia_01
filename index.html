@@ -111,10 +111,10 @@
           gtm.async=true; gtm.src='https://www.googletagmanager.com/gtm.js?id=GTM-KL73G5K3';
           document.head.appendChild(gtm);
         }
-        window.addEventListener('load',function(){
-          if('requestIdleCallback' in window) requestIdleCallback(loadAnalytics,{timeout:4000});
-          else setTimeout(loadAnalytics,2500);
-        },{once:true});
+        ['pointerdown','keydown','touchstart','scroll'].forEach(function(n){
+          window.addEventListener(n,loadAnalytics,{once:true,passive:true});
+        });
+        window.addEventListener('load',function(){ setTimeout(loadAnalytics,10000); },{once:true});
       })();
     </script>
     <!-- End deferred Google Analytics / Tag Manager -->
@@ -696,10 +696,11 @@
             })(window, document, "clarity", "script", "sz9dhj2ky3");
           }
         };
-        window.addEventListener('load', function() {
-          if ('requestIdleCallback' in window) requestIdleCallback(loadMarketing,{timeout:5000});
-          else setTimeout(loadMarketing,3500);
-        }, {once:true});
+        var mkLoaded=false; var runMarketing=function(){ if(mkLoaded) return; mkLoaded=true; loadMarketing(); };
+        ['pointerdown','keydown','touchstart','scroll'].forEach(function(n){
+          window.addEventListener(n,runMarketing,{once:true,passive:true});
+        });
+        window.addEventListener('load', function() { setTimeout(runMarketing,10000); }, {once:true});
       }
     </script>
     

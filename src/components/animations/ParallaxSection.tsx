@@ -27,7 +27,12 @@ const ParallaxSection = ({ children, className = '', speed = 0.15, direction = '
     );
     observer.observe(el);
 
+    let frame = 0;
     const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => { frame = 0; measure(); });
+    };
+    const measure = () => {
       const rect = el.getBoundingClientRect();
       const windowH = window.innerHeight;
       const centerY = rect.top + rect.height / 2;
@@ -45,6 +50,7 @@ const ParallaxSection = ({ children, className = '', speed = 0.15, direction = '
 
     return () => {
       observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
       window.removeEventListener('scroll', onScroll);
     };
   }, [speed, direction, fadeIn]);
