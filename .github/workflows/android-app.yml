@@ -51,6 +51,12 @@ jobs:
           java-version: "21"
           cache: gradle
 
+      - name: Show Android debug signing fingerprint for App Links
+        working-directory: android
+        run: |
+          ./gradlew signingReport | tee signing-report.txt
+          grep -A 8 "Variant: debug" signing-report.txt | grep "SHA-256" | head -1
+
       - name: Build APK and Android App Bundle
         working-directory: android
         run: |
