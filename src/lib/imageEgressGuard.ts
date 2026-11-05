@@ -79,6 +79,16 @@ function restoreWsrvOriginal(img: HTMLImageElement): void {
 
 function optimize(img: HTMLImageElement): void {
   restoreWsrvOriginal(img);
+
+  // Avoid downloading large R2 images before they approach the viewport.
+  // Preserve eager loading for visible/above-the-fold images to protect LCP.
+  const currentSrc = img.getAttribute("src") || "";
+  if (/\.r2\.dev\//i.test(currentSrc)) {
+    const rect = img.getBoundingClientRect();
+    const belowFold = rect.top > Math.max(window.innerHeight * 1.25, 900);
+    if (belowFold && !img.hasAttribute("loading")) img.loading = "lazy";
+    if (!img.hasAttribute("decoding")) img.decoding = "async";
+  }
   if (img.getAttribute(DONE_ATTR) === "true") return;
   if (img.getAttribute("data-no-img-optimize") === "true") return;
 
