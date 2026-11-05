@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.13aa0e68c4e34b09b3c9994d2061ae64',
+  appId: 'com.worklyindia.app',
   appName: 'Workly India',
   webDir: 'dist',
   plugins: {
