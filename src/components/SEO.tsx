@@ -31,7 +31,7 @@ const SEO = ({
    
   
   // Use brand OG image if available, otherwise use provided image or default
-  const defaultImage = brandAssets.og_image_url || getOptimizedLogo('https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png', 512);
+  const defaultImage = brandAssets.og_image_url || getOptimizedLogo('https://worklyindia.devs.surf/icons/icon-512x512.png', 512);
   const finalImage = image || defaultImage;
   
   const siteUrl = CANONICAL_URL;

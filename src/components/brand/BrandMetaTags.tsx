@@ -17,7 +17,7 @@ export const BrandMetaTags = () => {
   
   // Convert to absolute URL for OG image, then route Supabase Storage images
   // through the free CDN proxy so social crawlers don't burn Cached Egress.
-  const relativeOgImage = brandAssets.og_image_url || brandAssets.logo_url || 'https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png';
+  const relativeOgImage = brandAssets.og_image_url || brandAssets.logo_url || 'https://worklyindia.devs.surf/icons/icon-512x512.png';
   const absoluteOgImage = relativeOgImage.startsWith('http') 
     ? relativeOgImage 
     : `${siteUrl}${relativeOgImage.startsWith('/') ? relativeOgImage : '/' + relativeOgImage}`;

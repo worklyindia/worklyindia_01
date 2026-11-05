@@ -618,7 +618,7 @@ Best regards,
 
     // Get primary job image for schema
     const primaryJobImage = jobImages[0]?.image_url;
-    const companyLogo = jobData.company?.logo_url || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`;
+    const companyLogo = jobData.company?.logo_url || `https://worklyindia.devs.surf/icons/icon-512x512.png`;
 
     // Build schema
     const schema: any = {
@@ -1072,7 +1072,7 @@ Best regards,
         <meta property="og:site_name" content="Workly India - Remote Jobs" />
         
         {/* Job Image for Google & Social Sharing */}
-        <meta property="og:image" content={jobImages[0]?.image_url || jobData.company?.logo_url || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`} />
+        <meta property="og:image" content={jobImages[0]?.image_url || jobData.company?.logo_url || `https://worklyindia.devs.surf/icons/icon-512x512.png`} />
         <meta property="og:image:alt" content={`${jobData.title} at ${jobData.company?.company_name || jobData.company_name} - Remote Job India`} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
@@ -1081,7 +1081,7 @@ Best regards,
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={`${jobData.title} at ${jobData.company?.company_name || jobData.company_name}`} />
         <meta name="twitter:description" content={`${jobData.description.substring(0, 160)}...`} />
-        <meta name="twitter:image" content={jobImages[0]?.image_url || jobData.company?.logo_url || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`} />
+        <meta name="twitter:image" content={jobImages[0]?.image_url || jobData.company?.logo_url || `https://worklyindia.devs.surf/icons/icon-512x512.png`} />
         <meta name="twitter:image:alt" content={`${jobData.title} - Remote Job Opportunity`} />
         
         {/* Article Meta for better indexing */}

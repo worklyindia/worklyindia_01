@@ -34,7 +34,7 @@ export const ReviewStructuredData = ({
     "@context": "https://schema.org",
     "@type": itemReviewed.type || "Organization",
     "name": itemReviewed.name,
-    "image": itemReviewed.image || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+    "image": itemReviewed.image || `https://worklyindia.devs.surf/icons/icon-512x512.png`,
     "url": SITE_URL,
     ...(aggregateRating && {
       "aggregateRating": {

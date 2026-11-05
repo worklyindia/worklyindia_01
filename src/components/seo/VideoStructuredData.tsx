@@ -37,7 +37,7 @@ export const VideoStructuredData = ({
       "name": BRAND_NAME,
       "logo": {
         "@type": "ImageObject",
-        "url": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`
+        "url": `https://worklyindia.devs.surf/icons/icon-512x512.png`
       }
     }
   };

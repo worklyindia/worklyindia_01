@@ -9,12 +9,9 @@ export const criticalCSS = `
 
 // Preload critical resources with priority - ULTRA-OPTIMIZED
 export const preloadResources = () => {
-  const logoSrc = 'https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png';
-  
-  // Only preload absolute critical resources
+  // Built CSS is already linked by Vite; the old storage logo no longer exists.
   const links = [
-    { href: '/src/index.css', as: 'style' },
-    { href: getOptimizedLogo(logoSrc, 32), as: 'image', priority: 'high' },
+    { href: '/icons/icon-192x192.png?v=20261022', as: 'image', priority: 'high' },
   ];
 
   links.forEach(({ href, as, priority }) => {
@@ -26,16 +23,6 @@ export const preloadResources = () => {
     document.head.appendChild(link);
   });
 
-  // Prefetch in background (non-blocking) with requestIdleCallback
-  if ('requestIdleCallback' in window) {
-    requestIdleCallback(() => {
-      const baseLogo = 'https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png';
-      [48, 56].forEach(size => {
-        const img = new Image();
-        img.src = getOptimizedLogo(baseLogo, size);
-      });
-    }, { timeout: 2000 });
-  }
 };
 
 // Firebase messaging is the only service worker allowed at the root scope.

@@ -46,10 +46,10 @@ export const CourseStructuredData = ({
       "@type": "Organization",
       "name": provider,
       "url": SITE_URL,
-      "logo": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`
+      "logo": `https://worklyindia.devs.surf/icons/icon-512x512.png`
     },
     "url": url || SITE_URL,
-    "image": image || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+    "image": image || `https://worklyindia.devs.surf/icons/icon-512x512.png`,
     "courseMode": courseMode,
     "isAccessibleForFree": isAccessibleForFree
   };

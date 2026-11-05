@@ -34,7 +34,7 @@ export const organizationStructuredData = {
   "name": BRAND_CONFIG.name,
   "alternateName": BRAND_CONFIG.alternateName,
   "url": CANONICAL_URL,
-  "logo": optimizeImage("https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png", 512, 85, 'webp'),
+  "logo": optimizeImage("https://worklyindia.devs.surf/icons/icon-512x512.png", 512, 85, 'webp'),
   "description": "India's premier platform connecting talented professionals with legitimate Workly India opportunities. Verified employers, genuine jobs, and trusted by thousands of job seekers across India.",
   "foundingDate": "2024-01-01",
   "founders": [{
@@ -184,12 +184,12 @@ export const articleStructuredData = (article: {
     "name": BRAND_CONFIG.name,
     "logo": {
       "@type": "ImageObject",
-      "url": optimizeImage("https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png", 512, 85, 'webp')
+      "url": optimizeImage("https://worklyindia.devs.surf/icons/icon-512x512.png", 512, 85, 'webp')
     }
   },
   "datePublished": article.datePublished,
   "dateModified": article.dateModified || article.datePublished,
-  "image": article.image || optimizeImage("https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png", 512, 85, 'webp'),
+  "image": article.image || optimizeImage("https://worklyindia.devs.surf/icons/icon-512x512.png", 512, 85, 'webp'),
   "url": article.url
 });
 
@@ -197,7 +197,7 @@ export const localBusinessStructuredData = {
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
   "name": BRAND_CONFIG.name,
-  "image": optimizeImage("https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png", 512, 85, 'webp'),
+  "image": optimizeImage("https://worklyindia.devs.surf/icons/icon-512x512.png", 512, 85, 'webp'),
   "@id": `${CANONICAL_URL}/#localbusiness`,
   "url": `${CANONICAL_URL}/`,
   "telephone": BRAND_CONFIG.phone,

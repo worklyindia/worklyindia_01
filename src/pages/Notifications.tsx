@@ -10,7 +10,7 @@ import Header from "@/components/Header";
 import LazyImage from "@/components/LazyImage";
 import { getOptimizedLogo } from "@/utils/performance";
 
-const logoUrl = "https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png";
+const logoUrl = "https://worklyindia.devs.surf/icons/icon-512x512.png";
 
 const Notifications = () => {
   const navigate = useNavigate();

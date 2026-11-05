@@ -63,7 +63,7 @@ export const EmployerJobPostingSchema = ({ brandName }: EmployerJobPostingSchema
     "alternateName": "Workly India Job Portal",
     "description": "India's #1 remote job portal. Connect with verified employers, find remote jobs, and hire talented professionals for your company.",
     "url": SITE_URL,
-    "logo": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+    "logo": `https://worklyindia.devs.surf/icons/icon-512x512.png`,
     "address": {
       "@type": "PostalAddress",
       "addressCountry": "IN"

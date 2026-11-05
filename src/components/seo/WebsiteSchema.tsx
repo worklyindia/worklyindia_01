@@ -42,7 +42,7 @@ export const WebsiteSchema = ({
         "name": name,
         "logo": {
           "@type": "ImageObject",
-          "url": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+          "url": `https://worklyindia.devs.surf/icons/icon-512x512.png`,
           "width": 512,
           "height": 512
         }
@@ -74,7 +74,7 @@ export const WebsiteSchema = ({
       "name": name,
       "legalName": name,
       "url": CANONICAL_URL,
-      "logo": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+      "logo": `https://worklyindia.devs.surf/icons/icon-512x512.png`,
       "foundingDate": "2024",
       "founders": [
         {

@@ -6,7 +6,7 @@ import { BRAND_CONFIG } from '@/config/brandConfig';
 const SITE_URL = CANONICAL_URL;
 const SITE_NAME = BRAND_CONFIG.name;
 const TWITTER_HANDLE = '@WorklyIndia';
-const DEFAULT_IMAGE = 'https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png';
+const DEFAULT_IMAGE = 'https://worklyindia.devs.surf/icons/icon-512x512.png';
 
 interface SEOHeadProps {
   title: string;

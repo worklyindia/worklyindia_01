@@ -31,7 +31,7 @@ export const WebSiteStructuredData = ({
       "name": BRAND_CONFIG.name,
       "logo": {
         "@type": "ImageObject",
-        "url": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`
+        "url": `https://worklyindia.devs.surf/icons/icon-512x512.png`
       },
       "sameAs": [
       `https://twitter.com/${BRAND_CONFIG.twitterHandle?.replace('@', '')}`,

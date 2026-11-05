@@ -148,7 +148,7 @@ export const JobPostingStructuredData = ({
   const postalCode = job.postal_code || getCityPostalCode(city, state);
   
   // Prepare image URLs for structured data
-  const defaultLogo = `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`;
+  const defaultLogo = `https://worklyindia.devs.surf/icons/icon-512x512.png`;
   const logoUrl = companyLogoUrl || defaultLogo;
   
   // Build the structured data

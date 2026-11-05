@@ -4,7 +4,7 @@ import { CANONICAL_URL } from '@/config/domainConfig';
 
 export const SITE_URL = CANONICAL_URL;
 export const SITE_NAME = BRAND_CONFIG.name;
-export const DEFAULT_LOGO = 'https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png';
+export const DEFAULT_LOGO = 'https://worklyindia.devs.surf/icons/icon-512x512.png';
 // Generate canonical URL
 export const getCanonicalUrl = (path: string): string => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;

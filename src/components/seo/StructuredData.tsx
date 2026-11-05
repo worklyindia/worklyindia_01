@@ -51,7 +51,7 @@ export const JobPostingSchema = ({
       "@type": "Organization",
       "name": company,
       "sameAs": siteUrl,
-      "logo": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`
+      "logo": `https://worklyindia.devs.surf/icons/icon-512x512.png`
     },
     "jobLocation": {
       "@type": "Place",
@@ -156,7 +156,7 @@ export const ArticleSchema = ({
       "name": BRAND_CONFIG.name,
       "logo": {
         "@type": "ImageObject",
-        "url": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`
+        "url": `https://worklyindia.devs.surf/icons/icon-512x512.png`
       }
     },
     "datePublished": datePublished || new Date().toISOString(),
@@ -165,7 +165,7 @@ export const ArticleSchema = ({
       "@type": "WebPage",
       "@id": url || siteUrl
     },
-    "image": image || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`
+    "image": image || `https://worklyindia.devs.surf/icons/icon-512x512.png`
   };
 
   return (
@@ -206,7 +206,7 @@ export const HowToSchema = ({
     "name": name,
     "description": description,
     "totalTime": totalTime,
-    "image": image || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+    "image": image || `https://worklyindia.devs.surf/icons/icon-512x512.png`,
     "step": steps.map((step, index) => ({
       "@type": "HowToStep",
       "position": index + 1,
@@ -298,8 +298,8 @@ export const LocalBusinessSchema = ({
     "url": siteUrl,
     "telephone": telephone,
     "email": email,
-    "image": image || `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
-    "logo": `https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/brand-assets/site/e6842375-3aac-4daa-a379-8b60152cbf1d.png`,
+    "image": image || `https://worklyindia.devs.surf/icons/icon-512x512.png`,
+    "logo": `https://worklyindia.devs.surf/icons/icon-512x512.png`,
     "address": {
       "@type": "PostalAddress",
       "streetAddress": address.street,
