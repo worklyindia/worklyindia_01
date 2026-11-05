@@ -4,10 +4,6 @@ const config: CapacitorConfig = {
   appId: 'app.lovable.13aa0e68c4e34b09b3c9994d2061ae64',
   appName: 'Workly India',
   webDir: 'dist',
-  server: {
-    url: 'https://worklyindia.devs.surf?forceHideBadge=true',
-    cleartext: true
-  },
   plugins: {
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"]
