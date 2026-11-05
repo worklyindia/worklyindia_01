@@ -1,265 +1,197 @@
-import { useContactInfo as useSiteContactInfo } from "@/hooks/useSiteSettings";
+import { useContactInfo as useSiteContactInfo, useMerchantInfo, useSocialLinks } from "@/hooks/useSiteSettings";
 import PageHeader from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Users, Target, Award, Heart, Globe, CheckCircle, Shield, Building, Phone } from "lucide-react";
+import { Users, Target, Award, Heart, Globe, CheckCircle, Shield, Building, Phone, ArrowRight, BriefcaseBusiness, Sparkles } from "lucide-react";
 import SEO from "@/components/SEO";
 import { getUpdatedTimestamp } from "@/utils/timestampUtils";
-import { useMerchantInfo, useSocialLinks } from "@/hooks/useSiteSettings";
-import ParallaxSection from "@/components/animations/ParallaxSection";
-import TextReveal from "@/components/animations/TextReveal";
-import AnimatedCounter from "@/components/animations/AnimatedCounter";
-import Tilt3DCard from "@/components/animations/Tilt3DCard";
 import BrandSocialBar from "@/components/BrandSocialBar";
 import FounderSection from "@/components/FounderSection";
 import { ROUTE_SEO } from "@/lib/routeSeo";
+import { Link } from "react-router-dom";
 
 const AboutUs = () => {
   const { data: merchantInfo } = useMerchantInfo();
   const { data: socialLinks } = useSocialLinks();
-  
-  const stats = [
-    { label: "Job Seekers", value: "500K+", icon: Users },
-    { label: "Hiring Companies", value: "5K+", icon: Building },
-    { label: "Job Opportunities", value: "15K+", icon: Target },
-    { label: "Fee for Job Seekers", value: "₹0", icon: Award }
-  ];
-
   const { data: siteContact } = useSiteContactInfo();
+
   const supportPhone = siteContact?.phone?.trim() || merchantInfo?.contact_number || "+91 9904923067";
   const companyInfo = [
     { label: "Founded", value: merchantInfo?.founded_year || "2025" },
-    { label: "Headquarters", value: merchantInfo?.registered_address || "Panchasar, Gujarat, India" },
+    { label: "Headquarters", value: merchantInfo?.registered_address || "Gujarat, India" },
     { label: "UDYAM Registration", value: merchantInfo?.udyam_registration || "UDYAM-GJ-18-0022888" },
     { label: "IEC Code", value: merchantInfo?.iec_code || "EBGPG4522J" },
-    { label: "Business Type", value: merchantInfo?.business_type || "Workly India – Remote Jobs Platform" },
+    { label: "Business Type", value: merchantInfo?.business_type || "Remote Jobs Platform" },
     { label: "Support", value: supportPhone }
   ];
 
+  const highlights = [
+    { title: "Job seeker first", description: "Explore opportunities without paying registration or application fees.", icon: Award },
+    { title: "Direct connections", description: "Connect with employers and discover opportunities without unnecessary middlemen.", icon: Users },
+    { title: "Safety-minded", description: "We encourage careful job search and provide ways to report suspicious activity.", icon: Shield },
+    { title: "Opportunity for all", description: "Discover roles and career resources from across India.", icon: Globe }
+  ];
+
   const values = [
-    {
-      title: "Innovation",
-      description: "We continuously evolve to provide cutting-edge job search solutions",
-      icon: Target
-    },
-    {
-      title: "Accessibility", 
-      description: "Making job opportunities accessible to everyone, everywhere",
-      icon: Globe
-    },
-    {
-      title: "Trust",
-      description: "Building trust through transparency and reliable service",
-      icon: CheckCircle
-    },
-    {
-      title: "Community",
-      description: "Creating a supportive community for job seekers and employers",
-      icon: Heart
-    }
+    { title: "Integrity", description: "Clear information, honest communication and responsible practices.", icon: CheckCircle },
+    { title: "Innovation", description: "Useful tools that make finding work and hiring simpler.", icon: Sparkles },
+    { title: "Accessibility", description: "Making career opportunities and resources easier to reach.", icon: Globe },
+    { title: "Community", description: "Supporting job seekers and employers throughout their journey.", icon: Heart }
   ];
 
   return (
     <div className="min-h-screen bg-background">
-      <SEO 
+      <SEO
         title={ROUTE_SEO['/about-us'].title}
         description={ROUTE_SEO['/about-us'].description}
         keywords={ROUTE_SEO['/about-us'].keywords}
         canonical="/about-us"
       />
       <PageHeader title="About Us" />
-      
-      <main className="container mx-auto px-4 py-6 pb-24 md:pb-8 max-w-4xl">
-        {/* Header Section */}
-        <TextReveal>
-          <div className="text-center mb-12">
-            <Badge variant="secondary" className="mb-4 animate-scale-bounce-in">About Workly India</Badge>
-            <h1 className="text-4xl font-bold text-foreground mb-4">
-              India's Most Trusted Workly India Platform
+
+      <main className="mx-auto max-w-6xl px-4 pb-24 pt-5 md:pb-12">
+        {/* Intro / hero */}
+        <section className="relative isolate overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-primary/15 via-card to-secondary/15 px-6 py-12 sm:px-10 md:py-16">
+          <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 left-1/4 h-48 w-48 rounded-full bg-secondary/20 blur-3xl" />
+          <div className="relative mx-auto max-w-3xl text-center">
+            <Badge variant="secondary" className="mb-5 inline-flex items-center gap-2 rounded-full px-3 py-1">
+              <Sparkles className="h-3.5 w-3.5" /> About Workly India
+            </Badge>
+            <h1 className="text-balance text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl md:text-5xl">
+              Helping India move forward, <span className="text-primary">one opportunity at a time.</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-2">
-              Last updated: {getUpdatedTimestamp('about-us')}
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+              Workly India brings job seekers, employers and career tools together in one accessible platform—so discovering work and finding talent can feel simpler, clearer and more empowering.
             </p>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mt-4">
-              Join 500,000+ job seekers and 5,000+ companies hiring on Workly India — with verified employers since 2025. Verified opportunities, zero registration fees, and strong fraud protection.
-            </p>
-            <div className="flex justify-center mt-6 space-x-4">
-              <Badge variant="secondary" className="bg-primary/10 text-primary">
-                <Shield className="w-4 h-4 mr-1" />
-                Government Registered
-              </Badge>
-              <Badge variant="secondary" className="bg-secondary text-secondary-foreground">
-                <Building className="w-4 h-4 mr-1" />
-                Legally Compliant
-              </Badge>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <Button asChild size="lg" className="rounded-full px-6">
+                <Link to="/jobs">Explore jobs <ArrowRight className="ml-2 h-4 w-4" /></Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="rounded-full bg-background/70 px-6">
+                <Link to="/post-job">Hire with Workly India</Link>
+              </Button>
             </div>
+            <p className="mt-5 text-xs text-muted-foreground">Updated {getUpdatedTimestamp('about-us')}</p>
           </div>
-        </TextReveal>
+        </section>
 
-        <FounderSection className="mb-12" />
+        <FounderSection className="my-10" />
 
-        {/* Stats Section */}
-        <ParallaxSection speed={0.08} fadeIn>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-            {stats.map((stat, index) => (
-              <Tilt3DCard key={index} className="rounded-xl" maxTilt={12}>
-                <Card className="p-6 text-center bg-card border border-border/50 animate-scale-bounce-in" style={{ animationDelay: `${index * 0.1}s`, animationFillMode: 'both' }}>
-                  <div className="p-3 bg-primary/10 rounded-xl w-fit mx-auto mb-3 animate-float" style={{ animationDelay: `${index * 0.3}s` }}>
-                    <stat.icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <AnimatedCounter value={stat.value} className="text-2xl font-bold text-foreground" />
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
-                </Card>
-              </Tilt3DCard>
-            ))}
+        {/* Platform pillars */}
+        <section className="my-12">
+          <div className="mb-6 text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">What matters to us</p>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">A platform built around people</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">Our focus is to make the job search and hiring journey more approachable, transparent and useful.</p>
           </div>
-        </ParallaxSection>
-
-        {/* Mission Section */}
-        <ParallaxSection speed={0.06} fadeIn>
-          <Card className="p-8 mb-8 bg-gradient-to-r from-primary/5 to-secondary/5 border border-border/50 shine-effect">
-            <h2 className="text-2xl font-bold text-foreground mb-4 text-center">Our Mission</h2>
-            <p className="text-muted-foreground text-center text-lg leading-relaxed">
-              To revolutionize the job market by providing a comprehensive platform that enables 
-              professionals to find meaningful Workly India opportunities while helping companies 
-              discover exceptional talent across India.
-            </p>
-          </Card>
-        </ParallaxSection>
-
-        {/* Values Section */}
-        <ParallaxSection speed={0.08} fadeIn>
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-foreground mb-6 text-center">Our Values</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {values.map((value, index) => (
-                <Tilt3DCard key={index} className="rounded-xl" maxTilt={10}>
-                  <Card className="p-6 bg-card border border-border/50 hover-lift animate-slide-up-fade" style={{ animationDelay: `${index * 0.1}s`, animationFillMode: 'both' }}>
-                    <div className="flex items-start space-x-4">
-                      <div className="p-3 bg-primary/10 rounded-xl shrink-0 animate-float" style={{ animationDelay: `${index * 0.2}s` }}>
-                        <value.icon className="w-6 h-6 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-foreground mb-2">{value.title}</h3>
-                        <p className="text-sm text-muted-foreground">{value.description}</p>
-                      </div>
-                    </div>
-                  </Card>
-                </Tilt3DCard>
-              ))}
-            </div>
-          </div>
-        </ParallaxSection>
-
-        {/* Why Workly India */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-6 text-center">Why People Trust Workly India</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { t: "100% Free for Job Seekers", d: "No registration fee, no training fee, no hidden charges — ever.", i: Award },
-              { t: "Verified Employers", d: "Every company's documents, address and contact are checked before jobs go live.", i: Shield },
-              { t: "Free Resume Builder", d: "Create professional resumes and cover letters in minutes, at no cost.", i: Target },
-              { t: "Government Registered", d: "UDYAM MSME registered business from Patan, Gujarat, India.", i: Building },
-              { t: "Direct HR Connect", d: "Talk to employers directly — no agents and no middlemen.", i: Users },
-              { t: "Real Human Support", d: "Call or WhatsApp our team for any job, complaint or platform issue.", i: Phone },
-            ].map((f) => (
-              <Card key={f.t} className="p-5 bg-card border border-border flex items-start gap-4">
-                <div className="p-3 bg-primary/10 rounded-xl shrink-0"><f.i className="w-5 h-5 text-primary" /></div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1">{f.t}</h3>
-                  <p className="text-sm text-muted-foreground">{f.d}</p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {highlights.map((item) => (
+              <Card key={item.title} className="group h-full rounded-2xl border-border/70 bg-card/80 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <item.icon className="h-5 w-5" />
                 </div>
+                <h3 className="font-semibold text-foreground">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
               </Card>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Company Information */}
-        <Card className="p-8 mb-8">
-          <div className="flex items-center mb-6">
-            <div className="p-3 bg-primary/10 rounded-xl mr-4">
-              <Building className="w-8 h-8 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-foreground">Company Information</h2>
-              <p className="text-muted-foreground">Registered & verified business details</p>
-            </div>
+        {/* Mission */}
+        <section className="my-12 grid gap-5 md:grid-cols-2">
+          <Card className="relative overflow-hidden rounded-2xl border-primary/20 bg-gradient-to-br from-primary/10 to-card p-7 sm:p-9">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary"><Target className="h-6 w-6" /></div>
+            <h2 className="text-2xl font-bold text-foreground">Our mission</h2>
+            <p className="mt-3 leading-7 text-muted-foreground">To make job discovery and hiring more accessible by bringing people, opportunities and practical career resources together in one trusted experience.</p>
+          </Card>
+          <Card className="rounded-2xl border-border/70 p-7 sm:p-9">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-secondary-foreground"><Globe className="h-6 w-6" /></div>
+            <h2 className="text-2xl font-bold text-foreground">Our vision</h2>
+            <p className="mt-3 leading-7 text-muted-foreground">A future where every person can discover meaningful career possibilities, build confidence and connect with employers—wherever they are in India.</p>
+          </Card>
+        </section>
+
+        {/* Values */}
+        <section className="my-12">
+          <div className="mb-6 text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">The values behind our work</h2>
+            <p className="mt-2 text-muted-foreground">Principles that guide how we build and serve.</p>
           </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {companyInfo.map((info, index) => (
-              <div key={index} className="p-4 bg-muted/30 rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">{info.label}</p>
-                <p className="font-semibold text-foreground">{info.value}</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {values.map((value) => (
+              <div key={value.title} className="flex gap-4 rounded-2xl border border-border/70 bg-card p-5 sm:p-6">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><value.icon className="h-5 w-5" /></div>
+                <div><h3 className="font-semibold text-foreground">{value.title}</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">{value.description}</p></div>
               </div>
             ))}
           </div>
-          
-          <div className="mt-6 p-4 bg-primary/5 rounded-lg border border-primary/20">
-            <div className="flex items-center">
-              <CheckCircle className="w-5 h-5 text-primary mr-2" />
-              <p className="text-sm text-foreground">
-                <strong>Verified Business:</strong> All company details have been verified using official government records.
-              </p>
-            </div>
-          </div>
-        </Card>
+        </section>
 
-        {/* Story Section */}
-        <Card className="p-8 bg-card border border-border/50">
-          <div className="flex items-center mb-6">
-            <div className="p-3 bg-primary/10 rounded-xl mr-4">
-              <Heart className="w-8 h-8 text-primary" />
+        {/* Company facts */}
+        <section className="my-12">
+          <Card className="overflow-hidden rounded-2xl border-border/70">
+            <div className="flex items-center gap-4 border-b border-border bg-muted/30 p-6 sm:p-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary"><Building className="h-6 w-6" /></div>
+              <div><h2 className="text-xl font-bold text-foreground sm:text-2xl">Company information</h2><p className="mt-1 text-sm text-muted-foreground">Business details and support</p></div>
             </div>
+            <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+              {companyInfo.map((info) => (
+                <div key={info.label} className="bg-card p-5 sm:p-6">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{info.label}</p>
+                  <p className="mt-2 break-words text-sm font-semibold text-foreground">{info.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 bg-primary/5 p-5 sm:p-6">
+              <Shield className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+              <p className="text-sm leading-6 text-muted-foreground">We aim to maintain clear business information and responsible platform practices. Please review job details carefully and report suspicious listings or requests.</p>
+            </div>
+          </Card>
+        </section>
+
+        {/* Story */}
+        <section className="my-12">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary"><Heart className="h-5 w-5" /></div>
+            <div><h2 className="text-2xl font-bold text-foreground">Our story</h2><p className="text-sm text-muted-foreground">Why Workly India exists</p></div>
+          </div>
+          <div className="space-y-4 text-muted-foreground leading-7">
+            <p>Workly India was created with a simple belief: looking for a job should open doors, not create barriers. We want job seekers to be able to explore opportunities without being asked to pay to register or apply.</p>
+            <p>We are building tools and experiences that support the whole journey—from discovering roles and connecting with employers to preparing resumes, improving skills and taking the next career step.</p>
+            <p>Our platform continues to evolve with feedback from job seekers and employers. We encourage users to stay alert, verify opportunities and contact us whenever something does not feel right.</p>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="my-12 rounded-3xl bg-gradient-to-r from-primary to-primary/80 p-7 text-primary-foreground sm:p-10">
+          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
             <div>
-              <h2 className="text-2xl font-bold text-foreground">Our Story</h2>
-              <p className="text-muted-foreground">Building India's most trusted Workly India platform</p>
+              <h2 className="text-2xl font-bold">Let’s build your next chapter.</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-primary-foreground/85">Whether you’re looking for work or looking for talent, start exploring Workly India.</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild variant="secondary" className="rounded-full"><Link to="/jobs">Find opportunities <ArrowRight className="ml-2 h-4 w-4" /></Link></Button>
+              <Button asChild variant="outline" className="rounded-full border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10"><Link to="/post-job">Post a job</Link></Button>
             </div>
           </div>
-          
-          <div className="space-y-6 text-muted-foreground leading-relaxed">
-            <p>
-              Workly India was founded in 2025 with a mission: to eliminate fraudulent job schemes and create India's first completely transparent remote-work platform. After witnessing thousands of job seekers lose money to fake employers demanding registration fees, our founders decided to build a platform where job seekers never pay a single rupee.
-            </p>
-            <p>
-              We implemented rigorous company verification processes including UDYAM registration validation, business registration checks, address verification, and financial background screening. Every employer must provide government-issued business documents before posting jobs on our platform.
-            </p>
-            <p>
-              Today, we've successfully helped 500,000+ job seekers connect with 5,000+ companies hiring across India. Our fraud-prevention policy has protected countless job seekers from scams, while our dedicated support ensures quick resolution of any disputes.
-            </p>
-            <p>
-              As India's leading Workly India platform, we continue innovating with features like skill assessments, resume builders, and career guidance tools - all free for job seekers. Our vision is to empower every Indian professional with access to legitimate remote opportunities.
-              "We do not charge any fees from job seekers. Payments are collected only from companies/employers for job postings."
-            </p>
-          </div>
-          
-          <div className="mt-8 p-6 bg-gradient-to-r from-primary/5 to-secondary/5 rounded-xl">
-            <div className="flex items-center">
-              <Phone className="w-6 h-6 text-primary mr-3" />
-              <div>
-                <h4 className="font-semibold text-foreground">Need Support?</h4>
-                <p className="text-sm text-muted-foreground">
-                  Call us at {supportPhone} for assistance with jobs, complaints, or platform issues.
-                </p>
-              </div>
-            </div>
+        </section>
+
+        {/* Contact */}
+        <Card className="mb-8 rounded-2xl border-border/70 p-6 sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div><h2 className="text-xl font-bold text-foreground">Need a hand?</h2><p className="mt-1 text-muted-foreground">Our support team can help with platform questions or concerns.</p><p className="mt-3 flex items-center gap-2 font-semibold text-foreground"><Phone className="h-4 w-4 text-primary" /> {supportPhone}</p></div>
+            <Button asChild variant="outline" className="rounded-full"><a href={`https://wa.me/${supportPhone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer">Chat on WhatsApp <ArrowRight className="ml-2 h-4 w-4" /></a></Button>
           </div>
         </Card>
 
-        {/* Social Media Section — same icons as home page */}
-        <Card className="p-6 sm:p-8 mt-8 mb-8 bg-card border border-border">
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-foreground mb-2">Connect With Us</h2>
-            <p className="text-muted-foreground">
-              Follow Workly India for daily job updates, career tips and success stories
-            </p>
-          </div>
+        {/* Social */}
+        <Card className="rounded-2xl border-border/70 p-6 sm:p-8">
+          <div className="mb-6 text-center"><h2 className="text-2xl font-bold text-foreground">Connect with us</h2><p className="mt-2 text-muted-foreground">Follow Workly India for updates, career tips and platform news.</p></div>
           <BrandSocialBar size="md" />
         </Card>
-
       </main>
-
     </div>
   );
 };
