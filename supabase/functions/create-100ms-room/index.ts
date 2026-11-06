@@ -85,7 +85,7 @@ const handler = async (req: Request): Promise<Response> => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const authorization = req.headers.get("Authorization") || "";
-    const accessToken = authorization.replace(/^Bearer\\s+/i, "");
+    const accessToken = authorization.replace(/^Bearer\s+/i, "");
     if (!supabaseUrl || !anonKey || !serviceRoleKey || !accessToken || accessToken === authorization) {
       return new Response(JSON.stringify({ success: false, error: "Authentication required" }), {
         status: 401, headers: { "Content-Type": "application/json", ...corsHeaders }
