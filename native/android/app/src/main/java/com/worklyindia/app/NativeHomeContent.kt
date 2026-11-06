@@ -93,7 +93,26 @@ fun NativeHomeBannerCarousel(data:NativeHomeData) {
 }
 
 @Composable
-fun NativeHomeExtraSections(data:NativeHomeData,onFeature:(String)->Unit) {
+fun NativeHomeExtraSections(data:NativeHomeData,onFeature:(String)->Unit,onCategory:(String)->Unit) {
+    HomeHeading("Jobs that fit your life","Find your next chapter")
+    val careerCards = listOf(
+        Triple("Jobs for Freshers","Your first step starts here","Fresher"),
+        Triple("Work from Home","A career, wherever you are","Remote"),
+        Triple("Part-time Jobs","Make time for what matters","Part-time"),
+        Triple("Jobs for Women","Your ambition belongs here","Women"),
+        Triple("Full-time Jobs","Build your next chapter","Full-time"),
+        Triple("Internships","Learn today, lead tomorrow","Internship")
+    )
+    careerCards.forEachIndexed { index, card ->
+        val icons = listOf(Icons.Default.School,Icons.Default.Home,Icons.Default.Schedule,Icons.Default.Groups,Icons.Default.Work,Icons.Default.MenuBook)
+        Card(onClick={onCategory(card.third)},modifier=Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=4.dp),shape=RoundedCornerShape(14.dp)) {
+            Row(Modifier.padding(13.dp),verticalAlignment=Alignment.CenterVertically) {
+                Icon(icons[index],null,Modifier.size(32.dp),tint=MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f).padding(horizontal=12.dp)) { Text(card.first,fontWeight=FontWeight.Bold);Text(card.second,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                Icon(Icons.Default.ArrowForward,null,tint=MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
     if(data.videos.isNotEmpty()) {
         HomeHeading("Workly India videos","Updates and useful job guidance")
         LazyRow(contentPadding=PaddingValues(horizontal=14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){items(data.videos){NativeHomeYouTube(it,Modifier.width(310.dp).height(190.dp))}}
