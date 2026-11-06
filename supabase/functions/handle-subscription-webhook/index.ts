@@ -20,19 +20,18 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const razorpaySignature = req.headers.get("x-razorpay-signature");
-    const razorpayKeySecret = Deno.env.get("RAZORPAY_KEY_SECRET")?.trim();
-    
-    if (!razorpayKeySecret) {
-      throw new Error("Razorpay secret not configured");
-    }
+    const razorpaySignature = req.headers.get("x-razorpay-signature") || "";
+    const webhookSecret = Deno.env.get("RAZORPAY_WEBHOOK_SECRET")?.trim();
+    if (!webhookSecret) throw new Error("Razorpay webhook secret not configured");
+    if (!razorpaySignature) throw new Error("Missing Razorpay webhook signature");
 
     const payload = await req.text();
-    
-    // Verify webhook signature using HMAC-SHA256
-    if (razorpaySignature) {
+    if (!payload) throw new Error("Empty webhook payload");
+
+    // Verify webhook signature using the dedicated webhook secret.
+    {
       const encoder = new TextEncoder();
-      const keyData = encoder.encode(razorpayKeySecret);
+      const keyData = encoder.encode(webhookSecret);
       const key = await crypto.subtle.importKey(
         "raw",
         keyData,
@@ -54,10 +53,16 @@ serve(async (req) => {
       console.log("Signature verification:", {
         expectedLength: expectedSignatureHex.length,
         receivedLength: razorpaySignature.length,
-        bodyHash: expectedSignatureHex
+        signatureMismatch: true
       });
 
-      if (expectedSignatureHex !== razorpaySignature) {
+      const expectedBytes = new TextEncoder().encode(expectedSignatureHex);
+      const receivedBytes = new TextEncoder().encode(razorpaySignature.trim().toLowerCase());
+      let mismatch = expectedBytes.length ^ receivedBytes.length;
+      for (let i = 0; i < Math.max(expectedBytes.length, receivedBytes.length); i++) {
+        mismatch |= (expectedBytes[i] || 0) ^ (receivedBytes[i] || 0);
+      }
+      if (mismatch !== 0) {
         console.error("Invalid webhook signature verification", {
           expectedLength: expectedSignatureHex.length,
           receivedLength: razorpaySignature.length,
