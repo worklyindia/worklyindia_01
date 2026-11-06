@@ -1,1 +1,8 @@
 project_id = "jubwzelupbntbetpajqb"
+
+# Razorpay calls these endpoints directly; each handler validates the provider HMAC signature.
+[functions.razorpay-webhook]
+verify_jwt = false
+
+[functions.handle-subscription-webhook]
+verify_jwt = false
