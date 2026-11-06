@@ -98,11 +98,11 @@ object NativeAuth {
             body, session.accessToken, mapOf("Prefer" to "resolution=merge-duplicates,return=minimal"))
     }
 
-    suspend fun apply(context: Context, jobId: String, coverLetter: String = ""): Boolean = withContext(Dispatchers.IO) {
+    suspend fun apply(context: Context, jobId: String, employerId: String, coverLetter: String = ""): Boolean = withContext(Dispatchers.IO) {
         val s = session(context) ?: throw IllegalStateException("Pehle login karein.")
         request("POST", "/rest/v1/job_applications",
             JSONObject().put("job_id", jobId).put("applicant_id", s.userId)
-                .put("cover_letter", coverLetter), s.accessToken,
+                .put("employer_id", employerId).put("cover_letter", coverLetter), s.accessToken,
             mapOf("Prefer" to "return=minimal"))
         true
     }
