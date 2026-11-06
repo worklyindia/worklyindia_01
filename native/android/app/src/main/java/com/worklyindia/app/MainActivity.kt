@@ -1128,6 +1128,7 @@ private fun AccountScreen(
             "Cover letter builder" to Icons.Default.EditNote,
             "Employer dashboard" to Icons.Default.BusinessCenter,
             "Messages" to Icons.Default.Chat,
+            "Interviews" to Icons.Default.VideoCall,
             "Notifications" to Icons.Default.Notifications,
             "Help & support" to Icons.Default.SupportAgent
         ).forEach { (title, icon) ->
