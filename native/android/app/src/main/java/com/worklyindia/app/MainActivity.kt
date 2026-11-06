@@ -169,7 +169,7 @@ private fun WorklyApp() {
             tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
-            tab == "More" -> MoreScreen(m)
+            tab == "More" -> MoreScreen(m, authSession, saved.size)
             else -> AccountScreen(m, authSession, authMessage, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." })
         }
     }
@@ -369,12 +369,14 @@ private fun Section(title: String, body: String) {
 }
 
 @Composable
-private fun MoreScreen(m: Modifier) {
+private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int) {
     var now by remember { mutableStateOf(LocalDateTime.now(ZoneId.of("Asia/Kolkata"))) }
     var selectedOption by remember { mutableStateOf<String?>(null) }
     var festivals by remember { mutableStateOf<List<Festival>>(emptyList()) }
+    var festivalsLoaded by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         festivals = runCatching { JobsApi.fetchFestivals() }.getOrDefault(emptyList())
+        festivalsLoaded = true
     }
     LaunchedEffect(Unit) {
         while (true) {
@@ -382,21 +384,26 @@ private fun MoreScreen(m: Modifier) {
             delay(1000)
         }
     }
-    val hour = now.hour
-    val greeting = when (hour) {
+    val greeting = when (now.hour) {
         in 5..11 -> "Good Morning"
         in 12..16 -> "Good Afternoon"
         in 17..19 -> "Good Evening"
         else -> "Good Night"
     }
-    val time = now.format(DateTimeFormatter.ofPattern("hh:mm:ss a"))
+    val greetingIcon = when (now.hour) {
+        in 5..11 -> Icons.Default.WbSunny
+        in 12..16 -> Icons.Default.LightMode
+        in 17..19 -> Icons.Default.WbTwilight
+        else -> Icons.Default.DarkMode
+    }
+    val clock = now.format(DateTimeFormatter.ofPattern("hh:mm:ss a"))
     val date = now.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy"))
-    val todayKey = now.toLocalDate().toString()
-    val todayFestivals = festivals.filter { it.date == todayKey }
-    val nextFestivalDate = festivals.firstOrNull { it.date > todayKey }?.date
+    val today = now.toLocalDate().toString()
+    val todayFestivals = festivals.filter { it.date == today }
+    val nextFestivalDate = festivals.firstOrNull { it.date > today }?.date
     val upcomingFestivals = festivals.filter { it.date == nextFestivalDate }
     val shownFestivals = if (todayFestivals.isNotEmpty()) todayFestivals else upcomingFestivals
-    val links = listOf(
+    val menu = listOf(
         "Website Pricing", "About Us", "Mission", "Vision", "Why Choose Workly India",
         "Blog", "Trust & Safety", "Employer Guidelines", "Job Seeker Guidelines",
         "Community Guidelines", "Accessibility Statement", "Privacy Policy",
@@ -404,51 +411,187 @@ private fun MoreScreen(m: Modifier) {
         "Disclaimer", "DMCA / Copyright Policy", "Contact Us", "Sitemap", "Careers",
         "Press / Media Kit"
     )
-    LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("More options", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+    val ctx = LocalContext.current
+    LazyColumn(
+        modifier = m.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
+    ) {
+        if (session == null) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.09f))
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                        Text("Browsing as Guest", fontWeight = FontWeight.SemiBold)
+                        Text("Login to unlock all features and sync your data across devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { selectedOption = "Login" }) { Text("Login") }
+                }
+            }
+        }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("🇮🇳 India • IST", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    Text(greeting, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-                    Text(time, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    Text(date, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    HorizontalDivider()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Celebration, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("Festival calendar", Modifier.padding(start = 10.dp).weight(1f), fontWeight = FontWeight.SemiBold)
-                        TextButton(onClick = { selectedOption = "Festival calendar" }) { Text("View") }
-                    }
-                    if (shownFestivals.isNotEmpty()) {
-                        Text(if (todayFestivals.isNotEmpty()) "Today's Festival" else "Upcoming Festival", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        Text(shownFestivals.joinToString(" • ") { it.name }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                        if (todayFestivals.isEmpty() && nextFestivalDate != null) {
-                            Text(nextFestivalDate, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier.size(50.dp).clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        (session?.email?.firstOrNull()?.uppercase() ?: "G"),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(
+                        session?.email?.substringBefore("@") ?: "Guest User",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (session != null) "Complete job search dashboard" else "Explore features - Login for full access",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        item {
+            Card(
+                onClick = { selectedOption = "Festival calendar" },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Column {
+                    Row(
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)).padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Row(
+                                Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(greetingIcon, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                                Text(greeting, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+                            }
+                            Text(clock, Modifier.padding(top = 12.dp), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                            Text(date, Modifier.padding(top = 5.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                    } else {
-                        Text("Festival calendar is loading or no upcoming festival is listed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(
+                            Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)).padding(11.dp)
+                        ) { Icon(Icons.Default.CalendarMonth, null, tint = MaterialTheme.colorScheme.primary) }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                    Row(
+                        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)).padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(36.dp).clip(RoundedCornerShape(50))
+                                .background(if (todayFestivals.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Celebration, null, tint = if (todayFestivals.isNotEmpty()) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary, modifier = Modifier.size(17.dp))
+                        }
+                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                            if (!festivalsLoaded) {
+                                Text("Loading festival calendar…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else if (shownFestivals.isNotEmpty()) {
+                                Text(if (todayFestivals.isNotEmpty()) "TODAY'S FESTIVAL" else "UPCOMING FESTIVAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(shownFestivals.joinToString(" • ") { it.name }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            } else {
+                                Text("View festival calendar", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                        if (todayFestivals.isNotEmpty()) {
+                            Text("Today", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        } else if (nextFestivalDate != null) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(nextFestivalDate, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                                val days = java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), java.time.LocalDate.parse(nextFestivalDate))
+                                if (days > 0) Text(if (days == 1L) "Tomorrow" else "in $days days", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 6.dp).size(18.dp))
                     }
                 }
             }
         }
-        item { Text("Workly India links", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        items(links) { label ->
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(12.dp)) {
-                Row(Modifier.fillMaxWidth().clickable { selectedOption = label }.padding(horizontal = 14.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text(label, Modifier.padding(start = 10.dp).weight(1f), fontWeight = FontWeight.Medium)
-                    Text("In progress", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MoreStatCard(Modifier.weight(1f), "0", "Applications", Icons.Default.Description)
+                MoreStatCard(Modifier.weight(1f), savedCount.toString(), "Saved Jobs", Icons.Default.Favorite)
+                MoreStatCard(Modifier.weight(1f), "—", "Response", Icons.Default.TrendingUp)
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                menu.forEachIndexed { index, label ->
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                    Row(
+                        Modifier.fillMaxWidth().clickable { selectedOption = label }
+                            .padding(horizontal = 20.dp, vertical = 15.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    }
+                    if (index == menu.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
                 }
             }
         }
-        item { Text("Workly India • Native Android", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+        item {
+            Text(
+                "© ${now.year} Workly India. All Rights Reserved.",
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 20.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
-    if (selectedOption != null) AlertDialog(
-        onDismissRequest = { selectedOption = null },
-        title = { Text(selectedOption!!) },
-        text = { Text("Is section ka native app page abhi develop ho raha hai. App se website/browser open nahi hoga.") },
-        confirmButton = { TextButton(onClick = { selectedOption = null }) { Text("OK") } }
-    )
+    if (selectedOption != null) {
+        AlertDialog(
+            onDismissRequest = { selectedOption = null },
+            title = { Text(selectedOption!!) },
+            text = { Text(if (selectedOption == "Login") "Login and signup are available in the Account tab." else "Yeh section Workly India ke More menu mein hai. Iska full native page abhi integrate hona baaki hai.") },
+            confirmButton = { TextButton(onClick = { selectedOption = null }) { Text("OK") } }
+        )
+    }
+}
+
+@Composable
+private fun MoreStatCard(modifier: Modifier, value: String, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(15.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(11.dp)) {
+            Box(Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)).padding(7.dp)) {
+                Icon(icon, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+            Text(value, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(label, Modifier.padding(top = 3.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable
