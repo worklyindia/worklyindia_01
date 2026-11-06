@@ -404,6 +404,21 @@ export class FirebasePushService {
       }
 
       const ua = navigator.userAgent;
+
+      // One current browser subscription per account: remove the previous web
+      // token before saving the latest token. Android uses its own platform row.
+      const { error: cleanupError } = await supabase
+        .from('push_subscriptions')
+        .delete()
+        .eq('user_id', userId)
+        .eq('platform', 'web')
+        .neq('fcm_token', token);
+
+      if (cleanupError) {
+        console.error('❌ Failed to replace older web push token:', cleanupError.message);
+        return false;
+      }
+
       const { error } = await supabase.from('push_subscriptions').upsert(
         {
           user_id: userId,
@@ -417,30 +432,12 @@ export class FirebasePushService {
             hostname: window.location.hostname,
           },
         },
-        { onConflict: 'fcm_token' },
+        { onConflict: 'user_id,platform' },
       );
 
       if (error) {
         console.error('❌ Failed to save push token:', error.message);
         return false;
-      }
-
-      // Sirf ISI device (same browser) ke purane tokens hatao. Pehle user ke
-      // saare web tokens hat jaate the, to phone par subscribe karte hi laptop
-      // unsubscribe ho jata tha (aur ulta) — bar bar subscribe/unsubscribe.
-      const { error: cleanupError } = await supabase
-        .from('push_subscriptions')
-        .delete()
-        .eq('user_id', userId)
-        .eq('platform', 'web')
-        .eq('device_info->>userAgent', ua)
-        .eq('device_info->>hostname', window.location.hostname)
-        .neq('fcm_token', token);
-
-      if (cleanupError) {
-        console.error('❌ Failed to remove older push tokens:', cleanupError.message);
-        // The fresh token is already saved. Cleanup can be retried later and
-        // must not make the working subscription appear to have failed.
       }
 
       console.log('✅ Push token saved');
