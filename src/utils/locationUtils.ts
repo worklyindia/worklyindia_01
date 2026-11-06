@@ -1,5 +1,3 @@
-import { Capacitor } from '@capacitor/core';
-import { Geolocation as CapacitorGeolocation } from '@capacitor/geolocation';
 
 export interface LocationData {
   city: string;
@@ -30,11 +28,6 @@ export const isSecureContext = (): boolean => {
 };
 
 export const checkGeolocationSupport = (): { supported: boolean; error?: string } => {
-  // Capacitor native always supports geolocation
-  if (Capacitor.isNativePlatform()) {
-    return { supported: true };
-  }
-
   if (!navigator.geolocation) {
     return { supported: false, error: 'Geolocation not supported by this browser' };
   }
@@ -301,63 +294,16 @@ export const getCompanyDisplayLocation = (company: any): string => {
 };
 
 /**
- * Gets geolocation using Capacitor plugin on native platforms,
- * falls back to browser Geolocation API on web.
+ * Gets geolocation using the browser Geolocation API.
+ * The separate Kotlin Android application uses Android location permissions natively.
  */
 export const getGeolocation = async (): Promise<GeolocationPosition> => {
-  // Use Capacitor Geolocation on native platforms for GPS accuracy
-  if (Capacitor.isNativePlatform()) {
-    console.log('📡 Using Capacitor GPS geolocation (native)...');
-    try {
-      // Request permissions first on native
-      const permStatus = await CapacitorGeolocation.checkPermissions();
-      console.log('🔐 Capacitor GPS permission status:', permStatus.location);
-
-      if (permStatus.location === 'denied') {
-        const reqResult = await CapacitorGeolocation.requestPermissions();
-        console.log('🔐 Capacitor GPS permission request result:', reqResult.location);
-        if (reqResult.location === 'denied') {
-          throw new Error('Location permission denied');
-        }
-      }
-
-      const position = await CapacitorGeolocation.getCurrentPosition({
-        enableHighAccuracy: true, // Use GPS on native for best accuracy
-        timeout: 15000,
-        maximumAge: 300000, // 5 min cache
-      });
-
-      console.log('📍 Capacitor GPS position:', position.coords);
-
-      // Convert to standard GeolocationPosition shape
-      return {
-        coords: {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          altitude: position.coords.altitude,
-          altitudeAccuracy: position.coords.altitudeAccuracy,
-          heading: position.coords.heading,
-          speed: position.coords.speed,
-        },
-        timestamp: position.timestamp,
-      } as GeolocationPosition;
-    } catch (err) {
-      console.warn('⚠️ Capacitor GPS failed, falling back to browser API:', err);
-      // Fall through to browser API
-    }
-  }
-
-  // Browser fallback
+  if (!navigator.geolocation) throw new Error('Geolocation is not supported by this browser');
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       resolve,
       reject,
-      {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 600000,
-      }
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
     );
   });
 };
