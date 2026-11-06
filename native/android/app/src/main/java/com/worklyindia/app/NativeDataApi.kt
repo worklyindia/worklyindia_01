@@ -43,6 +43,18 @@ object NativeDataApi {
         } finally { c.disconnect() }
     }
 
+    suspend fun savedJobIds(s:NativeSession):Set<String> {
+        val a=JSONArray(call("/saved_jobs?select=job_id&user_id=eq.${enc(s.userId)}&limit=1000",s))
+        return (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("job_id")?.takeIf{v->v.isNotBlank()} }.toSet()
+    }
+    suspend fun saveJob(s:NativeSession,jobId:String) {
+        call("/saved_jobs?on_conflict=user_id,job_id",s,"POST",JSONObject().put("user_id",s.userId).put("job_id",jobId),
+            "resolution=ignore-duplicates,return=minimal")
+    }
+    suspend fun unsaveJob(s:NativeSession,jobId:String) {
+        call("/saved_jobs?user_id=eq.${enc(s.userId)}&job_id=eq.${enc(jobId)}",s,"DELETE",null,"return=minimal")
+    }
+
     suspend fun applications(s:NativeSession):List<NativeApplication> {
         val a=JSONArray(call("/job_applications?select=id,status,applied_at,job:jobs(title,api_company_name,companies(company_name))&applicant_id=eq.${enc(s.userId)}&order=applied_at.desc&limit=100",s))
         return (0 until a.length()).map { i ->
