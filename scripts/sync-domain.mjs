@@ -53,7 +53,10 @@ async function collect(path) {
   return [path];
 }
 
-const targets = (await Promise.all(files.map((file) => collect(join(root, file))))).flat();
+// Some optional legacy/native config files may not exist after removing Capacitor.
+// Only traverse paths that are present so a missing optional file cannot break production builds.
+const existingFiles = files.filter((file) => existsSync(join(root, file)));
+const targets = (await Promise.all(existingFiles.map((file) => collect(join(root, file))))).flat();
 
 // Any previously-used domain that may still be baked into static assets.
 const knownDomains = [
