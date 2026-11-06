@@ -75,36 +75,34 @@ object NativePushManager {
             // Upsert on (user_id, platform) atomically replaces this account's
             // previous Android token. A separate DELETE is redundant and can
             // make subscription fail when PostgREST is briefly unavailable.
-            val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?on_conflict=user_id,platform").openConnection() as HttpURLConnection)
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 15000
-            connection.readTimeout = 20000
-            connection.setRequestProperty("apikey", SUPABASE_KEY)
-            connection.setRequestProperty("Authorization", "Bearer ${session.accessToken}")
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty("Prefer", "resolution=merge-duplicates,return=minimal")
-            connection.doOutput = true
-            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             var status = 0
             var response = ""
             // Supabase PostgREST can briefly return gateway/timeout failures.
-            // Retry the idempotent upsert; never fail because an old-token
-            // cleanup request timed out.
+            // Each retry uses a fresh connection and repeats the idempotent upsert.
             for (attempt in 1..3) {
+                val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?on_conflict=user_id,platform").openConnection() as HttpURLConnection)
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 20000
+                connection.setRequestProperty("apikey", SUPABASE_KEY)
+                connection.setRequestProperty("Authorization", "Bearer ${session.accessToken}")
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Prefer", "resolution=merge-duplicates,return=minimal")
+                connection.doOutput = true
                 try {
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
                     status = connection.responseCode
                     response = (if (status in 200..299) connection.inputStream else connection.errorStream)
                         ?.bufferedReader()?.use { it.readText() }.orEmpty()
                 } catch (error: Exception) {
+                    status = 0
                     response = error.message ?: error.javaClass.simpleName
+                } finally {
+                    connection.disconnect()
                 }
                 if (status in 200..299) break
-                if (attempt < 3) {
-                    connection.disconnect()
-                    Thread.sleep(500L * attempt)
-                }
+                if (attempt < 3) Thread.sleep(500L * attempt)
             }
-            connection.disconnect()
             if (status !in 200..299) {
                 android.util.Log.e("WorklyPush", "Token registration failed [$status]: $response")
                 return@withContext false
