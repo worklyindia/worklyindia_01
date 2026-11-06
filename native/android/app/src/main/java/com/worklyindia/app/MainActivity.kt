@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -125,7 +127,8 @@ private fun WorklyApp() {
                 onApply = { openUrl(ctx, job.externalApplyUrl ?: job.webUrl) }, onShare = { shareJob(ctx, job) })
             tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
-                onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" })
+                onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
+                onEmployer = { tab = "Account" })
             tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
@@ -137,15 +140,18 @@ private fun WorklyApp() {
 @Composable
 private fun HomeScreen(
     m: Modifier, state: LoadState, categories: List<String>, saved: Set<String>, onSave: (Job) -> Unit,
-    onSearch: (String) -> Unit, onCategory: (String) -> Unit, onJob: (Job) -> Unit, onRetry: () -> Unit, onAll: () -> Unit
+    onSearch: (String) -> Unit, onCategory: (String) -> Unit, onJob: (Job) -> Unit, onRetry: () -> Unit, onAll: () -> Unit,
+    onEmployer: () -> Unit
 ) {
     var q by remember { mutableStateOf("") }
     LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(42.dp).background(Brand, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Text("W", color = Color.White, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
-                }
+                Image(
+                    painter = painterResource(R.drawable.ic_workly_launcher),
+                    contentDescription = "Workly India logo",
+                    modifier = Modifier.size(44.dp)
+                )
                 Column(Modifier.padding(start = 10.dp)) {
                     Text("Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                     Text("Verified jobs across India", color = Muted, style = MaterialTheme.typography.labelMedium)
@@ -161,6 +167,11 @@ private fun HomeScreen(
                         leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White))
                     Button({ onSearch(q) }, Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("Search jobs", fontWeight = FontWeight.Bold) }
+                    OutlinedButton(onEmployer, Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                        Icon(Icons.Default.BusinessCenter, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("I'm hiring — post a job")
+                    }
                 }
             }
         }
