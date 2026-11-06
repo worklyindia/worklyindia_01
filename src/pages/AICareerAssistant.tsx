@@ -40,7 +40,6 @@ import { applyYtSeoUpdate, isYtUpdateApproval } from '@/utils/applyYtSeoUpdate';
 import ChatActionButtons, { extractChatButtons, stripChatButtonsBlock } from '@/components/ai-chat/ChatActionButtons';
 import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
-import { Camera as CapCamera, CameraResultType } from '@capacitor/camera';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import TranslateDialog from '@/components/chat/TranslateDialog';
@@ -2030,22 +2029,10 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
     inputRef.current?.focus();
   };
 
-  const handleCameraClick = async () => {
-    try {
-      const image = await CapCamera.getPhoto({
-        quality: 90,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl
-      });
-      
-      if (image.dataUrl) {
-        setSelectedImages(prev => [...prev, image.dataUrl!]);
-        toast.success('Photo captured');
-      }
-    } catch (error) {
-      console.error('Camera error:', error);
-      toast.error('Failed to access camera');
-    }
+  const handleCameraClick = () => {
+    // The browser's native file chooser offers camera capture on supported phones.
+    // This keeps the website build independent from the retired Capacitor runtime.
+    photoInputRef.current?.click();
   };
 
   const startVoiceInput = async () => {
