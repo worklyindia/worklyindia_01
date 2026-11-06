@@ -124,7 +124,7 @@ serve(async (req) => {
     const body = await req.text();
     
     logInfo('Webhook request received', {
-      signature: signature.substring(0, 20) + '...',
+      hasSignature: !!signature,
       userAgent,
       bodyLength: body.length,
       hasSignature: !!signature
@@ -137,7 +137,7 @@ serve(async (req) => {
         message: 'Invalid payload - webhook ignored',
         requestId 
       }), { 
-        status: 200, 
+        status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
@@ -170,23 +170,16 @@ serve(async (req) => {
 
       if (!isValid) {
         logError("Invalid webhook signature verification", {
-          expectedLength: expectedHex.length,
           receivedLength: signature.trim().length,
-          expectedPrefix: expectedHex.slice(0, 16),
-          receivedPrefix: signature.trim().slice(0, 16),
-          bodyHash: await crypto.subtle.digest("SHA-256", encoder.encode(body)).then((buf) =>
-            Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("")
-          ),
         });
-        // Return 200 to prevent webhook auto-disable, but log the issue
         return new Response(
           JSON.stringify({
-            status: "acknowledged",
-            message: "Signature verification failed - webhook ignored",
+            status: "rejected",
+            message: "Invalid webhook signature",
             requestId,
           }),
           {
-            status: 200,
+            status: 401,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           },
         );
