@@ -346,7 +346,7 @@ export interface LegacyPayload {
 export async function sendLegacyPush(
   supabase: { from: (table: string) => any },
   payload: LegacyPayload,
-): Promise<{ ok: boolean; id: string; recipients: number; errors: string[] }> {
+): Promise<{ ok: boolean; id: string; recipients: number; failed: number; errors: string[] }> {
   const tokens = [
     ...(payload.include_subscription_ids ?? []),
     ...(payload.include_player_ids ?? []),
