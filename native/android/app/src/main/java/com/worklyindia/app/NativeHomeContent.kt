@@ -94,6 +94,58 @@ fun NativeHomeBannerCarousel(data:NativeHomeData) {
 }
 
 @Composable
+fun NativeHomeCareerCategories(onCategory:(String)->Unit,onAll:()->Unit) {
+    val photoBase = "https://wsrv.nl/?w=600&q=80&output=webp&url=https://pub-3225b45ecaf943b3b9061cd57d754bf2.r2.dev/"
+    val cards = listOf(
+        arrayOf("Jobs for Freshers","Your first step starts here","Fresher","FIRST OPPORTUNITY","01-Jobs-for-Freshers.png"),
+        arrayOf("Work from Home","A career, wherever you are","Remote","WORK YOUR WAY","02-Work-from-Home.png"),
+        arrayOf("Part-time Jobs","Make time for what matters","Part-time","FLEXIBLE HOURS","03-Part-time-Jobs.png"),
+        arrayOf("Jobs for Women","Your ambition belongs here","Women","NEW POSSIBILITIES","04-Jobs-for-Women.png"),
+        arrayOf("Full-time Jobs","Build your next chapter","Full-time","CAREER GROWTH","05-Full-time-Jobs.png"),
+        arrayOf("Internships","Learn today, lead tomorrow","Internship","LEARN & GROW","06-Internships.png")
+    )
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                Text("FIND YOUR NEXT CHAPTER", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Text("Jobs that fit your life", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = onAll) { Text("All jobs"); Icon(Icons.Default.ArrowForward, null, Modifier.size(15.dp)) }
+        }
+        cards.forEachIndexed { index, card ->
+            val icons = listOf(Icons.Default.School,Icons.Default.Home,Icons.Default.Schedule,Icons.Default.Groups,Icons.Default.Work,Icons.Default.MenuBook)
+            Card(
+                onClick = { onCategory(card[2]) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .6f))
+            ) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 150.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(start = 16.dp, top = 15.dp, bottom = 15.dp, end = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(icons[index], null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text(card[3], Modifier.padding(start = 5.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        }
+                        Text(card[0], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(card[1], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("View jobs", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            Icon(Icons.Default.ArrowUpward, null, Modifier.padding(start = 4.dp).size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    AsyncImage(
+                        model = photoBase + card[4], contentDescription = card[0],
+                        modifier = Modifier.width(116.dp).height(150.dp).clip(RoundedCornerShape(topEnd = 15.dp, bottomEnd = 15.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun NativeHomeExtraSections(data:NativeHomeData,onFeature:(String)->Unit,onCategory:(String)->Unit) {
     HomeHeading("Jobs that fit your life","Find your next chapter")
     val photoBase = "https://wsrv.nl/?w=600&q=80&output=webp&url=https://pub-3225b45ecaf943b3b9061cd57d754bf2.r2.dev/"
