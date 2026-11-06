@@ -250,16 +250,20 @@ export const PushNotificationSettings: React.FC = () => {
 
         let errorMessage = "Failed to enable push notifications. Please try again.";
 
-        if (!configured) {
+        if (!isNativeAndroid && !configured) {
           errorMessage = "Push notifications are not configured yet. They will work once the Firebase keys are set.";
         } else if (details.isBlocked) {
-          errorMessage = "Notifications are blocked by your browser. Please check site permissions.";
+          errorMessage = isNativeAndroid
+            ? "Notifications are disabled in Android settings. Please allow notifications for Workly India."
+            : "Notifications are blocked by your browser. Please check site permissions.";
         } else if (!details.supported) {
           errorMessage = isNativeAndroid
             ? "Native Android notification support is unavailable. Please update the Workly India app."
             : "This browser does not support push notifications";
         } else if (details.inIframe) {
           errorMessage = "Open the app in a new tab to enable notifications";
+        } else if (isNativeAndroid) {
+          errorMessage = "Android could not register this device with Firebase. Please check the app's Firebase configuration and try again.";
         }
         
         toast({
