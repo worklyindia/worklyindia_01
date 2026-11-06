@@ -1009,6 +1009,7 @@ private fun AccountScreen(
     var profileIndustry by remember { mutableStateOf("") }
     var profileLoading by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
+    var accountType by rememberSaveable { mutableStateOf(ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).getString("account_type", "job_seeker") ?: "job_seeker") }
     val scope = rememberCoroutineScope()
     LaunchedEffect(session?.userId) {
         if (session == null) {
@@ -1046,15 +1047,36 @@ private fun AccountScreen(
                         Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         Text(session.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Aapka account native app mein connected hai.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { scope.launch { NativePushManager.unregister(ctx, session); NativeAuth.signOut(ctx); onSession(null); password = "" } }, Modifier.fillMaxWidth()) { Text("Logout") }
+                        Button(onClick = { scope.launch { NativePushManager.unregister(ctx, session); NativeAuth.signOut(ctx); ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", "job_seeker").apply(); accountType = "job_seeker"; onSession(null); password = "" } }, Modifier.fillMaxWidth()) { Text("Logout") }
                     } else {
-                        Text("Workly India mein shuru karein", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                        Text("Login ya account banayein — app ke andar hi.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (mode == "signup") OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true)
+                        Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                        Text("Apna account type select karke continue karein.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("job_seeker" to "Job Seeker", "employer" to "Employer").forEach { (type, label) ->
+                                val active = accountType == type
+                                Surface(
+                                    modifier = Modifier.weight(1f).clickable {
+                                        accountType = type
+                                        ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", type).apply()
+                                        mode = "login"; onMessage(null)
+                                    },
+                                    shape = RoundedCornerShape(9.dp),
+                                    color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent
+                                ) {
+                                    Text(label, Modifier.padding(vertical = 11.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        Text(if (accountType == "employer") "Employer Login" else "Job Seeker Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(if (accountType == "employer") "Sign in to manage your company and hiring." else "Sign in to find jobs, apply and manage your profile.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        if (mode == "signup" && accountType == "job_seeker") OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true)
                         OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true)
                         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
                         Button(
-                            enabled = !busy && email.contains("@") && password.length >= 6 && (mode == "login" || name.isNotBlank()),
+                            enabled = !busy && email.contains("@") && password.length >= 6 && (mode == "login" || (accountType == "job_seeker" && name.isNotBlank())),
                             onClick = {
                                 scope.launch {
                                     busy = true
@@ -1063,16 +1085,25 @@ private fun AccountScreen(
                                         val result = if (mode == "login") NativeAuth.signIn(ctx, email, password)
                                             else NativeAuth.signUp(ctx, email, password, name)
                                         if (result == null) onMessage("Account create ho gaya. Email verify karke login karein.")
-                                        else onSession(result)
+                                        else if (accountType == "employer" && NativeDataApi.companyId(result) == null) {
+                                            NativeAuth.signOut(ctx)
+                                            onMessage("Is login se Employer company account linked nahi mila. Employer registered email se login karein.")
+                                        } else {
+                                            ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", accountType).apply()
+                                            onSession(result)
+                                        }
                                     } catch (e: Exception) {
                                         onMessage(e.message ?: "Login nahi ho saka. Dobara try karein.")
                                     } finally { busy = false }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text(if (busy) "Please wait..." else if (mode == "login") "Login" else "Create account") }
-                        TextButton(onClick = { mode = if (mode == "login") "signup" else "login"; onMessage(null) }) {
+                        ) { Text(if (busy) "Please wait..." else if (mode == "login") if (accountType == "employer") "Employer Login" else "Login" else "Create account") }
+                        if (accountType == "job_seeker") TextButton(onClick = { mode = if (mode == "login") "signup" else "login"; onMessage(null) }) {
                             Text(if (mode == "login") "New user? Create account" else "Already have an account? Login")
+                        } else Text("New employers: create your company account on the Workly India employer signup page.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = { onNavigate(if (accountType == "employer") "Employer dashboard" else "My applications") }) {
+                            Text(if (accountType == "employer") "Explore employer features" else "Explore job seeker features")
                         }
                     }
                     if (!message.isNullOrBlank()) Text(
