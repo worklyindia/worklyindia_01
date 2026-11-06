@@ -93,6 +93,7 @@ fun NativeFeatureScreen(
     var interviewMode by remember { mutableStateOf("online") }
     var interviewLocation by remember { mutableStateOf("") }
     var interviewNotes by remember { mutableStateOf("") }
+    val context=LocalContext.current
     val scope= rememberCoroutineScope()
 
     LaunchedEffect(screenTitle,session,refresh,selectedConversation?.id) {
