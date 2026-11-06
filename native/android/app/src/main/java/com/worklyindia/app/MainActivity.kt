@@ -118,7 +118,7 @@ private fun WorklyApp() {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (selected == null) NavigationBar(containerColor = Color.White) {
+            if (selected == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Search,
                     "Saved" to Icons.Default.Bookmark, "Account" to Icons.Default.Person)
                     .forEach { (label, icon) ->
@@ -179,7 +179,7 @@ private fun HomeScreen(
                     OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
                         placeholder = { Text("Job title, city or company") },
                         leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White))
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface))
                     Button({ onSearch(q) }, Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("Search jobs", fontWeight = FontWeight.Bold) }
                     OutlinedButton(onEmployer, Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                         Icon(Icons.Default.BusinessCenter, contentDescription = null)
@@ -257,7 +257,7 @@ private fun SavedScreen(m: Modifier, jobs: List<Job>, count: Int, saved: Set<Str
 @Composable
 private fun JobCard(job: Job, saved: Boolean, onSave: () -> Unit, onOpen: () -> Unit) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 Logo(job)
@@ -293,7 +293,7 @@ private fun Pill(t: String) = Surface(color = MaterialTheme.colorScheme.secondar
 @Composable
 private fun JobDetail(m: Modifier, job: Job, saved: Boolean, onBack: () -> Unit, onSave: (Job) -> Unit, onApply: () -> Unit, onShare: () -> Unit) {
     Column(m.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().background(Color.White).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onBack) { Icon(Icons.Default.ArrowBack, "Back") }
             Text("Job details", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             IconButton(onShare) { Icon(Icons.Default.Share, "Share") }
@@ -307,7 +307,7 @@ private fun JobDetail(m: Modifier, job: Job, saved: Boolean, onBack: () -> Unit,
                     Text(job.company, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("💰 ${job.salary}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     Text("📍 ${job.location}")
@@ -323,7 +323,7 @@ private fun JobDetail(m: Modifier, job: Job, saved: Boolean, onBack: () -> Unit,
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { job.skills.forEach { Pill(it) } }
             }
         }
-        Surface(color = Color.White, shadowElevation = 6.dp) {
+        Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
             Button(onApply, Modifier.fillMaxWidth().padding(14.dp).height(50.dp), shape = RoundedCornerShape(12.dp)) {
                 Text("Apply now", fontWeight = FontWeight.Bold)
             }
@@ -356,7 +356,7 @@ private fun AccountScreen(
     LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (session != null) {
                         Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
@@ -408,7 +408,7 @@ private fun AccountScreen(
             "Help & support" to Icons.Default.SupportAgent
         ).forEach { (title, icon) ->
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
                         Text(title, Modifier.padding(start = 12.dp).weight(1f), fontWeight = FontWeight.SemiBold)
