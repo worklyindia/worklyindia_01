@@ -92,7 +92,7 @@ object NativeDataApi {
 
     suspend fun interviews(s:NativeSession):List<NativeInterview> {
         val uid=enc(s.userId)
-        val path="/interviews?select=id,applicant_id,scheduled_at,scheduled_end_at,mode,video_platform,location_url,jitsi_meeting_url,videosdk_room_id,videosdk_meeting_url,videosdk_host_token,videosdk_participant_tokens,hms_room_id,hms_room_url,hms_host_token,hms_participant_tokens,status,notes,host_user_id,job:jobs(title)&or=(applicant_id.eq."+uid+",host_user_id.eq."+uid+")&order=scheduled_at.asc&limit=100"
+        val path="/interviews?select=id,applicant_id,scheduled_at,scheduled_end_at,mode,video_platform,location_url,jitsi_meeting_url,status,notes,host_user_id,job:jobs(title)&or=(applicant_id.eq."+uid+",host_user_id.eq."+uid+")&order=scheduled_at.asc&limit=100"
         val a=JSONArray(call(path,s))
         return (0 until a.length()).map { i ->
             val o=a.getJSONObject(i)
@@ -127,6 +127,9 @@ object NativeDataApi {
             response
         } finally { c.disconnect() }
     }
+
+    suspend fun interviewAccess(s:NativeSession, interviewId:String):JSONObject =
+        JSONObject(callFunction("create-100ms-room",s,JSONObject().put("action","get-access").put("interviewId",interviewId)))
 
     suspend fun scheduleInterview(s:NativeSession, jobId:String, applicantId:String, localDateTime:String, mode:String, locationOrLink:String, notes:String) {
         require(mode in setOf("online","jitsi","100ms","phone","in_person")) { "Interview mode invalid hai." }
