@@ -27,6 +27,16 @@ object NativePushManager {
     private const val SUPABASE_URL = "https://jubwzelupbntbetpajqb.supabase.co"
     private const val SUPABASE_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
     private const val CHANNEL_ID = "workly_updates"
+    private const val PUSH_PREFS = "workly_native_push"
+    private const val OPTED_IN = "native_push_opted_in"
+
+    fun isOptedIn(context: Context): Boolean =
+        context.getSharedPreferences(PUSH_PREFS, Context.MODE_PRIVATE).getBoolean(OPTED_IN, false)
+
+    fun setOptedIn(context: Context, optedIn: Boolean) {
+        context.getSharedPreferences(PUSH_PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(OPTED_IN, optedIn).apply()
+    }
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -109,6 +119,7 @@ object NativePushManager {
                 return@withContext false
             }
             createChannel(context)
+            setOptedIn(context, true)
             android.util.Log.i("WorklyPush", "Native Android FCM token registered")
             true
         } catch (error: Exception) {
@@ -118,12 +129,13 @@ object NativePushManager {
     }
 
     suspend fun unregister(context: Context, session: NativeSession) = withContext(Dispatchers.IO) {
+        setOptedIn(context, false)
         try {
             if (FirebaseApp.getApps(context).isEmpty()) return@withContext
             val token = Tasks.await(FirebaseMessaging.getInstance().token)
             if (token.isNullOrBlank()) return@withContext
             val encoded = URLEncoder.encode(token, "UTF-8")
-            val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&fcm_token=eq.$encoded").openConnection() as HttpURLConnection)
+            val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&platform=eq.android&fcm_token=eq.$encoded").openConnection() as HttpURLConnection)
             connection.requestMethod = "DELETE"
             connection.connectTimeout = 15000
             connection.readTimeout = 20000
