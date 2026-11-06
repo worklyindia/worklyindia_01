@@ -55,7 +55,7 @@ object JobsApi {
                 "internship", "internships" -> q.append("&job_type=ilike.*internship*")
                 "contract" -> q.append("&job_type=ilike.*contract*")
                 "fresher", "freshers" -> q.append("&experience_level=ilike.*fresher*")
-                "women", "jobs for women" -> q.append("&category=ilike.*women*")
+                "women", "jobs for women" -> q.append("&or=(gender_preference.ilike.*female*,gender_preference.ilike.*women*,gender_preference.eq.both)")
                 else -> if (!category.isNullOrBlank()) q.append("&category=eq.${enc(category)}")
             }
             val s = search.trim().replace(Regex("[,()*%]"), " ").trim()
