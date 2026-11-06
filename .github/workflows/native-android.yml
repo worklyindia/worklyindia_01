@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  debug-apk:
+  public-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -51,18 +51,6 @@ jobs:
             --output native/android/app/src/main/res/drawable/ic_workly_launcher.png
           file native/android/app/src/main/res/drawable/ic_workly_launcher.png
 
-      - name: Build debug APK
-        working-directory: native/android
-        run: gradle assembleDebug --stacktrace
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: workly-india-native-debug-apk
-          path: native/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
       - name: Prepare release signing key
         id: release-signing
         env:
@@ -76,48 +64,42 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/workly-signing/upload-key.jks"
             echo "WORKLY_RELEASE_READY=true" >> "$GITHUB_OUTPUT"
           else
-            echo "WORKLY_RELEASE_READY=false" >> "$GITHUB_OUTPUT"
-            echo "Release signing secrets are not configured; skipping signed release APK."
+            echo "::error::Public release signing secrets are missing. Configure WORKLY_UPLOAD_KEYSTORE_BASE64, WORKLY_UPLOAD_STORE_PASSWORD, WORKLY_UPLOAD_KEY_ALIAS and WORKLY_UPLOAD_KEY_PASSWORD."
+            exit 1
           fi
 
-      - name: Build signed release APK
-        if: steps.release-signing.outputs.WORKLY_RELEASE_READY == 'true'
+      - name: Build signed public release APK and Play Store bundle
         working-directory: native/android
         env:
           WORKLY_UPLOAD_STORE_FILE: ${{ runner.temp }}/workly-signing/upload-key.jks
           WORKLY_UPLOAD_STORE_PASSWORD: ${{ secrets.WORKLY_UPLOAD_STORE_PASSWORD }}
           WORKLY_UPLOAD_KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
           WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
-        run: gradle assembleRelease --stacktrace
+        run: gradle assembleRelease bundleRelease --stacktrace
 
-      - name: Upload signed release APK
-        if: steps.release-signing.outputs.WORKLY_RELEASE_READY == 'true'
+      - name: Upload public release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: workly-india-native-signed-release-apk
-          path: native/android/app/build/outputs/apk/release/app-release.apk
+          name: workly-india-public-release
+          path: |
+            native/android/app/build/outputs/apk/release/app-release.apk
+            native/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
 
-      - name: Add build summary
+      - name: Add public release summary
         if: always()
         run: |
           {
-            echo "## Workly India — Native Android Build"
+            echo "## Workly India — Public Android Release"
             echo ""
             printf -- '- **Commit:** `%s`\\n' "$GITHUB_SHA"
             echo ""
-            if [ -f "native/android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-              echo "### Debug APK"
-              echo "- Debug APK generated successfully."
-              echo "- Artifact: `workly-india-native-debug-apk`"
-            fi
-            if [ -f "native/android/app/build/outputs/apk/release/app-release.apk" ]; then
-              echo "### Signed release APK"
-              echo "- Signed release APK generated successfully."
-              echo "- Artifact: `workly-india-native-signed-release-apk`"
+            if [ -f "native/android/app/build/outputs/apk/release/app-release.apk" ] && [ -f "native/android/app/build/outputs/bundle/release/app-release.aab" ]; then
+              echo "- Signed release APK: generated."
+              echo "- Google Play AAB: generated."
+              echo "- Artifact: `workly-india-public-release`"
             else
-              echo "### Release signing"
-              echo "- Signed release APK not generated. Add the four WORKLY_UPLOAD_* repository secrets to enable it."
+              echo "::error::Public release outputs were not generated."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
