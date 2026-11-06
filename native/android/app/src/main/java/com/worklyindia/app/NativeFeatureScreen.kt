@@ -93,7 +93,7 @@ fun NativeFeatureScreen(
 
     Column(m.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onBack) { Icon(Icons.Default.ArrowBack,"Back") }
+            IconButton(onClick={ if(title=="Messages" && selectedConversation!=null) { selectedConversation=null; chatMessages=emptyList(); error=null } else onBack() }) { Icon(Icons.Default.ArrowBack,"Back") }
             Text(selectedConversation?.jobTitle ?: title,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
             if(title in listOf("My applications","Notifications","Messages","Employer dashboard")) IconButton(onClick={refresh++}) { Icon(Icons.Default.Refresh,"Refresh") }
         }
