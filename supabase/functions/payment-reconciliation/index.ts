@@ -26,6 +26,21 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // This endpoint can inspect and mutate payment records; restrict it to admins.
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.slice(7));
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const { data: adminUser, error: adminError } = await supabase
+      .from('admin_users').select('role').eq('user_id', user.id).maybeSingle();
+    if (adminError || !['owner', 'admin'].includes(adminUser?.role || '')) {
+      return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const razorpayKeyId = Deno.env.get('RAZORPAY_KEY_ID');
     const razorpayKeySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
 
@@ -41,7 +56,8 @@ serve(async (req) => {
     if (req.method === 'GET') {
       // Get reconciliation report
       const url = new URL(req.url);
-      const hours = parseInt(url.searchParams.get('hours') || '24');
+      const requestedHours = parseInt(url.searchParams.get('hours') || '24');
+      const hours = Number.isFinite(requestedHours) ? Math.min(720, Math.max(1, requestedHours)) : 24;
       const autoFix = url.searchParams.get('auto_fix') === 'true';
       const markExpired = url.searchParams.get('mark_expired') === 'true';
 
@@ -167,15 +183,18 @@ serve(async (req) => {
               const capturedPayment = payments.find(p => p.status === 'captured');
 
               if (capturedPayment) {
+                const amountMatch = capturedPayment.order_id === txn.razorpay_order_id &&
+                  capturedPayment.currency === 'INR' &&
+                  Number(capturedPayment.amount) === Math.round(Number(txn.amount) * 100);
                 reconciliationResults.transactions_checked.push({
                   order_id: txn.razorpay_order_id,
                   payment_id: capturedPayment.id,
-                  status: 'payment_found_captured',
-                  amount_match: capturedPayment.amount === txn.amount * 100
+                  status: amountMatch ? 'payment_found_captured' : 'captured_payment_mismatch',
+                  amount_match: amountMatch
                 });
 
-                // Auto-fix if requested
-                if (autoFix) {
+                // Never reconcile a transaction unless order, currency and exact amount match.
+                if (autoFix && amountMatch) {
                   try {
                     // Update transaction
                     await supabase
