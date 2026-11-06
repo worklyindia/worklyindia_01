@@ -40,7 +40,10 @@ type NativeNotificationResult = { granted: boolean; registered: boolean };
 
 const isNativeAndroidApp = (): boolean => {
   try {
-    return Boolean(window.WorklyAndroid?.isNativeAndroidApp?.());
+    if (Boolean(window.WorklyAndroid?.isNativeAndroidApp?.())) return true;
+    // Native app adds this marker to its WebView UA. This also covers the
+    // brief startup window before addJavascriptInterface is exposed to JS.
+    return typeof navigator !== 'undefined' && /WorklyIndiaApp\\/1\\.0/i.test(navigator.userAgent);
   } catch {
     return false;
   }
