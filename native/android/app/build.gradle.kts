@@ -60,8 +60,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.razorpay:checkout:1.6.41")
     implementation("live.videosdk:rtc-android-sdk:3.0.1")
-    implementation("live.100ms:android-sdk:2.9.88")
-    implementation("live.100ms:video-view:2.9.88")
+    implementation("live.100ms:room-kit:1.3.9")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 
