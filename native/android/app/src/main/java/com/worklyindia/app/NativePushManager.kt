@@ -59,9 +59,11 @@ object NativePushManager {
                 android.util.Log.e("WorklyPush", "Firebase default app could not initialize; check google-services.json")
                 return@withContext false
             }
-            // Register the device token even when notification permission is currently denied.
-            // Android will suppress display until the user grants POST_NOTIFICATIONS, but the
-            // token is ready immediately after they enable it in system settings.
+            // Never create an enabled server subscription until Android allows notifications.
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) return@withContext false
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return@withContext false
             createChannel(context)
             val token = Tasks.await(FirebaseMessaging.getInstance().token)
             if (token.isNullOrBlank()) return@withContext false
