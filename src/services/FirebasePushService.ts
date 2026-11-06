@@ -26,7 +26,7 @@ interface PushConfigResponse {
 
 const CONFIG_CACHE_KEY = 'firebase_push_config_v1';
 
-declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; }; } }
+declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; registerPushNotifications?: () => void; }; } }
 
 export class FirebasePushService {
   private static isNativeAndroid(): boolean { return typeof window !== 'undefined' && typeof window.WorklyAndroid?.isNotificationPermissionGranted === 'function' && typeof window.WorklyAndroid?.requestNotificationPermission === 'function'; }
@@ -326,9 +326,21 @@ export class FirebasePushService {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       if (!userId) return false;
-      const { data, error } = await supabase.from('push_subscriptions').select('fcm_token').eq('user_id', userId).eq('platform', 'android').eq('enabled', true).maybeSingle();
-      if (error) console.warn('Native Android push registration not yet visible:', error.message);
-      return Boolean(data?.fcm_token);
+      window.WorklyAndroid!.registerPushNotifications?.();
+      // Native FCM registration runs asynchronously in Android. Wait for the
+      // server row to appear instead of reporting success before it is saved.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const { data, error } = await supabase.from('push_subscriptions')
+          .select('fcm_token').eq('user_id', userId).eq('platform', 'android')
+          .eq('enabled', true).maybeSingle();
+        if (error) {
+          console.warn('Native Android push registration not yet visible:', error.message);
+          return false;
+        }
+        if (data?.fcm_token) return true;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      return false;
     }
     const canEnable = this.canEnableNotifications();
     if (!canEnable.canEnable) {
@@ -508,6 +520,21 @@ export class FirebasePushService {
 
   static async unsubscribe(): Promise<boolean> {
     try {
+      if (this.isNativeAndroid()) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData.session?.user?.id;
+        if (!userId) return false;
+        // Keep the Android token row so the user can re-subscribe without
+        // generating a new FCM token; disabled rows are excluded by send-push.
+        const { error } = await supabase.from('push_subscriptions')
+          .update({ enabled: false, last_seen_at: new Date().toISOString() })
+          .eq('user_id', userId).eq('platform', 'android');
+        if (error) {
+          console.error('Native Android unsubscribe failed:', error.message);
+          return false;
+        }
+        return true;
+      }
       // Grab the token first: the goodbye push has to go out before the token
       // is deleted, otherwise there is nothing left to deliver to.
       const token = this.currentToken || (await this.getCurrentPlayerId());
