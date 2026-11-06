@@ -85,13 +85,20 @@ fun NativeFeatureScreen(
     var supportTitle by remember { mutableStateOf("") }
     var supportDescription by remember { mutableStateOf("") }
     var supportCategory by remember { mutableStateOf("Account") }
+    var screenTitle by remember { mutableStateOf(title) }
+    var chatReturnScreen by remember { mutableStateOf("Messages") }
+    var schedulingApplicant by remember { mutableStateOf<NativeEmployerApplicant?>(null) }
+    var interviewDateTime by remember { mutableStateOf("") }
+    var interviewMode by remember { mutableStateOf("online") }
+    var interviewLocation by remember { mutableStateOf("") }
+    var interviewNotes by remember { mutableStateOf("") }
     val scope= rememberCoroutineScope()
 
-    LaunchedEffect(title,session,refresh,selectedConversation?.id) {
+    LaunchedEffect(screenTitle,session,refresh,selectedConversation?.id) {
         if(session==null) return@LaunchedEffect
         busy=true; error=null
         try {
-            when(title) {
+            when(screenTitle) {
                 "My applications" -> applications=NativeDataApi.applications(session)
                 "Notifications" -> notifications=NativeDataApi.notifications(session)
                 "Messages" -> {
@@ -124,9 +131,9 @@ fun NativeFeatureScreen(
 
     Column(m.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-            IconButton(onClick={ if(title=="Messages" && selectedConversation!=null) { selectedConversation=null; chatMessages=emptyList(); error=null } else onBack() }) { Icon(Icons.Default.ArrowBack,"Back") }
-            Text(selectedConversation?.jobTitle ?: title,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
-            if(title in listOf("My applications","Notifications","Messages","Employer dashboard")) IconButton(onClick={refresh++}) { Icon(Icons.Default.Refresh,"Refresh") }
+            IconButton(onClick={ if(screenTitle=="Messages" && selectedConversation!=null) { selectedConversation=null; chatMessages=emptyList(); error=null; screenTitle=chatReturnScreen } else onBack() }) { Icon(Icons.Default.ArrowBack,"Back") }
+            Text(selectedConversation?.jobTitle ?: screenTitle,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
+            if(screenTitle in listOf("My applications","Notifications","Messages","Employer dashboard")) IconButton(onClick={refresh++}) { Icon(Icons.Default.Refresh,"Refresh") }
         }
         if(session==null) {
             Box(Modifier.fillMaxSize().padding(24.dp),contentAlignment=Alignment.Center) {
@@ -136,7 +143,7 @@ fun NativeFeatureScreen(
                     Text("Is feature ko use karne ke liye Account tab se login karein.",color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-        } else when(title) {
+        } else when(screenTitle) {
             "AI Chat" -> NativeAIChatScreen(session)
             "AI Chat Plans" -> NativeAIPlansScreen(session, paymentResult, onStartCheckout, onConsumePaymentResult)
             "Connected accounts" -> {
@@ -306,6 +313,20 @@ fun NativeFeatureScreen(
                 if(employerApplications.isEmpty()) item { EmptyNative("No applicants yet","Published jobs par candidates apply karenge to yahan dikhenge.") }
                 items(employerApplications,key={it.id}) { applicant ->
                     EmployerApplicantCard(applicant,updatingApplicantId==applicant.id,
+                        onMessage={
+                            scope.launch {
+                                busy=true
+                                runCatching { NativeDataApi.getOrCreateConversation(session,applicant.jobId,applicant.applicantId,applicant.jobTitle) }
+                                    .onSuccess { c -> chatReturnScreen="Employer dashboard"; selectedConversation=c; chatMessages=emptyList(); screenTitle="Messages" }
+                                    .onFailure { error=it.message ?: "Chat open nahi ho saka." }
+                                busy=false
+                            }
+                        },
+                        onSchedule={ candidate ->
+                            schedulingApplicant=candidate
+                            interviewDateTime=java.time.LocalDateTime.now().plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0).toString()
+                            interviewMode="online"; interviewLocation=""; interviewNotes=""
+                        },
                         onShortlist={
                             updatingApplicantId=applicant.id
                             scope.launch {
@@ -333,14 +354,46 @@ fun NativeFeatureScreen(
                 item { OutlinedTextField(jobType,{jobType=it},Modifier.fillMaxWidth(),label={Text("Job type")},singleLine=true) }
                 item { Button(enabled=!busy&&jobTitle.isNotBlank()&&jobLocation.isNotBlank()&&jobDescription.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.createJobDraft(session,jobTitle,jobLocation,jobDescription,jobType); jobTitle=""; jobLocation=""; jobDescription=""; employerJobs=NativeDataApi.employerJobs(session); error="Private draft saved. Publish workflow is not yet connected." }.onFailure{error=it.message}; busy=false }},modifier=Modifier.fillMaxWidth()) { Text("Save job draft") } }
             }
-            else -> InfoNativePage(title)
+            else -> InfoNativePage(screenTitle)
         }
         if(error!=null) Text(error!!,Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),color=if(error!!.contains("saved",true))MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+    }
+    if (schedulingApplicant != null && session != null) {
+        val candidate = schedulingApplicant!!
+        AlertDialog(
+            onDismissRequest = { schedulingApplicant = null },
+            title = { Text("Schedule interview") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(candidate.fullName + " • " + candidate.jobTitle, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(interviewDateTime,{interviewDateTime=it},Modifier.fillMaxWidth(),label={Text("Date & time")},supportingText={Text("YYYY-MM-DDTHH:MM (device local time)")},singleLine=true)
+                    Text("Interview type",style=MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                        listOf("online","phone","in_person").forEach { mode -> FilterChip(selected=interviewMode==mode,onClick={interviewMode=mode},label={Text(when(mode){"online"->"Online";"phone"->"Phone";else->"In person"})}) }
+                    }
+                    OutlinedTextField(interviewLocation,{interviewLocation=it},Modifier.fillMaxWidth(),label={Text(if(interviewMode=="online") "Meeting link (optional)" else if(interviewMode=="phone") "Phone details (optional)" else "Interview address (optional)")},singleLine=true)
+                    OutlinedTextField(interviewNotes,{interviewNotes=it},Modifier.fillMaxWidth(),label={Text("Notes (optional)")},minLines=2)
+                    Text("30-minute interview. Candidate notification depends on existing notification setup.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button(enabled=!busy && interviewDateTime.isNotBlank(),onClick={
+                    scope.launch {
+                        busy=true
+                        runCatching { NativeDataApi.scheduleInterview(session,candidate.jobId,candidate.applicantId,interviewDateTime,interviewMode,interviewLocation,interviewNotes) }
+                            .onSuccess { error="Interview scheduled successfully."; schedulingApplicant=null; refresh++ }
+                            .onFailure { error=it.message ?: "Interview schedule nahi hua." }
+                        busy=false
+                    }
+                }) { Text(if(busy) "Scheduling…" else "Schedule") }
+            },
+            dismissButton = { TextButton(onClick={schedulingApplicant=null}) { Text("Cancel") } }
+        )
     }
 }
 
 @Composable
-private fun EmployerApplicantCard(applicant:NativeEmployerApplicant,updating:Boolean,onShortlist:()->Unit,onReject:()->Unit) {
+private fun EmployerApplicantCard(applicant:NativeEmployerApplicant,updating:Boolean,onMessage:()->Unit,onSchedule:(NativeEmployerApplicant)->Unit,onShortlist:()->Unit,onReject:()->Unit) {
     val context=LocalContext.current
     val status=applicant.status.lowercase()
     Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),
@@ -372,6 +425,10 @@ private fun EmployerApplicantCard(applicant:NativeEmployerApplicant,updating:Boo
                     Text("Open resume")
                 }
             }
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick=onMessage,modifier=Modifier.weight(1f),enabled=!updating) { Icon(Icons.Default.Chat,null); Spacer(Modifier.width(5.dp)); Text("Message") }
+                OutlinedButton(onClick={onSchedule(applicant)},modifier=Modifier.weight(1f),enabled=!updating) { Icon(Icons.Default.CalendarMonth,null); Spacer(Modifier.width(5.dp)); Text("Interview") }
+            }
             if(status!="shortlisted" && status!="rejected") {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(enabled=!updating,onClick=onReject,modifier=Modifier.weight(1f)){Text("Reject")}
@@ -384,6 +441,7 @@ private fun EmployerApplicantCard(applicant:NativeEmployerApplicant,updating:Boo
     }
 }
 
+@Composable
 private fun NativeEmployerStatCard(label:String,value:String,modifier:Modifier=Modifier) {
     Card(modifier,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),shape=RoundedCornerShape(14.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -451,6 +509,7 @@ private fun ApplicationStatusCard(application: NativeApplication) {
     }
 }
 
+@Composable
 private fun NativeRowCard(title:String,subtitle:String,status:String,onClick:(()->Unit)?=null) {
     Card(Modifier.fillMaxWidth().then(if(onClick!=null)Modifier.clickable{onClick()}else Modifier),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
         Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically) {
