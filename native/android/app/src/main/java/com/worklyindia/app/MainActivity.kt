@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.webkit.CookieManager
@@ -182,11 +183,25 @@ class MainActivity : Activity() {
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
             ?: savedPage
             ?: website
-        webView.loadUrl(target)
+        failedUrl = target
+        if (isNetworkAvailable()) webView.loadUrl(target) else showOfflinePage()
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java)
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
     private fun retryLastPage() {
         val target = failedUrl ?: website
+        if (!isNetworkAvailable()) {
+            showingOfflinePage = false
+            showOfflinePage()
+            return
+        }
         showingOfflinePage = false
         webView.loadUrl(target)
     }
@@ -208,8 +223,8 @@ class MainActivity : Activity() {
               button{width:100%;border:0;border-radius:12px;padding:15px;background:#155eef;color:white;
               font-size:16px;font-weight:700}small{display:block;color:#94a3b8;margin-top:18px}
             </style></head><body><main><div class="logo">W</div><h1>You're offline</h1>
-            <p>Your internet connection is unavailable. Saved app data stays on this device.
-            Reconnect to view live jobs, messages and account updates.</p>
+            <p>Your internet connection is unavailable. Workly India is open in offline mode.
+            Live jobs, messages and account updates will sync when you reconnect.</p>
             <button onclick="window.WorklyAndroid.retryConnection()">Try again</button>
             <small>Workly India · Offline mode</small></main></body></html>
         """.trimIndent()
