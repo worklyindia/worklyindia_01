@@ -47,6 +47,8 @@ android {
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -58,4 +60,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.razorpay:checkout:1.6.41")
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+// Firebase Android config is supplied as app/google-services.json when the Android app is registered in Firebase.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
