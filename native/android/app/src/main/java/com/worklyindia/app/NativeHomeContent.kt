@@ -95,21 +95,25 @@ fun NativeHomeBannerCarousel(data:NativeHomeData) {
 @Composable
 fun NativeHomeExtraSections(data:NativeHomeData,onFeature:(String)->Unit,onCategory:(String)->Unit) {
     HomeHeading("Jobs that fit your life","Find your next chapter")
+    val photoBase = "https://wsrv.nl/?w=600&q=80&output=webp&url=https://pub-3225b45ecaf943b3b9061cd57d754bf2.r2.dev/"
     val careerCards = listOf(
-        Triple("Jobs for Freshers","Your first step starts here","Fresher"),
-        Triple("Work from Home","A career, wherever you are","Remote"),
-        Triple("Part-time Jobs","Make time for what matters","Part-time"),
-        Triple("Jobs for Women","Your ambition belongs here","Women"),
-        Triple("Full-time Jobs","Build your next chapter","Full-time"),
-        Triple("Internships","Learn today, lead tomorrow","Internship")
+        arrayOf("Jobs for Freshers","Your first step starts here","Fresher","FIRST OPPORTUNITY",photoBase+"01-Jobs-for-Freshers.png"),
+        arrayOf("Work from Home","A career, wherever you are","Remote","WORK YOUR WAY",photoBase+"02-Work-from-Home.png"),
+        arrayOf("Part-time Jobs","Make time for what matters","Part-time","FLEXIBLE HOURS",photoBase+"03-Part-time-Jobs.png"),
+        arrayOf("Jobs for Women","Your ambition belongs here","Women","NEW POSSIBILITIES",photoBase+"04-Jobs-for-Women.png"),
+        arrayOf("Full-time Jobs","Build your next chapter","Full-time","CAREER GROWTH",photoBase+"05-Full-time-Jobs.png"),
+        arrayOf("Internships","Learn today, lead tomorrow","Internship","LEARN & GROW",photoBase+"06-Internships.png")
     )
     careerCards.forEachIndexed { index, card ->
         val icons = listOf(Icons.Default.School,Icons.Default.Home,Icons.Default.Schedule,Icons.Default.Groups,Icons.Default.Work,Icons.Default.MenuBook)
-        Card(onClick={onCategory(card.third)},modifier=Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=4.dp),shape=RoundedCornerShape(14.dp)) {
+        Card(onClick={onCategory(card[2])},modifier=Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=4.dp),shape=RoundedCornerShape(14.dp)) {
             Row(Modifier.padding(13.dp),verticalAlignment=Alignment.CenterVertically) {
-                Icon(icons[index],null,Modifier.size(32.dp),tint=MaterialTheme.colorScheme.primary)
-                Column(Modifier.weight(1f).padding(horizontal=12.dp)) { Text(card.first,fontWeight=FontWeight.Bold);Text(card.second,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
-                Icon(Icons.Default.ArrowForward,null,tint=MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment=Alignment.CenterVertically) { Icon(icons[index],null,Modifier.size(18.dp),tint=MaterialTheme.colorScheme.primary); Text(card[3],Modifier.padding(start=5.dp),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold) }
+                    Text(card[0],fontWeight=FontWeight.Bold)
+                    Text(card[1],style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                AsyncImage(card[4],card[0],Modifier.width(88.dp).height(96.dp),contentScale=androidx.compose.ui.layout.ContentScale.Fit)
             }
         }
     }
