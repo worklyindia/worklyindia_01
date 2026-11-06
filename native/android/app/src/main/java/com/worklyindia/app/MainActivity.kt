@@ -983,7 +983,7 @@ private fun AccountScreen(
                         Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         Text(session.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Aapka account native app mein connected hai.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { NativeAuth.signOut(ctx); onSession(null); password = "" }, Modifier.fillMaxWidth()) { Text("Logout") }
+                        Button(onClick = { scope.launch { NativePushManager.unregister(ctx, session); NativeAuth.signOut(ctx); onSession(null); password = "" } }, Modifier.fillMaxWidth()) { Text("Logout") }
                     } else {
                         Text("Workly India mein shuru karein", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         Text("Login ya account banayein — app ke andar hi.", color = MaterialTheme.colorScheme.onSurfaceVariant)
