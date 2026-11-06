@@ -118,6 +118,32 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    const { data: planRow, error: planLookupError } = await serviceClient
+      .from('ai_chat_plans').select('id, price_inr').eq('id', plan_id).single();
+    if (planLookupError || !planRow || Number(planRow.price_inr) <= 0) {
+      throw new Error('Paid AI plan not found');
+    }
+    const keyId = Deno.env.get('RAZORPAY_KEY_ID')?.trim();
+    if (!keyId) throw new Error('Razorpay key ID not configured');
+    const auth = 'Basic ' + btoa(keyId + ':' + razorpayKeySecret.trim());
+    const orderRes = await fetch('https://api.razorpay.com/v1/orders/' + encodeURIComponent(razorpay_order_id), { headers: { Authorization: auth } });
+    if (!orderRes.ok) throw new Error('Unable to confirm Razorpay order');
+    const order = await orderRes.json();
+    if (order.id !== razorpay_order_id || order.status !== 'paid' || Number(order.amount) !== Math.round(Number(planRow.price_inr) * 100) || order.currency !== 'INR' || order.notes?.user_id !== user.id || String(order.notes?.plan_id) !== String(plan_id)) {
+      throw new Error('Razorpay order does not match this user and AI plan');
+    }
+    const payRes = await fetch('https://api.razorpay.com/v1/payments/' + encodeURIComponent(razorpay_payment_id), { headers: { Authorization: auth } });
+    if (!payRes.ok) throw new Error('Unable to confirm Razorpay payment');
+    const payment = await payRes.json();
+    if (payment.order_id !== razorpay_order_id || payment.status !== 'captured' || Number(payment.amount) !== Math.round(Number(planRow.price_inr) * 100) || payment.currency !== 'INR') {
+      throw new Error('Payment is not captured or does not match the selected AI plan');
+    }
+    const { data: priorSubscription } = await serviceClient.from('ai_chat_subscriptions').select('*').eq('razorpay_payment_id', razorpay_payment_id).maybeSingle();
+    if (priorSubscription) {
+      if (priorSubscription.user_id !== user.id || String(priorSubscription.plan_id) !== String(plan_id)) throw new Error('Payment is linked to another subscription');
+      return new Response(JSON.stringify({ status: 'success', subscription: priorSubscription, already: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // Cancel any existing active subscription
     console.log('🔄 Cancelling existing active subscriptions...');
     await serviceClient
