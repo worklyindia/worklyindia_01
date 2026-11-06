@@ -55,12 +55,27 @@ object NativeAuth {
         NativeSession(j.getString("access"), j.getString("refresh"), j.getString("id"), j.optString("email"))
     }.getOrNull()
 
-    suspend fun signIn(context: Context, email: String, password: String): NativeSession = withContext(Dispatchers.IO) {
-        val j = request("POST", "/auth/v1/token?grant_type=password",
-            JSONObject().put("email", email.trim()).put("password", password))
+    suspend fun signIn(context: Context, identifier: String, password: String): NativeSession = withContext(Dispatchers.IO) {
+        val clean = identifier.trim().replace(Regex("[\\u200B-\\u200D\\uFEFF\\u00AD\\u200E\\u200F]"), "")
+        val digits = clean.filter { it.isDigit() }
+        val isPhone = !clean.contains("@") && digits.length in 10..15 && clean.all { it.isDigit() || it in "+ ()-" }
+        val j = if (isPhone) {
+            // Workly website resolves mobile credentials through the same secured Edge Function.
+            val normalizedPhone = if (digits.length == 10) "91$digits" else digits
+            request("POST", "/functions/v1/unified-ai-tricks",
+                JSONObject().put("action", "phone_password_login").put("phone", normalizedPhone).put("password", password))
+        } else {
+            request("POST", "/auth/v1/token?grant_type=password",
+                JSONObject().put("email", clean.lowercase()).put("password", password))
+        }
         val s = NativeSession(j.getString("access_token"), j.getString("refresh_token"),
-            j.getJSONObject("user").getString("id"), j.getJSONObject("user").optString("email", email))
+            j.getJSONObject("user").getString("id"), j.getJSONObject("user").optString("email", identifier))
         save(context, s); s
+    }
+
+    suspend fun resetPassword(email: String) = withContext(Dispatchers.IO) {
+        request("POST", "/auth/v1/recover",
+            JSONObject().put("email", email.trim().lowercase()).put("redirect_to", "https://worklyindia.devs.surf/reset-password"))
     }
 
     suspend fun signUp(context: Context, email: String, password: String, name: String): NativeSession? = withContext(Dispatchers.IO) {
