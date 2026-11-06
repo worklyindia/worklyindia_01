@@ -47,9 +47,51 @@ import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import com.razorpay.Checkout
+import com.razorpay.PaymentData
+import com.razorpay.PaymentResultWithDataListener
+import org.json.JSONObject
 
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
+    var razorpayResult by mutableStateOf<NativeRazorpayResult?>(null)
+        private set
+
+    fun clearRazorpayResult() { razorpayResult = null }
+
+    fun openRazorpayCheckout(order: NativeCheckoutOrder, email: String) {
+        try {
+            val checkout = Checkout()
+            checkout.setKeyID(order.keyId)
+            val options = JSONObject()
+                .put("key", order.keyId)
+                .put("order_id", order.orderId)
+                .put("amount", order.amount)
+                .put("currency", order.currency)
+                .put("name", "Workly India")
+                .put("description", "AI Chat - ${order.planName}")
+                .put("prefill", JSONObject().put("email", email))
+                .put("theme", JSONObject().put("color", "#1646C8"))
+                .put("retry", JSONObject().put("enabled", true).put("max_count", 3))
+            checkout.open(this, options)
+        } catch (e: Exception) {
+            razorpayResult = NativeRazorpayResult(null, null, null, e.message ?: "Checkout open nahi ho saka.")
+        }
+    }
+
+    override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: PaymentData) {
+        razorpayResult = NativeRazorpayResult(
+            orderId = paymentData.orderId,
+            paymentId = paymentData.paymentId ?: razorpayPaymentId,
+            signature = paymentData.signature
+        )
+    }
+
+    override fun onPaymentError(code: Int, response: String?) {
+        razorpayResult = NativeRazorpayResult(null, null, null,
+            response?.take(500) ?: "Payment cancel ya fail hua (code $code).")
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -58,6 +100,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Checkout.preload(applicationContext)
         setContent {
             val dark = isSystemInDarkTheme()
             SideEffect {
@@ -174,7 +217,13 @@ private fun WorklyApp() {
         when {
             job != null -> JobDetail(m, job, job.id in saved, { selected = null }, toggleSave,
                 onApply = { if (!job.externalApplyUrl.isNullOrBlank()) externalApplyNotice = true else if (authSession == null) { authMessage = "Apply karne ke liye login karein."; tab = "Account"; selected = null } else scope.launch { authMessage = try { NativeAuth.apply(ctx, job.id, job.employerId ?: throw IllegalStateException("Employer details nahi mile. Is job ke liye native apply support available nahi hai.")); "Application submit ho gayi." } catch (e: Exception) { e.message ?: "Apply nahi ho saka." }; selected = null; tab = "Account" } }, onShare = { shareJob(ctx, job) })
-            selectedFeature != null -> NativeFeatureScreen(m, selectedFeature!!, authSession) { selectedFeature = null }
+            selectedFeature != null -> NativeFeatureScreen(
+                m, selectedFeature!!, authSession,
+                onBack = { selectedFeature = null },
+                paymentResult = razorpayResult,
+                onStartCheckout = { order -> openRazorpayCheckout(order, authSession?.email.orEmpty()) },
+                onConsumePaymentResult = { clearRazorpayResult() }
+            )
             tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
                 onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
@@ -558,7 +607,7 @@ private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int, on
     val upcomingFestivals = festivals.filter { it.date == nextFestivalDate }
     val shownFestivals = if (todayFestivals.isNotEmpty()) todayFestivals else upcomingFestivals
     val menu = listOf(
-        "AI Chat", "Connected accounts", "Website Pricing", "About Us", "Mission", "Vision", "Why Choose Workly India",
+        "AI Chat", "AI Chat Plans", "Connected accounts", "Website Pricing", "About Us", "Mission", "Vision", "Why Choose Workly India",
         "Blog", "Trust & Safety", "Employer Guidelines", "Job Seeker Guidelines",
         "Community Guidelines", "Accessibility Statement", "Privacy Policy",
         "Refund & Cancellation", "Terms & Conditions", "FAQ", "Cookie Policy",
