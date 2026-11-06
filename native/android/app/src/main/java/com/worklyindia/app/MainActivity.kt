@@ -996,6 +996,7 @@ private fun AccountScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var forgotPassword by rememberSaveable { mutableStateOf(false) }
     var profileBusy by remember { mutableStateOf(false) }
     var profileName by remember { mutableStateOf("") }
     var profilePhone by remember { mutableStateOf("") }
@@ -1072,39 +1073,71 @@ private fun AccountScreen(
                                 }
                             }
                         }
-                        Text(if (accountType == "employer") "Employer Login" else "Job Seeker Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(if (accountType == "employer") "Sign in to manage your company and hiring." else "Sign in to find jobs, apply and manage your profile.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                        if (mode == "signup" && accountType == "job_seeker") OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true)
-                        OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true)
-                        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
-                        Button(
-                            enabled = !busy && email.contains("@") && password.length >= 6 && (mode == "login" || (accountType == "job_seeker" && name.isNotBlank())),
-                            onClick = {
-                                scope.launch {
-                                    busy = true
-                                    onMessage(null)
-                                    try {
-                                        val result = if (mode == "login") NativeAuth.signIn(ctx, email, password)
-                                            else NativeAuth.signUp(ctx, email, password, name)
-                                        if (result == null) onMessage("Account create ho gaya. Email verify karke login karein.")
-                                        else if (accountType == "employer" && NativeDataApi.companyId(result) == null) {
-                                            NativeAuth.signOut(ctx)
-                                            onMessage("Is login se Employer company account linked nahi mila. Employer registered email se login karein.")
-                                        } else {
-                                            ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", accountType).apply()
-                                            onSession(result)
-                                        }
-                                    } catch (e: Exception) {
-                                        onMessage(e.message ?: "Login nahi ho saka. Dobara try karein.")
-                                    } finally { busy = false }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text(if (busy) "Please wait..." else if (mode == "login") if (accountType == "employer") "Employer Login" else "Login" else "Create account") }
-                        if (accountType == "job_seeker") TextButton(onClick = { mode = if (mode == "login") "signup" else "login"; onMessage(null) }) {
-                            Text(if (mode == "login") "New user? Create account" else "Already have an account? Login")
-                        } else Text("New employers: create your company account on the Workly India employer signup page.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (forgotPassword) "Reset password" else if (accountType == "employer") "Employer Login" else "Job Seeker Login", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (forgotPassword) "Enter your registered email and we will send a secure reset link."
+                            else if (accountType == "employer") "Sign in to manage your company and hiring."
+                            else "Sign in to find jobs, apply and manage your profile.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall
+                        )
+                        if (!forgotPassword && mode == "signup" && accountType == "job_seeker") OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true)
+                        OutlinedTextField(
+                            value = email, onValueChange = { email = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(if (mode == "login" && !forgotPassword) "Email or mobile number" else "Email address") },
+                            placeholder = { Text(if (mode == "login" && !forgotPassword) "name@email.com or +91 98765 43210" else "name@email.com") },
+                            singleLine = true
+                        )
+                        if (!forgotPassword) OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
+                        if (forgotPassword) {
+                            Button(
+                                enabled = !busy && email.contains("@"),
+                                onClick = {
+                                    scope.launch {
+                                        busy = true; onMessage(null)
+                                        try {
+                                            NativeAuth.resetPassword(email)
+                                            onMessage("Password reset link aapke email par bhej diya gaya hai. Inbox aur spam folder check karein.")
+                                        } catch (e: Exception) { onMessage(e.message ?: "Reset email nahi bhej paye. Dobara try karein.") }
+                                        finally { busy = false }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(if (busy) "Sending..." else "Send reset link") }
+                            TextButton(onClick = { forgotPassword = false; onMessage(null) }) { Text("Back to login") }
+                        } else {
+                            Button(
+                                enabled = !busy && (email.contains("@") || email.filter { it.isDigit() }.length in 10..15) &&
+                                    (mode == "login" || (accountType == "job_seeker" && name.isNotBlank())) && password.length >= 6,
+                                onClick = {
+                                    scope.launch {
+                                        busy = true
+                                        onMessage(null)
+                                        try {
+                                            val result = if (mode == "login") NativeAuth.signIn(ctx, email, password)
+                                                else NativeAuth.signUp(ctx, email, password, name)
+                                            if (result == null) onMessage("Account create ho gaya. Email verify karke login karein.")
+                                            else if (accountType == "employer" && NativeDataApi.companyId(result) == null) {
+                                                NativeAuth.signOut(ctx)
+                                                onMessage("Is login se Employer company account linked nahi mila. Employer registered email se login karein.")
+                                            } else {
+                                                ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", accountType).apply()
+                                                onSession(result)
+                                            }
+                                        } catch (e: Exception) {
+                                            onMessage(e.message ?: "Login nahi ho saka. Dobara try karein.")
+                                        } finally { busy = false }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(if (busy) "Please wait..." else if (mode == "login") if (accountType == "employer") "Employer Login" else "Login" else "Create account") }
+                            if (mode == "login") TextButton(onClick = { forgotPassword = true; onMessage(null) }) { Text("Forgot password?") }
+                            if (accountType == "job_seeker") TextButton(onClick = { mode = if (mode == "login") "signup" else "login"; onMessage(null) }) {
+                                Text(if (mode == "login") "New user? Create account" else "Already have an account? Login")
+                            } else TextButton(onClick = {
+                                runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://worklyindia.devs.surf/employer-signup"))) }
+                            }) { Text("Create employer account") }
+                        }
                         TextButton(onClick = { onNavigate(if (accountType == "employer") "Employer dashboard" else "My applications") }) {
                             Text(if (accountType == "employer") "Explore employer features" else "Explore job seeker features")
                         }
