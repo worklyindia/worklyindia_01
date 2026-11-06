@@ -71,7 +71,9 @@ class MainActivity : Activity() {
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             view.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            windowInsets
+            // Insets are already applied to the root. Do not dispatch them to WebView,
+            // otherwise WebView can apply the status-bar inset a second time.
+            WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(root)
         webView.settings.apply {
