@@ -13,6 +13,7 @@ data class NativeEmployerApplicant(val id:String,val jobId:String,val applicantI
 data class NativeNotification(val id:String, val title:String, val message:String, val createdAt:String, val read:Boolean)
 data class NativeConversation(val id:String, val jobTitle:String, val lastMessage:String, val updatedAt:String)
 data class NativeChatMessage(val id:String, val senderId:String, val message:String, val createdAt:String)
+data class NativeInterview(val id:String,val jobTitle:String,val applicantId:String,val scheduledAt:String,val scheduledEndAt:String,val mode:String,val locationUrl:String,val status:String,val notes:String)
 
 object NativeDataApi {
     private const val BASE="https://jubwzelupbntbetpajqb.supabase.co/rest/v1"
@@ -89,9 +90,22 @@ object NativeDataApi {
         return NativeConversation(o.optString("id"),jobTitle,"",o.optString("last_message_at"))
     }
 
+    suspend fun interviews(s:NativeSession):List<NativeInterview> {
+        val uid=enc(s.userId)
+        val path="/interviews?select=id,applicant_id,scheduled_at,scheduled_end_at,mode,location_url,status,notes,job:jobs(title)&or=(applicant_id.eq."+uid+",host_user_id.eq."+uid+")&order=scheduled_at.asc&limit=100"
+        val a=JSONArray(call(path,s))
+        return (0 until a.length()).map { i ->
+            val o=a.getJSONObject(i)
+            NativeInterview(o.optString("id"),o.optJSONObject("job")?.optString("title")?.takeIf{it.isNotBlank()}?:"Interview",
+                o.optString("applicant_id"),o.optString("scheduled_at"),o.optString("scheduled_end_at"),
+                o.optString("mode"),o.optString("location_url"),o.optString("status"),o.optString("notes"))
+        }
+    }
+
     suspend fun scheduleInterview(s:NativeSession, jobId:String, applicantId:String, localDateTime:String, mode:String, locationOrLink:String, notes:String) {
         require(mode in setOf("online","phone","in_person")) { "Interview mode invalid hai." }
         val local=java.time.LocalDateTime.parse(localDateTime.trim())
+        require(local.isAfter(java.time.LocalDateTime.now())) { "Interview ka time future mein hona chahiye." }
         val start=local.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime()
         val end=start.plusMinutes(30)
         val body=JSONObject().put("job_id",jobId).put("applicant_id",applicantId).put("scheduled_at",start.toString()).put("scheduled_end_at",end.toString()).put("mode",mode).put("status","scheduled").put("host_user_id",s.userId)
