@@ -19,7 +19,9 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,11 +37,11 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Let Android lay out the app below the real system status bar.
-        // Avoid manual inset padding: it can create a second, visible gap above the website.
-        WindowCompat.setDecorFitsSystemWindows(window, true)
-        window.statusBarColor = android.graphics.Color.WHITE
-        window.navigationBarColor = android.graphics.Color.WHITE
+        // Android 15 enforces edge-to-edge for apps targeting SDK 35.
+        // Apply system-bar insets once to a native container, not in website CSS.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = true
@@ -57,6 +59,21 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT
         )
         webView.setBackgroundColor(android.graphics.Color.WHITE)
+
+        // Keep the Android status bar visible and place the whole website below it.
+        // A root container is used so the WebView viewport itself starts below the inset.
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(android.graphics.Color.WHITE)
+            addView(webView)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, windowInsets ->
+            val systemBars = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            windowInsets
+        }
+        ViewCompat.requestApplyInsets(root)
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -121,8 +138,8 @@ class MainActivity : Activity() {
                 else callback.invoke(origin, false, false)
             }
         }
-        // Android handles the status/navigation bar insets; WebView starts immediately below status bar.
-        setContentView(webView)
+        // The native container reserves the status/navigation bar areas exactly once.
+        setContentView(root)
         val target = intent.getStringExtra("notification_url")
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
