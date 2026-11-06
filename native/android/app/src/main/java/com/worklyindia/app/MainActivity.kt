@@ -518,13 +518,15 @@ private fun HomeScreen(
         }
         item { NativeScrollReveal { NativeHomeCareerCategories(onCategory = onCategory, onAll = onAll) } }
         item {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(9.dp)
-            ) {
-                HomeQuickStat(Modifier.weight(1f), "Find jobs", Icons.Default.Work, onAll)
-                HomeQuickStat(Modifier.weight(1f), "Resume tools", Icons.Default.Description) { onFeature("My resume") }
-                HomeQuickStat(Modifier.weight(1f), "For employers", Icons.Default.BusinessCenter, onEmployer)
+            NativeScrollReveal(type = "zoom-in") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    HomeQuickStat(Modifier.weight(1f), "Find jobs", Icons.Default.Work, onAll)
+                    HomeQuickStat(Modifier.weight(1f), "Resume tools", Icons.Default.Description) { onFeature("My resume") }
+                    HomeQuickStat(Modifier.weight(1f), "For employers", Icons.Default.BusinessCenter, onEmployer)
+                }
             }
         }
         item {
