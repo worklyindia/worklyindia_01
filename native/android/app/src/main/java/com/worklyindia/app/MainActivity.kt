@@ -95,6 +95,9 @@ class MainActivity : Activity() {
             allowContentAccess = true
             mediaPlaybackRequiresUserGesture = true
             if (Build.VERSION.SDK_INT >= 26) safeBrowsingEnabled = true
+            // Lets the website identify this exact native WebView even if the
+            // JavaScript bridge is temporarily unavailable during page startup.
+            userAgentString = "$userAgentString WorklyIndiaApp/1.0"
         }
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
@@ -312,6 +315,21 @@ class MainActivity : Activity() {
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Returning from Android notification settings should refresh FCM
+        // registration automatically once the user has enabled notifications.
+        if (::webView.isInitialized && getNotificationPermissionStatusForActivity() == "granted") {
+            registerNativePushAndNotifyJs(true)
+        }
+    }
+
+    private fun getNotificationPermissionStatusForActivity(): String {
+        val runtimeGranted = Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return if (runtimeGranted && androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()) "granted" else "denied"
     }
 
     override fun onNewIntent(intent: Intent) {
