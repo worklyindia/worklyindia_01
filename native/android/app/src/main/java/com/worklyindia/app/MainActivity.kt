@@ -243,11 +243,7 @@ class MainActivity : Activity() {
                         user.optString("email"),
                         if (role.equals("employer", true)) "employer" else "jobseeker"
                     )
-                    if (isNotificationPermissionGranted()) {
-                        activityScope.launch(Dispatchers.IO) {
-                            NativePushManager.register(this@MainActivity, saved)
-                        }
-                    }
+                    // Push registration is explicit opt-in from the website settings UI.
                 } catch (error: Exception) {
                     android.util.Log.w("WorklyWebView", "Website session sync skipped", error)
                 }
