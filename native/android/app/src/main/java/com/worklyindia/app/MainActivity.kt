@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val Brand = Color(0xFF1646C8)
 private val PageBg = Color(0xFFF4F6FB)
@@ -80,6 +81,9 @@ private sealed interface LoadState {
 private fun WorklyApp() {
     val ctx = LocalContext.current
     val store = remember { SavedStore(ctx) }
+    var authSession by remember { mutableStateOf(NativeAuth.session(ctx)) }
+    var authMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf("Home") }
     var selected by remember { mutableStateOf<Job?>(null) }
     var saved by remember { mutableStateOf(store.load()) }
@@ -124,7 +128,7 @@ private fun WorklyApp() {
         val job = selected
         when {
             job != null -> JobDetail(m, job, job.id in saved, { selected = null }, toggleSave,
-                onApply = { openUrl(ctx, job.externalApplyUrl ?: job.webUrl) }, onShare = { shareJob(ctx, job) })
+                onApply = { if (job.externalApplyUrl.isNullOrBlank()) { if (authSession == null) { authMessage = "Apply karne ke liye login karein."; tab = "Account"; selected = null } else scope.launch { authMessage = try { NativeAuth.apply(ctx, job.id); "Application submit ho gayi." } catch (e: Exception) { e.message ?: "Apply nahi ho saka." } } } else openUrl(ctx, job.externalApplyUrl) }, onShare = { shareJob(ctx, job) })
             tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
                 onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
