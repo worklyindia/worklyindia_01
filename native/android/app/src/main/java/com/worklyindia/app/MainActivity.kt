@@ -516,7 +516,6 @@ private fun HomeScreen(
                 }
             }
         }
-        item { NativeScrollReveal { NativeHomeCareerCategories(onCategory = onCategory, onAll = onAll) } }
         item {
             NativeScrollReveal(type = "zoom-in") {
                 Row(
@@ -529,11 +528,12 @@ private fun HomeScreen(
                 }
             }
         }
+        item { NativeScrollReveal { NativeHomeCareerCategories(onCategory = onCategory, onAll = onAll) } }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Latest opportunities", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text("Fresh jobs to explore", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Text("Top 10 Ranked Jobs", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Text("Fresh opportunities picked for you", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
                 TextButton(onClick = onAll) { Text("See all"); Icon(Icons.Default.ArrowForward, null, Modifier.size(16.dp)) }
             }
