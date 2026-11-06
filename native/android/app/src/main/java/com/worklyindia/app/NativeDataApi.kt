@@ -118,6 +118,23 @@ object NativeDataApi {
             .put("category",category).put("priority","normal").put("status","open"),"return=minimal")
     }
 
+    suspend fun loadProfile(s:NativeSession):JSONObject? {
+        val a=JSONArray(call("/profiles?select=full_name,phone,location,experience_years,current_position,skills,education,bio,preferred_location,job_type,industry&user_id=eq.${enc(s.userId)}&limit=1",s))
+        return if(a.length()==0)null else a.getJSONObject(0)
+    }
+
+    suspend fun saveProfile(s:NativeSession, fullName:String, phone:String, location:String,
+                            currentPosition:String, experienceYears:Int?, skills:String,
+                            education:String, bio:String, preferredLocation:String, jobType:String, industry:String) {
+        val skillArray=JSONArray().apply { skills.split(",").map{it.trim()}.filter{it.isNotBlank()}.forEach{put(it)} }
+        val body=JSONObject().put("user_id",s.userId).put("email",s.email).put("full_name",fullName.trim())
+            .put("phone",phone.trim()).put("location",location.trim()).put("current_position",currentPosition.trim())
+            .put("experience_years",experienceYears).put("skills",skillArray).put("education",education.trim())
+            .put("bio",bio.trim()).put("preferred_location",preferredLocation.trim()).put("job_type",jobType.trim())
+            .put("industry",industry.trim()).put("updated_at",java.time.Instant.now().toString())
+        call("/profiles?on_conflict=user_id",s,"POST",body,"resolution=merge-duplicates,return=minimal")
+    }
+
     suspend fun companyId(s:NativeSession):String? {
         val a=JSONArray(call("/companies?select=id&user_id=eq.${enc(s.userId)}&limit=1",s))
         return if(a.length()==0)null else a.getJSONObject(0).optString("id").takeIf{it.isNotBlank()}
