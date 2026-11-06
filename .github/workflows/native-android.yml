@@ -72,10 +72,12 @@ jobs:
         run: gradle assembleRelease bundleRelease --stacktrace
 
       - name: Rename release files for users
-        working-directory: native/android/app/build/outputs
         run: |
-          cp apk/release/app-release.apk Workly-India.apk
-          cp bundle/release/app-release.aab Workly-India.aab
+          APK_FILE=$(find native/android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)
+          AAB_FILE=$(find native/android/app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' | head -n 1)
+          test -n "$APK_FILE" && test -n "$AAB_FILE"
+          cp "$APK_FILE" native/android/app/build/outputs/Workly-India.apk
+          cp "$AAB_FILE" native/android/app/build/outputs/Workly-India.aab
 
       - name: Upload public release artifacts
         uses: actions/upload-artifact@v4
