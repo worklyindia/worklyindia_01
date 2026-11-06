@@ -273,19 +273,22 @@ class MainActivity : Activity() {
         fun requestNativeNotifications() {
             runOnUiThread {
                 NativePushManager.setOptedIn(this@MainActivity, true)
-                if (!androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled() ||
-                    (Build.VERSION.SDK_INT >= 33 &&
-                        ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
-                        getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).getBoolean(NOTIFICATION_PERMISSION_ASKED, false) &&
-                        !ActivityCompat.shouldShowRequestPermissionRationale(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS))
-                ) {
-                    openAppNotificationSettings()
-                } else if (Build.VERSION.SDK_INT >= 33 &&
+                val permissionMissing = Build.VERSION.SDK_INT >= 33 &&
                     ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                ) {
+                val askedBefore = getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE)
+                    .getBoolean(NOTIFICATION_PERMISSION_ASKED, false)
+                val permanentlyDenied = permissionMissing && askedBefore &&
+                    !ActivityCompat.shouldShowRequestPermissionRationale(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS)
+                val notificationsDisabled = !androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
+
+                if (permanentlyDenied || (notificationsDisabled && !permissionMissing)) {
+                    openAppNotificationSettings()
+                } else if (permissionMissing) {
                     getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).edit()
                         .putBoolean(NOTIFICATION_PERMISSION_ASKED, true).apply()
                     ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                } else if (notificationsDisabled) {
+                    openAppNotificationSettings()
                 } else {
                     registerNativePushAndNotifyJs(getNotificationPermissionStatus() == "granted")
                 }
