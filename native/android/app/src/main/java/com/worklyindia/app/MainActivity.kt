@@ -1125,7 +1125,7 @@ private fun AccountScreen(
                                         onMessage(null)
                                         try {
                                             if (mode == "login" && email.contains("@")) {
-                                                val challenge = runCatching { NativeAuth.checkLogin2FA(email, accountType) }.getOrNull()
+                                                val challenge = NativeAuth.checkLogin2FA(email, accountType)
                                                 val challengeUser = challenge?.optString("userId").orEmpty()
                                                 if (challenge?.optBoolean("required", false) == true && challengeUser.isNotBlank()) {
                                                     twoFactorUserId = challengeUser
