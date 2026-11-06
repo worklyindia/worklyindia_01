@@ -128,12 +128,11 @@ object NativePushManager {
         }
     }
 
-    suspend fun unregister(context: Context, session: NativeSession) = withContext(Dispatchers.IO) {
-        setOptedIn(context, false)
+    suspend fun unregister(context: Context, session: NativeSession): Boolean = withContext(Dispatchers.IO) {
         try {
-            if (FirebaseApp.getApps(context).isEmpty()) return@withContext
+            if (FirebaseApp.getApps(context).isEmpty()) return@withContext false
             val token = Tasks.await(FirebaseMessaging.getInstance().token)
-            if (token.isNullOrBlank()) return@withContext
+            if (token.isNullOrBlank()) return@withContext false
             val encoded = URLEncoder.encode(token, "UTF-8")
             val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&platform=eq.android&fcm_token=eq.$encoded").openConnection() as HttpURLConnection)
             connection.requestMethod = "DELETE"
@@ -148,8 +147,12 @@ object NativePushManager {
                 android.util.Log.e("WorklyPush", "Token removal failed [$status]: $response")
             }
             connection.disconnect()
+            val success = status in 200..299
+            if (success) setOptedIn(context, false)
+            success
         } catch (error: Exception) {
             android.util.Log.w("WorklyPush", "Token cleanup failed during logout", error)
+            false
         }
     }
 
