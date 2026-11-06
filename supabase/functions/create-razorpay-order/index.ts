@@ -247,7 +247,7 @@ serve(async (req) => {
         body: JSON.stringify({
           amount: price * 100, currency: "INR",
           receipt: `seo_${Date.now()}`,
-          notes: { service: "search_listing", ref: user.id },
+          notes: { service: "search_listing", ref: user.id, job_id: String(job_id) },
         }),
       });
       if (!orderRes.ok) {
