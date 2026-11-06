@@ -157,6 +157,12 @@ class MainActivity : Activity() {
                 if (!showingOfflinePage && Uri.parse(url).host == allowedHost) {
                     getSharedPreferences(APP_PREFS, MODE_PRIVATE).edit()
                         .putString(LAST_PAGE_URL, url).apply()
+                    // Publish an explicit native marker before React initializes
+                    // notification capability checks on the website.
+                    webView.evaluateJavascript(
+                        "window.__WORKLY_NATIVE_ANDROID__=true;window.dispatchEvent(new Event('workly:native-bridge-ready'))",
+                        null
+                    )
                     syncWebsiteSession()
                 }
             }
