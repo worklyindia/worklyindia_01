@@ -179,6 +179,8 @@ private fun WorklyApp() {
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
     var reload by remember { mutableIntStateOf(0) }
     val known = remember { mutableStateMapOf<String, Job>() }
+    var homeData by remember { mutableStateOf(NativeHomeData()) }
+    LaunchedEffect(Unit) { runCatching { homeData = NativeHomeApi.load() } }
 
     LaunchedEffect(Unit) { runCatching { categories = JobsApi.fetchCategories() } }
     LaunchedEffect(search, category, reload) {
@@ -229,10 +231,10 @@ private fun WorklyApp() {
                 onStartCheckout = { order -> paymentActivity?.openRazorpayCheckout(order, authSession?.email.orEmpty()) },
                 onConsumePaymentResult = { paymentActivity?.clearRazorpayResult() }
             )
-            tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
+            tab == "Home" -> HomeScreen(m, state, homeData, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
                 onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
-                onEmployer = { tab = "Account" }, onFeature = { selectedFeature = it })
+                onEmployer = { tab = "Account" }, onFeature = { feature -> when (feature) { "Favorites" -> tab = "Saved"; "Employee", "Post Job" -> selectedFeature = "Employer dashboard"; "Resume" -> selectedFeature = "My resume"; else -> selectedFeature = feature } })
             tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
@@ -250,7 +252,7 @@ private fun WorklyApp() {
 
 @Composable
 private fun HomeScreen(
-    m: Modifier, state: LoadState, categories: List<String>, saved: Set<String>, onSave: (Job) -> Unit,
+    m: Modifier, state: LoadState, homeData: NativeHomeData, categories: List<String>, saved: Set<String>, onSave: (Job) -> Unit,
     onSearch: (String) -> Unit, onCategory: (String) -> Unit, onJob: (Job) -> Unit, onRetry: () -> Unit, onAll: () -> Unit,
     onEmployer: () -> Unit, onFeature: (String) -> Unit
 ) {
@@ -259,7 +261,11 @@ private fun HomeScreen(
         Triple("My applications", "Track applications", Icons.Default.Description),
         Triple("My resume", "Build your resume", Icons.Default.Article),
         Triple("Messages", "Chat with employers", Icons.Default.Chat),
-        Triple("Notifications", "Job updates & alerts", Icons.Default.Notifications)
+        Triple("Notifications", "Job updates & alerts", Icons.Default.Notifications),
+        Triple("Companies", "Explore employers", Icons.Default.Business),
+        Triple("Favorites", "Saved opportunities", Icons.Default.Favorite),
+        Triple("AI Chat", "Career assistant", Icons.Default.AutoAwesome),
+        Triple("Refer", "Invite a friend", Icons.Default.CardGiftcard)
     )
 
     LazyColumn(
@@ -291,38 +297,22 @@ private fun HomeScreen(
         }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            if (homeData.banners.isNotEmpty()) {
+                NativeHomeBannerCarousel(homeData)
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Surface(color = Color.White.copy(alpha = 0.16f), shape = RoundedCornerShape(50)) {
-                        Text(
-                            "JOBS • CAREER • GROWTH",
-                            Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Text(
-                        "Find work that\nfits your life.",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text(
-                        "Explore opportunities across India — remote, part-time and full-time.",
-                        color = Color.White.copy(alpha = 0.88f),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        Text("Discover jobs with employer details", Modifier.padding(start = 6.dp), color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall)
+                    Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("JOBS • CAREER • GROWTH", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("Find work that fits your life.", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold)
+                        Text("Explore opportunities across India — remote, part-time and full-time.", color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodyMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Text("Discover jobs with employer details", Modifier.padding(start = 6.dp), color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
@@ -440,7 +430,8 @@ private fun HomeScreen(
                 TextButton(onClick = onAll) { Text("See all") }
             }
         }
-        jobList(state, saved, onSave, onJob, onRetry, take = 5)
+        jobList(state, saved, onSave, onJob, onRetry, take = 10)
+        item { NativeHomeExtraSections(homeData, onFeature) }
     }
 }
 
