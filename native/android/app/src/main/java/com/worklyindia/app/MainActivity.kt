@@ -453,7 +453,7 @@ private fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            if (homeData.banners.isNotEmpty()) NativeHomeBannerCarousel(homeData)
+            if (homeData.banners.isNotEmpty()) NativeScrollReveal { NativeHomeBannerCarousel(homeData) }
             else Card(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 shape = RoundedCornerShape(22.dp),
@@ -515,7 +515,7 @@ private fun HomeScreen(
                 }
             }
         }
-        item { NativeHomeCareerCategories(onCategory = onCategory, onAll = onAll) }
+        item { NativeScrollReveal { NativeHomeCareerCategories(onCategory = onCategory, onAll = onAll) } }
         item {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp),
@@ -536,7 +536,7 @@ private fun HomeScreen(
             }
         }
         jobList(state, saved, onSave, onJob, onRetry, take = 10)
-        item { NativeHomeExtraSections(homeData, onFeature, onCategory) }
+        item { NativeScrollReveal { NativeHomeExtraSections(homeData, onFeature, onCategory) } }
     }
 }
 
