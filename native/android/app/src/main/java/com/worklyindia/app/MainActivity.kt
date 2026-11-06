@@ -997,6 +997,14 @@ private fun AccountScreen(
     var password by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var forgotPassword by rememberSaveable { mutableStateOf(false) }
+    var twoFactorPending by rememberSaveable { mutableStateOf(false) }
+    var twoFactorUserId by rememberSaveable { mutableStateOf("") }
+    var twoFactorMethod by rememberSaveable { mutableStateOf("email_otp") }
+    var twoFactorOtp by rememberSaveable { mutableStateOf("") }
+    var twoFactorTelegram by rememberSaveable { mutableStateOf(false) }
+    var twoFactorTotp by rememberSaveable { mutableStateOf(false) }
+    var twoFactorEmail by rememberSaveable { mutableStateOf(false) }
+    var twoFactorOtpSent by rememberSaveable { mutableStateOf(false) }
     var profileBusy by remember { mutableStateOf(false) }
     var profileName by remember { mutableStateOf("") }
     var profilePhone by remember { mutableStateOf("") }
@@ -1114,15 +1122,53 @@ private fun AccountScreen(
                                         busy = true
                                         onMessage(null)
                                         try {
-                                            val result = if (mode == "login") NativeAuth.signIn(ctx, email, password)
-                                                else NativeAuth.signUp(ctx, email, password, name)
-                                            if (result == null) onMessage("Account create ho gaya. Email verify karke login karein.")
-                                            else if (accountType == "employer" && NativeDataApi.companyId(result) == null) {
-                                                NativeAuth.signOut(ctx)
-                                                onMessage("Is login se Employer company account linked nahi mila. Employer registered email se login karein.")
+                                            if (mode == "login" && email.contains("@")) {
+                                                val challenge = runCatching { NativeAuth.checkLogin2FA(email, accountType) }.getOrNull()
+                                                val challengeUser = challenge?.optString("userId").orEmpty()
+                                                if (challenge?.optBoolean("required", false) == true && challengeUser.isNotBlank()) {
+                                                    twoFactorUserId = challengeUser
+                                                    twoFactorTelegram = challenge.optBoolean("telegramConnected")
+                                                    twoFactorTotp = challenge.optBoolean("totpEnabled")
+                                                    twoFactorEmail = challenge.optBoolean("emailOtpEnabled")
+                                                    val preferred = challenge.optString("twoFactorMethod")
+                                                    twoFactorMethod = when {
+                                                        preferred == "google_authenticator" && twoFactorTotp -> "google_authenticator"
+                                                        preferred == "telegram" && twoFactorTelegram -> "telegram"
+                                                        preferred == "email_otp" && twoFactorEmail -> "email_otp"
+                                                        twoFactorTotp -> "google_authenticator"
+                                                        twoFactorTelegram -> "telegram"
+                                                        else -> "email_otp"
+                                                    }
+                                                    twoFactorPending = true
+                                                    twoFactorOtp = ""
+                                                    twoFactorOtpSent = false
+                                                    if (twoFactorMethod == "telegram" || twoFactorMethod == "email_otp") {
+                                                        NativeAuth.sendLoginOtp(twoFactorUserId, accountType, twoFactorMethod)
+                                                        twoFactorOtpSent = true
+                                                    }
+                                                    onMessage("Extra security verification required. Complete 2-step verification to sign in.")
+                                                } else {
+                                                    val result = NativeAuth.signIn(ctx, email, password)
+                                                    if (result == null) onMessage("Account create ho gaya. Email verify karke login karein.")
+                                                    else if (accountType == "employer" && NativeDataApi.companyId(result) == null) {
+                                                        NativeAuth.signOut(ctx)
+                                                        onMessage("Is login se Employer company account linked nahi mila. Employer registered email se login karein.")
+                                                    } else {
+                                                        ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", accountType).apply()
+                                                        onSession(result)
+                                                    }
+                                                }
                                             } else {
-                                                ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", accountType).apply()
-                                                onSession(result)
+                                                val result = if (mode == "login") NativeAuth.signIn(ctx, email, password)
+                                                    else NativeAuth.signUp(ctx, email, password, name)
+                                                if (result == null) onMessage("Account create ho gaya. Email verify karke login karein.")
+                                                else if (accountType == "employer" && NativeDataApi.companyId(result) == null) {
+                                                    NativeAuth.signOut(ctx)
+                                                    onMessage("Is login se Employer company account linked nahi mila. Employer registered email se login karein.")
+                                                } else {
+                                                    ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", accountType).apply()
+                                                    onSession(result)
+                                                }
                                             }
                                         } catch (e: Exception) {
                                             onMessage(e.message ?: "Login nahi ho saka. Dobara try karein.")
@@ -1131,6 +1177,72 @@ private fun AccountScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) { Text(if (busy) "Please wait..." else if (mode == "login") if (accountType == "employer") "Employer Login" else "Login" else "Create account") }
+                            if (twoFactorPending) {
+                                Divider()
+                                Text("Two-step verification", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text("Workly India account security ke liye verification complete karein.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                val methods = buildList {
+                                    if (twoFactorTotp) add("google_authenticator" to "Authenticator")
+                                    if (twoFactorTelegram) add("telegram" to "Telegram")
+                                    if (twoFactorEmail) add("email_otp" to "Email OTP")
+                                }
+                                if (methods.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    methods.forEach { (method, label) ->
+                                        FilterChip(
+                                            selected = twoFactorMethod == method,
+                                            onClick = {
+                                                twoFactorMethod = method; twoFactorOtp = ""; twoFactorOtpSent = false
+                                                if (method != "google_authenticator") scope.launch {
+                                                    busy = true
+                                                    runCatching { NativeAuth.sendLoginOtp(twoFactorUserId, accountType, method) }
+                                                        .onSuccess { twoFactorOtpSent = true; onMessage("$label code bhej diya gaya hai.") }
+                                                        .onFailure { onMessage(it.message ?: "OTP send nahi hua.") }
+                                                    busy = false
+                                                }
+                                            },
+                                            label = { Text(label) }
+                                        )
+                                    }
+                                }
+                                if (twoFactorMethod == "google_authenticator") {
+                                    Text("Google Authenticator app ka 6-digit code enter karein.", style = MaterialTheme.typography.bodySmall)
+                                } else {
+                                    Text(if (twoFactorOtpSent) "Aapke ${if (twoFactorMethod == "telegram") "Telegram" else "email"} par OTP bheja gaya hai." else "OTP bheja ja raha hai...", style = MaterialTheme.typography.bodySmall)
+                                }
+                                OutlinedTextField(
+                                    value = twoFactorOtp, onValueChange = { twoFactorOtp = it.filter(Char::isDigit).take(6) },
+                                    modifier = Modifier.fillMaxWidth(), label = { Text("6-digit verification code") },
+                                    singleLine = true
+                                )
+                                Button(
+                                    enabled = !busy && twoFactorOtp.length == 6 && (twoFactorMethod == "google_authenticator" || twoFactorOtpSent),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = {
+                                        scope.launch {
+                                            busy = true
+                                            try {
+                                                val verified = if (twoFactorMethod == "google_authenticator")
+                                                    NativeAuth.verifyLoginTotp(twoFactorUserId, accountType, twoFactorOtp)
+                                                else NativeAuth.verifyLoginOtp(twoFactorUserId, accountType, twoFactorMethod, twoFactorOtp)
+                                                if (!verified) onMessage("Verification code galat ya expire ho gaya. Dobara check karein.")
+                                                else {
+                                                    val result = NativeAuth.signIn(ctx, email, password)
+                                                    if (accountType == "employer" && NativeDataApi.companyId(result) == null) {
+                                                        NativeAuth.signOut(ctx)
+                                                        onMessage("Employer company account linked nahi mila.")
+                                                    } else {
+                                                        twoFactorPending = false
+                                                        ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", accountType).apply()
+                                                        onSession(result)
+                                                    }
+                                                }
+                                            } catch (e: Exception) { onMessage(e.message ?: "Verification nahi ho saka.") }
+                                            finally { busy = false }
+                                        }
+                                    }
+                                ) { Text(if (busy) "Verifying..." else "Verify & Login") }
+                                TextButton(onClick = { twoFactorPending = false; twoFactorOtp = ""; twoFactorUserId = ""; onMessage("Login cancelled.") }) { Text("Cancel verification") }
+                            }
                             if (mode == "login") TextButton(onClick = { forgotPassword = true; onMessage(null) }) { Text("Forgot password?") }
                             if (accountType == "job_seeker") TextButton(onClick = { mode = if (mode == "login") "signup" else "login"; onMessage(null) }) {
                                 Text(if (mode == "login") "New user? Create account" else "Already have an account? Login")
