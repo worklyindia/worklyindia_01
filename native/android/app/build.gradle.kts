@@ -59,6 +59,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.razorpay:checkout:1.6.41")
+    implementation("org.jitsi.react:jitsi-meet-sdk:11.6.3")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
 
