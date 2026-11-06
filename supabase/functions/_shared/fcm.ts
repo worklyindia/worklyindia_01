@@ -195,7 +195,20 @@ function buildMessage(token: string, payload: PushPayload) {
     message: {
       token,
       data,
-      android: { priority: 'HIGH' },
+      android: {
+        priority: 'HIGH',
+        // Include an Android notification envelope as a delivery fallback.
+        // Background Android can display it even if data callbacks are delayed;
+        // foreground delivery is still handled by WorklyFirebaseMessagingService.
+        notification: {
+          title: payload.title,
+          body: payload.body,
+          channel_id: payload.androidChannelId || 'workly_updates',
+          icon: 'ic_stat_workly',
+          sound: 'default',
+          tag: data.tag,
+        },
+      },
       apns: {
         headers: { 'apns-priority': '10' },
         payload: { aps: { 'content-available': 1, sound: 'default' } },
