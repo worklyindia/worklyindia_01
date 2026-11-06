@@ -73,7 +73,7 @@ export const PushNotificationSettings: React.FC = () => {
       }
       loadSettings();
     };
-    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+    if (!FirebasePushService.isNativeAndroidApp() && typeof navigator !== 'undefined' && navigator.permissions?.query) {
       navigator.permissions
         .query({ name: 'notifications' as PermissionName })
         .then((status) => {
@@ -206,9 +206,12 @@ export const PushNotificationSettings: React.FC = () => {
 
     // Ask for permission FIRST, straight out of the click: any network call
     // before this loses the user gesture and Chrome silently blocks the prompt.
-    const permission = await FirebasePushService.ensurePermission();
+    const isNativeAndroid = FirebasePushService.isNativeAndroidApp();
+    // Android WebView has no browser Notification API. Let the native bridge
+    // request POST_NOTIFICATIONS after this Subscribe tap instead.
+    const permission = isNativeAndroid ? 'granted' : await FirebasePushService.ensurePermission();
     setPermissionStatus(permission);
-    if (permission !== 'granted') {
+    if (!isNativeAndroid && permission !== 'granted') {
       if (permission === 'denied') {
         // Show the step-by-step unblock guide instead of a disappearing toast.
         setShowUnblockGuide(true);
@@ -252,7 +255,9 @@ export const PushNotificationSettings: React.FC = () => {
         } else if (details.isBlocked) {
           errorMessage = "Notifications are blocked by your browser. Please check site permissions.";
         } else if (!details.supported) {
-          errorMessage = "This browser does not support push notifications";
+          errorMessage = isNativeAndroid
+            ? "Native Android notification support is unavailable. Please update the Workly India app."
+            : "This browser does not support push notifications";
         } else if (details.inIframe) {
           errorMessage = "Open the app in a new tab to enable notifications";
         }
