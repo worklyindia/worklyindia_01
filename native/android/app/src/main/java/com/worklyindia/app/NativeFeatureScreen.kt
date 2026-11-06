@@ -223,7 +223,7 @@ fun NativeFeatureScreen(
                                 Text(whenText,style=MaterialTheme.typography.bodyMedium)
                                 Text("Type: "+when(interview.videoPlatform.lowercase()){"jitsi"->"Jitsi video";"100ms"->"100ms native video";"videosdk"->"VideoSDK native video";else->when(interview.mode){"online"->"Custom link";"phone"->"Phone";"in_person"->"In person";else->interview.mode}},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(if(interview.applicantId==session.userId) "Your interview" else "Candidate interview",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                if(interview.videoPlatform.equals("100ms",true)) {
+                                if(interview.videoPlatform.equals("100ms",true) || interview.mode=="100ms_iframe") {
                                     Button(enabled=!busy,onClick={
                                         scope.launch {
                                             busy=true
@@ -245,7 +245,7 @@ fun NativeFeatureScreen(
                                         }
                                     },modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Join 100ms interview") }
                                 }
-                                if(interview.videoPlatform.equals("videosdk",true)) {
+                                if(interview.videoPlatform.equals("videosdk",true) || interview.mode=="videosdk_iframe") {
                                     Button(enabled=!busy,onClick={
                                         scope.launch {
                                             busy=true
