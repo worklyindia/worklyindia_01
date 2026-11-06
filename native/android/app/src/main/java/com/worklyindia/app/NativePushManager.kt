@@ -173,7 +173,7 @@ object NativePushManager {
     suspend fun unregister(context: Context, session: NativeSession) = withContext(Dispatchers.IO) {
         try {
             val firebaseApp = getFirebaseApp(context) ?: return@withContext
-            val token = Tasks.await(FirebaseMessaging.getInstance(firebaseApp).token)
+            val token = Tasks.await(FirebaseMessaging.getInstance().token)
             if (token.isNullOrBlank()) return@withContext
             val encoded = URLEncoder.encode(token, "UTF-8")
             val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&fcm_token=eq.$encoded").openConnection() as HttpURLConnection)
