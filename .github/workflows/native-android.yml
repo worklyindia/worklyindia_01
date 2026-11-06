@@ -71,13 +71,19 @@ jobs:
           WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
         run: gradle assembleRelease bundleRelease --stacktrace
 
+      - name: Rename release files for users
+        working-directory: native/android/app/build/outputs
+        run: |
+          cp apk/release/app-release.apk Workly-India.apk
+          cp bundle/release/app-release.aab Workly-India.aab
+
       - name: Upload public release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: workly-india-public-release
+          name: Workly-India
           path: |
-            native/android/app/build/outputs/apk/release/app-release.apk
-            native/android/app/build/outputs/bundle/release/app-release.aab
+            native/android/app/build/outputs/Workly-India.apk
+            native/android/app/build/outputs/Workly-India.aab
           if-no-files-found: error
           retention-days: 30
 
