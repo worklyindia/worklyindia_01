@@ -297,6 +297,9 @@ private fun WorklyApp() {
                         applyBusy = true
                         scope.launch {
                             val result = runCatching {
+                                if (NativeDataApi.hasApplied(session, pendingJob.id)) {
+                                    throw IllegalStateException("Aap is job ke liye pehle hi apply kar chuke hain. Status My applications mein dekhein.")
+                                }
                                 NativeAuth.apply(ctx, pendingJob.id, pendingJob.employerId
                                     ?: throw IllegalStateException("Employer details nahi mile. Is job ke liye native apply support available nahi hai."))
                             }
