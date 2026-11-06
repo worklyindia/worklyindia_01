@@ -47,7 +47,7 @@ serve(async (req) => {
       .eq('user_id', user.id)
       .single();
 
-    if (!adminUser) {
+    if (!['owner', 'admin'].includes(adminUser?.role || '')) {
       throw new Error('Admin access required');
     }
 
@@ -198,8 +198,14 @@ serve(async (req) => {
       });
     }
 
-    // If payment is captured, mark transaction as successful
+    // Verify the captured payment belongs to this exact local order and amount.
     if (paymentStatus === 'captured') {
+      const expectedPaise = Math.round(Number(transaction.amount) * 100);
+      if (!transaction.razorpay_order_id || paymentData.order_id !== transaction.razorpay_order_id ||
+          Number(paymentData.amount) !== expectedPaise || paymentData.currency !== 'INR') {
+        throw new Error('Captured payment does not match the local order, amount and currency');
+      }
+
       // Update transaction status
       const { error: updateError } = await supabaseService
         .from('transactions')
