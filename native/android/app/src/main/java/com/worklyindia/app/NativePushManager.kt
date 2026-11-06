@@ -72,24 +72,9 @@ object NativePushManager {
                 .put("enabled", true)
                 .put("last_seen_at", java.time.Instant.now().toString())
 
-            // Keep exactly one current Android FCM registration per account.
-            // The web subscription is stored separately under platform=web.
-            val cleanup = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&platform=eq.android&fcm_token=neq.${URLEncoder.encode(token, "UTF-8")}").openConnection() as HttpURLConnection)
-            cleanup.requestMethod = "DELETE"
-            cleanup.connectTimeout = 15000
-            cleanup.readTimeout = 20000
-            cleanup.setRequestProperty("apikey", SUPABASE_KEY)
-            cleanup.setRequestProperty("Authorization", "Bearer ${session.accessToken}")
-            cleanup.setRequestProperty("Prefer", "return=minimal")
-            val cleanupStatus = cleanup.responseCode
-            val cleanupResponse = (if (cleanupStatus in 200..299) cleanup.inputStream else cleanup.errorStream)
-                ?.bufferedReader()?.use { it.readText() }.orEmpty()
-            cleanup.disconnect()
-            if (cleanupStatus !in 200..299) {
-                android.util.Log.e("WorklyPush", "Old Android token cleanup failed [$cleanupStatus]: $cleanupResponse")
-                return@withContext false
-            }
-
+            // Upsert on (user_id, platform) atomically replaces this account's
+            // previous Android token. A separate DELETE is redundant and can
+            // make subscription fail when PostgREST is briefly unavailable.
             val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?on_conflict=user_id,platform").openConnection() as HttpURLConnection)
             connection.requestMethod = "POST"
             connection.connectTimeout = 15000
@@ -100,9 +85,25 @@ object NativePushManager {
             connection.setRequestProperty("Prefer", "resolution=merge-duplicates,return=minimal")
             connection.doOutput = true
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
-            val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
-                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            var status = 0
+            var response = ""
+            // Supabase PostgREST can briefly return gateway/timeout failures.
+            // Retry the idempotent upsert; never fail because an old-token
+            // cleanup request timed out.
+            for (attempt in 1..3) {
+                try {
+                    status = connection.responseCode
+                    response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                        ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                } catch (error: Exception) {
+                    response = error.message ?: error.javaClass.simpleName
+                }
+                if (status in 200..299) break
+                if (attempt < 3) {
+                    connection.disconnect()
+                    Thread.sleep(500L * attempt)
+                }
+            }
             connection.disconnect()
             if (status !in 200..299) {
                 android.util.Log.e("WorklyPush", "Token registration failed [$status]: $response")
