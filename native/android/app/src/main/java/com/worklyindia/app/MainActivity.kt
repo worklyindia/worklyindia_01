@@ -39,6 +39,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -1096,7 +1097,7 @@ private fun AccountScreen(
                             placeholder = { Text(if (mode == "login" && !forgotPassword) "name@email.com or +91 98765 43210" else "name@email.com") },
                             singleLine = true
                         )
-                        if (!forgotPassword) OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
+                        if (!forgotPassword) OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                         if (forgotPassword) {
                             Button(
                                 enabled = !busy && email.contains("@"),
@@ -1115,7 +1116,7 @@ private fun AccountScreen(
                             TextButton(onClick = { forgotPassword = false; onMessage(null) }) { Text("Back to login") }
                         } else {
                             Button(
-                                enabled = !busy && (email.contains("@") || email.filter { it.isDigit() }.length in 10..15) &&
+                                enabled = !busy && !twoFactorPending && (email.contains("@") || email.filter { it.isDigit() }.length in 10..15) &&
                                     (mode == "login" || (accountType == "job_seeker" && name.isNotBlank())) && password.length >= 6,
                                 onClick = {
                                     scope.launch {
@@ -1209,6 +1210,18 @@ private fun AccountScreen(
                                 } else {
                                     Text(if (twoFactorOtpSent) "Aapke ${if (twoFactorMethod == "telegram") "Telegram" else "email"} par OTP bheja gaya hai." else "OTP bheja ja raha hai...", style = MaterialTheme.typography.bodySmall)
                                 }
+                                if (twoFactorMethod != "google_authenticator") TextButton(
+                                    enabled = !busy,
+                                    onClick = {
+                                        scope.launch {
+                                            busy = true
+                                            runCatching { NativeAuth.sendLoginOtp(twoFactorUserId, accountType, twoFactorMethod) }
+                                                .onSuccess { twoFactorOtpSent = true; onMessage("Naya verification code bhej diya gaya hai.") }
+                                                .onFailure { onMessage(it.message ?: "OTP resend nahi hua.") }
+                                            busy = false
+                                        }
+                                    }
+                                ) { Text("Resend OTP") }
                                 OutlinedTextField(
                                     value = twoFactorOtp, onValueChange = { twoFactorOtp = it.filter(Char::isDigit).take(6) },
                                     modifier = Modifier.fillMaxWidth(), label = { Text("6-digit verification code") },
