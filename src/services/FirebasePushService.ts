@@ -128,7 +128,7 @@ export class FirebasePushService {
         const detail = (event as CustomEvent<NativeNotificationResult>).detail;
         if (detail) finish({ granted: Boolean(detail.granted), registered: Boolean(detail.registered) });
       };
-      const timeout = window.setTimeout(() => finish({ granted: false, registered: false }), 25000);
+      const timeout = window.setTimeout(() => finish({ granted: false, registered: false }), 90000);
       window.addEventListener('workly:native-notification-result', onResult, { once: true });
       try {
         // Called from the Subscribe button click; Android shows its runtime
