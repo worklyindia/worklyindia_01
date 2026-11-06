@@ -11,6 +11,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
 
   try {
     console.log("Handling subscription webhook");
@@ -50,12 +53,6 @@ serve(async (req) => {
         .map(b => b.toString(16).padStart(2, '0'))
         .join('');
 
-      console.log("Signature verification:", {
-        expectedLength: expectedSignatureHex.length,
-        receivedLength: razorpaySignature.length,
-        signatureMismatch: true
-      });
-
       const expectedBytes = new TextEncoder().encode(expectedSignatureHex);
       const receivedBytes = new TextEncoder().encode(razorpaySignature.trim().toLowerCase());
       let mismatch = expectedBytes.length ^ receivedBytes.length;
@@ -63,11 +60,7 @@ serve(async (req) => {
         mismatch |= (expectedBytes[i] || 0) ^ (receivedBytes[i] || 0);
       }
       if (mismatch !== 0) {
-        console.error("Invalid webhook signature verification", {
-          expectedLength: expectedSignatureHex.length,
-          receivedLength: razorpaySignature.length,
-          bodyHash: expectedSignatureHex
-        });
+        console.error("Invalid webhook signature verification");
         throw new Error("Invalid webhook signature");
       }
       
