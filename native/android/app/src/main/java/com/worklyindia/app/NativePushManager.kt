@@ -107,7 +107,7 @@ object NativePushManager {
             // Android will suppress display until the user grants POST_NOTIFICATIONS, but the
             // token is ready immediately after they enable it in system settings.
             createChannel(context)
-            val token = Tasks.await(FirebaseMessaging.getInstance(firebaseApp).token)
+            val token = Tasks.await(FirebaseMessaging.getInstance().token)
             if (token.isNullOrBlank()) return@withContext false
 
             val info = JSONObject()
