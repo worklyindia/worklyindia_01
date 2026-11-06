@@ -50,6 +50,12 @@ import java.time.format.DateTimeFormatter
 
 
 class MainActivity : ComponentActivity() {
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Website App Links launch the native app; normal entry starts at the native Home screen.
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
