@@ -98,7 +98,26 @@ class MainActivity : Activity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                if (Uri.parse(url).host == allowedHost) syncWebsiteSession()
+                if (Uri.parse(url).host == allowedHost) {
+                    syncWebsiteSession()
+                    // In this native shell Android already places the WebView below
+                    // the status bar. WebView may still report a non-zero CSS
+                    // safe-area inset, which adds a second blank strip above headers.
+                    view.evaluateJavascript("""
+                        (function() {
+                          var id = 'workly-native-top-inset-fix';
+                          var style = document.getElementById(id);
+                          if (!style) {
+                            style = document.createElement('style');
+                            style.id = id;
+                            style.textContent = 'html, body { padding-top: 0 !important; margin-top: 0 !important; }';
+                            (document.head || document.documentElement).appendChild(style);
+                          }
+                          document.documentElement.dataset.worklyNative = 'android';
+                          if (document.body) document.body.style.setProperty('padding-top', '0', 'important');
+                        })();
+                    """.trimIndent(), null)
+                }
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -199,18 +218,46 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun registerPushNotifications() {
+        fun registerPushNotifications(rawSession: String) {
             runOnUiThread {
-                val session = NativeAuth.session(this@MainActivity) ?: return@runOnUiThread
-                if (!hasNotificationPermission()) return@runOnUiThread
-                activityScope.launch(Dispatchers.IO) {
-                    NativePushManager.register(this@MainActivity, session)
-                    runOnUiThread {
+                try {
+                    // Always use the latest Supabase access token from the live web
+                    // session; the encrypted native copy may otherwise expire.
+                    val sessionJson = JSONObject(rawSession)
+                    val user = sessionJson.getJSONObject("user")
+                    val metadata = user.optJSONObject("user_metadata") ?: JSONObject()
+                    val role = metadata.optString("user_type",
+                        metadata.optString("account_type", metadata.optString("role", "jobseeker")))
+                    val session = NativeAuth.saveWebSession(
+                        this@MainActivity,
+                        sessionJson.getString("access_token"),
+                        sessionJson.getString("refresh_token"),
+                        user.getString("id"),
+                        user.optString("email"),
+                        if (role.equals("employer", true)) "employer" else "jobseeker"
+                    )
+                    if (!hasNotificationPermission()) {
                         webView.evaluateJavascript(
-                            "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete'));",
+                            "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:false,reason:'permission_denied'}}));",
                             null
                         )
+                        return@runOnUiThread
                     }
+                    activityScope.launch(Dispatchers.IO) {
+                        val success = NativePushManager.register(this@MainActivity, session)
+                        runOnUiThread {
+                            webView.evaluateJavascript(
+                                "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:$success}}));",
+                                null
+                            )
+                        }
+                    }
+                } catch (error: Exception) {
+                    android.util.Log.e("WorklyPush", "Could not read fresh website session", error)
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:false,reason:'session_unavailable'}}));",
+                        null
+                    )
                 }
             }
         }
@@ -262,13 +309,8 @@ class MainActivity : Activity() {
             }
         } else if (requestCode == REQUEST_NOTIFICATIONS) {
             val granted = hasNotificationPermission()
-            if (granted) {
-                NativeAuth.session(this)?.let { session ->
-                    activityScope.launch(Dispatchers.IO) {
-                        NativePushManager.register(this@MainActivity, session)
-                    }
-                }
-            }
+            // The web UI owns the subscribe flow and invokes native registration
+            // once after this callback. Do not register twice here.
             webView.evaluateJavascript(
                 "window.dispatchEvent(new CustomEvent('workly-native-notification-permission', {detail:{granted:$granted}}));",
                 null
