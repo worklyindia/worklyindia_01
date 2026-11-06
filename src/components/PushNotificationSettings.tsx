@@ -39,6 +39,16 @@ export const PushNotificationSettings: React.FC = () => {
     // prompt does not wait on a network round trip.
     void FirebasePushService.getConfig();
 
+    // WebView bridge readiness can race React hydration on slower devices.
+    // Retry capability detection briefly and also listen for the native
+    // MainActivity page-finished signal; then refresh the settings card.
+    const refreshNativeStatus = () => {
+      if (FirebasePushService.isNativeAndroidApp()) void loadSettings();
+    };
+    const bridgeRetryTimers = [0, 250, 750, 1500, 3000].map((delay) =>
+      window.setTimeout(refreshNativeStatus, delay),
+    );
+    window.addEventListener('workly:native-bridge-ready', refreshNativeStatus);
 
     // Re-check when the user comes back to the page: the browser may have
     // revoked permission or dropped the token while the page was hidden.
@@ -88,6 +98,8 @@ export const PushNotificationSettings: React.FC = () => {
     return () => {
       document.removeEventListener('visibilitychange', recheck);
       window.removeEventListener('focus', recheck);
+      window.removeEventListener('workly:native-bridge-ready', refreshNativeStatus);
+      bridgeRetryTimers.forEach((timer) => window.clearTimeout(timer));
       permissionStatusRef?.removeEventListener('change', onPermissionChange);
     };
   }, []);
