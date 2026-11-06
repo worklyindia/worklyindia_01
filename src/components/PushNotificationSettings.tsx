@@ -247,6 +247,10 @@ export const PushNotificationSettings: React.FC = () => {
           FirebasePushService.checkNotificationPermissionDetails(),
           FirebasePushService.isConfigured(),
         ]);
+        // Do not leave the UI showing "granted" when Android denied the
+        // runtime permission or native FCM registration did not finish.
+        setPermissionStatus(details.permission);
+        setIsSubscribed(Boolean(details.subscribed));
 
         let errorMessage = "Failed to enable push notifications. Please try again.";
 
@@ -384,7 +388,11 @@ export const PushNotificationSettings: React.FC = () => {
           Push Notifications
         </CardTitle>
         <CardDescription>
-          {getStatusText()}
+          {FirebasePushService.isNativeAndroidApp()
+            ? (isSubscribed
+                ? 'Workly India app notifications are enabled on this device.'
+                : 'Get notifications directly from the Workly India app. Browser push is not used in the Android app.')
+            : getStatusText()}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
