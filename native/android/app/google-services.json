@@ -1,0 +1,28 @@
+{
+  "project_info": {
+    "project_number": "215114168483",
+    "project_id": "workly-india",
+    "storage_bucket": "workly-india.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:215114168483:android:62b08a621e705494dc2716",
+        "android_client_info": {
+          "package_name": "com.worklyindia.app"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJ4NDXDaNdjhoTMp-SoG0i-4VYBNZu3vI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
