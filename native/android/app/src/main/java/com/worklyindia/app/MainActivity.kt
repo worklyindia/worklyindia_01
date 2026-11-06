@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 
 class MainActivity : ComponentActivity() {
@@ -49,6 +55,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val dark = isSystemInDarkTheme()
+            SideEffect {
+                // Keep Android system status/navigation bars visible and make their icons
+                // readable in both system Light and Dark modes.
+                window.statusBarColor = if (dark) android.graphics.Color.rgb(16, 21, 34) else android.graphics.Color.rgb(244, 246, 251)
+                window.navigationBarColor = if (dark) android.graphics.Color.rgb(16, 21, 34) else android.graphics.Color.rgb(244, 246, 251)
+                val bars = WindowInsetsControllerCompat(window, window.decorView)
+                bars.isAppearanceLightStatusBars = !dark
+                bars.isAppearanceLightNavigationBars = !dark
+                bars.show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+            }
             MaterialTheme(
                 colorScheme = if (dark) darkColorScheme(
                     primary = Color(0xFF9DB7FF), onPrimary = Color(0xFF102B68),
@@ -133,7 +149,7 @@ private fun WorklyApp() {
         bottomBar = {
             if (selected == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Search,
-                    "Saved" to Icons.Default.Bookmark, "Account" to Icons.Default.Person)
+                    "Saved" to Icons.Default.Bookmark, "More" to Icons.Default.Menu, "Account" to Icons.Default.Person)
                     .forEach { (label, icon) ->
                         NavigationBarItem(selected = tab == label, onClick = { tab = label },
                             icon = { Icon(icon, contentDescription = label) }, label = { Text(label) })
@@ -153,6 +169,7 @@ private fun WorklyApp() {
             tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
+            tab == "More" -> MoreScreen(m)
             else -> AccountScreen(m, authSession, authMessage, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." })
         }
     }
@@ -349,6 +366,72 @@ private fun Section(title: String, body: String) {
     if (body.isBlank()) return
     Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
     Text(body, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+}
+
+@Composable
+private fun MoreScreen(m: Modifier) {
+    var now by remember { mutableStateOf(LocalDateTime.now(ZoneId.of("Asia/Kolkata"))) }
+    var selectedOption by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = LocalDateTime.now(ZoneId.of("Asia/Kolkata"))
+            delay(1000)
+        }
+    }
+    val hour = now.hour
+    val greeting = when (hour) {
+        in 5..11 -> "Good Morning"
+        in 12..16 -> "Good Afternoon"
+        in 17..19 -> "Good Evening"
+        else -> "Good Night"
+    }
+    val time = now.format(DateTimeFormatter.ofPattern("hh:mm:ss a"))
+    val date = now.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy"))
+    val links = listOf(
+        "Website Pricing", "About Us", "Mission", "Vision", "Why Choose Workly India",
+        "Blog", "Trust & Safety", "Employer Guidelines", "Job Seeker Guidelines",
+        "Community Guidelines", "Accessibility Statement", "Privacy Policy",
+        "Refund & Cancellation", "Terms & Conditions", "FAQ", "Cookie Policy",
+        "Disclaimer", "DMCA / Copyright Policy", "Contact Us", "Sitemap", "Careers",
+        "Press / Media Kit"
+    )
+    LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Text("More options", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), shape = RoundedCornerShape(20.dp)) {
+                Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("🇮🇳 India • IST", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    Text(greeting, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text(time, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(date, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    HorizontalDivider()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Celebration, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Text("Festival calendar", Modifier.padding(start = 10.dp).weight(1f), fontWeight = FontWeight.SemiBold)
+                        TextButton(onClick = { selectedOption = "Festival calendar" }) { Text("View") }
+                    }
+                    Text("Festival dates and celebrations will appear here when the calendar data is connected.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        item { Text("Workly India links", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        items(links) { label ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(12.dp)) {
+                Row(Modifier.fillMaxWidth().clickable { selectedOption = label }.padding(horizontal = 14.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text(label, Modifier.padding(start = 10.dp).weight(1f), fontWeight = FontWeight.Medium)
+                    Text("In progress", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        item { Text("Workly India • Native Android", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
+    }
+    if (selectedOption != null) AlertDialog(
+        onDismissRequest = { selectedOption = null },
+        title = { Text(selectedOption!!) },
+        text = { Text("Is section ka native app page abhi develop ho raha hai. App se website/browser open nahi hoga.") },
+        confirmButton = { TextButton(onClick = { selectedOption = null }) { Text("OK") } }
+    )
 }
 
 @Composable
