@@ -48,6 +48,29 @@ export const PushNotificationSettings: React.FC = () => {
     document.addEventListener('visibilitychange', recheck);
     window.addEventListener('focus', recheck);
 
+    // Native Android permission prompts complete asynchronously outside WebView.
+    // Refresh and subscribe once Android reports that the user granted permission.
+    const onNativePermission = async (event: Event) => {
+      const granted = Boolean((event as CustomEvent<{ granted?: boolean }>).detail?.granted);
+      const permission = await FirebasePushService.checkPermissionStatus();
+      setPermissionStatus(permission);
+      if (granted && permission === 'granted') {
+        setIsLoading(true);
+        try {
+          const success = await FirebasePushService.requestPermissionAndSaveToken();
+          setIsSubscribed(success);
+          if (success) toast({ title: 'Notifications on', description: 'This Android device is subscribed.' });
+          else toast({ title: 'Almost there', description: 'Android permission is allowed, but device registration has not completed yet.', variant: 'destructive' });
+        } finally {
+          setIsLoading(false);
+          await loadSettings();
+        }
+      } else {
+        await loadSettings();
+      }
+    };
+    window.addEventListener('workly-native-notification-permission', onNativePermission);
+
     // Track permission changes live, so the card updates the moment the user
     // allows or blocks notifications in browser site settings.
     let permissionStatusRef: PermissionStatus | null = null;
@@ -88,6 +111,7 @@ export const PushNotificationSettings: React.FC = () => {
     return () => {
       document.removeEventListener('visibilitychange', recheck);
       window.removeEventListener('focus', recheck);
+      window.removeEventListener('workly-native-notification-permission', onNativePermission);
       permissionStatusRef?.removeEventListener('change', onPermissionChange);
     };
   }, []);
