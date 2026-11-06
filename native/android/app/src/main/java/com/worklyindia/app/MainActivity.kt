@@ -120,9 +120,21 @@ class MainActivity : Activity() {
                 return true
             }
 
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                super.onReceivedError(view, request, error)
+                if (request.isForMainFrame && request.url.host == allowedHost) {
+                    failedUrl = request.url.toString()
+                    showOfflinePage()
+                }
+            }
+
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                if (Uri.parse(url).host == allowedHost) syncWebsiteSession()
+                if (!showingOfflinePage && Uri.parse(url).host == allowedHost) {
+                    getSharedPreferences(APP_PREFS, MODE_PRIVATE).edit()
+                        .putString(LAST_PAGE_URL, url).apply()
+                    syncWebsiteSession()
+                }
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
@@ -161,6 +173,31 @@ class MainActivity : Activity() {
             ?: savedPage
             ?: website
         webView.loadUrl(target)
+    }
+
+    private fun showOfflinePage() {
+        if (showingOfflinePage) return
+        showingOfflinePage = true
+        val html = """
+            <!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">
+            <meta name="theme-color" content="#ffffff"><title>Workly India - Offline</title>
+            <style>
+              *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f7f9fc;color:#172033;
+              font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
+              main{width:100%;max-width:420px;background:#fff;border:1px solid #e3e8f0;border-radius:22px;
+              padding:30px 24px;text-align:center;box-shadow:0 8px 30px rgba(20,40,80,.07)}
+              .logo{width:68px;height:68px;border-radius:18px;background:#eff6ff;color:#1457a6;
+              display:grid;place-items:center;font-size:30px;font-weight:800;margin:0 auto 18px}
+              h1{font-size:24px;margin:0 0 10px}p{color:#64748b;line-height:1.6;margin:0 0 22px}
+              button{width:100%;border:0;border-radius:12px;padding:15px;background:#155eef;color:white;
+              font-size:16px;font-weight:700}small{display:block;color:#94a3b8;margin-top:18px}
+            </style></head><body><main><div class="logo">W</div><h1>You're offline</h1>
+            <p>Your internet connection is unavailable. Saved app data stays on this device.
+            Reconnect to view live jobs, messages and account updates.</p>
+            <button onclick="window.WorklyAndroid.retryConnection()">Try again</button>
+            <small>Workly India · Offline mode</small></main></body></html>
+        """.trimIndent()
+        webView.loadDataWithBaseURL("https://$allowedHost/", html, "text/html", "UTF-8", null)
     }
 
     private fun syncWebsiteSession() {
