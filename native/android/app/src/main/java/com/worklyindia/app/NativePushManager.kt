@@ -42,14 +42,15 @@ object NativePushManager {
 
     suspend fun register(context: Context, session: NativeSession): Boolean = withContext(Dispatchers.IO) {
         try {
-            if (FirebaseApp.getApps(context).isEmpty()) {
-                android.util.Log.w("WorklyPush", "Firebase Android config missing; add app/google-services.json")
+            // Initialize explicitly as a safety net for fresh installs and OEM startup timing.
+            if (FirebaseApp.getApps(context).isEmpty() && FirebaseApp.initializeApp(context) == null) {
+                android.util.Log.e("WorklyPush", "Firebase default app could not initialize; check google-services.json")
                 return@withContext false
             }
-            if (Build.VERSION.SDK_INT >= 33 &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) return@withContext false
-
+            // Register the device token even when notification permission is currently denied.
+            // Android will suppress display until the user grants POST_NOTIFICATIONS, but the
+            // token is ready immediately after they enable it in system settings.
+            createChannel(context)
             val token = Tasks.await(FirebaseMessaging.getInstance().token)
             if (token.isNullOrBlank()) return@withContext false
 
