@@ -113,7 +113,10 @@ class MainActivity : Activity() {
             loadsImagesAutomatically = true
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(false)
-            cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+            // Always revalidate remote app assets. LOAD_CACHE_ELSE_NETWORK can keep
+            // an old JavaScript bundle alive and leave the browser-only push warning
+            // visible after the native bridge has been added.
+            cacheMode = WebSettings.LOAD_DEFAULT
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             allowFileAccess = false
             allowContentAccess = true
