@@ -339,7 +339,7 @@ fun NativeFeatureScreen(
     }
 }
 
-@Composable @Composable
+@Composable
 private fun EmployerApplicantCard(applicant:NativeEmployerApplicant,updating:Boolean,onShortlist:()->Unit,onReject:()->Unit) {
     val context=LocalContext.current
     val status=applicant.status.lowercase()
@@ -393,7 +393,7 @@ private fun NativeEmployerStatCard(label:String,value:String,modifier:Modifier=M
     }
 }
 
-@Composable @Composable
+@Composable
 private fun ApplicationStatusCard(application: NativeApplication) {
     val raw = application.status.trim().lowercase().replace('-', '_').replace(' ', '_')
     val label = when(raw) {
