@@ -1257,8 +1257,8 @@ private fun AccountScreen(
                                 TextButton(onClick = { twoFactorPending = false; twoFactorOtp = ""; twoFactorUserId = ""; onMessage("Login cancelled.") }) { Text("Cancel verification") }
                             }
                             if (mode == "login") TextButton(onClick = { forgotPassword = true; onMessage(null) }) { Text("Forgot password?") }
-                            if (accountType == "job_seeker") TextButton(onClick = { mode = if (mode == "login") "signup" else "login"; onMessage(null) }) {
-                                Text(if (mode == "login") "New user? Create account" else "Already have an account? Login")
+                            if (accountType == "job_seeker") TextButton(onClick = { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://worklyindia.devs.surf/auth?mode=signup"))) } }) {
+                                Text("New user? Create account")
                             } else TextButton(onClick = {
                                 runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://worklyindia.devs.surf/employer-signup"))) }
                             }) { Text("Create employer account") }
