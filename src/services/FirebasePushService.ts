@@ -41,10 +41,18 @@ type NativeNotificationResult = { granted: boolean; registered: boolean };
 
 const isNativeAndroidApp = (): boolean => {
   try {
-    if (Boolean(window.WorklyAndroid?.isNativeAndroidApp?.())) return true;
-    // Native app adds this marker to its WebView UA. This also covers the
-    // brief startup window before addJavascriptInterface is exposed to JS.
-    return typeof navigator !== 'undefined' && /WorklyIndiaApp\/1\.0/i.test(navigator.userAgent);
+    if (typeof window === 'undefined') return false;
+
+    // The native bridge is the strongest signal. Checking the object itself
+    // also supports older installed Workly app builds.
+    if (window.WorklyAndroid) return true;
+    if (window.WorklyAndroid?.isNativeAndroidApp?.() === true) return true;
+
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    // Current releases append this marker; Android System WebView commonly
+    // identifies itself with "; wv)" on older app builds.
+    return /WorklyIndiaApp\/1\.0/i.test(ua) ||
+      (/Android/i.test(ua) && /;\s*wv\)/i.test(ua));
   } catch {
     return false;
   }
