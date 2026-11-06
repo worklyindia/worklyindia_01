@@ -48,13 +48,13 @@ object JobsApi {
             val q = StringBuilder("$BASE/jobs?select=${enc(SELECT)}&status=eq.active&visibility=eq.public")
             q.append("&order=is_featured.desc,created_at.desc&limit=$limit")
             when (category?.trim()?.lowercase()) {
-                "remote", "work from home" -> q.append("&work_mode=ilike.*remote*")
+                "remote", "work from home" -> q.append("&or=(remote_allowed.eq.true,work_mode.ilike.*remote*)")
                 "hybrid" -> q.append("&work_mode=ilike.*hybrid*")
                 "part-time", "part time" -> q.append("&job_type=ilike.*part*time*")
                 "full-time", "full time" -> q.append("&job_type=ilike.*full*time*")
                 "internship", "internships" -> q.append("&job_type=ilike.*internship*")
                 "contract" -> q.append("&job_type=ilike.*contract*")
-                "fresher", "freshers" -> q.append("&experience_level=ilike.*fresher*")
+                "fresher", "freshers" -> q.append("&or=(experience_level.ilike.*fresher*,experience_level.eq.0-1,experience_level.eq.entry-level)")
                 "women", "jobs for women" -> q.append("&or=(gender_preference.ilike.*female*,gender_preference.ilike.*women*,gender_preference.eq.both)")
                 else -> if (!category.isNullOrBlank()) q.append("&category=eq.${enc(category)}")
             }
