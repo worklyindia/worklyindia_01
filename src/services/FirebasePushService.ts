@@ -43,6 +43,10 @@ const isNativeAndroidApp = (): boolean => {
   try {
     if (typeof window === 'undefined') return false;
 
+    // MainActivity marks the document from onPageFinished as an explicit
+    // native-app signal. This avoids relying only on browser-specific UA text.
+    if ((window as Window & { __WORKLY_NATIVE_ANDROID__?: boolean }).__WORKLY_NATIVE_ANDROID__ === true) return true;
+
     // The native bridge is the strongest signal. Checking the object itself
     // also supports older installed Workly app builds.
     if (window.WorklyAndroid) return true;
