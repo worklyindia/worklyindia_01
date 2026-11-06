@@ -61,7 +61,7 @@ jobs:
           {
             echo "## Workly India — Native Android Build"
             echo ""
-            printf '- **Commit:** `%s`\n' "$GITHUB_SHA"
+            printf -- '- **Commit:** `%s`\n' "$GITHUB_SHA"
             echo ""
             if [ -f "native/android/app/build/outputs/apk/debug/app-debug.apk" ]; then
               echo "### APK"
