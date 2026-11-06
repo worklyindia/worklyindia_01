@@ -107,24 +107,62 @@ object NativeDataApi {
         val body=JSONObject().put("status",status).put("updated_at",java.time.Instant.now().toString())
         call("/interviews?id=eq.${enc(interviewId)}&host_user_id=eq.${enc(s.userId)}",s,"PATCH",body,"return=minimal")
     }
+    private suspend fun callFunction(name:String, s:NativeSession, body:JSONObject):String = withContext(Dispatchers.IO) {
+        val c=URL("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/$name").openConnection() as HttpURLConnection
+        c.requestMethod="POST"
+        c.connectTimeout=20000
+        c.readTimeout=30000
+        c.setRequestProperty("apikey",KEY)
+        c.setRequestProperty("Authorization","Bearer ${s.accessToken}")
+        c.setRequestProperty("Content-Type","application/json")
+        c.doOutput=true
+        c.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+        try {
+            val status=c.responseCode
+            val response=(if(status in 200..299)c.inputStream else c.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty()
+            if(status !in 200..299) {
+                val message=runCatching { JSONObject(response).optString("error").ifBlank{JSONObject(response).optString("message")} }.getOrNull()
+                throw IllegalStateException(message?.takeIf{it.isNotBlank()} ?: "Meeting provider request failed ($status)")
+            }
+            response
+        } finally { c.disconnect() }
+    }
+
     suspend fun scheduleInterview(s:NativeSession, jobId:String, applicantId:String, localDateTime:String, mode:String, locationOrLink:String, notes:String) {
-        require(mode in setOf("online","jitsi","phone","in_person")) { "Interview mode invalid hai." }
+        require(mode in setOf("online","jitsi","100ms","phone","in_person")) { "Interview mode invalid hai." }
         val local=java.time.LocalDateTime.parse(localDateTime.trim())
         require(local.isAfter(java.time.LocalDateTime.now())) { "Interview ka time future mein hona chahiye." }
         val start=local.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime()
         val end=start.plusMinutes(30)
-        val storedMode=if(mode=="jitsi") "online" else mode
+        val storedMode=if(mode=="jitsi" || mode=="100ms") "online" else mode
         val body=JSONObject().put("job_id",jobId).put("applicant_id",applicantId).put("scheduled_at",start.toString()).put("scheduled_end_at",end.toString()).put("mode",storedMode).put("status","scheduled").put("host_user_id",s.userId)
         if(mode=="jitsi") {
             val roomName="WorklyIndia-"+java.util.UUID.randomUUID().toString().replace("-","")
             val meetingUrl="https://meet.jit.si/"+roomName
             body.put("video_platform","jitsi").put("jitsi_room_name",roomName).put("jitsi_meeting_url",meetingUrl).put("location_url",meetingUrl)
+        } else if(mode=="100ms") {
+            body.put("video_platform","100ms")
         } else if(mode=="online") {
             body.put("video_platform","custom")
         }
-        if(locationOrLink.isNotBlank() && mode!="jitsi") body.put("location_url",locationOrLink.trim())
+        if(locationOrLink.isNotBlank() && mode!="jitsi" && mode!="100ms") body.put("location_url",locationOrLink.trim())
         if(notes.isNotBlank()) body.put("notes",notes.trim())
-        call("/interviews",s,"POST",body,"return=minimal")
+        if(mode=="100ms") {
+            val inserted=JSONArray(call("/interviews",s,"POST",body,"return=representation"))
+            if(inserted.length()==0) throw IllegalStateException("Interview record create nahi hua.")
+            val interviewId=inserted.getJSONObject(0).optString("id")
+            try {
+                val result=JSONObject(callFunction("create-100ms-room",s,JSONObject()
+                    .put("jobId",jobId).put("applicantId",applicantId).put("applicantName","Workly India candidate")
+                    .put("scheduledAt",start.toString()).put("scheduledEndAt",end.toString()).put("interviewId",interviewId)))
+                if(!result.optBoolean("success")) throw IllegalStateException(result.optString("error","100ms room create nahi hua."))
+            } catch(e:Exception) {
+                runCatching { call("/interviews?id=eq.${enc(interviewId)}&host_user_id=eq.${enc(s.userId)}",s,"PATCH",JSONObject().put("status","cancelled"),"return=minimal") }
+                throw e
+            }
+        } else {
+            call("/interviews",s,"POST",body,"return=minimal")
+        }
     }
     suspend fun updateApplicantStatus(s:NativeSession, applicationId:String, status:String) {
         require(status=="shortlisted" || status=="rejected") { "Invalid application status." }
