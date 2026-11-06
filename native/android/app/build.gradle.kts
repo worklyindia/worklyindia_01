@@ -16,6 +16,27 @@ android {
         versionName = "1.0.0"
     }
 
+    signingConfigs {
+        create("release") {
+            val storePath = System.getenv("WORKLY_UPLOAD_STORE_FILE")
+            if (!storePath.isNullOrBlank()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("WORKLY_UPLOAD_STORE_PASSWORD")
+                keyAlias = System.getenv("WORKLY_UPLOAD_KEY_ALIAS")
+                keyPassword = System.getenv("WORKLY_UPLOAD_KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            val storePath = System.getenv("WORKLY_UPLOAD_STORE_FILE")
+            if (!storePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+    }
+
     buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
