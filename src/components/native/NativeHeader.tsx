@@ -44,9 +44,6 @@ export const NativeHeader = ({
         isIOS && "shadow-sm",
         isAndroid && "shadow-md"
       )}
-      style={{
-        paddingTop: 'env(safe-area-inset-top)',
-      }}
     >
       <div className="flex items-center justify-between h-14 px-4">
         {/* Left Section */}
