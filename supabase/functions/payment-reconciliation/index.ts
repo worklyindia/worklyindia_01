@@ -12,6 +12,7 @@ interface RazorpayPayment {
   order_id: string;
   status: string;
   amount: number;
+  currency: string;
   created_at: number;
 }
 
