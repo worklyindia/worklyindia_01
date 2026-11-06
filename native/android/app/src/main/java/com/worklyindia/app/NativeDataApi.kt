@@ -13,7 +13,7 @@ data class NativeEmployerApplicant(val id:String,val jobId:String,val applicantI
 data class NativeNotification(val id:String, val title:String, val message:String, val createdAt:String, val read:Boolean)
 data class NativeConversation(val id:String, val jobTitle:String, val lastMessage:String, val updatedAt:String)
 data class NativeChatMessage(val id:String, val senderId:String, val message:String, val createdAt:String)
-data class NativeInterview(val id:String,val jobTitle:String,val applicantId:String,val scheduledAt:String,val scheduledEndAt:String,val mode:String,val videoPlatform:String,val locationUrl:String,val jitsiMeetingUrl:String,val status:String,val notes:String)
+data class NativeInterview(val id:String,val jobTitle:String,val applicantId:String,val scheduledAt:String,val scheduledEndAt:String,val mode:String,val videoPlatform:String,val locationUrl:String,val jitsiMeetingUrl:String,val status:String,val notes:String,val hostUserId:String)
 
 object NativeDataApi {
     private const val BASE="https://jubwzelupbntbetpajqb.supabase.co/rest/v1"
@@ -92,16 +92,21 @@ object NativeDataApi {
 
     suspend fun interviews(s:NativeSession):List<NativeInterview> {
         val uid=enc(s.userId)
-        val path="/interviews?select=id,applicant_id,scheduled_at,scheduled_end_at,mode,video_platform,location_url,jitsi_meeting_url,status,notes,job:jobs(title)&or=(applicant_id.eq."+uid+",host_user_id.eq."+uid+")&order=scheduled_at.asc&limit=100"
+        val path="/interviews?select=id,applicant_id,scheduled_at,scheduled_end_at,mode,video_platform,location_url,jitsi_meeting_url,status,notes,host_user_id,job:jobs(title)&or=(applicant_id.eq."+uid+",host_user_id.eq."+uid+")&order=scheduled_at.asc&limit=100"
         val a=JSONArray(call(path,s))
         return (0 until a.length()).map { i ->
             val o=a.getJSONObject(i)
             NativeInterview(o.optString("id"),o.optJSONObject("job")?.optString("title")?.takeIf{it.isNotBlank()}?:"Interview",
                 o.optString("applicant_id"),o.optString("scheduled_at"),o.optString("scheduled_end_at"),
-                o.optString("mode"),o.optString("video_platform"),o.optString("location_url"),o.optString("jitsi_meeting_url"),o.optString("status"),o.optString("notes"))
+                o.optString("mode"),o.optString("video_platform"),o.optString("location_url"),o.optString("jitsi_meeting_url"),o.optString("status"),o.optString("notes"),o.optString("host_user_id"))
         }
     }
 
+    suspend fun updateInterviewStatus(s:NativeSession, interviewId:String, status:String) {
+        require(status in setOf("cancelled","completed")) { "Interview status invalid hai." }
+        val body=JSONObject().put("status",status).put("updated_at",java.time.Instant.now().toString())
+        call("/interviews?id=eq.${enc(interviewId)}&host_user_id=eq.${enc(s.userId)}",s,"PATCH",body,"return=minimal")
+    }
     suspend fun scheduleInterview(s:NativeSession, jobId:String, applicantId:String, localDateTime:String, mode:String, locationOrLink:String, notes:String) {
         require(mode in setOf("online","jitsi","phone","in_person")) { "Interview mode invalid hai." }
         val local=java.time.LocalDateTime.parse(localDateTime.trim())
