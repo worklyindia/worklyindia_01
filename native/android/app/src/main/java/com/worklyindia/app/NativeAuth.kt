@@ -99,8 +99,9 @@ object NativeAuth {
 
     suspend fun resetPassword(email: String, userType: String) = withContext(Dispatchers.IO) {
         val redirect = if (userType == "employer") "https://worklyindia.devs.surf/employer-auth?type=recovery" else "https://worklyindia.devs.surf/reset-password"
-        request("POST", "/auth/v1/recover",
-            JSONObject().put("email", email.trim().lowercase()).put("redirect_to", redirect))
+        val encodedRedirect = java.net.URLEncoder.encode(redirect, "UTF-8")
+        request("POST", "/auth/v1/recover?redirect_to=$encodedRedirect",
+            JSONObject().put("email", email.trim().lowercase()))
     }
 
     suspend fun signUp(context: Context, email: String, password: String, name: String): NativeSession? = withContext(Dispatchers.IO) {
