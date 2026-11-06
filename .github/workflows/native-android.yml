@@ -47,7 +47,7 @@ jobs:
         working-directory: native/android
         run: gradle assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: workly-india-native-debug-apk
@@ -55,21 +55,61 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Prepare release signing key
+        id: release-signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WORKLY_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.WORKLY_UPLOAD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            mkdir -p "$RUNNER_TEMP/workly-signing"
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/workly-signing/upload-key.jks"
+            echo "WORKLY_RELEASE_READY=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "WORKLY_RELEASE_READY=false" >> "$GITHUB_OUTPUT"
+            echo "Release signing secrets are not configured; skipping signed release APK."
+          fi
+
+      - name: Build signed release APK
+        if: steps.release-signing.outputs.WORKLY_RELEASE_READY == 'true'
+        working-directory: native/android
+        env:
+          WORKLY_UPLOAD_STORE_FILE: ${{ runner.temp }}/workly-signing/upload-key.jks
+          WORKLY_UPLOAD_STORE_PASSWORD: ${{ secrets.WORKLY_UPLOAD_STORE_PASSWORD }}
+          WORKLY_UPLOAD_KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
+          WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
+        run: gradle assembleRelease --stacktrace
+
+      - name: Upload signed release APK
+        if: steps.release-signing.outputs.WORKLY_RELEASE_READY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: workly-india-native-signed-release-apk
+          path: native/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Add build summary
         if: always()
         run: |
           {
             echo "## Workly India — Native Android Build"
             echo ""
-            printf -- '- **Commit:** `%s`\n' "$GITHUB_SHA"
+            printf -- '- **Commit:** `%s`\\n' "$GITHUB_SHA"
             echo ""
             if [ -f "native/android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-              echo "### APK"
+              echo "### Debug APK"
               echo "- Debug APK generated successfully."
-              echo '- Artifact name: `workly-india-native-debug-apk`'
-              echo "- Download it from this workflow run's **Artifacts** section (available for 14 days)."
+              echo "- Artifact: `workly-india-native-debug-apk`"
+            fi
+            if [ -f "native/android/app/build/outputs/apk/release/app-release.apk" ]; then
+              echo "### Signed release APK"
+              echo "- Signed release APK generated successfully."
+              echo "- Artifact: `workly-india-native-signed-release-apk`"
             else
-              echo "### Build result"
-              echo "- APK was not generated. Check the failed step's logs."
+              echo "### Release signing"
+              echo "- Signed release APK not generated. Add the four WORKLY_UPLOAD_* repository secrets to enable it."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
