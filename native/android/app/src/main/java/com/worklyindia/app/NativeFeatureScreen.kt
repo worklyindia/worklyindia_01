@@ -90,7 +90,7 @@ fun NativeFeatureScreen(
     var chatReturnScreen by remember { mutableStateOf("Messages") }
     var schedulingApplicant by remember { mutableStateOf<NativeEmployerApplicant?>(null) }
     var interviewDateTime by remember { mutableStateOf("") }
-    var interviewMode by remember { mutableStateOf("online") }
+    var interviewMode by remember { mutableStateOf("jitsi") }
     var interviewLocation by remember { mutableStateOf("") }
     var interviewNotes by remember { mutableStateOf("") }
     val context=LocalContext.current
@@ -189,7 +189,7 @@ fun NativeFeatureScreen(
                                     AssistChip(onClick={},label={Text(interview.status.replace("_"," ").replaceFirstChar{it.uppercase()})})
                                 }
                                 Text(whenText,style=MaterialTheme.typography.bodyMedium)
-                                Text("Type: "+when(interview.mode){"online"->"Online";"phone"->"Phone";"in_person"->"In person";else->interview.mode},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Type: "+when(interview.mode){"online"->"Custom link";"jitsi"->"Jitsi video";"phone"->"Phone";"in_person"->"In person";else->interview.mode},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(if(interview.applicantId==session.userId) "Your interview" else "Candidate interview",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 if(interview.locationUrl.isNotBlank()) {
                                     if(interview.locationUrl.startsWith("https://") || interview.locationUrl.startsWith("http://")) {
@@ -355,7 +355,7 @@ fun NativeFeatureScreen(
                         onSchedule={ candidate ->
                             schedulingApplicant=candidate
                             interviewDateTime=java.time.LocalDateTime.now().plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0).toString()
-                            interviewMode="online"; interviewLocation=""; interviewNotes=""
+                            interviewMode="jitsi"; interviewLocation=""; interviewNotes=""
                         },
                         onShortlist={
                             updatingApplicantId=applicant.id
@@ -399,11 +399,11 @@ fun NativeFeatureScreen(
                     OutlinedTextField(interviewDateTime,{interviewDateTime=it},Modifier.fillMaxWidth(),label={Text("Date & time")},supportingText={Text("YYYY-MM-DDTHH:MM (device local time)")},singleLine=true)
                     Text("Interview type",style=MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                        listOf("online","phone","in_person").forEach { mode -> FilterChip(selected=interviewMode==mode,onClick={interviewMode=mode},label={Text(when(mode){"online"->"Online";"phone"->"Phone";else->"In person"})}) }
+                        listOf("jitsi","online","phone","in_person").forEach { mode -> FilterChip(selected=interviewMode==mode,onClick={interviewMode=mode},label={Text(when(mode){"jitsi"->"Free video";"online"->"Custom link";"phone"->"Phone";else->"In person"})}) }
                     }
-                    OutlinedTextField(interviewLocation,{interviewLocation=it},Modifier.fillMaxWidth(),label={Text(if(interviewMode=="online") "Meeting link (optional)" else if(interviewMode=="phone") "Phone details (optional)" else "Interview address (optional)")},singleLine=true)
+                    OutlinedTextField(interviewLocation,{interviewLocation=it},Modifier.fillMaxWidth(),label={Text(if(interviewMode=="online") "Meeting link (optional)" else if(interviewMode=="jitsi") "Auto-generated Jitsi link" else if(interviewMode=="phone") "Phone details (optional)" else "Interview address (optional)")},singleLine=true)
                     OutlinedTextField(interviewNotes,{interviewNotes=it},Modifier.fillMaxWidth(),label={Text("Notes (optional)")},minLines=2)
-                    Text("30-minute interview. Candidate notification depends on existing notification setup.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if(interviewMode=="jitsi") "30-minute Jitsi video room will be created automatically." else "30-minute interview. Candidate notification depends on existing notification setup.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
