@@ -70,7 +70,25 @@ object NativePushManager {
                 .put("enabled", true)
                 .put("last_seen_at", java.time.Instant.now().toString())
 
-            val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?on_conflict=fcm_token").openConnection() as HttpURLConnection)
+            // Keep exactly one current Android FCM registration per account.
+            // The web subscription is stored separately under platform=web.
+            val cleanup = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&platform=eq.android&fcm_token=neq.${URLEncoder.encode(token, "UTF-8")}").openConnection() as HttpURLConnection)
+            cleanup.requestMethod = "DELETE"
+            cleanup.connectTimeout = 15000
+            cleanup.readTimeout = 20000
+            cleanup.setRequestProperty("apikey", SUPABASE_KEY)
+            cleanup.setRequestProperty("Authorization", "Bearer ${session.accessToken}")
+            cleanup.setRequestProperty("Prefer", "return=minimal")
+            val cleanupStatus = cleanup.responseCode
+            val cleanupResponse = (if (cleanupStatus in 200..299) cleanup.inputStream else cleanup.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            cleanup.disconnect()
+            if (cleanupStatus !in 200..299) {
+                android.util.Log.e("WorklyPush", "Old Android token cleanup failed [$cleanupStatus]: $cleanupResponse")
+                return@withContext false
+            }
+
+            val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?on_conflict=user_id,platform").openConnection() as HttpURLConnection)
             connection.requestMethod = "POST"
             connection.connectTimeout = 15000
             connection.readTimeout = 20000
