@@ -27,6 +27,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
@@ -87,12 +91,20 @@ object NativeHomeApi {
 }
 
 @Composable
-fun NativeScrollReveal(content: @Composable () -> Unit) {
+fun NativeScrollReveal(type: String = "fade-up", content: @Composable () -> Unit) {
     var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { delay(24); visible = true }
+    val screenHeightPx = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val revealModifier = Modifier.onGloballyPositioned { coordinates ->
+        if (!visible) {
+            val top = coordinates.positionInRoot().y
+            val bottom = top + coordinates.size.height
+            if (top < screenHeightPx && bottom > 0f) visible = true
+        }
+    }
     val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(600, easing = FastOutSlowInEasing), label = "homeRevealAlpha")
-    val offset by animateFloatAsState(if (visible) 0f else 30f, tween(600, easing = FastOutSlowInEasing), label = "homeRevealOffset")
-    androidx.compose.foundation.layout.Box(Modifier.graphicsLayer { this.alpha = alpha; translationY = offset }) { content() }
+    val offset by animateFloatAsState(if (visible) 0f else if (type == "zoom-in") 0f else 30f, tween(600, easing = FastOutSlowInEasing), label = "homeRevealOffset")
+    val scale by animateFloatAsState(if (visible) 1f else if (type == "zoom-in") 0.94f else 1f, tween(600, easing = FastOutSlowInEasing), label = "homeRevealScale")
+    androidx.compose.foundation.layout.Box(revealModifier.graphicsLayer { this.alpha = alpha; translationY = offset; scaleX = scale; scaleY = scale }) { content() }
 }
 
 @Composable
