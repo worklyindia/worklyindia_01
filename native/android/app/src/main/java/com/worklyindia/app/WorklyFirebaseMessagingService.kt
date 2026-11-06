@@ -28,6 +28,7 @@ class WorklyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        if (!NativePushManager.isOptedIn(applicationContext)) return
         // The existing Workly notification hub sends FCM data-only messages.
         // Display exactly one native notification here (never an FCM auto-display duplicate).
         val payload = message.data.toMutableMap()
