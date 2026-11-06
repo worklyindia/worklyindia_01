@@ -104,7 +104,7 @@ const handler = async (req: Request): Promise<Response> => {
       const { interviewId } = requestBody;
       if (!interviewId) throw new Error("interviewId is required");
       const { data: interview, error: lookupError } = await admin.from("interviews")
-        .select("id,applicant_id,host_user_id,video_platform,jitsi_meeting_url,location_url,videosdk_room_id,videosdk_host_token,videosdk_participant_tokens,hms_room_id,hms_room_url,hms_host_token,hms_participant_tokens,hms_host_prebuilt_url,hms_participant_prebuilt_urls")
+        .select("id,applicant_id,host_user_id,mode,video_platform,jitsi_meeting_url,location_url,videosdk_room_id,videosdk_host_token,videosdk_participant_tokens,hms_room_id,hms_room_url,hms_host_token,hms_participant_tokens,hms_host_prebuilt_url,hms_participant_prebuilt_urls")
         .eq("id", interviewId).maybeSingle();
       if (lookupError || !interview) {
         return new Response(JSON.stringify({ success: false, error: "Interview not found" }), {
@@ -119,7 +119,7 @@ const handler = async (req: Request): Promise<Response> => {
           status: 403, headers: { "Content-Type": "application/json", ...corsHeaders }
         });
       }
-      const platform = (interview.video_platform || "").toLowerCase();
+      const platform = (interview.video_platform || (interview.mode === "100ms_iframe" ? "100ms" : interview.mode === "videosdk_iframe" ? "videosdk" : interview.mode === "jitsi" ? "jitsi" : "")).toLowerCase();
       if (platform === "100ms") {
         const roomCode = isHost ? interview.hms_host_token : interview.hms_participant_tokens?.[uid];
         const meetingUrl = isHost ? (interview.hms_host_prebuilt_url || interview.hms_room_url) :
