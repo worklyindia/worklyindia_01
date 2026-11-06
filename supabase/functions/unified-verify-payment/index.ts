@@ -959,6 +959,11 @@ async function handleVerifyDonation(supabase: any, params: any) {
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(donation.amount) * 100), {
+    type: 'donation',
+    campaign_id: String(donation.campaign_id),
+  });
+
   const { error: updErr } = await supabase
     .from('donations').update({
       status: 'paid',
