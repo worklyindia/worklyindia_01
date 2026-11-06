@@ -79,7 +79,7 @@ private fun NativeVideoSDKMeetingScreen(
     ) { result ->
         if (result.values.all { it }) {
             joinNativeVideoSDKMeeting(
-                context.applicationContext, meetingId, token, participantName,
+                context, meetingId, token, participantName,
                 onMeeting = { meeting = it },
                 onLocalParticipant = { peer -> if(participants.none { it.id == peer.id }) participants.add(peer) },
                 onPeerJoined = { peer -> if(participants.none { it.id == peer.id }) participants.add(peer) },
@@ -211,7 +211,7 @@ private fun NativeVideoSDKParticipantTile(participant: Participant) {
 }
 
 private fun joinNativeVideoSDKMeeting(
-    appContext: Context,
+    meetingContext: Context,
     meetingId: String,
     token: String,
     participantName: String,
@@ -225,7 +225,7 @@ private fun joinNativeVideoSDKMeeting(
     try {
         VideoSDK.config(token)
         val meeting = VideoSDK.initMeeting(
-            appContext,
+            meetingContext,
             meetingId,
             participantName,
             true,
@@ -234,8 +234,7 @@ private fun joinNativeVideoSDKMeeting(
             null,
             false,
             null,
-            null,
-            VideoSDK.PreferredProtocol.UDP_OVER_TCP
+            null
         )
         meeting.addEventListener(object : MeetingEventListener() {
             override fun onMeetingJoined() {
