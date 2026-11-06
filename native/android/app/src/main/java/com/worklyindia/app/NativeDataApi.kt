@@ -135,6 +135,21 @@ object NativeDataApi {
         call("/profiles?on_conflict=user_id",s,"POST",body,"resolution=merge-duplicates,return=minimal")
     }
 
+    suspend fun loadCompany(s:NativeSession):JSONObject? {
+        val a=JSONArray(call("/companies?select=id,company_name,industry,company_size,location,website,description,phone,email,country,state,city,postal_code,whatsapp_number&user_id=eq.${enc(s.userId)}&limit=1",s))
+        return if(a.length()==0)null else a.getJSONObject(0)
+    }
+
+    suspend fun saveCompany(s:NativeSession, fields:JSONObject) {
+        val existing=loadCompany(s)
+        val body=JSONObject(fields.toString()).put("user_id",s.userId)
+        if(existing==null) {
+            call("/companies",s,"POST",body,"return=minimal")
+        } else {
+            call("/companies?id=eq.${enc(existing.optString("id"))}&user_id=eq.${enc(s.userId)}",s,"PATCH",body,"return=minimal")
+        }
+    }
+
     suspend fun companyId(s:NativeSession):String? {
         val a=JSONArray(call("/companies?select=id&user_id=eq.${enc(s.userId)}&limit=1",s))
         return if(a.length()==0)null else a.getJSONObject(0).optString("id").takeIf{it.isNotBlank()}
