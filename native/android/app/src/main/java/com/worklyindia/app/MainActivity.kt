@@ -234,8 +234,8 @@ private fun WorklyApp() {
         },
         bottomBar = {
             if (selected == null && selectedFeature == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Search,
-                    "Saved" to Icons.Default.Bookmark, "More" to Icons.Default.Menu, "Account" to Icons.Default.Person)
+                listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Work,
+                    "Activity" to Icons.Default.Timeline, "More" to Icons.Default.Menu)
                     .forEach { (label, icon) ->
                         NavigationBarItem(selected = tab == label, onClick = { selectedFeature = null; selected = null; tab = label },
                             icon = { Icon(icon, contentDescription = label) }, label = { Text(label) })
@@ -266,6 +266,13 @@ private fun WorklyApp() {
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
                 onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
                 onEmployer = { tab = "Account" }, onFeature = { feature -> when (feature) { "Favorites" -> tab = "Saved"; "Employee", "Post Job" -> selectedFeature = "Employer dashboard"; "Resume" -> selectedFeature = "My resume"; else -> selectedFeature = feature } })
+            tab == "Activity" -> NativeFeatureScreen(
+                m, "My applications", authSession,
+                onBack = { tab = "Home" },
+                paymentResult = paymentActivity?.razorpayResult,
+                onStartCheckout = { order -> paymentActivity?.openRazorpayCheckout(order, authSession?.email.orEmpty()) },
+                onConsumePaymentResult = { paymentActivity?.clearRazorpayResult() }
+            )
             tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
@@ -440,14 +447,6 @@ private fun HomeScreen(
     onEmployer: () -> Unit, onFeature: (String) -> Unit
 ) {
     var q by rememberSaveable { mutableStateOf("") }
-    val quickActions = listOf(
-        Triple("Resume", "Build your resume", Icons.Default.Article),
-        Triple("AI Chat", "Career assistant", Icons.Default.AutoAwesome),
-        Triple("Refer", "Invite a friend", Icons.Default.CardGiftcard),
-        Triple("Companies", "Explore employers", Icons.Default.Business),
-        Triple("Developer", "Developer tools", Icons.Default.Code),
-        Triple("Post Job", "Create a job listing", Icons.Default.AddBox)
-    )
     LazyColumn(
         m.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -518,33 +517,13 @@ private fun HomeScreen(
         }
         item { NativeHomeCareerCategories(onCategory = onCategory, onAll = onAll) }
         item {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Your career tools", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { onFeature("More") }) { Text("Explore all") }
-                }
-                quickActions.chunked(3).forEach { pair ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        pair.forEach { (title, subtitle, icon) ->
-                            Card(
-                                onClick = { onFeature(title) }, modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
-                            ) {
-                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                                    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                                        Icon(icon, null, Modifier.padding(9.dp).size(21.dp), tint = MaterialTheme.colorScheme.primary)
-                                    }
-                                    Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 2, minLines = 2)
-                                }
-                            }
-                        }
-                        if (pair.size < 3) repeat(3 - pair.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                HomeQuickStat(Modifier.weight(1f), "Find jobs", Icons.Default.Work, onAll)
+                HomeQuickStat(Modifier.weight(1f), "Resume tools", Icons.Default.Description) { onFeature("My resume") }
+                HomeQuickStat(Modifier.weight(1f), "For employers", Icons.Default.BusinessCenter, onEmployer)
             }
         }
         item {
@@ -572,6 +551,31 @@ private fun androidx.compose.foundation.lazy.LazyListScope.jobList(
         is LoadState.Ready -> {
             if (state.jobs.isEmpty()) item { Message(Icons.Default.SearchOff, "Koi job nahi mili", "Dusra shabd ya category try karein.") }
             items(state.jobs.take(take), key = { it.id }) { JobCard(it, it.id in saved, { onSave(it) }) { onJob(it) } }
+        }
+    }
+}
+
+@Composable
+private fun HomeQuickStat(
+    modifier: Modifier,
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 82.dp),
+        shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
+            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
         }
     }
 }
