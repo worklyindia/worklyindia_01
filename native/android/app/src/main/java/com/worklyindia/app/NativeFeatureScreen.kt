@@ -458,8 +458,8 @@ private suspend fun callNativeCareerAI(
         connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
         val code = connection.responseCode
         val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-        val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
         if (code !in 200..299) {
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             val detail = runCatching { JSONObject(body).optString("userMessage").ifBlank { JSONObject(body).optString("error") } }.getOrNull()
             throw IllegalStateException(detail?.takeIf { it.isNotBlank() } ?: when (code) {
                 401, 403 -> "Session expire ho gayi. Dobara login karein."
@@ -468,30 +468,39 @@ private suspend fun callNativeCareerAI(
             })
         }
         if (connection.contentType?.contains("application/json", true) == true) {
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             val json = JSONObject(body)
             return@withContext json.optString("response").ifBlank { json.optString("message") }
         }
         var full = ""
         var latestStatus: String? = "Workly AI is thinking…"
-        body.lineSequence().filter { it.startsWith("data: ") }.forEach { line ->
-            val raw = line.removePrefix("data: ").trim()
-            if (raw.isBlank() || raw == "[DONE]") return@forEach
-            val event = runCatching { JSONObject(raw) }.getOrNull() ?: return@forEach
-            when (event.optString("type")) {
-                "status" -> {
-                    latestStatus = event.optString("text").takeIf { it.isNotBlank() } ?: latestStatus
-                    withContext(Dispatchers.Main) { onUpdate(full, latestStatus) }
-                }
-                "error" -> throw IllegalStateException(event.optString("message").ifBlank { "AI response mein problem aa gayi." })
-                "progress_message" -> {
-                    latestStatus = event.optString("text").takeIf { it.isNotBlank() } ?: latestStatus
-                    withContext(Dispatchers.Main) { onUpdate(full, latestStatus) }
-                }
-                else -> {
-                    val delta = event.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta")?.optString("content").orEmpty()
-                    if (delta.isNotEmpty()) {
-                        full += delta
-                        withContext(Dispatchers.Main) { onUpdate(full, "Workly AI is replying…") }
+        stream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
+            while (true) {
+                val line = reader.readLine() ?: break
+                if (!line.startsWith("data: ")) continue
+                val raw = line.removePrefix("data: ").trim()
+                if (raw.isBlank() || raw == "[DONE]") continue
+                val event = runCatching { JSONObject(raw) }.getOrNull() ?: continue
+                when (event.optString("type")) {
+                    "status" -> {
+                        latestStatus = event.optString("text").takeIf { it.isNotBlank() } ?: latestStatus
+                        withContext(Dispatchers.Main) { onUpdate(full, latestStatus) }
+                    }
+                    "error" -> throw IllegalStateException(event.optString("message").ifBlank { "AI response mein problem aa gayi." })
+                    "progress_message" -> {
+                        latestStatus = event.optString("text").takeIf { it.isNotBlank() } ?: latestStatus
+                        withContext(Dispatchers.Main) { onUpdate(full, latestStatus) }
+                    }
+                    "image_start" -> {
+                        latestStatus = "Creating image…"
+                        withContext(Dispatchers.Main) { onUpdate(full, latestStatus) }
+                    }
+                    else -> {
+                        val delta = event.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta")?.optString("content").orEmpty()
+                        if (delta.isNotEmpty()) {
+                            full += delta
+                            withContext(Dispatchers.Main) { onUpdate(full, "Workly AI is replying…") }
+                        }
                     }
                 }
             }
