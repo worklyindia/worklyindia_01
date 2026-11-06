@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
 import { LocationData, GeoLocation, FullAddress, fetchIPLocation, reverseGeocode, getGeolocation, checkGeolocationSupport } from '@/utils/locationUtils';
 
 export type LocationState = 'idle' | 'detecting-ip' | 'detecting-geo' | 'success' | 'error';
@@ -182,7 +181,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       
       if (abortControllerRef.current?.signal.aborted) return;
       
-      const isNativeGPS = Capacitor.isNativePlatform();
+      const isNativeGPS = false;
       console.log(`📍 Got ${isNativeGPS ? 'GPS' : 'browser'} position:`, position.coords, `accuracy: ${position.coords.accuracy}m`);
       
       const lat = position.coords.latitude;
