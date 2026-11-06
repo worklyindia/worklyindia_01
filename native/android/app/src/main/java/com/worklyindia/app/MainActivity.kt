@@ -22,6 +22,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,12 +49,6 @@ class MainActivity : Activity() {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
         }
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
-        }
-
         webView = WebView(this)
         webView.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -77,6 +73,16 @@ class MainActivity : Activity() {
         }
         ViewCompat.requestApplyInsets(root)
         webView.settings.apply {
+            // Enable Android Credential Manager-backed WebAuthn in supported System WebView versions.
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
+                WebSettingsCompat.setWebAuthenticationSupport(
+                    this,
+                    WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP
+                )
+                android.util.Log.i("WorklyWebView", "WebAuthn support enabled for the Workly Android app")
+            } else {
+                android.util.Log.w("WorklyWebView", "This Android System WebView version does not support WebAuthn")
+            }
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
@@ -188,6 +194,29 @@ class MainActivity : Activity() {
 
     inner class WorklyWebBridge {
         @JavascriptInterface
+        fun isNativeAndroidApp(): Boolean = true
+
+        @JavascriptInterface
+        fun getNotificationPermissionStatus(): String {
+            val runtimeGranted = Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            return if (runtimeGranted && androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()) "granted" else "denied"
+        }
+
+        @JavascriptInterface
+        fun requestNativeNotifications() {
+            runOnUiThread {
+                if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                } else {
+                    registerNativePushAndNotifyJs(getNotificationPermissionStatus() == "granted")
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun clearAuthSession() {
             runOnUiThread {
                 val old = NativeAuth.session(this@MainActivity)
@@ -227,12 +256,38 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            val granted = Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            registerNativePushAndNotifyJs(granted)
+        }
         if (requestCode == REQUEST_MEDIA) {
             val request = pendingWebPermission
             pendingWebPermission = null
             if (request != null) {
                 val granted = permissions.indices.all { grantResults.getOrNull(it) == PackageManager.PERMISSION_GRANTED }
                 if (granted) request.grant(request.resources) else request.deny()
+            }
+        }
+    }
+
+    private fun registerNativePushAndNotifyJs(permissionGranted: Boolean) {
+        if (!permissionGranted || !androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('workly:native-notification-result',{detail:{granted:false,registered:false}}))",
+                null
+            )
+            return
+        }
+        activityScope.launch(Dispatchers.IO) {
+            val session = NativeAuth.session(this@MainActivity)
+            val registered = session?.let { NativePushManager.register(this@MainActivity, it) } ?: false
+            runOnUiThread {
+                val granted = permissionGranted && androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
+                webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('workly:native-notification-result',{detail:{granted:$granted,registered:$registered}}))",
+                    null
+                )
             }
         }
     }
