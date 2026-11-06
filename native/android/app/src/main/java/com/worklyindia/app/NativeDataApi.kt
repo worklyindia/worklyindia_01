@@ -13,7 +13,7 @@ data class NativeEmployerApplicant(val id:String,val jobId:String,val applicantI
 data class NativeNotification(val id:String, val title:String, val message:String, val createdAt:String, val read:Boolean)
 data class NativeConversation(val id:String, val jobTitle:String, val lastMessage:String, val updatedAt:String)
 data class NativeChatMessage(val id:String, val senderId:String, val message:String, val createdAt:String)
-data class NativeInterview(val id:String,val jobTitle:String,val applicantId:String,val scheduledAt:String,val scheduledEndAt:String,val mode:String,val locationUrl:String,val jitsiMeetingUrl:String,val status:String,val notes:String)
+data class NativeInterview(val id:String,val jobTitle:String,val applicantId:String,val scheduledAt:String,val scheduledEndAt:String,val mode:String,val videoPlatform:String,val locationUrl:String,val jitsiMeetingUrl:String,val status:String,val notes:String)
 
 object NativeDataApi {
     private const val BASE="https://jubwzelupbntbetpajqb.supabase.co/rest/v1"
@@ -92,13 +92,13 @@ object NativeDataApi {
 
     suspend fun interviews(s:NativeSession):List<NativeInterview> {
         val uid=enc(s.userId)
-        val path="/interviews?select=id,applicant_id,scheduled_at,scheduled_end_at,mode,location_url,jitsi_meeting_url,status,notes,job:jobs(title)&or=(applicant_id.eq."+uid+",host_user_id.eq."+uid+")&order=scheduled_at.asc&limit=100"
+        val path="/interviews?select=id,applicant_id,scheduled_at,scheduled_end_at,mode,video_platform,location_url,jitsi_meeting_url,status,notes,job:jobs(title)&or=(applicant_id.eq."+uid+",host_user_id.eq."+uid+")&order=scheduled_at.asc&limit=100"
         val a=JSONArray(call(path,s))
         return (0 until a.length()).map { i ->
             val o=a.getJSONObject(i)
             NativeInterview(o.optString("id"),o.optJSONObject("job")?.optString("title")?.takeIf{it.isNotBlank()}?:"Interview",
                 o.optString("applicant_id"),o.optString("scheduled_at"),o.optString("scheduled_end_at"),
-                o.optString("mode"),o.optString("location_url"),o.optString("jitsi_meeting_url"),o.optString("status"),o.optString("notes"))
+                o.optString("mode"),o.optString("video_platform"),o.optString("location_url"),o.optString("jitsi_meeting_url"),o.optString("status"),o.optString("notes"))
         }
     }
 
@@ -108,12 +108,16 @@ object NativeDataApi {
         require(local.isAfter(java.time.LocalDateTime.now())) { "Interview ka time future mein hona chahiye." }
         val start=local.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime()
         val end=start.plusMinutes(30)
-        val body=JSONObject().put("job_id",jobId).put("applicant_id",applicantId).put("scheduled_at",start.toString()).put("scheduled_end_at",end.toString()).put("mode",mode).put("status","scheduled").put("host_user_id",s.userId)
+        val storedMode=if(mode=="jitsi") "online" else mode
+        val body=JSONObject().put("job_id",jobId).put("applicant_id",applicantId).put("scheduled_at",start.toString()).put("scheduled_end_at",end.toString()).put("mode",storedMode).put("status","scheduled").put("host_user_id",s.userId)
         if(mode=="jitsi") {
             val roomName="WorklyIndia-"+java.util.UUID.randomUUID().toString().replace("-","")
-            body.put("jitsi_room_name",roomName).put("jitsi_meeting_url","https://meet.jit.si/"+roomName)
+            val meetingUrl="https://meet.jit.si/"+roomName
+            body.put("video_platform","jitsi").put("jitsi_room_name",roomName).put("jitsi_meeting_url",meetingUrl).put("location_url",meetingUrl)
+        } else if(mode=="online") {
+            body.put("video_platform","custom")
         }
-        if(locationOrLink.isNotBlank()) body.put("location_url",locationOrLink.trim())
+        if(locationOrLink.isNotBlank() && mode!="jitsi") body.put("location_url",locationOrLink.trim())
         if(notes.isNotBlank()) body.put("notes",notes.trim())
         call("/interviews",s,"POST",body,"return=minimal")
     }
