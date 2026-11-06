@@ -12,6 +12,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -36,6 +37,8 @@ class MainActivity : Activity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
+    private var failedUrl: String? = null
+    private var showingOfflinePage = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,7 +92,7 @@ class MainActivity : Activity() {
             loadsImagesAutomatically = true
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(false)
-            cacheMode = WebSettings.LOAD_DEFAULT
+            cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             allowFileAccess = false
             allowContentAccess = true
@@ -151,9 +154,11 @@ class MainActivity : Activity() {
         }
         // The native container reserves the status/navigation bar areas exactly once.
         setContentView(root)
+        val savedPage = getSharedPreferences(APP_PREFS, MODE_PRIVATE).getString(LAST_PAGE_URL, null)
         val target = intent.getStringExtra("notification_url")
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
+            ?: savedPage
             ?: website
         webView.loadUrl(target)
     }
@@ -214,6 +219,7 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun requestNativeNotifications() {
             runOnUiThread {
+                NativePushManager.setOptedIn(this@MainActivity, true)
                 if (!androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled() ||
                     (Build.VERSION.SDK_INT >= 33 &&
                         ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
@@ -261,8 +267,10 @@ class MainActivity : Activity() {
                         user.optString("email"),
                         if (role.equals("employer", true)) "employer" else "jobseeker"
                     )
-                    activityScope.launch(Dispatchers.IO) {
-                        NativePushManager.register(this@MainActivity, saved)
+                    if (NativePushManager.isOptedIn(this@MainActivity)) {
+                        activityScope.launch(Dispatchers.IO) {
+                            NativePushManager.register(this@MainActivity, saved)
+                        }
                     }
                 } catch (error: Exception) {
                     android.util.Log.w("WorklyWebView", "Website session sync skipped", error)
@@ -328,7 +336,9 @@ class MainActivity : Activity() {
         if (returnedFromNotificationSettings) {
             getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).edit()
                 .putBoolean(NOTIFICATION_SETTINGS_OPENED, false).apply()
-            if (::webView.isInitialized && getNotificationPermissionStatusForActivity() == "granted") {
+            if (::webView.isInitialized && NativePushManager.isOptedIn(this) &&
+                getNotificationPermissionStatusForActivity() == "granted"
+            ) {
                 registerNativePushAndNotifyJs(true)
             }
         }
@@ -366,6 +376,8 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_MEDIA = 702
+        private const val APP_PREFS = "workly_app_state"
+        private const val LAST_PAGE_URL = "last_page_url"
         private const val NOTIFICATION_PREFS = "workly_notification_permissions"
         private const val NOTIFICATION_PERMISSION_ASKED = "post_notifications_asked"
         private const val NOTIFICATION_SETTINGS_OPENED = "notification_settings_opened"
