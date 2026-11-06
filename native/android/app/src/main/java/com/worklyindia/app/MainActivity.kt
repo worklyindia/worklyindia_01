@@ -283,7 +283,11 @@ private fun NativeWebsiteHeader(
     onSearch: () -> Unit,
     isLoggedIn: Boolean
 ) {
-    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+    Surface(
+        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp
+    ) {
         Column {
             Box(Modifier.fillMaxWidth().height(3.dp).background(MaterialTheme.colorScheme.primary))
             Row(
