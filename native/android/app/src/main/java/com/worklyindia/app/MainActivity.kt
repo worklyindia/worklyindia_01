@@ -277,6 +277,39 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
+        fun unsubscribeNativeNotifications() {
+            runOnUiThread {
+                val session = NativeAuth.session(this@MainActivity)
+                if (session == null) {
+                    NativePushManager.setOptedIn(this@MainActivity, false)
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('workly:native-unsubscribe-result',{detail:{success:true}}))",
+                        null
+                    )
+                    return@runOnUiThread
+                }
+                activityScope.launch(Dispatchers.IO) {
+                    val success = NativePushManager.unregister(this@MainActivity, session)
+                    runOnUiThread {
+                        webView.evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('workly:native-unsubscribe-result',{detail:{success:$success}}))",
+                            null
+                        )
+                    }
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun retryConnection() {
+            runOnUiThread {
+                val target = failedUrl ?: website
+                showingOfflinePage = false
+                webView.loadUrl(target)
+            }
+        }
+
+        @JavascriptInterface
         fun clearAuthSession() {
             runOnUiThread {
                 val old = NativeAuth.session(this@MainActivity)
