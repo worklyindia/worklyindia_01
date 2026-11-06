@@ -65,7 +65,7 @@ object NativePushManager {
 
             val body = JSONObject()
                 .put("user_id", session.userId)
-                .put("user_role", "jobseeker")
+                .put("user_role", session.userRole)
                 .put("fcm_token", token)
                 .put("platform", "android")
                 .put("device_info", info)
