@@ -300,9 +300,10 @@ class MainActivity : Activity() {
             )
             return
         }
+        val appContext = applicationContext
         activityScope.launch(Dispatchers.IO) {
-            val session = NativeAuth.session(this@MainActivity)
-            val registered = session?.let { NativePushManager.register(this@MainActivity, it) } ?: false
+            val session = NativeAuth.session(appContext)
+            val registered = session?.let { NativePushManager.register(appContext, it) } ?: false
             runOnUiThread {
                 val granted = permissionGranted && androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
                 webView.evaluateJavascript(
