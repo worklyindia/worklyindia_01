@@ -305,7 +305,7 @@ class MainActivity : Activity() {
             val session = NativeAuth.session(appContext)
             val registered = session?.let { NativePushManager.register(appContext, it) } ?: false
             runOnUiThread {
-                val granted = permissionGranted && androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
+                val granted = permissionGranted && androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
                 webView.evaluateJavascript(
                     "window.dispatchEvent(new CustomEvent('workly:native-notification-result',{detail:{granted:$granted,registered:$registered}}))",
                     null
