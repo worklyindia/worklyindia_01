@@ -73,6 +73,30 @@ object NativeAuth {
         save(context, s); s
     }
 
+    suspend fun checkLogin2FA(email: String, userType: String): JSONObject = withContext(Dispatchers.IO) {
+        request("POST", "/functions/v1/unified-2fa",
+            JSONObject().put("action", "check-login").put("email", email.trim().lowercase()).put("userType", userType))
+    }
+
+    suspend fun sendLoginOtp(userId: String, userType: String, method: String): JSONObject = withContext(Dispatchers.IO) {
+        val action = if (method == "telegram") "send-telegram-otp" else "send-email-otp"
+        request("POST", "/functions/v1/unified-2fa",
+            JSONObject().put("action", action).put("userId", userId).put("userType", userType))
+    }
+
+    suspend fun verifyLoginOtp(userId: String, userType: String, method: String, code: String): Boolean = withContext(Dispatchers.IO) {
+        val action = if (method == "telegram") "verify-telegram-otp" else "verify-email-otp"
+        val result = request("POST", "/functions/v1/unified-2fa",
+            JSONObject().put("action", action).put("userId", userId).put("userType", userType).put("code", code.trim()))
+        result.optBoolean("verified", false)
+    }
+
+    suspend fun verifyLoginTotp(userId: String, userType: String, code: String): Boolean = withContext(Dispatchers.IO) {
+        val result = request("POST", "/functions/v1/unified-totp",
+            JSONObject().put("action", "verify-login").put("userId", userId).put("userType", userType).put("token", code.trim()))
+        result.optBoolean("verified", false) || result.optBoolean("success", false)
+    }
+
     suspend fun resetPassword(email: String) = withContext(Dispatchers.IO) {
         request("POST", "/auth/v1/recover",
             JSONObject().put("email", email.trim().lowercase()).put("redirect_to", "https://worklyindia.devs.surf/reset-password"))
