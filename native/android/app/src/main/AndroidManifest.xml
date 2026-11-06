@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <application
         android:name=".WorklyApplication"
         android:allowBackup="true"
@@ -13,6 +14,7 @@
         android:icon="@drawable/ic_workly_launcher_image"
         android:roundIcon="@drawable/ic_workly_launcher_image"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <service
             android:name=".WorklyFirebaseMessagingService"
@@ -21,7 +23,6 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-        <activity android:name=".NativeVideoSDKMeetingActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,15 +31,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Verified Android App Links: the website domain must publish the
-                 matching SHA-256 signing certificate in /.well-known/assetlinks.json. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="worklyindia.devs.surf" />
             </intent-filter>
-            <!-- Fallback deep link for explicit app-to-app handoffs. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
