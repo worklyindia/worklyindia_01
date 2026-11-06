@@ -329,35 +329,85 @@ private fun Section(title: String, body: String) {
 }
 
 @Composable
-private fun AccountScreen(m: Modifier, open: (String) -> Unit) {
+private fun AccountScreen(
+    m: Modifier,
+    session: NativeSession?,
+    message: String?,
+    onMessage: (String?) -> Unit,
+    onSession: (NativeSession?) -> Unit
+) {
+    var mode by rememberSaveable { mutableStateOf("login") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text("Apne Workly India account se login karein.", color = Muted)
-                    Button({ open("/auth") }, Modifier.fillMaxWidth()) { Text("Job seeker login") }
-                    OutlinedButton({ open("/employer-auth") }, Modifier.fillMaxWidth()) { Text("Employer login") }
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (session != null) {
+                        Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                        Text(session.email, color = Muted)
+                        Text("Aapka account native app mein connected hai.", color = Muted)
+                        Button(onClick = { NativeAuth.signOut(ctx); onSession(null); password = "" }, Modifier.fillMaxWidth()) { Text("Logout") }
+                    } else {
+                        Text("Workly India mein shuru karein", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                        Text("Login ya account banayein — app ke andar hi.", color = Muted)
+                        if (mode == "signup") OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true)
+                        OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true)
+                        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
+                        Button(
+                            enabled = !busy && email.contains("@") && password.length >= 6 && (mode == "login" || name.isNotBlank()),
+                            onClick = {
+                                scope.launch {
+                                    busy = true
+                                    onMessage(null)
+                                    try {
+                                        val result = if (mode == "login") NativeAuth.signIn(ctx, email, password)
+                                            else NativeAuth.signUp(ctx, email, password, name)
+                                        if (result == null) onMessage("Account create ho gaya. Email verify karke login karein.")
+                                        else onSession(result)
+                                    } catch (e: Exception) {
+                                        onMessage(e.message ?: "Login nahi ho saka. Dobara try karein.")
+                                    } finally { busy = false }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(if (busy) "Please wait..." else if (mode == "login") "Login" else "Create account") }
+                        TextButton(onClick = { mode = if (mode == "login") "signup" else "login"; onMessage(null) }) {
+                            Text(if (mode == "login") "New user? Create account" else "Already have an account? Login")
+                        }
+                    }
+                    if (!message.isNullOrBlank()) Text(
+                        message,
+                        color = if (message.contains("successful") || message.contains("submit") || message.contains("verify")) Brand else MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
+        item { Text("More features", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) }
         listOf(
-            Triple("Build my resume", "/resume-builder", Icons.Default.Description),
-            Triple("Post a job", "/employer-auth", Icons.Default.BusinessCenter),
-            Triple("Contact us", "/contact", Icons.Default.SupportAgent),
-            Triple("Privacy policy", "/privacy", Icons.Default.Security),
-        ).forEach { (t, path, icon) ->
+            "My applications" to Icons.Default.Description,
+            "My resume" to Icons.Default.Article,
+            "Employer dashboard" to Icons.Default.BusinessCenter,
+            "Messages" to Icons.Default.Chat,
+            "Notifications" to Icons.Default.Notifications,
+            "Help & support" to Icons.Default.SupportAgent
+        ).forEach { (title, icon) ->
             item {
-                Card(Modifier.fillMaxWidth().clickable { open(path) }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(icon, null, tint = Brand); Text(t, Modifier.padding(start = 12.dp).weight(1f), fontWeight = FontWeight.SemiBold)
-                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(icon, null, tint = Brand)
+                        Text(title, Modifier.padding(start = 12.dp).weight(1f), fontWeight = FontWeight.SemiBold)
+                        Text("Coming next", color = Muted, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
         }
-        item { Text("Version 1.0.0", color = Muted, style = MaterialTheme.typography.bodySmall) }
+        item { Text("Workly India • Native Android", color = Muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
