@@ -930,8 +930,48 @@ private fun AccountScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var profileBusy by remember { mutableStateOf(false) }
+    var profileName by remember { mutableStateOf("") }
+    var profilePhone by remember { mutableStateOf("") }
+    var profileLocation by remember { mutableStateOf("") }
+    var profilePosition by remember { mutableStateOf("") }
+    var profileExperience by remember { mutableStateOf("") }
+    var profileSkills by remember { mutableStateOf("") }
+    var profileEducation by remember { mutableStateOf("") }
+    var profileBio by remember { mutableStateOf("") }
+    var profilePreferredLocation by remember { mutableStateOf("") }
+    var profileJobType by remember { mutableStateOf("") }
+    var profileIndustry by remember { mutableStateOf("") }
+    var profileLoading by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    LaunchedEffect(session?.userId) {
+        if (session == null) {
+            profileName = ""; profilePhone = ""; profileLocation = ""; profilePosition = ""
+            profileExperience = ""; profileSkills = ""; profileEducation = ""; profileBio = ""
+            profilePreferredLocation = ""; profileJobType = ""; profileIndustry = ""
+        } else {
+            profileLoading = true
+            runCatching { NativeDataApi.loadProfile(session) }
+                .onSuccess { p ->
+                    if (p != null) {
+                        profileName = p.optString("full_name")
+                        profilePhone = p.optString("phone")
+                        profileLocation = p.optString("location")
+                        profilePosition = p.optString("current_position")
+                        profileExperience = if (p.isNull("experience_years")) "" else p.optInt("experience_years").toString()
+                        profileSkills = p.optJSONArray("skills")?.let { a -> (0 until a.length()).joinToString(", ") { a.optString(it) } }.orEmpty()
+                        profileEducation = p.optString("education")
+                        profileBio = p.optString("bio")
+                        profilePreferredLocation = p.optString("preferred_location")
+                        profileJobType = p.optString("job_type")
+                        profileIndustry = p.optString("industry")
+                    }
+                }
+                .onFailure { onMessage(it.message ?: "Profile load nahi ho saka.") }
+            profileLoading = false
+        }
+    }
     LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
@@ -974,6 +1014,48 @@ private fun AccountScreen(
                         message,
                         color = if (message.contains("successful") || message.contains("submit") || message.contains("verify")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                     )
+                }
+            }
+        }
+        if (session != null) item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccountCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+                        Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                            Text("My profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text("Apni job profile aur preferences update karein", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (profileLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                    OutlinedTextField(profileName, { profileName = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true)
+                    OutlinedTextField(session.email, {}, Modifier.fillMaxWidth(), label = { Text("Email address") }, readOnly = true, singleLine = true)
+                    OutlinedTextField(profilePhone, { profilePhone = it }, Modifier.fillMaxWidth(), label = { Text("Phone number") }, singleLine = true)
+                    OutlinedTextField(profileLocation, { profileLocation = it }, Modifier.fillMaxWidth(), label = { Text("Current location") }, singleLine = true)
+                    OutlinedTextField(profilePosition, { profilePosition = it }, Modifier.fillMaxWidth(), label = { Text("Current position") }, singleLine = true)
+                    OutlinedTextField(profileExperience, { profileExperience = it.filter(Char::isDigit).take(2) }, Modifier.fillMaxWidth(), label = { Text("Experience (years)") }, singleLine = true)
+                    OutlinedTextField(profileSkills, { profileSkills = it }, Modifier.fillMaxWidth(), label = { Text("Skills (comma separated)") }, minLines = 2)
+                    OutlinedTextField(profileEducation, { profileEducation = it }, Modifier.fillMaxWidth(), label = { Text("Education") }, minLines = 2)
+                    OutlinedTextField(profileBio, { profileBio = it }, Modifier.fillMaxWidth(), label = { Text("About you") }, minLines = 3)
+                    OutlinedTextField(profilePreferredLocation, { profilePreferredLocation = it }, Modifier.fillMaxWidth(), label = { Text("Preferred job location") }, singleLine = true)
+                    OutlinedTextField(profileJobType, { profileJobType = it }, Modifier.fillMaxWidth(), label = { Text("Preferred job type") }, singleLine = true)
+                    OutlinedTextField(profileIndustry, { profileIndustry = it }, Modifier.fillMaxWidth(), label = { Text("Preferred industry") }, singleLine = true)
+                    Button(
+                        enabled = !profileBusy && !profileLoading && profileName.isNotBlank(),
+                        onClick = {
+                            profileBusy = true
+                            scope.launch {
+                                runCatching {
+                                    NativeDataApi.saveProfile(session, profileName, profilePhone, profileLocation,
+                                        profilePosition, profileExperience.toIntOrNull(), profileSkills, profileEducation,
+                                        profileBio, profilePreferredLocation, profileJobType, profileIndustry)
+                                }.onSuccess { onMessage("Profile saved successfully.") }
+                                    .onFailure { onMessage(it.message ?: "Profile save nahi ho saka.") }
+                                profileBusy = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(if (profileBusy) "Saving profile…" else "Save profile") }
                 }
             }
         }
