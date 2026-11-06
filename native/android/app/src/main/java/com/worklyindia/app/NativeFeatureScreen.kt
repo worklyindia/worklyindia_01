@@ -154,8 +154,12 @@ fun NativeFeatureScreen(
             "My applications" -> {
                 if(busy) LoadingNative()
                 else if(applications.isEmpty()) EmptyNative("Abhi applications nahi hain","Jobs par apply karne ke baad yahan status dikhega.")
-                else LazyColumn(contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                    items(applications,key={it.id}) { a -> NativeRowCard(a.jobTitle,a.company.ifBlank{"Workly India"},a.status.replaceFirstChar{it.uppercase()}) }
+                else LazyColumn(contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                    item {
+                        Text("${applications.size} applications",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+                        Text("Employer ke response ke saath status yahan update hoga.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    items(applications,key={it.id}) { a -> ApplicationStatusCard(a) }
                 }
             }
             "Notifications" -> {
@@ -309,7 +313,65 @@ fun NativeFeatureScreen(
     }
 }
 
-@Composable private fun NativeRowCard(title:String,subtitle:String,status:String,onClick:(()->Unit)?=null) {
+@Composable @Composable
+private fun ApplicationStatusCard(application: NativeApplication) {
+    val raw = application.status.trim().lowercase().replace('-', '_').replace(' ', '_')
+    val label = when(raw) {
+        "applied", "submitted", "pending" -> "Submitted"
+        "under_review", "reviewing", "viewed", "in_review" -> "Under review"
+        "shortlisted", "short_listed" -> "Shortlisted"
+        "interview", "interview_scheduled", "interviewing" -> "Interview"
+        "selected", "accepted", "hired" -> "Selected"
+        "rejected", "declined" -> "Not selected"
+        "withdrawn", "cancelled", "canceled" -> "Withdrawn"
+        else -> application.status.replace('_',' ').replaceFirstChar { it.uppercase() }.ifBlank { "Submitted" }
+    }
+    val icon = when(raw) {
+        "rejected", "declined" -> Icons.Default.Cancel
+        "shortlisted", "short_listed", "interview", "interview_scheduled", "interviewing", "selected", "accepted", "hired" -> Icons.Default.CheckCircle
+        "under_review", "reviewing", "viewed", "in_review" -> Icons.Default.Visibility
+        "withdrawn", "cancelled", "canceled" -> Icons.Default.Block
+        else -> Icons.Default.Schedule
+    }
+    val appliedDate = runCatching {
+        java.time.Instant.parse(application.appliedAt).atZone(java.time.ZoneId.of("Asia/Kolkata"))
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy"))
+    }.getOrNull()
+    val reviewedDate = application.reviewedAt?.let { value ->
+        runCatching { java.time.Instant.parse(value).atZone(java.time.ZoneId.of("Asia/Kolkata"))
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy")) }.getOrNull()
+    }
+    Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),
+        colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),
+        border=androidx.compose.foundation.BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant.copy(alpha=0.65f))) {
+        Column(Modifier.fillMaxWidth().padding(15.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                    Text(application.jobTitle,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium)
+                    Text(application.company.ifBlank{"Workly India"},color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
+                }
+                Surface(color=MaterialTheme.colorScheme.secondaryContainer,shape=RoundedCornerShape(50)) {
+                    Row(Modifier.padding(horizontal=10.dp,vertical=6.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                        Icon(icon,null,Modifier.size(15.dp),tint=MaterialTheme.colorScheme.primary)
+                        Text(label,style=MaterialTheme.typography.labelMedium,fontWeight=FontWeight.SemiBold)
+                    }
+                }
+            }
+            Divider(color=MaterialTheme.colorScheme.outlineVariant)
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Icon(Icons.Default.CalendarToday,null,Modifier.size(16.dp),tint=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(" Applied ${appliedDate ?: "date unavailable"}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(reviewedDate!=null) {
+                    Spacer(Modifier.width(12.dp))
+                    Text("Reviewed ${reviewedDate}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Text("Application ID: ${application.id.take(8)}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private fun NativeRowCard(title:String,subtitle:String,status:String,onClick:(()->Unit)?=null) {
     Card(Modifier.fillMaxWidth().then(if(onClick!=null)Modifier.clickable{onClick()}else Modifier),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
         Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(title,fontWeight=FontWeight.SemiBold); Text(subtitle,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall) }
