@@ -1076,13 +1076,15 @@ async function handleVerifyJobIndexing(supabase: any, params: any, req: Request)
     return new Response(JSON.stringify({ error: 'Job not found' }),
       { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-  if (job.company_id) {
-    const { data: company } = await supabase
-      .from('companies').select('user_id').eq('id', job.company_id).maybeSingle();
-    if (company?.user_id && company.user_id !== user.id) {
-      return new Response(JSON.stringify({ error: 'Not authorized for this job' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+  if (!job.company_id) {
+    return new Response(JSON.stringify({ error: 'Job has no verified company owner' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const { data: company, error: companyError } = await supabase
+    .from('companies').select('user_id').eq('id', job.company_id).maybeSingle();
+  if (companyError || !company || company.user_id !== user.id) {
+    return new Response(JSON.stringify({ error: 'Not authorized for this job' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
   // Build job URL
@@ -1094,7 +1096,7 @@ async function handleVerifyJobIndexing(supabase: any, params: any, req: Request)
   const { data: setting } = await supabase
     .from('app_settings').select('setting_value').eq('setting_key', 'search_engine_indexing_price').maybeSingle();
   const price = Math.max(1, parseInt(setting?.setting_value || '100', 10) || 100);
-  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, price * 100, { service: 'search_listing', ref: user.id });
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, price * 100, { service: 'search_listing', ref: user.id, job_id: String(job_id) });
 
   // Upsert job_indexing_status with paid flag
   const nowIso = new Date().toISOString();
