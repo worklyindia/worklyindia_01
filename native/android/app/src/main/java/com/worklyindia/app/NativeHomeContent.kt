@@ -35,12 +35,12 @@ private const val HOME_PUBLIC_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeY
 data class NativeHomeBanner(val title:String,val subtitle:String,val image:String?,val youtube:String?)
 data class NativeHomeBadge(val title:String,val subtitle:String,val description:String,val image:String?)
 data class NativeHomePerson(val name:String,val image:String?)
-data class NativeHomeData(val banners:List<NativeHomeBanner> = emptyList(),val videos:List<String> = emptyList(),val heroImage:String? = null,val seekersImage:String? = null,val badges:List<NativeHomeBadge> = emptyList(),val seekers:List<NativeHomePerson> = emptyList(),val companies:List<NativeHomePerson> = emptyList())
+data class NativeHomeData(val banners:List<NativeHomeBanner> = emptyList(),val videos:List<String> = emptyList(),val heroImage:String? = null,val seekersImage:String? = null,val badges:List<NativeHomeBadge> = emptyList(),val seekers:List<NativeHomePerson> = emptyList(),val companies:List<NativeHomePerson> = emptyList(),val logoUrl:String? = null,val brandName:String = "Workly India",val tagline:String = "Find.Work.Grow")
 
 object NativeHomeApi {
     suspend fun load():NativeHomeData = withContext(Dispatchers.IO) {
         var banners=emptyList<NativeHomeBanner>(); var videos=emptyList<String>(); var hero:String?=null; var seekersImage:String?=null
-        var badges=emptyList<NativeHomeBadge>(); var seekers=emptyList<NativeHomePerson>(); var companies=emptyList<NativeHomePerson>()
+        var badges=emptyList<NativeHomeBadge>(); var seekers=emptyList<NativeHomePerson>(); var companies=emptyList<NativeHomePerson>(); var logoUrl:String?=null; var brandName="Workly India"; var tagline="Find.Work.Grow"
         runCatching {
             val a=JSONArray(request("$HOME_BASE_URL/rest/v1/rpc/get_active_hero_banners","POST","{}"))
             banners=(0 until a.length()).mapNotNull { i -> val o=a.optJSONObject(i) ?: return@mapNotNull null
@@ -59,7 +59,8 @@ object NativeHomeApi {
             badges=(0 until a.length()).map { i -> val o=a.getJSONObject(i); NativeHomeBadge(o.optString("title"),o.optString("subtitle"),o.optString("description"),o.optString("image_url").takeIf{it.startsWith("http")}) }
         }
         runCatching { seekers=people("get_trust_seekers") }; runCatching { companies=people("get_trust_companies") }
-        NativeHomeData(banners,videos,hero,seekersImage,badges,seekers,companies)
+        runCatching { val o=JSONObject(request("$HOME_BASE_URL/rest/v1/rpc/get_brand_assets","POST","{}")); logoUrl=o.optString("logo_url").takeIf{it.startsWith("http")}; brandName=o.optString("brand_name").ifBlank{"Workly India"}; tagline=o.optString("brand_tagline").ifBlank{"Find.Work.Grow"} }
+        NativeHomeData(banners,videos,hero,seekersImage,badges,seekers,companies,logoUrl,brandName,tagline)
     }
     private fun people(fn:String):List<NativeHomePerson> {
         val a=JSONArray(request("$HOME_BASE_URL/rest/v1/rpc/$fn","POST","{\"_limit\":30}"))
