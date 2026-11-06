@@ -82,6 +82,21 @@ fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()
                 }
             }
         } else when(title) {
+            "Connected accounts" -> {
+                LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    item { Text("Connect your communication channels",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
+                    item { Text("Account permissions are managed securely. A channel will show Connected only after its provider OAuth/token setup has been completed and verified.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
+                    item { NativeChannelCard("WhatsApp Business","Business inbox, customer messages and approved templates","Official Meta Business connection required",Icons.Default.Chat) }
+                    item { NativeChannelCard("Instagram","Business DMs, comments and account profile","Instagram Business OAuth and permissions required",Icons.Default.CameraAlt) }
+                    item { NativeChannelCard("Facebook Messenger","Page inbox, messages and page identity","Facebook Page OAuth and permissions required",Icons.Default.Facebook) }
+                    item { NativeChannelCard("Gmail","Read and reply to connected Gmail mailbox","Google OAuth consent and verified callback required",Icons.Default.Email) }
+                    item { NativeChannelCard("Outlook","Microsoft mailbox and email conversations","Microsoft OAuth app and callback required",Icons.Default.Mail) }
+                    item { NativeChannelCard("Domain Email","IMAP/SMTP mailbox connection","Mailbox host, port and app-password setup required",Icons.Default.AlternateEmail) }
+                    item { NativeChannelCard("Telegram","Bot messages and automated replies","Telegram bot token and webhook required",Icons.Default.Send) }
+                    item { NativeChannelCard("Google Business Profile","Business reviews and profile interactions","Google Business Profile API access required",Icons.Default.Business) }
+                    item { Text("Important: provider connect flows are not yet enabled in this Android build. These accounts are not falsely marked as connected.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error) }
+                }
+            }
             "My applications" -> {
                 if(busy) LoadingNative()
                 else if(applications.isEmpty()) EmptyNative("Abhi applications nahi hain","Jobs par apply karne ke baad yahan status dikhega.")
@@ -220,5 +235,20 @@ fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()
     Column(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text(title,style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)
         Text(body,style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+
+@Composable private fun NativeChannelCard(name:String,description:String,requirement:String,icon:androidx.compose.ui.graphics.vector.ImageVector) {
+    Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
+        Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            Surface(shape=RoundedCornerShape(12.dp),color=MaterialTheme.colorScheme.secondaryContainer) { Icon(icon,null,Modifier.padding(10.dp).size(23.dp),tint=MaterialTheme.colorScheme.primary) }
+            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
+                Text(name,fontWeight=FontWeight.SemiBold)
+                Text(description,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(requirement,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.tertiary)
+            }
+            Text("Setup",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
