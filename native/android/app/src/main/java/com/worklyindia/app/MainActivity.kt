@@ -534,7 +534,7 @@ private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int) {
         }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MoreStatCard(Modifier.weight(1f), "0", "Applications", Icons.Default.Description)
+                MoreStatCard(Modifier.weight(1f), "—", "Applications", Icons.Default.Description)
                 MoreStatCard(Modifier.weight(1f), savedCount.toString(), "Saved Jobs", Icons.Default.Favorite)
                 MoreStatCard(Modifier.weight(1f), "—", "Response", Icons.Default.TrendingUp)
             }
