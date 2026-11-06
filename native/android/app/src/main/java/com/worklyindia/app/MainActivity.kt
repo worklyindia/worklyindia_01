@@ -178,7 +178,7 @@ private fun WorklyApp() {
             tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
                 onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
-                onEmployer = { tab = "Account" })
+                onEmployer = { tab = "Account" }, onFeature = { selectedFeature = it })
             tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
@@ -198,51 +198,192 @@ private fun WorklyApp() {
 private fun HomeScreen(
     m: Modifier, state: LoadState, categories: List<String>, saved: Set<String>, onSave: (Job) -> Unit,
     onSearch: (String) -> Unit, onCategory: (String) -> Unit, onJob: (Job) -> Unit, onRetry: () -> Unit, onAll: () -> Unit,
-    onEmployer: () -> Unit
+    onEmployer: () -> Unit, onFeature: (String) -> Unit
 ) {
-    var q by remember { mutableStateOf("") }
-    LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    var q by rememberSaveable { mutableStateOf("") }
+    val quickActions = listOf(
+        Triple("My applications", "Track applications", Icons.Default.Description),
+        Triple("My resume", "Build your resume", Icons.Default.Article),
+        Triple("Messages", "Chat with employers", Icons.Default.Chat),
+        Triple("Notifications", "Job updates & alerts", Icons.Default.Notifications)
+    )
+
+    LazyColumn(
+        m.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp)
+    ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Image(
                     painter = painterResource(R.drawable.ic_workly_launcher),
                     contentDescription = "Workly India logo",
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(46.dp)
                 )
-                Column(Modifier.padding(start = 10.dp)) {
+                Column(Modifier.padding(start = 11.dp).weight(1f)) {
                     Text("Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text("Verified jobs across India", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                    Text("Your career, your next opportunity", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                 }
-            }
-        }
-        item {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(22.dp)) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Find a job that fits your life", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                    OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
-                        placeholder = { Text("Job title, city or company") },
-                        leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface))
-                    Button({ onSearch(q) }, Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("Search jobs", fontWeight = FontWeight.Bold) }
-                    OutlinedButton(onEmployer, Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                        Icon(Icons.Default.BusinessCenter, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("I'm hiring — post a job")
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.09f),
+                    shape = RoundedCornerShape(50)
+                ) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Verified, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
+                        Text("India", Modifier.padding(start = 5.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         }
-        if (categories.isNotEmpty()) item {
-            Text("Categories", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.take(12).forEach { c -> AssistChip({ onCategory(c) }, { Text(c) }) }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(color = Color.White.copy(alpha = 0.16f), shape = RoundedCornerShape(50)) {
+                        Text(
+                            "JOBS • CAREER • GROWTH",
+                            Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        "Find work that\nfits your life.",
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        "Explore opportunities across India — remote, part-time and full-time.",
+                        color = Color.White.copy(alpha = 0.88f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Shield, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Text("Discover jobs with employer details", Modifier.padding(start = 6.dp), color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
             }
         }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Search your next opportunity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = q,
+                    onValueChange = { q = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Job title, skill, city or company") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search jobs") },
+                    trailingIcon = {
+                        if (q.isNotBlank()) IconButton(onClick = { q = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear search") }
+                    },
+                    shape = RoundedCornerShape(15.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+                Button(
+                    onClick = { onSearch(q.trim()) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.Search, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Search jobs", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onEmployer,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.BusinessCenter, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("I'm hiring — post a job")
+                }
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Popular job categories", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onAll) { Text("All jobs") }
+                }
+                if (categories.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        categories.take(8).chunked(2).forEach { pair ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                                pair.forEach { category ->
+                                    Surface(
+                                        modifier = Modifier.weight(1f).clickable { onCategory(category) },
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                                    ) {
+                                        Row(
+                                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 13.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.WorkOutline, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                            Text(category, Modifier.weight(1f).padding(start = 8.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp))
+                                        }
+                                    }
+                                }
+                                if (pair.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else {
+                    Text("Job categories load ho rahi hain…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Your career tools", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                quickActions.chunked(2).forEach { pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        pair.forEach { (title, subtitle, icon) ->
+                            Card(
+                                onClick = { onFeature(title) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
+                                    Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Latest jobs", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                TextButton(onAll) { Text("See all") }
+                Column(Modifier.weight(1f)) {
+                    Text("Latest opportunities", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Text("Fresh jobs to explore", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = onAll) { Text("See all") }
             }
         }
         jobList(state, saved, onSave, onJob, onRetry, take = 5)
