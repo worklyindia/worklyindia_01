@@ -95,8 +95,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       status: 'success',
       message: 'Payment completed manually',
-      transaction_id,
-      wallet: walletResult
+      transaction_id
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
