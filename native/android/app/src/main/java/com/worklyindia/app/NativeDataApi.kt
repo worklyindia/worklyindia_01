@@ -9,6 +9,7 @@ import java.net.URL
 import java.net.URLEncoder
 
 data class NativeApplication(val id:String, val jobTitle:String, val company:String, val status:String, val appliedAt:String, val reviewedAt:String?)
+data class NativeEmployerApplicant(val id:String,val jobTitle:String,val fullName:String,val email:String,val phone:String,val location:String,val skills:List<String>,val experience:String,val resumeUrl:String,val coverLetter:String,val status:String,val appliedAt:String)
 data class NativeNotification(val id:String, val title:String, val message:String, val createdAt:String, val read:Boolean)
 data class NativeConversation(val id:String, val jobTitle:String, val lastMessage:String, val updatedAt:String)
 data class NativeChatMessage(val id:String, val senderId:String, val message:String, val createdAt:String)
@@ -63,6 +64,24 @@ object NativeDataApi {
                 co?.optString("company_name")?.takeIf{it.isNotBlank()}?:j?.optString("api_company_name","")?:"",
                 o.optString("status","submitted"),o.optString("applied_at"),o.optString("reviewed_at").takeIf{it.isNotBlank() && it!="null"})
         }
+    }
+
+
+    suspend fun employerApplications(s:NativeSession):List<NativeEmployerApplicant> {
+        val a=JSONArray(call("/job_applications?select=id,job_id,api_full_name,api_email,api_phone,api_location,api_skills,api_experience_years,resume_url,cover_letter,status,applied_at,job:jobs(title)&employer_id=eq.${enc(s.userId)}&order=applied_at.desc&limit=200",s))
+        return (0 until a.length()).map { i ->
+            val o=a.getJSONObject(i); val skills=o.optJSONArray("api_skills")
+            NativeEmployerApplicant(o.optString("id"),o.optJSONObject("job")?.optString("title")?.takeIf{it.isNotBlank()}?:"Job application",
+                o.optString("api_full_name").ifBlank{"Candidate"},o.optString("api_email"),o.optString("api_phone"),o.optString("api_location"),
+                if(skills==null) emptyList() else (0 until skills.length()).map{skills.optString(it)}.filter{it.isNotBlank()},
+                o.optString("api_experience_years").takeIf{it.isNotBlank() && it!="null"}?.let{"$it years"}.orEmpty(),
+                o.optString("resume_url"),o.optString("cover_letter"),o.optString("status","applied"),o.optString("applied_at"))
+        }
+    }
+    suspend fun updateApplicantStatus(s:NativeSession, applicationId:String, status:String) {
+        require(status=="shortlisted" || status=="rejected") { "Invalid application status." }
+        call("/job_applications?id=eq.${enc(applicationId)}&employer_id=eq.${enc(s.userId)}",s,"PATCH",
+            JSONObject().put("status",status).put("reviewed_at",java.time.Instant.now().toString()),"return=minimal")
     }
 
     suspend fun hasApplied(s:NativeSession, jobId:String):Boolean {
