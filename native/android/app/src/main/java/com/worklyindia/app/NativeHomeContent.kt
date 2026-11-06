@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,11 +20,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -80,17 +85,41 @@ object NativeHomeApi {
 @Composable
 fun NativeHomeBannerCarousel(data:NativeHomeData) {
     if(data.banners.isEmpty()) return
-    var index by remember { mutableIntStateOf(0) }; val b=data.banners[index.coerceIn(data.banners.indices)]
-    Card(Modifier.fillMaxWidth().padding(horizontal=12.dp),shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) { Column {
-        if(b.image!=null) AsyncImage(b.image,b.title,Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(topStart=18.dp,topEnd=18.dp)),contentScale=androidx.compose.ui.layout.ContentScale.Fit)
-        if(b.title.isNotBlank() || b.subtitle.isNotBlank()) Column(Modifier.padding(horizontal=15.dp,vertical=12.dp)){if(b.title.isNotBlank())Text(b.title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);if(b.subtitle.isNotBlank())Text(b.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-        if(data.banners.size>1)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
-            IconButton(onClick={index=(index-1+data.banners.size)%data.banners.size}){Icon(Icons.Default.ChevronLeft,"Previous banner")}
-            Text("${index+1} / ${data.banners.size}",style=MaterialTheme.typography.labelMedium)
-            IconButton(onClick={index=(index+1)%data.banners.size}){Icon(Icons.Default.ChevronRight,"Next banner")}
+    var index by remember(data.banners) { mutableIntStateOf(0) }
+    var userInteracting by remember { mutableStateOf(false) }
+    var progress by remember(index, userInteracting) { mutableFloatStateOf(0f) }
+    LaunchedEffect(index, userInteracting, data.banners.size) {
+        if(data.banners.size > 1 && !userInteracting) {
+            progress = 0f
+            val tick = 30L
+            var elapsed = 0L
+            while(elapsed < 3000L) {
+                delay(tick)
+                elapsed += tick
+                progress = (elapsed / 3000f).coerceIn(0f,1f)
+            }
+            index = (index + 1) % data.banners.size
         }
-        if(b.youtube!=null)NativeHomeYouTube(b.youtube,Modifier.fillMaxWidth().height(205.dp))
-    } }
+    }
+    LaunchedEffect(userInteracting) {
+        if(userInteracting) { delay(3000); userInteracting = false }
+    }
+    val b=data.banners[index.coerceIn(data.banners.indices)]
+    Card(Modifier.fillMaxWidth().padding(horizontal=12.dp),shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
+        Column {
+            if(b.image!=null) AsyncImage(b.image,b.title,Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(topStart=18.dp,topEnd=18.dp)),contentScale=androidx.compose.ui.layout.ContentScale.Fit)
+            if(b.title.isNotBlank() || b.subtitle.isNotBlank()) Column(Modifier.padding(horizontal=15.dp,vertical=12.dp)){if(b.title.isNotBlank())Text(b.title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);if(b.subtitle.isNotBlank())Text(b.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+            if(data.banners.size>1) {
+                LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(3.dp),color=MaterialTheme.colorScheme.primary,trackColor=MaterialTheme.colorScheme.surfaceVariant)
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
+                    IconButton(onClick={userInteracting=true;index=(index-1+data.banners.size)%data.banners.size}){Icon(Icons.Default.ChevronLeft,"Previous banner")}
+                    Text("${index+1} / ${data.banners.size}",style=MaterialTheme.typography.labelMedium)
+                    IconButton(onClick={userInteracting=true;index=(index+1)%data.banners.size}){Icon(Icons.Default.ChevronRight,"Next banner")}
+                }
+            }
+            if(b.youtube!=null)NativeHomeYouTube(b.youtube,Modifier.fillMaxWidth().height(205.dp))
+        }
+    }
 }
 
 @Composable
