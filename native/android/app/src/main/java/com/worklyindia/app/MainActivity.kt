@@ -208,6 +208,18 @@ private fun WorklyApp() {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            if (selected == null && selectedFeature == null) {
+                NativeWebsiteHeader(
+                    data = homeData,
+                    savedCount = saved.size,
+                    onAI = { selectedFeature = "AI Chat" },
+                    onFavorites = { tab = "Saved" },
+                    onRefer = { selectedFeature = "Refer" },
+                    onProfile = { tab = "Account" }
+                )
+            }
+        },
         bottomBar = {
             if (selected == null && selectedFeature == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Search,
@@ -250,6 +262,84 @@ private fun WorklyApp() {
     )
 }
 
+
+@Composable
+private fun NativeWebsiteHeader(
+    data: NativeHomeData,
+    savedCount: Int,
+    onAI: () -> Unit,
+    onFavorites: () -> Unit,
+    onRefer: () -> Unit,
+    onProfile: () -> Unit
+) {
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+        Column {
+            Box(Modifier.fillMaxWidth().height(3.dp).background(MaterialTheme.colorScheme.primary))
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (data.logoUrl != null) {
+                    AsyncImage(
+                        model = data.logoUrl,
+                        contentDescription = "Workly India brand logo",
+                        modifier = Modifier.size(43.dp).clip(RoundedCornerShape(50)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.size(43.dp),
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Work, contentDescription = "Workly India", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                Column(Modifier.weight(1f).padding(start = 9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Workly", color = Color(0xFF3B5CE4), fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
+                        Text(" India", color = Color(0xFF0DB17E), fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
+                    }
+                    Text(
+                        data.tagline,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                IconButton(onClick = onAI, modifier = Modifier.size(39.dp)) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = "AI Career Chat", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = onFavorites, modifier = Modifier.size(39.dp)) {
+                    Box {
+                        Icon(Icons.Default.FavoriteBorder, contentDescription = "Favorites", tint = MaterialTheme.colorScheme.primary)
+                        if (savedCount > 0) {
+                            Surface(
+                                modifier = Modifier.align(Alignment.TopEnd).size(15.dp),
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.error
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(savedCount.coerceAtMost(99).toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
+                }
+                IconButton(onClick = onRefer, modifier = Modifier.size(39.dp)) {
+                    Icon(Icons.Default.CardGiftcard, contentDescription = "Refer a friend", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = onProfile, modifier = Modifier.size(39.dp)) {
+                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile and login", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun HomeScreen(
     m: Modifier, state: LoadState, homeData: NativeHomeData, categories: List<String>, saved: Set<String>, onSave: (Job) -> Unit,
@@ -273,29 +363,6 @@ private fun HomeScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    painter = painterResource(R.drawable.ic_workly_launcher),
-                    contentDescription = "Workly India logo",
-                    modifier = Modifier.size(46.dp)
-                )
-                Column(Modifier.padding(start = 11.dp).weight(1f)) {
-                    Text("Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text("Your career, your next opportunity", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
-                }
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.09f),
-                    shape = RoundedCornerShape(50)
-                ) {
-                    Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Verified, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
-                        Text("India", Modifier.padding(start = 5.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
-
         item {
             if (homeData.banners.isNotEmpty()) {
                 NativeHomeBannerCarousel(homeData)
