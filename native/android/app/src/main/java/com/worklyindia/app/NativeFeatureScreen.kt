@@ -34,7 +34,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 @Composable
-fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()->Unit) {
+fun NativeFeatureScreen(
+    m: Modifier,
+    title: String,
+    session: NativeSession?,
+    onBack: () -> Unit,
+    paymentResult: NativeRazorpayResult? = null,
+    onStartCheckout: (NativeCheckoutOrder) -> Unit = {},
+    onConsumePaymentResult: () -> Unit = {}
+) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
@@ -99,6 +107,7 @@ fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()
             }
         } else when(title) {
             "AI Chat" -> NativeAIChatScreen(session)
+            "AI Chat Plans" -> NativeAIPlansScreen(session, paymentResult, onStartCheckout, onConsumePaymentResult)
             "Connected accounts" -> {
                 LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                     item { Text("Connect your communication channels",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
