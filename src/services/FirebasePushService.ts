@@ -32,6 +32,7 @@ declare global {
       isNativeAndroidApp?: () => boolean;
       getNotificationPermissionStatus?: () => string;
       requestNativeNotifications?: () => void;
+      unsubscribeNativeNotifications?: () => void;
     };
   }
 }
@@ -43,7 +44,7 @@ const isNativeAndroidApp = (): boolean => {
     if (Boolean(window.WorklyAndroid?.isNativeAndroidApp?.())) return true;
     // Native app adds this marker to its WebView UA. This also covers the
     // brief startup window before addJavascriptInterface is exposed to JS.
-    return typeof navigator !== 'undefined' && /WorklyIndiaApp\\/1\\.0/i.test(navigator.userAgent);
+    return typeof navigator !== 'undefined' && /WorklyIndiaApp\/1\.0/i.test(navigator.userAgent);
   } catch {
     return false;
   }
@@ -136,6 +137,32 @@ export class FirebasePushService {
       } catch (error) {
         console.error('Native notification request failed:', error);
         finish({ granted: false, registered: false });
+      }
+    });
+  }
+
+  private static requestNativeUnsubscribe(): Promise<boolean> {
+    if (!isNativeAndroidApp() || !window.WorklyAndroid?.unsubscribeNativeNotifications) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (success: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('workly:native-unsubscribe-result', onResult);
+        window.clearTimeout(timeout);
+        resolve(success);
+      };
+      const onResult = (event: Event) => {
+        const detail = (event as CustomEvent<{ success: boolean }>).detail;
+        if (detail) finish(Boolean(detail.success));
+      };
+      const timeout = window.setTimeout(() => finish(false), 20000);
+      window.addEventListener('workly:native-unsubscribe-result', onResult, { once: true });
+      try {
+        window.WorklyAndroid!.unsubscribeNativeNotifications!();
+      } catch (error) {
+        console.error('Native Android unsubscribe failed:', error);
+        finish(false);
       }
     });
   }
@@ -571,6 +598,11 @@ export class FirebasePushService {
   }
 
   static async unsubscribe(): Promise<boolean> {
+    if (isNativeAndroidApp()) {
+      const success = await this.requestNativeUnsubscribe();
+      if (success) this.currentToken = null;
+      return success;
+    }
     try {
       // Grab the token first: the goodbye push has to go out before the token
       // is deleted, otherwise there is nothing left to deliver to.
