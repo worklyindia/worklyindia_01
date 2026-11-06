@@ -8,8 +8,6 @@ android {
     namespace = "com.worklyindia.app"
     compileSdk = 35
 
-    // Keep the generated release files branded consistently for distribution.
-    setProperty("archivesBaseName", "Workly-India")
 
     defaultConfig {
         applicationId = "com.worklyindia.app"
