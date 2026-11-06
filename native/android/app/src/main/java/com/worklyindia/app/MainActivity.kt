@@ -578,18 +578,42 @@ private fun HomeQuickStat(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 82.dp),
+        modifier = modifier.heightIn(min = 94.dp),
         shape = RoundedCornerShape(15.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = androidx.compose.foundation.BorderStroke(0.dp, Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 5.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(23.dp))
-            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            val iconTint = when (title) {
+                "Employee" -> Color(0xFF3B82F6)
+                "Companies" -> Color(0xFFA855F7)
+                "Favorites" -> Color(0xFFEC4899)
+                "Refer" -> Color(0xFFF97316)
+                "AI Chat" -> Color(0xFF10B981)
+                "Developer" -> Color(0xFF06B6D4)
+                "Resume" -> Color(0xFF6366F1)
+                else -> Color(0xFFEF4444)
+            }
+            val iconBg = when (title) {
+                "Employee" -> Color(0x263B82F6)
+                "Companies" -> Color(0x26A855F7)
+                "Favorites" -> Color(0x26EC4899)
+                "Refer" -> Color(0x26F97316)
+                "AI Chat" -> Color(0x2610B981)
+                "Developer" -> Color(0x2606B6D4)
+                "Resume" -> Color(0x266366F1)
+                else -> Color(0x26EF4444)
+            }
+            Box(
+                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(iconBg),
+                contentAlignment = Alignment.Center
+            ) { Icon(icon, contentDescription = title, tint = iconTint, modifier = Modifier.size(25.dp)) }
+            Text(title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }
