@@ -26,7 +26,7 @@ interface PushConfigResponse {
 
 const CONFIG_CACHE_KEY = 'firebase_push_config_v1';
 
-declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; registerPushNotifications?: () => void; }; } }
+declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; registerPushNotifications?: (sessionJson: string) => void; }; } }
 
 export class FirebasePushService {
   private static isNativeAndroid(): boolean { return typeof window !== 'undefined' && typeof window.WorklyAndroid?.isNotificationPermissionGranted === 'function' && typeof window.WorklyAndroid?.requestNotificationPermission === 'function'; }
@@ -326,21 +326,41 @@ export class FirebasePushService {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       if (!userId) return false;
-      window.WorklyAndroid!.registerPushNotifications?.();
-      // Native FCM registration runs asynchronously in Android. Wait for the
-      // server row to appear instead of reporting success before it is saved.
-      for (let attempt = 0; attempt < 12; attempt++) {
-        const { data, error } = await supabase.from('push_subscriptions')
-          .select('fcm_token').eq('user_id', userId).eq('platform', 'android')
-          .eq('enabled', true).maybeSingle();
-        if (error) {
-          console.warn('Native Android push registration not yet visible:', error.message);
-          return false;
+      if (!sessionData.session || !window.WorklyAndroid!.registerPushNotifications) return false;
+      // Android reports the actual FCM/PostgREST result. This avoids treating
+      // an optimistic permission grant or a stale DB row as a successful subscribe.
+      const registration = await new Promise<boolean>((resolve) => {
+        let settled = false;
+        const finish = (value: boolean) => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener('workly-native-push-registration-complete', onComplete);
+          window.clearTimeout(timeout);
+          resolve(value);
+        };
+        const onComplete = (event: Event) => {
+          const detail = (event as CustomEvent<{ success?: boolean; reason?: string }>).detail;
+          if (!detail?.success) console.error('Native FCM registration failed:', detail?.reason || 'unknown');
+          finish(detail?.success === true);
+        };
+        const timeout = window.setTimeout(() => finish(false), 25000);
+        window.addEventListener('workly-native-push-registration-complete', onComplete, { once: true });
+        try {
+          window.WorklyAndroid!.registerPushNotifications!(JSON.stringify(sessionData.session));
+        } catch (error) {
+          console.error('Could not call Android push bridge:', error);
+          finish(false);
         }
-        if (data?.fcm_token) return true;
-        await new Promise((resolve) => setTimeout(resolve, 500));
+      });
+      if (!registration) return false;
+      const { data, error } = await supabase.from('push_subscriptions')
+        .select('fcm_token').eq('user_id', userId).eq('platform', 'android')
+        .eq('enabled', true).maybeSingle();
+      if (error) {
+        console.warn('Android FCM row verification failed:', error.message);
+        return false;
       }
-      return false;
+      return Boolean(data?.fcm_token);
     }
     const canEnable = this.canEnableNotifications();
     if (!canEnable.canEnable) {
