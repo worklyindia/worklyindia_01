@@ -200,28 +200,56 @@ export default function PushTemplatesManagement() {
   const sendTest = async (event: string) => {
     setTestingEvent(event);
     try {
-      const { FirebasePushService } = await import('@/services/FirebasePushService');
-      const token = await FirebasePushService.getCurrentPlayerId();
-      if (!token) {
-        toast.error('Enable notifications on this device before sending a test.');
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const userId = authData.user?.id;
+      if (authError || !userId) {
+        toast.error('Please sign in again before sending a test.');
+        return;
+      }
+      // Send the owner test to every active FCM registration for this account.
+      // Do not use getCurrentPlayerId(): that returns only this browser token.
+      const { data: devices, error: devicesError } = await supabase
+        .from('push_subscriptions')
+        .select('fcm_token, platform')
+        .eq('user_id', userId)
+        .eq('enabled', true);
+      if (devicesError) {
+        console.error('Could not load registered push devices:', devicesError);
+        toast.error('Could not load registered devices. Please try again.');
+        return;
+      }
+      const uniqueTokens = [...new Set((devices ?? [])
+        .map((device) => device.fcm_token)
+        .filter((token): token is string => typeof token === 'string' && token.length > 0))];
+      if (uniqueTokens.length === 0) {
+        toast.error('No active notification devices are registered for this account.');
         return;
       }
       const def = ALL_PUSH_TEMPLATES.find((d) => d.key === event);
-      const { data, error } = await supabase.functions.invoke('email-api', {
-        body: {
-          action: 'send_lifecycle_push',
-          event,
-          token,
-          test: true,
-          variables: def ? sampleValuesFor(def) : {},
-        },
-      });
-      if (error || !data?.success) {
-        const details = await describeInvokeFailure(error, data);
-        toast.error(`Test notification could not be sent. ${details}`);
-        return;
+      const results = await Promise.all(uniqueTokens.map(async (token) => {
+        const { data, error } = await supabase.functions.invoke('email-api', {
+          body: {
+            action: 'send_lifecycle_push',
+            event,
+            token,
+            test: true,
+            variables: def ? sampleValuesFor(def) : {},
+          },
+        });
+        return { success: !error && data?.success === true, data, error };
+      }));
+      const sent = results.filter((result) => result.success).length;
+      const failed = results.length - sent;
+      if (sent === results.length) {
+        toast.success(`Test notification accepted for all ${sent} registered device(s).`);
+      } else if (sent > 0) {
+        console.error('Some registered push devices rejected the test:', results);
+        toast.warning(`Test accepted for ${sent} device(s); ${failed} device(s) failed. Check console details.`);
+      } else {
+        console.error('All registered push devices rejected the test:', results);
+        const reason = results.map((result) => result.data?.error || result.error?.message).filter(Boolean).join('; ');
+        toast.error(`Test failed for all ${failed} device(s). ${reason}`);
       }
-      toast.success('Test notification sent successfully.');
     } catch (error) {
       console.error('Push template test failed:', error);
       toast.error('Test notification could not be sent. Please try again.');
