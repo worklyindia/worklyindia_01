@@ -216,7 +216,9 @@ private fun WorklyApp() {
                     onAI = { selectedFeature = "AI Chat" },
                     onFavorites = { tab = "Saved" },
                     onRefer = { selectedFeature = "Refer" },
-                    onProfile = { tab = "Account" }
+                    onProfile = { tab = "Account" },
+                    onSearch = { tab = "Jobs" },
+                    isLoggedIn = authSession != null
                 )
             }
         },
@@ -270,7 +272,9 @@ private fun NativeWebsiteHeader(
     onAI: () -> Unit,
     onFavorites: () -> Unit,
     onRefer: () -> Unit,
-    onProfile: () -> Unit
+    onProfile: () -> Unit,
+    onSearch: () -> Unit,
+    isLoggedIn: Boolean
 ) {
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
         Column {
@@ -299,8 +303,9 @@ private fun NativeWebsiteHeader(
                 }
                 Column(Modifier.weight(1f).padding(start = 9.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Workly", color = Color(0xFF3B5CE4), fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
-                        Text(" India", color = Color(0xFF0DB17E), fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
+                        val brandParts = data.brandName.split(" ", limit = 2)
+                        Text(brandParts.firstOrNull().orEmpty().ifBlank { "Workly" }, color = Color(0xFF3B5CE4), fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
+                        Text(" " + (brandParts.getOrNull(1) ?: "India"), color = Color(0xFF0DB17E), fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.titleMedium)
                     }
                     Text(
                         data.tagline,
@@ -310,32 +315,48 @@ private fun NativeWebsiteHeader(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = onAI, modifier = Modifier.size(39.dp)) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = "AI Career Chat", tint = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = onFavorites, modifier = Modifier.size(39.dp)) {
-                    Box {
-                        Icon(Icons.Default.FavoriteBorder, contentDescription = "Favorites", tint = MaterialTheme.colorScheme.primary)
-                        if (savedCount > 0) {
-                            Surface(
-                                modifier = Modifier.align(Alignment.TopEnd).size(15.dp),
-                                shape = RoundedCornerShape(50),
-                                color = MaterialTheme.colorScheme.error
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(savedCount.coerceAtMost(99).toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                if (isLoggedIn) {
+                    IconButton(onClick = onAI, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI Career Chat", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = onFavorites, modifier = Modifier.size(36.dp)) {
+                        Box {
+                            Icon(Icons.Default.FavoriteBorder, contentDescription = "Favorites", tint = MaterialTheme.colorScheme.primary)
+                            if (savedCount > 0) {
+                                Surface(
+                                    modifier = Modifier.align(Alignment.TopEnd).size(15.dp),
+                                    shape = RoundedCornerShape(50),
+                                    color = MaterialTheme.colorScheme.error
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(savedCount.coerceAtMost(99).toString(), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                IconButton(onClick = onRefer, modifier = Modifier.size(39.dp)) {
-                    Icon(Icons.Default.CardGiftcard, contentDescription = "Refer a friend", tint = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = onProfile, modifier = Modifier.size(39.dp)) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = "Profile and login", tint = MaterialTheme.colorScheme.primary)
+                    IconButton(onClick = onRefer, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.CardGiftcard, contentDescription = "Refer a friend", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = onProfile, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.AccountCircle, contentDescription = "Profile", tint = MaterialTheme.colorScheme.primary)
+                    }
+                } else {
+                    TextButton(onClick = onProfile) { Icon(Icons.Default.Login, contentDescription = null); Spacer(Modifier.width(4.dp)); Text("Log in") }
                 }
             }
+            OutlinedButton(
+                onClick = onSearch,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 0.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null)
+                Spacer(Modifier.width(9.dp))
+                Text("Search jobs, skills, city or company", modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.Default.Tune, contentDescription = "Search filters")
+            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
