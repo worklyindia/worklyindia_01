@@ -34,11 +34,14 @@ serve(async (req) => {
 
     console.log(`Manual payment request from user: ${user.id}`);
 
-    // SECURITY: Verify admin role
-    const { data: isAdmin, error: adminError } = await supabaseService
-      .rpc('is_admin');
+    // Verify the authenticated user's server-side admin role.
+    const { data: adminUser, error: adminError } = await supabaseService
+      .from('admin_users')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-    if (adminError || !isAdmin) {
+    if (adminError || !['owner', 'admin'].includes(adminUser?.role || '')) {
       console.error('Admin verification failed:', adminError);
       throw new Error('Admin access required');
     }
