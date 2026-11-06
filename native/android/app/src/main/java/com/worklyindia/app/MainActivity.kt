@@ -36,20 +36,23 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val Brand = Color(0xFF1646C8)
-private val PageBg = Color(0xFFF4F6FB)
-private val Ink = Color(0xFF151B2C)
-private val Muted = Color(0xFF636B80)
-private val Soft = Color(0xFFE7EDFC)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val dark = isSystemInDarkTheme()
             MaterialTheme(
-                colorScheme = lightColorScheme(
-                    primary = Brand, onPrimary = Color.White, background = PageBg,
-                    surface = Color.White, onSurface = Ink, secondaryContainer = Soft
+                colorScheme = if (dark) darkColorScheme(
+                    primary = Color(0xFF9DB7FF), onPrimary = Color(0xFF102B68),
+                    background = Color(0xFF101522), surface = Color(0xFF191F2D),
+                    onSurface = Color(0xFFE8ECF5), onSurfaceVariant = Color(0xFFB3BDCF),
+                    secondaryContainer = Color(0xFF283653), error = Color(0xFFFFB4AB)
+                ) else lightColorScheme(
+                    primary = Color(0xFF1646C8), onPrimary = Color.White,
+                    background = Color(0xFFF4F6FB), surface = Color.White,
+                    onSurface = Color(0xFF151B2C), onSurfaceVariant = Color(0xFF636B80),
+                    secondaryContainer = Color(0xFFE7EDFC)
                 )
             ) { WorklyApp() }
         }
@@ -83,6 +86,7 @@ private fun WorklyApp() {
     val store = remember { SavedStore(ctx) }
     var authSession by remember { mutableStateOf(NativeAuth.session(ctx)) }
     var authMessage by remember { mutableStateOf<String?>(null) }
+    var externalApplyNotice by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf("Home") }
     var selected by remember { mutableStateOf<Job?>(null) }
@@ -112,7 +116,7 @@ private fun WorklyApp() {
     }
 
     Scaffold(
-        containerColor = PageBg,
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (selected == null) NavigationBar(containerColor = Color.White) {
                 listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Search,
@@ -128,7 +132,7 @@ private fun WorklyApp() {
         val job = selected
         when {
             job != null -> JobDetail(m, job, job.id in saved, { selected = null }, toggleSave,
-                onApply = { if (job.externalApplyUrl.isNullOrBlank()) { if (authSession == null) { authMessage = "Apply karne ke liye login karein."; tab = "Account"; selected = null } else scope.launch { authMessage = try { NativeAuth.apply(ctx, job.id, job.employerId ?: throw IllegalStateException("Employer details nahi mile. Is job ko website par verify karein.")); "Application submit ho gayi." } catch (e: Exception) { e.message ?: "Apply nahi ho saka." }; selected = null; tab = "Account" } } else openUrl(ctx, job.externalApplyUrl) }, onShare = { shareJob(ctx, job) })
+                onApply = { if (!job.externalApplyUrl.isNullOrBlank()) externalApplyNotice = true else if (authSession == null) { authMessage = "Apply karne ke liye login karein."; tab = "Account"; selected = null } else scope.launch { authMessage = try { NativeAuth.apply(ctx, job.id, job.employerId ?: throw IllegalStateException("Employer details nahi mile. Is job ke liye native apply support available nahi hai.")); "Application submit ho gayi." } catch (e: Exception) { e.message ?: "Apply nahi ho saka." }; selected = null; tab = "Account" } }, onShare = { shareJob(ctx, job) })
             tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
                 onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
@@ -139,6 +143,12 @@ private fun WorklyApp() {
             else -> AccountScreen(m, authSession, authMessage, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." })
         }
     }
+    if (externalApplyNotice) AlertDialog(
+        onDismissRequest = { externalApplyNotice = false },
+        title = { Text("External application") },
+        text = { Text("Is job ka application process employer ke external portal par hai. Aapki request ke mutabik Workly India app koi website ya browser open nahi karegi. Is job ke liye native in-app apply support abhi available nahi hai.") },
+        confirmButton = { TextButton(onClick = { externalApplyNotice = false }) { Text("OK") } }
+    )
 }
 
 @Composable
@@ -158,14 +168,14 @@ private fun HomeScreen(
                 )
                 Column(Modifier.padding(start = 10.dp)) {
                     Text("Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text("Verified jobs across India", color = Muted, style = MaterialTheme.typography.labelMedium)
+                    Text("Verified jobs across India", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
         item {
-            Surface(color = Soft, shape = RoundedCornerShape(22.dp)) {
+            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(22.dp)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Find a job that fits your life", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = Ink)
+                    Text("Find a job that fits your life", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                     OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
                         placeholder = { Text("Job title, city or company") },
                         leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(14.dp),
@@ -230,7 +240,7 @@ private fun JobsScreen(
                 categories.forEach { c -> FilterChip(category == c, { onCategory(c) }, { Text(c) }) }
             }
         }
-        if (state is LoadState.Ready) item { Text("${state.jobs.size} jobs", color = Muted, style = MaterialTheme.typography.bodySmall) }
+        if (state is LoadState.Ready) item { Text("${state.jobs.size} jobs", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         jobList(state, saved, onSave, onJob, onRetry)
     }
 }
@@ -253,31 +263,31 @@ private fun JobCard(job: Job, saved: Boolean, onSave: () -> Unit, onOpen: () -> 
                 Logo(job)
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(job.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(job.company, color = Muted, style = MaterialTheme.typography.bodySmall)
+                    Text(job.company, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
-                IconButton(onSave) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save job", tint = Brand) }
+                IconButton(onSave) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save job", tint = MaterialTheme.colorScheme.primary) }
             }
-            Text("📍 ${job.location}", color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("📍 ${job.location}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Pill(job.type)
                 if (job.experience.isNotBlank()) Pill("${job.experience} yrs")
                 if (job.featured) Pill("⭐ Featured")
             }
-            Text(job.salary, color = Brand, fontWeight = FontWeight.SemiBold)
+            Text(job.salary, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
 @Composable
 private fun Logo(job: Job) {
-    val mod = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)).background(Soft)
+    val mod = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondaryContainer)
     if (job.logoUrl != null) AsyncImage(job.logoUrl, job.company, mod, contentScale = ContentScale.Crop)
-    else Box(mod, Alignment.Center) { Text(job.company.take(1), color = Brand, fontWeight = FontWeight.Bold) }
+    else Box(mod, Alignment.Center) { Text(job.company.take(1), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
-private fun Pill(t: String) = Surface(color = Soft, shape = RoundedCornerShape(50)) {
-    Text(t, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = Ink)
+private fun Pill(t: String) = Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(50)) {
+    Text(t, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
 }
 
 @Composable
@@ -287,19 +297,19 @@ private fun JobDetail(m: Modifier, job: Job, saved: Boolean, onBack: () -> Unit,
             IconButton(onBack) { Icon(Icons.Default.ArrowBack, "Back") }
             Text("Job details", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             IconButton(onShare) { Icon(Icons.Default.Share, "Share") }
-            IconButton({ onSave(job) }) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save", tint = Brand) }
+            IconButton({ onSave(job) }) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save", tint = MaterialTheme.colorScheme.primary) }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Logo(job)
                 Column(Modifier.padding(start = 12.dp)) {
                     Text(job.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(job.company, color = Muted)
+                    Text(job.company, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
                 Column(Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("💰 ${job.salary}", color = Brand, fontWeight = FontWeight.Bold)
+                    Text("💰 ${job.salary}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     Text("📍 ${job.location}")
                     Text("💼 ${job.type}" + if (job.experience.isNotBlank()) " • ${job.experience} yrs experience" else "")
                     Text("👥 ${job.openings} opening" + if (job.openings > 1) "s" else "")
@@ -325,7 +335,7 @@ private fun JobDetail(m: Modifier, job: Job, saved: Boolean, onBack: () -> Unit,
 private fun Section(title: String, body: String) {
     if (body.isBlank()) return
     Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-    Text(body, color = Ink, style = MaterialTheme.typography.bodyMedium)
+    Text(body, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
 }
 
 @Composable
@@ -350,12 +360,12 @@ private fun AccountScreen(
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (session != null) {
                         Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                        Text(session.email, color = Muted)
-                        Text("Aapka account native app mein connected hai.", color = Muted)
+                        Text(session.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Aapka account native app mein connected hai.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick = { NativeAuth.signOut(ctx); onSession(null); password = "" }, Modifier.fillMaxWidth()) { Text("Logout") }
                     } else {
                         Text("Workly India mein shuru karein", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                        Text("Login ya account banayein — app ke andar hi.", color = Muted)
+                        Text("Login ya account banayein — app ke andar hi.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (mode == "signup") OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true)
                         OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true)
                         OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true)
@@ -383,7 +393,7 @@ private fun AccountScreen(
                     }
                     if (!message.isNullOrBlank()) Text(
                         message,
-                        color = if (message.contains("successful") || message.contains("submit") || message.contains("verify")) Brand else MaterialTheme.colorScheme.error
+                        color = if (message.contains("successful") || message.contains("submit") || message.contains("verify")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                     )
                 }
             }
@@ -400,22 +410,22 @@ private fun AccountScreen(
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(icon, null, tint = Brand)
+                        Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
                         Text(title, Modifier.padding(start = 12.dp).weight(1f), fontWeight = FontWeight.SemiBold)
-                        Text("Coming next", color = Muted, style = MaterialTheme.typography.labelSmall)
+                        Text("Coming next", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
         }
-        item { Text("Workly India • Native Android", color = Muted, style = MaterialTheme.typography.bodySmall) }
+        item { Text("Workly India • Native Android", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable
 private fun Message(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icon, null, tint = Muted, modifier = Modifier.size(40.dp))
-        Text(title, fontWeight = FontWeight.Bold); Text(body, color = Muted)
+        Icon(icon, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp))
+        Text(title, fontWeight = FontWeight.Bold); Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant)
         action?.invoke()
     }
 }
