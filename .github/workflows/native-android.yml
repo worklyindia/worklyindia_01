@@ -111,7 +111,18 @@ jobs:
           WORKLY_UPLOAD_STORE_PASSWORD: ${{ secrets.WORKLY_UPLOAD_STORE_PASSWORD }}
           WORKLY_UPLOAD_KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
           WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
-        run: gradle assembleRelease bundleRelease --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleRelease bundleRelease --stacktrace --scan \
+            --terms-of-service-url=https://gradle.com/terms-of-service \
+            --terms-of-service-agree 2>&1 | tee "$RUNNER_TEMP/workly-gradle-build.log"
+          SCAN_URL=$(grep -Eo "https://(scans\.gradle\.com|gradle\.com)/s/[a-zA-Z0-9_-]+" "$RUNNER_TEMP/workly-gradle-build.log" | tail -n 1 || true)
+          if [ -n "$SCAN_URL" ]; then
+            echo "GRADLE_BUILD_SCAN_URL=$SCAN_URL" >> "$GITHUB_ENV"
+            echo "- **Public Gradle Build Scan:** $SCAN_URL" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Gradle did not print a Build Scan URL; inspect the build log."
+          fi
 
       - name: Rename release files for users
         run: |
