@@ -37,7 +37,6 @@ import { useJobRecommendationNotifications } from "@/hooks/useJobRecommendationN
 import { JobStatusNotificationWrapper } from "@/components/JobStatusNotificationWrapper";
 import { JobRecommendationNotifier } from "@/components/JobRecommendationNotifier";
 import { useLiveSessionTracking } from "@/hooks/useLiveSessionTracking";
-import { useNativeApp } from "@/hooks/useNativeApp";
 import { InstallPromptBanner } from "@/components/InstallPromptBanner";
 
 import { VPNGuard } from "@/components/VPNGuard";
@@ -411,10 +410,8 @@ const AppContent = () => {
   // DISABLED: Live session tracking removed to reduce Supabase egress
   // useLiveSessionTracking();
   
-  // Initialize all native app features (splash, status bar, keyboard, back button, network)
-  useNativeApp();
+  // Native Android lifecycle and system UI are handled by the separate Kotlin app.
   
-
   // Native Android is a separate Kotlin application. The web SPA does not import Capacitor plugins.
 
   return (
