@@ -1,5 +1,10 @@
 package com.worklyindia.app
 
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -270,6 +275,13 @@ private fun NativeAIChatScreen(session: NativeSession) {
     var sending by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Ready when you are") }
     var failure by remember { mutableStateOf<String?>(null) }
+    var thinkHarder by remember { mutableStateOf(false) }
+    var showComposerMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (!spoken.isNullOrBlank()) draft = listOf(draft.trim(), spoken).filter { it.isNotBlank() }.joinToString(" ")
+    }
     val scope = rememberCoroutineScope()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
@@ -278,9 +290,11 @@ private fun NativeAIChatScreen(session: NativeSession) {
     }
 
     fun send(text: String) {
-        val prompt = text.trim()
-        if (prompt.isBlank() || sending) return
+        val rawPrompt = text.trim()
+        if (rawPrompt.isBlank() || sending) return
+        val prompt = if (thinkHarder) "$rawPrompt\\n\\nPlease think carefully, verify the reasoning, and provide a more detailed, well-structured answer." else rawPrompt
         draft = ""
+        thinkHarder = false
         failure = null
         messages.add(NativeAIMessage("user", prompt))
         messages.add(NativeAIMessage("assistant", ""))
@@ -406,23 +420,64 @@ private fun NativeAIChatScreen(session: NativeSession) {
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (thinkHarder) {
+                    AssistChip(
+                        onClick = { thinkHarder = false },
+                        label = { Text("Think harder · On") },
+                        leadingIcon = { Icon(Icons.Default.Psychology, null) },
+                        trailingIcon = { Icon(Icons.Default.Close, null) }
+                    )
+                }
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box {
+                        FilledTonalIconButton(onClick = { showComposerMenu = true }, enabled = !sending, modifier = Modifier.size(46.dp)) {
+                            Icon(Icons.Default.Add, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = showComposerMenu, onDismissRequest = { showComposerMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (thinkHarder) "Turn off Think harder" else "Think harder") },
+                                leadingIcon = { Icon(Icons.Default.Psychology, null) },
+                                onClick = { thinkHarder = !thinkHarder; showComposerMenu = false }
+                            )
+                        }
+                    }
                     OutlinedTextField(
                         value = draft,
                         onValueChange = { draft = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Message Workly AI…") },
-                        maxLines = 5,
-                        shape = RoundedCornerShape(22.dp),
+                        placeholder = { Text("Message…") },
+                        maxLines = 6,
+                        shape = RoundedCornerShape(25.dp),
                         enabled = !sending
                     )
+                    if (draft.isBlank() && !sending) {
+                        FilledTonalIconButton(
+                            onClick = {
+                                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to Workly AI")
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-IN")
+                                }
+                                runCatching { speechLauncher.launch(intent) }
+                                    .onFailure { failure = "Voice typing is not available on this device. Install or enable a speech recognition service." }
+                            },
+                            modifier = Modifier.size(46.dp)
+                        ) { Icon(Icons.Default.Mic, contentDescription = "Voice typing") }
+                    }
                     FilledIconButton(
                         onClick = { send(draft) },
                         enabled = draft.isNotBlank() && !sending,
-                        modifier = Modifier.size(52.dp)
-                    ) { Icon(Icons.Default.Send, contentDescription = "Send message") }
+                        modifier = Modifier.size(46.dp)
+                    ) { Icon(Icons.Default.ArrowUpward, contentDescription = "Send message") }
                 }
-                Text("Workly AI may make mistakes. Check important information.", Modifier.fillMaxWidth().padding(top = 5.dp), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Text(
+                    if (sending) "Workly AI is generating a response…" else "Voice typing · Think harder · Streaming AI replies",
+                    Modifier.fillMaxWidth().padding(top = 5.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
             }
         }
     }
