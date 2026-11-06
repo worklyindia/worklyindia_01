@@ -129,42 +129,52 @@ class MainActivity : Activity() {
     private fun syncWebsiteSession() {
         val script = """
             (function() {
-              try {
-                var keys = Object.keys(localStorage);
-                var key = keys.find(function(k) { return k.indexOf('auth-token') >= 0; });
-                if (!key) return;
-                var session = JSON.parse(localStorage.getItem(key) || '{}');
-                if (session.access_token && session.refresh_token && session.user && session.user.id) {
-                  WorklyAndroid.syncAuthSession(JSON.stringify({
-                    access_token: session.access_token,
-                    refresh_token: session.refresh_token,
-                    user: session.user
-                  }));
-                }
-                if (!window.__worklyStorageHooked) {
-                  window.__worklyStorageHooked = true;
-                  var originalSet = Storage.prototype.setItem;
-                  Storage.prototype.setItem = function(k, v) {
-                    var result = originalSet.apply(this, arguments);
-                    if (String(k).indexOf('auth-token') >= 0) setTimeout(function() {
-                      try {
-                        var s = JSON.parse(localStorage.getItem(k) || '{}');
-                        if (s.access_token && s.refresh_token && s.user) WorklyAndroid.syncAuthSession(JSON.stringify(s));
-                      } catch(e) {}
-                    }, 250);
-                    return result;
-                  };
-                  window.addEventListener('storage', function(e) {
-                    if (e.key && e.key.indexOf('auth-token') >= 0) setTimeout(syncWebsiteSession, 250);
-                  });
-                }
-              } catch(e) {}
+              function syncWorklySession() {
+                try {
+                  var key = Object.keys(localStorage).find(function(k) { return k.indexOf('auth-token') >= 0; });
+                  if (!key) return;
+                  var session = JSON.parse(localStorage.getItem(key) || '{}');
+                  if (session.access_token && session.refresh_token && session.user && session.user.id) {
+                    WorklyAndroid.syncAuthSession(JSON.stringify(session));
+                  }
+                } catch(e) {}
+              }
+              if (!window.__worklyStorageHooked) {
+                window.__worklyStorageHooked = true;
+                var originalSet = Storage.prototype.setItem;
+                Storage.prototype.setItem = function(k, v) {
+                  var result = originalSet.apply(this, arguments);
+                  if (String(k).indexOf('auth-token') >= 0) setTimeout(syncWorklySession, 250);
+                  return result;
+                };
+                var originalRemove = Storage.prototype.removeItem;
+                Storage.prototype.removeItem = function(k) {
+                  var result = originalRemove.apply(this, arguments);
+                  if (String(k).indexOf('auth-token') >= 0 && window.WorklyAndroid) WorklyAndroid.clearAuthSession();
+                  return result;
+                };
+                window.addEventListener('storage', function(e) {
+                  if (e.key && e.key.indexOf('auth-token') >= 0) setTimeout(syncWorklySession, 250);
+                });
+              }
+              syncWorklySession();
             })();
         """.trimIndent()
         webView.evaluateJavascript(script, null)
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun clearAuthSession() {
+            runOnUiThread {
+                val old = NativeAuth.session(this@MainActivity)
+                if (old != null) activityScope.launch(Dispatchers.IO) {
+                    NativePushManager.unregister(this@MainActivity, old)
+                }
+                NativeAuth.signOut(this@MainActivity)
+            }
+        }
+
         @JavascriptInterface
         fun syncAuthSession(raw: String) {
             runOnUiThread {
