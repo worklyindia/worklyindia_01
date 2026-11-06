@@ -378,6 +378,7 @@ export async function sendLegacyPush(
     ok: result.sent > 0,
     id: crypto.randomUUID(),
     recipients: result.sent,
+    failed: result.failed,
     errors: result.errors,
   };
 }
