@@ -97,9 +97,10 @@ object NativeAuth {
         result.optBoolean("verified", false) || result.optBoolean("success", false)
     }
 
-    suspend fun resetPassword(email: String) = withContext(Dispatchers.IO) {
+    suspend fun resetPassword(email: String, userType: String) = withContext(Dispatchers.IO) {
+        val redirect = if (userType == "employer") "https://worklyindia.devs.surf/employer-auth?type=recovery" else "https://worklyindia.devs.surf/reset-password"
         request("POST", "/auth/v1/recover",
-            JSONObject().put("email", email.trim().lowercase()).put("redirect_to", "https://worklyindia.devs.surf/reset-password"))
+            JSONObject().put("email", email.trim().lowercase()).put("redirect_to", redirect))
     }
 
     suspend fun signUp(context: Context, email: String, password: String, name: String): NativeSession? = withContext(Dispatchers.IO) {
