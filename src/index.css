@@ -621,7 +621,6 @@ html {
     overscroll-behavior-y: auto;
     /* Safe Area Padding */
     padding-bottom: calc(env(safe-area-inset-bottom) + 64px); /* 64px for bottom nav */
-    padding-top: env(safe-area-inset-top);
   }
 
   /* Auth pages have no bottom nav: the 64px body padding painted the page
