@@ -189,7 +189,7 @@ fun NativeFeatureScreen(
                                     AssistChip(onClick={},label={Text(interview.status.replace("_"," ").replaceFirstChar{it.uppercase()})})
                                 }
                                 Text(whenText,style=MaterialTheme.typography.bodyMedium)
-                                Text("Type: "+when(interview.mode){"online"->"Custom link";"jitsi"->"Jitsi video";"phone"->"Phone";"in_person"->"In person";else->interview.mode},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Type: "+if(interview.videoPlatform=="jitsi") "Jitsi video" else when(interview.mode){"online"->"Custom link";"phone"->"Phone";"in_person"->"In person";else->interview.mode},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(if(interview.applicantId==session.userId) "Your interview" else "Candidate interview",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 val meetingLink=interview.jitsiMeetingUrl.ifBlank { interview.locationUrl }
                                 if(meetingLink.isNotBlank()) {
