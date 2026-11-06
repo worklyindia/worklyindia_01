@@ -32,6 +32,8 @@ data class Job(
     val webUrl: String get() = "${JobsApi.SITE}/job/$id"
 }
 
+data class Festival(val date: String, val name: String)
+
 object JobsApi {
     const val SITE = "https://worklyindia.devs.surf"
     private const val BASE = "https://jubwzelupbntbetpajqb.supabase.co/rest/v1"
@@ -58,6 +60,29 @@ object JobsApi {
         val arr = JSONArray(get("$BASE/jobs?select=category&status=eq.active&visibility=eq.public&limit=500"))
         (0 until arr.length()).mapNotNull { arr.getJSONObject(it).optStr("category") }
             .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+    }
+
+    suspend fun fetchFestivals(): List<Festival> = withContext(Dispatchers.IO) {
+        val rows = JSONArray(get("$BASE/google_calendar_api?select=data&name=eq.Google%20Calendar%20API%20JSON&limit=1"))
+        if (rows.length() == 0) return@withContext emptyList()
+        val data = rows.optJSONObject(0)?.optJSONObject("data") ?: return@withContext emptyList()
+        val source = data.optJSONArray("festivals") ?: return@withContext emptyList()
+        val expanded = mutableListOf<Festival>()
+        for (i in 0 until source.length()) {
+            val item = source.optJSONObject(i) ?: continue
+            val date = item.optString("date")
+            val name = item.optString("name")
+            if (!date.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) || name.isBlank()) continue
+            val isNavratriStart = name.contains("navratri", ignoreCase = true) &&
+                !Regex("\\b(last|end|day\\s*[2-9])\\b", RegexOption.IGNORE_CASE).containsMatchIn(name)
+            if (isNavratriStart) {
+                val baseName = name.replace(Regex("^first\\s+day\\s+of\\s+", RegexOption.IGNORE_CASE), "")
+                    .replace(Regex("\\s+day\\s*1\\s*$", RegexOption.IGNORE_CASE), "").trim()
+                val start = java.time.LocalDate.parse(date)
+                for (day in 1..9) expanded += Festival(start.plusDays((day - 1).toLong()).toString(), "$baseName Day $day")
+            } else expanded += Festival(date, name)
+        }
+        expanded.distinctBy { it.date + "|" + it.name.lowercase() }.sortedWith(compareBy<Festival> { it.date }.thenBy { it.name })
     }
 
     private fun get(url: String): String {
