@@ -363,7 +363,9 @@ export const PushNotificationSettings: React.FC = () => {
     if (permissionStatus === 'granted' && isSubscribed) {
       return 'Push notifications are enabled';
     } else if (permissionStatus === 'denied') {
-      return 'Push notifications are blocked in your browser';
+      return FirebasePushService.isNativeAndroidApp()
+        ? 'Notifications are blocked in Android app settings'
+        : 'Push notifications are blocked in your browser';
     } else {
       return 'Push notifications are turned off';
     }
