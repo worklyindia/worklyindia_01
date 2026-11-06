@@ -264,7 +264,7 @@ export async function sendToTokens(tokens: string[], payloadInput: PushPayload):
           if (res.status === 404 || res.status === 400 || /UNREGISTERED|INVALID_ARGUMENT/.test(errorBody)) {
             result.invalidTokens.push(token);
           }
-          result.errors.push(`[${res.status}] ${errorBody.slice(0, 300)}`);
+          result.errors.push(`token:${token.slice(0, 12)} [${res.status}] ${errorBody.slice(0, 300)}`);
         } catch (error) {
           result.failed++;
           result.errors.push(error instanceof Error ? error.message : String(error));
@@ -388,7 +388,13 @@ export async function legacyFetchCompat(
   payload: LegacyPayload,
 ) {
   const r = await sendLegacyPush(supabase, payload);
-  const body = { id: r.id, recipients: r.recipients, ...(r.ok ? {} : { errors: r.errors }) };
+  const body = {
+    id: r.id,
+    recipients: r.recipients,
+    sent: r.recipients,
+    failed: r.failed,
+    errors: r.errors,
+  };
   return {
     ok: r.ok,
     status: r.ok ? 200 : 500,
