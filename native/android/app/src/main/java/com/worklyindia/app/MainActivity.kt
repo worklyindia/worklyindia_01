@@ -585,24 +585,51 @@ private fun SavedScreen(m: Modifier, jobs: List<Job>, count: Int, saved: Set<Str
 
 @Composable
 private fun JobCard(job: Job, saved: Boolean, onSave: () -> Unit, onOpen: () -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(
+        Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+    ) {
+        Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 Logo(job)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Column(Modifier.weight(1f).padding(start = 11.dp, end = 4.dp)) {
                     Text(job.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(job.company, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(job.company, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (job.featured) {
+                            Spacer(Modifier.width(6.dp))
+                            Pill("Featured")
+                        }
+                    }
+                    Text(job.location, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                IconButton(onSave) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save job", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = onSave, modifier = Modifier.size(40.dp)) {
+                    Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        if (saved) "Remove saved job" else "Save job",
+                        tint = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            Text("📍 ${job.location}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically) {
                 Pill(job.type)
-                if (job.experience.isNotBlank()) Pill("${job.experience} yrs")
-                if (job.featured) Pill("⭐ Featured")
+                if (job.category.isNotBlank()) Pill(job.category)
+                if (job.experience.isNotBlank()) Pill(job.experience)
             }
-            Text(job.salary, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.07f))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Payments, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+                Text(job.salary.ifBlank { "Salary not disclosed" }, Modifier.weight(1f).padding(start = 8.dp),
+                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                TextButton(onClick = onOpen, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)) {
+                    Text("View details")
+                    Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(17.dp))
+                }
+            }
         }
     }
 }
@@ -628,34 +655,72 @@ private fun JobDetail(m: Modifier, job: Job, saved: Boolean, onBack: () -> Unit,
             IconButton(onShare) { Icon(Icons.Default.Share, "Share") }
             IconButton({ onSave(job) }) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save", tint = MaterialTheme.colorScheme.primary) }
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Logo(job)
-                Column(Modifier.padding(start = 12.dp)) {
-                    Text(job.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(job.company, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(15.dp)) {
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            ) {
+                Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Logo(job)
+                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text(job.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
+                            Text(job.company, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                            Text(job.location, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (job.featured) Pill("Featured")
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Pill(job.type)
+                        if (job.category.isNotBlank()) Pill(job.category)
+                        if (job.experience.isNotBlank()) Pill(job.experience)
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Payments, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                            Text("Salary", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(job.salary, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
                 }
             }
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(16.dp)) {
-                Column(Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("💰 ${job.salary}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    Text("📍 ${job.location}")
-                    Text("💼 ${job.type}" + if (job.experience.isNotBlank()) " • ${job.experience} yrs experience" else "")
-                    Text("👥 ${job.openings} opening" + if (job.openings > 1) "s" else "")
+                Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Job overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    DetailInfoRow(Icons.Default.LocationOn, "Location", job.location)
+                    DetailInfoRow(Icons.Default.WorkOutline, "Job type", job.type)
+                    if (job.category.isNotBlank()) DetailInfoRow(Icons.Default.Category, "Category", job.category)
+                    if (job.experience.isNotBlank()) DetailInfoRow(Icons.Default.Schedule, "Experience", job.experience)
+                    DetailInfoRow(Icons.Default.Groups, "Openings", "${job.openings.coerceAtLeast(1)}")
                 }
             }
-            Section("About this job", job.description)
+            Section("Job description", job.description)
             Section("Requirements", job.requirements)
             Section("Benefits", job.benefits)
             if (job.skills.isNotEmpty()) {
-                Text("Skills", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { job.skills.forEach { Pill(it) } }
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Required skills", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { job.skills.forEach { Pill(it) } }
+                }
             }
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
             Button(onApply, Modifier.fillMaxWidth().padding(14.dp).height(50.dp), shape = RoundedCornerShape(12.dp)) {
                 Text("Apply now", fontWeight = FontWeight.Bold)
             }
+        }
+    }
+}
+
+@Composable
+private fun DetailInfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+        Column(Modifier.weight(1f).padding(start = 11.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         }
     }
 }
