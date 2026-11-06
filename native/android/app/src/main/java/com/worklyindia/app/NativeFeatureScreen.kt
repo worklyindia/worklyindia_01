@@ -287,6 +287,7 @@ private fun NativeAIChatScreen(session: NativeSession) {
     var selectedFiles by remember { mutableStateOf<List<NativeAIFile>>(emptyList()) }
     var isProcessingAttachment by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
             isProcessingAttachment = true
@@ -341,7 +342,6 @@ private fun NativeAIChatScreen(session: NativeSession) {
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (!spoken.isNullOrBlank()) draft = listOf(draft.trim(), spoken).filter { it.isNotBlank() }.joinToString(" ")
     }
-    val scope = rememberCoroutineScope()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
@@ -350,13 +350,13 @@ private fun NativeAIChatScreen(session: NativeSession) {
 
     fun send(text: String) {
         val rawPrompt = text.trim()
-        if (rawPrompt.isBlank() || sending) return
-        val prompt = if (thinkHarder) "$rawPrompt\\n\\nPlease think carefully, verify the reasoning, and provide a more detailed, well-structured answer." else rawPrompt
+        if (rawPrompt.isBlank() && selectedImages.isEmpty() && selectedFiles.isEmpty() || sending) return
+        val prompt = if (thinkHarder) "$rawPrompt\n\nPlease think carefully, verify the reasoning, and provide a more detailed, well-structured answer." else rawPrompt
         draft = ""
         thinkHarder = false
         failure = null
-        val attachmentContext = selectedFiles.joinToString("\\n\\n") { "--- Attached file: ${it.name} ---\\n${it.text}" }
-        val promptWithFiles = listOf(prompt, attachmentContext).filter { it.isNotBlank() }.joinToString("\\n\\n")
+        val attachmentContext = selectedFiles.joinToString("\n\n") { "--- Attached file: ${it.name} ---\n${it.text}" }
+        val promptWithFiles = listOf(prompt, attachmentContext).filter { it.isNotBlank() }.joinToString("\n\n")
         val outgoingImages = selectedImages
         messages.add(NativeAIMessage("user", promptWithFiles, outgoingImages))
         messages.add(NativeAIMessage("assistant", ""))
@@ -597,7 +597,7 @@ private fun readNativeAIFile(context: android.content.Context, uri: Uri): Native
     if (bytes.size > 5 * 1024 * 1024) throw IllegalArgumentException("$name: file 5 MB se chhoti honi chahiye.")
     val raw = String(bytes, Charsets.UTF_8)
     val extracted = if (ext == "pdf" || mime == "application/pdf") {
-        val matches = Regex("\\(([^()] {0,0}[^()]*)\\)").findAll(raw).map { it.groupValues[1] }.filter { it.length > 2 && it.any(Char::isLetter) }.toList()
+        val matches = Regex("\\(([^()]*)\\)").findAll(raw).map { it.groupValues[1] }.filter { it.length > 2 && it.any(Char::isLetter) }.toList()
         matches.joinToString(" ").ifBlank { "PDF attached. Text extraction limited on this device; ask the user for a text-based copy if needed." }
     } else raw
     return NativeAIFile(name, extracted.take(25000))
