@@ -169,6 +169,9 @@ private fun WorklyApp() {
     var authSession by remember { mutableStateOf(NativeAuth.session(ctx)) }
     var authMessage by remember { mutableStateOf<String?>(null) }
     var externalApplyNotice by remember { mutableStateOf(false) }
+    var applyConfirmation by remember { mutableStateOf<Job?>(null) }
+    var applyBusy by remember { mutableStateOf(false) }
+    var applyResult by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf("Home") }
     var selected by remember { mutableStateOf<Job?>(null) }
@@ -244,7 +247,14 @@ private fun WorklyApp() {
         val job = selected
         when {
             job != null -> JobDetail(m, job, job.id in saved, { selected = null }, toggleSave,
-                onApply = { if (!job.externalApplyUrl.isNullOrBlank()) externalApplyNotice = true else if (authSession == null) { authMessage = "Apply karne ke liye login karein."; tab = "Account"; selected = null } else scope.launch { authMessage = try { NativeAuth.apply(ctx, job.id, job.employerId ?: throw IllegalStateException("Employer details nahi mile. Is job ke liye native apply support available nahi hai.")); "Application submit ho gayi." } catch (e: Exception) { e.message ?: "Apply nahi ho saka." }; selected = null; tab = "Account" } }, onShare = { shareJob(ctx, job) })
+                onApply = {
+                    if (!job.externalApplyUrl.isNullOrBlank()) externalApplyNotice = true
+                    else if (authSession == null) {
+                        authMessage = "Apply karne ke liye pehle login karein."
+                        tab = "Account"
+                        selected = null
+                    } else applyConfirmation = job
+                }, onShare = { shareJob(ctx, job) })
             selectedFeature != null -> NativeFeatureScreen(
                 m, selectedFeature!!, authSession,
                 onBack = { selectedFeature = null },
@@ -263,6 +273,54 @@ private fun WorklyApp() {
             else -> AccountScreen(m, authSession, authMessage, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." }, onNavigate = { selectedFeature = it })
         }
     }
+    if (applyConfirmation != null) {
+        val pendingJob = applyConfirmation!!
+        AlertDialog(
+            onDismissRequest = { if (!applyBusy) applyConfirmation = null },
+            title = { Text("Confirm application") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(pendingJob.title, fontWeight = FontWeight.Bold)
+                    Text(pendingJob.company, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(pendingJob.location, style = MaterialTheme.typography.bodySmall)
+                    Text("Aapki Workly India profile se is job ke liye application submit hogi. Submit karne se pehle apni profile details check kar lein.")
+                }
+            },
+            confirmButton = {
+                Button(enabled = !applyBusy, onClick = {
+                    val session = authSession
+                    if (session == null) {
+                        applyConfirmation = null
+                        tab = "Account"
+                        authMessage = "Apply karne ke liye pehle login karein."
+                    } else {
+                        applyBusy = true
+                        scope.launch {
+                            val result = runCatching {
+                                NativeAuth.apply(ctx, pendingJob.id, pendingJob.employerId
+                                    ?: throw IllegalStateException("Employer details nahi mile. Is job ke liye native apply support available nahi hai."))
+                            }
+                            applyBusy = false
+                            applyConfirmation = null
+                            applyResult = result.fold(
+                                { "Application submit ho gayi. Aap Account > My applications mein status dekh sakte hain." },
+                                { it.message ?: "Application submit nahi ho saki. Dobara try karein." }
+                            )
+                        }
+                    }
+                }) { Text(if (applyBusy) "Submitting…" else "Confirm & apply") }
+            },
+            dismissButton = {
+                TextButton(enabled = !applyBusy, onClick = { applyConfirmation = null }) { Text("Cancel") }
+            }
+        )
+    }
+    if (applyResult != null) AlertDialog(
+        onDismissRequest = { applyResult = null },
+        title = { Text(if (applyResult!!.startsWith("Application submit ho gayi")) "Application submitted" else "Application status") },
+        text = { Text(applyResult!!) },
+        confirmButton = { TextButton(onClick = { applyResult = null }) { Text("OK") } }
+    )
     if (externalApplyNotice) AlertDialog(
         onDismissRequest = { externalApplyNotice = false },
         title = { Text("External application") },
