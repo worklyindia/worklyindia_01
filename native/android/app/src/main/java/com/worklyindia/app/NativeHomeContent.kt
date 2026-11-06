@@ -1,0 +1,143 @@
+package com.worklyindia.app
+
+import android.annotation.SuppressLint
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+private const val HOME_BASE_URL = "https://jubwzelupbntbetpajqb.supabase.co"
+private const val HOME_PUBLIC_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
+
+data class NativeHomeBanner(val title:String,val subtitle:String,val image:String?,val youtube:String?)
+data class NativeHomeBadge(val title:String,val subtitle:String,val description:String,val image:String?)
+data class NativeHomePerson(val name:String,val image:String?)
+data class NativeHomeData(val banners:List<NativeHomeBanner> = emptyList(),val videos:List<String> = emptyList(),val heroImage:String? = null,val seekersImage:String? = null,val badges:List<NativeHomeBadge> = emptyList(),val seekers:List<NativeHomePerson> = emptyList(),val companies:List<NativeHomePerson> = emptyList())
+
+object NativeHomeApi {
+    suspend fun load():NativeHomeData = withContext(Dispatchers.IO) {
+        var banners=emptyList<NativeHomeBanner>(); var videos=emptyList<String>(); var hero:String?=null; var seekersImage:String?=null
+        var badges=emptyList<NativeHomeBadge>(); var seekers=emptyList<NativeHomePerson>(); var companies=emptyList<NativeHomePerson>()
+        runCatching {
+            val a=JSONArray(request("$HOME_BASE_URL/rest/v1/rpc/get_active_hero_banners","POST","{}"))
+            banners=(0 until a.length()).mapNotNull { i -> val o=a.optJSONObject(i) ?: return@mapNotNull null
+                NativeHomeBanner(o.optString("title"),o.optString("subtitle"),o.optString("image_url").takeIf{it.startsWith("http")},o.optString("youtube_url").takeIf{it.startsWith("http")}) }
+        }
+        runCatching {
+            val a=JSONArray(request("$HOME_BASE_URL/rest/v1/app_settings?select=setting_key,setting_value&setting_key=in.(home_seekers_video_url,home_hero_image,home_seekers_image)"))
+            for(i in 0 until a.length()) { val o=a.getJSONObject(i); when(o.optString("setting_key")) {
+                "home_seekers_video_url" -> videos=o.optString("setting_value").split(Regex("[\\n,]+")).map{it.trim()}.filter{it.contains("youtu")}
+                "home_hero_image" -> hero=o.optString("setting_value").takeIf{it.startsWith("http")}
+                "home_seekers_image" -> seekersImage=o.optString("setting_value").takeIf{it.startsWith("http")}
+            } }
+        }
+        runCatching {
+            val a=JSONArray(request("$HOME_BASE_URL/rest/v1/home_trust_badges?select=title,subtitle,description,image_url&is_active=eq.true&order=sort_order.asc"))
+            badges=(0 until a.length()).map { i -> val o=a.getJSONObject(i); NativeHomeBadge(o.optString("title"),o.optString("subtitle"),o.optString("description"),o.optString("image_url").takeIf{it.startsWith("http")}) }
+        }
+        runCatching { seekers=people("get_trust_seekers") }; runCatching { companies=people("get_trust_companies") }
+        NativeHomeData(banners,videos,hero,seekersImage,badges,seekers,companies)
+    }
+    private fun people(fn:String):List<NativeHomePerson> {
+        val a=JSONArray(request("$HOME_BASE_URL/rest/v1/rpc/$fn","POST","{\"_limit\":30}"))
+        return (0 until a.length()).mapNotNull { i -> val o=a.optJSONObject(i) ?: return@mapNotNull null
+            val n=o.optString("name").trim(); if(n.isBlank()) null else NativeHomePerson(n,o.optString("image_url").takeIf{it.startsWith("http")}) }
+    }
+    private fun request(url:String,method:String="GET",body:String?=null):String {
+        val c=URL(url).openConnection() as HttpURLConnection; c.connectTimeout=12000; c.readTimeout=16000; c.requestMethod=method
+        c.setRequestProperty("apikey",HOME_PUBLIC_KEY); c.setRequestProperty("Accept","application/json")
+        if(body!=null){c.doOutput=true;c.setRequestProperty("Content-Type","application/json");c.outputStream.use{it.write(body.toByteArray())}}
+        try { val code=c.responseCode; val stream=if(code in 200..299)c.inputStream else c.errorStream; val result=stream?.bufferedReader()?.use{it.readText()}.orEmpty()
+            if(code !in 200..299) error("Home content unavailable ($code)"); return result
+        } finally { c.disconnect() }
+    }
+}
+
+@Composable
+fun NativeHomeBannerCarousel(data:NativeHomeData) {
+    if(data.banners.isEmpty()) return
+    var index by remember { mutableIntStateOf(0) }; val b=data.banners[index.coerceIn(data.banners.indices)]
+    Card(Modifier.fillMaxWidth().padding(horizontal=12.dp),shape=RoundedCornerShape(18.dp)) { Column {
+        if(b.image!=null) AsyncImage(b.image,b.title,Modifier.fillMaxWidth().height(190.dp),contentScale=androidx.compose.ui.layout.ContentScale.Crop)
+        Column(Modifier.padding(14.dp)){if(b.title.isNotBlank())Text(b.title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);if(b.subtitle.isNotBlank())Text(b.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        if(data.banners.size>1)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
+            IconButton(onClick={index=(index-1+data.banners.size)%data.banners.size}){Icon(Icons.Default.ChevronLeft,"Previous banner")}
+            Text("${index+1} / ${data.banners.size}",style=MaterialTheme.typography.labelMedium)
+            IconButton(onClick={index=(index+1)%data.banners.size}){Icon(Icons.Default.ChevronRight,"Next banner")}
+        }
+        if(b.youtube!=null)NativeHomeYouTube(b.youtube,Modifier.fillMaxWidth().height(205.dp))
+    } }
+}
+
+@Composable
+fun NativeHomeExtraSections(data:NativeHomeData,onFeature:(String)->Unit) {
+    if(data.videos.isNotEmpty()) {
+        HomeHeading("Workly India videos","Updates and useful job guidance")
+        LazyRow(contentPadding=PaddingValues(horizontal=14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){items(data.videos){NativeHomeYouTube(it,Modifier.width(310.dp).height(190.dp))}}
+    }
+    HomeHeading("See Workly India in action","A quick look at how hiring and job search work on the platform.")
+    NativeHomeMp4("https://pub-58e90721f9fe42b38ecde13543c608fc.r2.dev/workly-india-promo-30s-silent.mp4",data.heroImage,Modifier.fillMaxWidth().padding(horizontal=14.dp).height(205.dp))
+    TextButton(onClick={onFeature("Workly India video")}){Text("Watch full video")}
+    HomeHeading("Join job seekers on Workly India","Community and career opportunities")
+    if(data.seekers.isNotEmpty())LazyRow(contentPadding=PaddingValues(horizontal=12.dp),horizontalArrangement=Arrangement.spacedBy(9.dp)){items(data.seekers){p->Card(Modifier.width(120.dp)){Column(Modifier.padding(10.dp),horizontalAlignment=Alignment.CenterHorizontally){if(p.image!=null)AsyncImage(p.image,p.name,Modifier.size(48.dp).clip(RoundedCornerShape(24.dp)))else Icon(Icons.Default.Person,null,Modifier.size(48.dp));Text(p.name,style=MaterialTheme.typography.labelSmall,maxLines=1,overflow=TextOverflow.Ellipsis)}}}}
+    if(data.seekersImage!=null)AsyncImage(data.seekersImage,"Workly India job seeker community",Modifier.fillMaxWidth().padding(10.dp))
+    HomeHeading("Free Resume Templates","Choose a design and create your resume")
+    LazyRow(contentPadding=PaddingValues(horizontal=14.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)){items(listOf("Modern","Professional","Minimal","Creative","Classic")){name->Card(onClick={onFeature("My resume")},Modifier.width(145.dp).height(155.dp)){Column(Modifier.fillMaxSize().padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.SpaceBetween){Icon(Icons.Default.Description,null,Modifier.size(48.dp),tint=MaterialTheme.colorScheme.primary);Text(name,fontWeight=FontWeight.Bold);Text("Create resume",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)}}}}
+    TextButton(onClick={onFeature("My resume")}){Text("View all resume templates")}
+    HomeHeading("Free Cover Letter Templates","Make your job application stand out")
+    LazyRow(contentPadding=PaddingValues(horizontal=14.dp),horizontalArrangement=Arrangement.spacedBy(10.dp)){items(listOf("Professional","Modern","Simple","Creative")){name->Card(onClick={onFeature("Cover letter builder")},Modifier.width(145.dp).height(140.dp)){Column(Modifier.fillMaxSize().padding(12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.SpaceBetween){Icon(Icons.Default.Mail,null,Modifier.size(42.dp),tint=MaterialTheme.colorScheme.primary);Text(name,fontWeight=FontWeight.Bold);Text("Create cover letter",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.primary)}}}}
+    TextButton(onClick={onFeature("Cover letter builder")}){Text("View all cover letter templates")}
+    Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+        Row(verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Language,null,tint=MaterialTheme.colorScheme.primary);Text("Domains",Modifier.padding(start=8.dp),color=MaterialTheme.colorScheme.primary,fontWeight=FontWeight.Bold)}
+        Text("Get your own website domain",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text("Find and buy the perfect domain for your brand.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick={onFeature("Domains")},Modifier.fillMaxWidth()){Icon(Icons.Default.Search,null);Text("Search domain name",Modifier.padding(start=8.dp))}
+        Text(".com   .in   .co.in   .online   .store   .tech   .net   .org   .app",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelMedium)
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){listOf("Instant setup" to Icons.Default.Bolt,"Free SSL" to Icons.Default.Shield,"Easy DNS" to Icons.Default.Settings).forEach{(t,i)->Column(horizontalAlignment=Alignment.CenterHorizontally){Icon(i,null,tint=MaterialTheme.colorScheme.primary);Text(t,style=MaterialTheme.typography.labelSmall)}}}
+    }
+    if(data.badges.isNotEmpty()){HomeHeading("Why choose Workly India","Platform safety and trust features");data.badges.forEach{b->Card(Modifier.fillMaxWidth().padding(horizontal=14.dp,vertical=5.dp),shape=RoundedCornerShape(16.dp)){Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){Row(verticalAlignment=Alignment.CenterVertically){if(b.image!=null)AsyncImage(b.image,b.title,Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)))else Icon(Icons.Default.VerifiedUser,null,Modifier.size(40.dp),tint=MaterialTheme.colorScheme.primary);Column(Modifier.weight(1f).padding(start=10.dp)){Text(b.title,fontWeight=FontWeight.Bold);Text(b.subtitle,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}};Text(b.description.ifBlank{b.subtitle},style=MaterialTheme.typography.bodySmall)}}}}
+    HomeHeading("Trusted by companies","Company profiles and employer community")
+    if(data.companies.isNotEmpty())LazyRow(contentPadding=PaddingValues(horizontal=12.dp),horizontalArrangement=Arrangement.spacedBy(9.dp)){items(data.companies){p->Card{Row(Modifier.widthIn(min=130.dp,max=190.dp).padding(12.dp),verticalAlignment=Alignment.CenterVertically){if(p.image!=null)AsyncImage(p.image,p.name,Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)))else Icon(Icons.Default.Business,null);Text(p.name,Modifier.padding(start=8.dp),style=MaterialTheme.typography.labelMedium,maxLines=2,overflow=TextOverflow.Ellipsis)}}}}
+    TextButton(onClick={onFeature("Companies")}){Text("Explore companies")}
+    Card(Modifier.fillMaxWidth().padding(14.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.errorContainer)){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)){Row(verticalAlignment=Alignment.CenterVertically){Icon(Icons.Default.Warning,null,tint=MaterialTheme.colorScheme.error);Text("Important Safety Notice",Modifier.padding(start=8.dp),fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.error)};Text("This platform lists job opportunities from various companies. We do not provide jobs directly.");Text("Always verify the company before applying. Legitimate jobs never require payment. Do not pay registration or processing fees.");Text("Never share your OTP, bank details, or passwords. Only verify documents through official government websites.");Text("Job seekers are never charged. Report suspicious activity to Workly India support.",style=MaterialTheme.typography.bodySmall);TextButton(onClick={onFeature("Help & support")}){Text("Contact support")}}}
+    Column(Modifier.fillMaxWidth().padding(16.dp),horizontalAlignment=Alignment.CenterHorizontally){Text("Explore Workly India",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+        val links=listOf("About Us","Mission","Vision","Why Choose Us","Blog","Trust & Safety","Employer Guidelines","Job Seeker Guidelines","Community Guidelines","Accessibility Statement","Privacy Policy","Refund Policy","Terms & Conditions","FAQ","Disclaimer","DMCA","Cookie Policy","Contact Us","Sitemap","Careers","Press / Media Kit")
+        links.chunked(2).forEach{pair->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){pair.forEach{label->TextButton(onClick={onFeature(label)},Modifier.weight(1f)){Text(label,style=MaterialTheme.typography.labelSmall,maxLines=2)}}}}
+        Text("Follow Workly India",fontWeight=FontWeight.Bold);Row(horizontalArrangement=Arrangement.spacedBy(14.dp)){IconButton(onClick={onFeature("Social channels")}){Icon(Icons.Default.Facebook,"Facebook")};IconButton(onClick={onFeature("Social channels")}){Icon(Icons.Default.CameraAlt,"Instagram")};IconButton(onClick={onFeature("Social channels")}){Icon(Icons.Default.PlayCircle,"YouTube")}}
+        Text("© 2026 Workly India. All Rights Reserved.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun HomeHeading(title:String,subtitle:String){Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=12.dp)){Text(title,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Text(subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
+private fun homeYoutubeId(url:String):String?=Regex("(?:youtu\\.be/|youtube(?:-nocookie)?\\.com/(?:embed/|watch\\?v=|shorts/))([A-Za-z0-9_-]{11})").find(url)?.groupValues?.getOrNull(1)
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun NativeHomeYouTube(url:String,modifier:Modifier=Modifier){val id=homeYoutubeId(url)?:return;AndroidView(modifier=modifier.clip(RoundedCornerShape(14.dp)),factory={ctx->WebView(ctx).apply{settings.javaScriptEnabled=true;settings.domStorageEnabled=true;webChromeClient=WebChromeClient();webViewClient=WebViewClient();loadDataWithBaseURL("https://www.youtube-nocookie.com","<html><meta name='viewport' content='width=device-width,initial-scale=1'><body style='margin:0;background:#000'><iframe width='100%' height='100%' src='https://www.youtube-nocookie.com/embed/$id?playsinline=1&rel=0' frameborder='0' allow='accelerometer;autoplay;encrypted-media;picture-in-picture' allowfullscreen></iframe></body></html>","text/html","UTF-8",null)}},update={})}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun NativeHomeMp4(url:String,poster:String?,modifier:Modifier=Modifier){AndroidView(modifier=modifier.clip(RoundedCornerShape(14.dp)),factory={ctx->WebView(ctx).apply{settings.javaScriptEnabled=true;webChromeClient=WebChromeClient();webViewClient=WebViewClient();val p=poster?.let{"poster='$it'"}.orEmpty();loadDataWithBaseURL(null,"<html><meta name='viewport' content='width=device-width,initial-scale=1'><body style='margin:0;background:#000'><video $p controls playsinline preload='metadata' style='width:100%;height:100%;object-fit:contain'><source src='$url' type='video/mp4'></video></body></html>","text/html","UTF-8",null)}},update={})}
