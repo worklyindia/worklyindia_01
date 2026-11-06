@@ -81,9 +81,9 @@ object NativeHomeApi {
 fun NativeHomeBannerCarousel(data:NativeHomeData) {
     if(data.banners.isEmpty()) return
     var index by remember { mutableIntStateOf(0) }; val b=data.banners[index.coerceIn(data.banners.indices)]
-    Card(Modifier.fillMaxWidth().padding(horizontal=12.dp),shape=RoundedCornerShape(18.dp)) { Column {
-        if(b.image!=null) AsyncImage(b.image,b.title,Modifier.fillMaxWidth().height(190.dp),contentScale=androidx.compose.ui.layout.ContentScale.Crop)
-        Column(Modifier.padding(14.dp)){if(b.title.isNotBlank())Text(b.title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);if(b.subtitle.isNotBlank())Text(b.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+    Card(Modifier.fillMaxWidth().padding(horizontal=12.dp),shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) { Column {
+        if(b.image!=null) AsyncImage(b.image,b.title,Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(topStart=18.dp,topEnd=18.dp)),contentScale=androidx.compose.ui.layout.ContentScale.Fit)
+        if(b.title.isNotBlank() || b.subtitle.isNotBlank()) Column(Modifier.padding(horizontal=15.dp,vertical=12.dp)){if(b.title.isNotBlank())Text(b.title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);if(b.subtitle.isNotBlank())Text(b.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         if(data.banners.size>1)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
             IconButton(onClick={index=(index-1+data.banners.size)%data.banners.size}){Icon(Icons.Default.ChevronLeft,"Previous banner")}
             Text("${index+1} / ${data.banners.size}",style=MaterialTheme.typography.labelMedium)
