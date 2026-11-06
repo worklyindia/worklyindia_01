@@ -11,6 +11,7 @@ import java.net.URLEncoder
 /** Live jobs from the Workly India backend (public, read-only publishable key). */
 data class Job(
     val id: String,
+    val employerId: String?,
     val title: String,
     val company: String,
     val logoUrl: String?,
@@ -38,7 +39,7 @@ object JobsApi {
     private const val SELECT =
         "id,title,location,city,state,job_type,category,department,experience_level,salary_range," +
             "description,requirements,benefits,skills,openings,is_featured,external_apply_url,created_at," +
-            "api_company_name,companies(company_name,logo_url)"
+            "api_company_name,company_id,companies(company_name,logo_url,user_id)"
 
     suspend fun fetchJobs(search: String = "", category: String? = null, limit: Int = 50): List<Job> =
         withContext(Dispatchers.IO) {
@@ -78,6 +79,7 @@ object JobsApi {
         val loc = o.optStr("location") ?: listOfNotNull(o.optStr("city"), o.optStr("state")).joinToString(", ")
         Job(
             id = o.getString("id"),
+            employerId = co?.optStr("user_id"),
             title = o.optStr("title") ?: "Job",
             company = co?.optStr("company_name") ?: o.optStr("api_company_name") ?: "Workly India",
             logoUrl = co?.optStr("logo_url"),
