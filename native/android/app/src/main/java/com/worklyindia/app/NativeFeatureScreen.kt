@@ -146,7 +146,7 @@ fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()
                 item { OutlinedTextField(resumeSkills,{resumeSkills=it},Modifier.fillMaxWidth(),label={Text("Skills")},minLines=2) }
                 item { OutlinedTextField(resumeExperience,{resumeExperience=it},Modifier.fillMaxWidth(),label={Text("Work experience")},minLines=4) }
                 item { OutlinedTextField(resumeEducation,{resumeEducation=it},Modifier.fillMaxWidth(),label={Text("Education")},minLines=3) }
-                item { Button(enabled=!busy&&resumeName.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.saveResumeDraft(session,resumeName,resumeHeadline,resumeSkills,resumeExperience,resumeEducation); error="Resume draft saved." }.onFailure{error=it.message}; busy=false }},Modifier.fillMaxWidth()) { Text(if(busy)"Saving…" else "Save resume draft") } }
+                item { Button(enabled=!busy&&resumeName.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.saveResumeDraft(session,resumeName,resumeHeadline,resumeSkills,resumeExperience,resumeEducation); error="Resume draft saved." }.onFailure{error=it.message}; busy=false }},modifier=Modifier.fillMaxWidth()) { Text(if(busy)"Saving…" else "Save resume draft") } }
                 item { Text("Resume PDF templates and export are not connected yet.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             "Cover letter builder" -> LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -154,14 +154,14 @@ fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()
                 item { OutlinedTextField(coverRole,{coverRole=it},Modifier.fillMaxWidth(),label={Text("Job title")},singleLine=true) }
                 item { OutlinedTextField(coverCompany,{coverCompany=it},Modifier.fillMaxWidth(),label={Text("Company")},singleLine=true) }
                 item { OutlinedTextField(coverText,{coverText=it},Modifier.fillMaxWidth(),label={Text("Your cover letter")},minLines=8) }
-                item { Button(enabled=!busy&&coverText.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.saveCoverLetterDraft(session,coverRole,coverCompany,coverText); error="Cover letter draft saved." }.onFailure{error=it.message}; busy=false }},Modifier.fillMaxWidth()) { Text("Save cover letter") } }
+                item { Button(enabled=!busy&&coverText.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.saveCoverLetterDraft(session,coverRole,coverCompany,coverText); error="Cover letter draft saved." }.onFailure{error=it.message}; busy=false }},modifier=Modifier.fillMaxWidth()) { Text("Save cover letter") } }
             }
             "Help & support" -> LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item { Text("Create a support ticket",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
                 item { OutlinedTextField(supportTitle,{supportTitle=it},Modifier.fillMaxWidth(),label={Text("Subject")},singleLine=true) }
                 item { OutlinedTextField(supportCategory,{supportCategory=it},Modifier.fillMaxWidth(),label={Text("Category (Account / Jobs / Payment)")},singleLine=true) }
                 item { OutlinedTextField(supportDescription,{supportDescription=it},Modifier.fillMaxWidth(),label={Text("Describe your issue")},minLines=5) }
-                item { Button(enabled=!busy&&supportTitle.isNotBlank()&&supportDescription.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.createSupportTicket(session,supportTitle,supportDescription,supportCategory); supportTitle=""; supportDescription=""; error="Support ticket submitted." }.onFailure{error=it.message}; busy=false }},Modifier.fillMaxWidth()) { Text("Submit support ticket") } }
+                item { Button(enabled=!busy&&supportTitle.isNotBlank()&&supportDescription.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.createSupportTicket(session,supportTitle,supportDescription,supportCategory); supportTitle=""; supportDescription=""; error="Support ticket submitted." }.onFailure{error=it.message}; busy=false }},modifier=Modifier.fillMaxWidth()) { Text("Submit support ticket") } }
             }
             "Employer dashboard" -> LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item { Text("Your job postings",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
@@ -173,7 +173,7 @@ fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()
                 item { OutlinedTextField(jobLocation,{jobLocation=it},Modifier.fillMaxWidth(),label={Text("Location")},singleLine=true) }
                 item { OutlinedTextField(jobDescription,{jobDescription=it},Modifier.fillMaxWidth(),label={Text("Job description")},minLines=4) }
                 item { OutlinedTextField(jobType,{jobType=it},Modifier.fillMaxWidth(),label={Text("Job type")},singleLine=true) }
-                item { Button(enabled=!busy&&jobTitle.isNotBlank()&&jobLocation.isNotBlank()&&jobDescription.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.createJobDraft(session,jobTitle,jobLocation,jobDescription,jobType); jobTitle=""; jobLocation=""; jobDescription=""; employerJobs=NativeDataApi.employerJobs(session); error="Private draft saved. Publish workflow is not yet connected." }.onFailure{error=it.message}; busy=false }},Modifier.fillMaxWidth()) { Text("Save job draft") } }
+                item { Button(enabled=!busy&&jobTitle.isNotBlank()&&jobLocation.isNotBlank()&&jobDescription.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.createJobDraft(session,jobTitle,jobLocation,jobDescription,jobType); jobTitle=""; jobLocation=""; jobDescription=""; employerJobs=NativeDataApi.employerJobs(session); error="Private draft saved. Publish workflow is not yet connected." }.onFailure{error=it.message}; busy=false }},modifier=Modifier.fillMaxWidth()) { Text("Save job draft") } }
             }
             else -> InfoNativePage(title)
         }
