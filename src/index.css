@@ -594,8 +594,9 @@ body[data-scroll-locked="1"] {
 html {
     -webkit-text-size-adjust: 100%;
     -ms-text-size-adjust: 100%;
-    /* Safe Area Support for Notch/Rounded Corners */
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    /* Safe-area spacing is applied once on body. Applying it to html as well
+       doubles the top inset inside Android WebView and creates a blank band
+       below the system status bar. */
   }
 
   /* Large screens / TVs: scale rem-based text, icons and buttons up so they stay readable
@@ -620,7 +621,6 @@ html {
     overscroll-behavior-y: auto;
     /* Safe Area Padding */
     padding-bottom: calc(env(safe-area-inset-bottom) + 64px); /* 64px for bottom nav */
-    padding-top: env(safe-area-inset-top);
   }
 
   /* Auth pages have no bottom nav: the 64px body padding painted the page

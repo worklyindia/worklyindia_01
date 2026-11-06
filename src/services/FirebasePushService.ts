@@ -26,6 +26,26 @@ interface PushConfigResponse {
 
 const CONFIG_CACHE_KEY = 'firebase_push_config_v1';
 
+declare global {
+  interface Window {
+    WorklyAndroid?: {
+      isNativeAndroidApp?: () => boolean;
+      getNotificationPermissionStatus?: () => string;
+      requestNativeNotifications?: () => void;
+    };
+  }
+}
+
+type NativeNotificationResult = { granted: boolean; registered: boolean };
+
+const isNativeAndroidApp = (): boolean => {
+  try {
+    return Boolean(window.WorklyAndroid?.isNativeAndroidApp?.());
+  } catch {
+    return false;
+  }
+};
+
 export class FirebasePushService {
   private static configPromise: Promise<PushConfigResponse | null> | null = null;
   private static initialized = false;
@@ -86,6 +106,37 @@ export class FirebasePushService {
 
   // ---------------------------------------------------------- capabilities
 
+  private static requestNativeNotificationSetup(): Promise<NativeNotificationResult> {
+    if (!isNativeAndroidApp() || !window.WorklyAndroid?.requestNativeNotifications) {
+      return Promise.resolve({ granted: false, registered: false });
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: NativeNotificationResult) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('workly:native-notification-result', onResult);
+        window.clearTimeout(timeout);
+        resolve(result);
+      };
+      const onResult = (event: Event) => {
+        const detail = (event as CustomEvent<NativeNotificationResult>).detail;
+        if (detail) finish({ granted: Boolean(detail.granted), registered: Boolean(detail.registered) });
+      };
+      const timeout = window.setTimeout(() => finish({ granted: false, registered: false }), 25000);
+      window.addEventListener('workly:native-notification-result', onResult, { once: true });
+      try {
+        // Called from the Subscribe button click; Android shows its runtime
+        // permission dialog directly from this user gesture.
+        window.WorklyAndroid!.requestNativeNotifications!();
+      } catch (error) {
+        console.error('Native notification request failed:', error);
+        finish({ granted: false, registered: false });
+      }
+    });
+  }
+
   static isBrowserPushSupported(): boolean {
     return (
       typeof window !== 'undefined' &&
@@ -108,7 +159,7 @@ export class FirebasePushService {
       isIOS: /iPad|iPhone|iPod/.test(ua),
       isAndroid: /Android/i.test(ua),
       hostname: typeof window !== 'undefined' ? window.location.hostname : '',
-      supported: this.isBrowserPushSupported(),
+      supported: this.isBrowserPushSupported() || isNativeAndroidApp(),
       userAgent: ua,
     };
   }
@@ -116,6 +167,9 @@ export class FirebasePushService {
   static canEnableNotifications(): { canEnable: boolean; reason?: string; recommendation?: string } {
     if (typeof window === 'undefined') {
       return { canEnable: false, reason: 'Not running in a browser' };
+    }
+    if (isNativeAndroidApp()) {
+      return { canEnable: true };
     }
     if (!this.isBrowserPushSupported()) {
       return {
@@ -141,7 +195,12 @@ export class FirebasePushService {
   }
 
   static async checkPermissionStatus(): Promise<'granted' | 'denied' | 'default'> {
-    if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
+    if (typeof window === 'undefined') return 'denied';
+    if (isNativeAndroidApp()) {
+      const status = window.WorklyAndroid?.getNotificationPermissionStatus?.();
+      return status === 'granted' || status === 'denied' ? status : 'default';
+    }
+    if (!('Notification' in window)) return 'denied';
     return Notification.permission;
   }
 
@@ -313,6 +372,17 @@ export class FirebasePushService {
 
   /** Asks for permission (if needed), gets an FCM token and saves it. */
   static async requestPermissionAndSaveToken(_forceLink = false): Promise<boolean> {
+    // Native Android WebView must use Android's runtime permission + FCM bridge.
+    // It does not expose the browser Push API and must not enter the web-FCM path.
+    if (isNativeAndroidApp()) {
+      const result = await this.requestNativeNotificationSetup();
+      if (!result.granted || !result.registered) {
+        console.warn('🔔 Native Android push setup did not complete:', result);
+        return false;
+      }
+      return true;
+    }
+
     const canEnable = this.canEnableNotifications();
     if (!canEnable.canEnable) {
       console.log('🔔 Cannot enable notifications:', canEnable.reason);

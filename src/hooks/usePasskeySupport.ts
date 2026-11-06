@@ -21,6 +21,11 @@ export const usePasskeySupport = (): PasskeySupportResult => {
   useEffect(() => {
     const checkPasskeySupport = async () => {
       try {
+        // The native Android WebView exposes WebAuthn after the app enables
+        // WebViewFeature.WEB_AUTHENTICATION in MainActivity. Do not reject the
+        // app merely because it is not a full Chrome browser.
+        const nativeAndroid = Boolean((window as any).WorklyAndroid?.isNativeAndroidApp?.());
+
         // Check basic WebAuthn support
         if (!window.PublicKeyCredential) {
           setReason('WebAuthn is not supported in this browser');
@@ -41,7 +46,7 @@ export const usePasskeySupport = (): PasskeySupportResult => {
         }
 
         // Passkeys are usable if either platform authenticator OR conditional mediation is available
-        const supported = isPlatformAvailable || isConditionalMediationAvailable;
+        const supported = isPlatformAvailable || isConditionalMediationAvailable || (nativeAndroid && isPlatformAvailable);
         
         if (!supported) {
           setReason('No platform authenticator available on this device');

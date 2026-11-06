@@ -19,7 +19,11 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,29 +39,50 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Let Android lay out the app below the real system status bar.
-        // Avoid manual inset padding: it can create a second, visible gap above the website.
-        WindowCompat.setDecorFitsSystemWindows(window, true)
-        window.statusBarColor = android.graphics.Color.WHITE
-        window.navigationBarColor = android.graphics.Color.WHITE
+        // Android 15 enforces edge-to-edge for apps targeting SDK 35.
+        // Apply system-bar insets once to a native container, not in website CSS.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
         }
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
-        }
-
         webView = WebView(this)
         webView.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         )
         webView.setBackgroundColor(android.graphics.Color.WHITE)
+
+        // Keep the Android status bar visible and place the whole website below it.
+        // A root container is used so the WebView viewport itself starts below the inset.
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(android.graphics.Color.WHITE)
+            addView(webView)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, windowInsets ->
+            val systemBars = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            // Insets are already applied to the root. Do not dispatch them to WebView,
+            // otherwise WebView can apply the status-bar inset a second time.
+            WindowInsetsCompat.CONSUMED
+        }
+        ViewCompat.requestApplyInsets(root)
         webView.settings.apply {
+            // Enable Android Credential Manager-backed WebAuthn in supported System WebView versions.
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
+                WebSettingsCompat.setWebAuthenticationSupport(
+                    this,
+                    WebSettingsCompat.WEB_AUTHENTICATION_SUPPORT_FOR_APP
+                )
+                android.util.Log.i("WorklyWebView", "WebAuthn support enabled for the Workly Android app")
+            } else {
+                android.util.Log.w("WorklyWebView", "This Android System WebView version does not support WebAuthn")
+            }
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
@@ -121,8 +146,8 @@ class MainActivity : Activity() {
                 else callback.invoke(origin, false, false)
             }
         }
-        // Android handles the status/navigation bar insets; WebView starts immediately below status bar.
-        setContentView(webView)
+        // The native container reserves the status/navigation bar areas exactly once.
+        setContentView(root)
         val target = intent.getStringExtra("notification_url")
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
@@ -169,6 +194,43 @@ class MainActivity : Activity() {
 
     inner class WorklyWebBridge {
         @JavascriptInterface
+        fun isNativeAndroidApp(): Boolean = true
+
+        @JavascriptInterface
+        fun getNotificationPermissionStatus(): String {
+            val runtimeGranted = Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            if (!runtimeGranted) {
+                val askedBefore = getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE)
+                    .getBoolean(NOTIFICATION_PERMISSION_ASKED, false)
+                return if (askedBefore) "denied" else "default"
+            }
+            return if (androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()) "granted" else "denied"
+        }
+
+        @JavascriptInterface
+        fun requestNativeNotifications() {
+            runOnUiThread {
+                if (!androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled() ||
+                    (Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+                        getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).getBoolean(NOTIFICATION_PERMISSION_ASKED, false) &&
+                        !ActivityCompat.shouldShowRequestPermissionRationale(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS))
+                ) {
+                    openAppNotificationSettings()
+                } else if (Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(NOTIFICATION_PERMISSION_ASKED, true).apply()
+                    ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                } else {
+                    registerNativePushAndNotifyJs(getNotificationPermissionStatus() == "granted")
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun clearAuthSession() {
             runOnUiThread {
                 val old = NativeAuth.session(this@MainActivity)
@@ -208,12 +270,46 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            val granted = Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            registerNativePushAndNotifyJs(granted)
+        }
         if (requestCode == REQUEST_MEDIA) {
             val request = pendingWebPermission
             pendingWebPermission = null
             if (request != null) {
                 val granted = permissions.indices.all { grantResults.getOrNull(it) == PackageManager.PERMISSION_GRANTED }
                 if (granted) request.grant(request.resources) else request.deny()
+            }
+        }
+    }
+
+    private fun openAppNotificationSettings() {
+        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+        }
+        runCatching { startActivity(intent) }
+    }
+
+    private fun registerNativePushAndNotifyJs(permissionGranted: Boolean) {
+        if (!permissionGranted || !androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('workly:native-notification-result',{detail:{granted:false,registered:false}}))",
+                null
+            )
+            return
+        }
+        val appContext = applicationContext
+        activityScope.launch(Dispatchers.IO) {
+            val session = NativeAuth.session(appContext)
+            val registered = session?.let { NativePushManager.register(appContext, it) } ?: false
+            runOnUiThread {
+                val granted = permissionGranted && androidx.core.app.NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
+                webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('workly:native-notification-result',{detail:{granted:$granted,registered:$registered}}))",
+                    null
+                )
             }
         }
     }
@@ -244,5 +340,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_MEDIA = 702
+        private const val NOTIFICATION_PREFS = "workly_notification_permissions"
+        private const val NOTIFICATION_PERMISSION_ASKED = "post_notifications_asked"
     }
 }
