@@ -47,6 +47,8 @@ fun NativeFeatureScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
     var applications by remember { mutableStateOf<List<NativeApplication>>(emptyList()) }
+    var employerApplications by remember { mutableStateOf<List<NativeEmployerApplicant>>(emptyList()) }
+    var updatingApplicantId by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf<List<NativeNotification>>(emptyList()) }
     var conversations by remember { mutableStateOf<List<NativeConversation>>(emptyList()) }
     var chatMessages by remember { mutableStateOf<List<NativeChatMessage>>(emptyList()) }
@@ -102,6 +104,7 @@ fun NativeFeatureScreen(
                 }
                 "Employer dashboard" -> {
                     employerJobs=NativeDataApi.employerJobs(session)
+                    employerApplications=NativeDataApi.employerApplications(session)
                     companyLoading=true
                     NativeDataApi.loadCompany(session)?.let { p ->
                         companyName=p.optString("company_name"); companyIndustry=p.optString("industry")
@@ -288,8 +291,40 @@ fun NativeFeatureScreen(
                     }
                 }
                 item { Text("Your job postings",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
-                if(employerJobs.isEmpty()) item { EmptyNative("Company profile not found","Job post karne se pehle employer company profile complete karein.") }
+                if(employerJobs.isEmpty()) item { EmptyNative(if(companyName.isBlank()) "Company profile not found" else "No job postings yet",if(companyName.isBlank()) "Job post karne se pehle employer company profile complete karein." else "Create a job draft below to start hiring.") }
                 items(employerJobs) { NativeRowCard(it.first,"Employer listing",it.second) }
+                item { HorizontalDivider() }
+                item {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Job applicants",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+                            Text("${employerApplications.size} applications received",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Default.People,null,tint=MaterialTheme.colorScheme.primary)
+                    }
+                }
+                if(employerApplications.isEmpty()) item { EmptyNative("No applicants yet","Published jobs par candidates apply karenge to yahan dikhenge.") }
+                items(employerApplications,key={it.id}) { applicant ->
+                    EmployerApplicantCard(applicant,updatingApplicantId==applicant.id,
+                        onShortlist={
+                            updatingApplicantId=applicant.id
+                            scope.launch {
+                                runCatching { NativeDataApi.updateApplicantStatus(session,applicant.id,"shortlisted") }
+                                    .onSuccess { employerApplications=employerApplications.map{a->if(a.id==applicant.id)a.copy(status="shortlisted")else a}; error="Candidate shortlisted." }
+                                    .onFailure { error=it.message ?: "Status update nahi ho saka." }
+                                updatingApplicantId=null
+                            }
+                        },
+                        onReject={
+                            updatingApplicantId=applicant.id
+                            scope.launch {
+                                runCatching { NativeDataApi.updateApplicantStatus(session,applicant.id,"rejected") }
+                                    .onSuccess { employerApplications=employerApplications.map{a->if(a.id==applicant.id)a.copy(status="rejected")else a}; error="Application status updated." }
+                                    .onFailure { error=it.message ?: "Status update nahi ho saka." }
+                                updatingApplicantId=null
+                            }
+                        })
+                }
                 item { HorizontalDivider() }
                 item { Text("Create a private draft",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
                 item { OutlinedTextField(jobTitle,{jobTitle=it},Modifier.fillMaxWidth(),label={Text("Job title")},singleLine=true) }
@@ -304,7 +339,52 @@ fun NativeFeatureScreen(
     }
 }
 
-@Composable private fun NativeEmployerStatCard(label:String,value:String,modifier:Modifier=Modifier) {
+@Composable @Composable
+private fun EmployerApplicantCard(applicant:NativeEmployerApplicant,updating:Boolean,onShortlist:()->Unit,onReject:()->Unit) {
+    val context=LocalContext.current
+    val status=applicant.status.lowercase()
+    Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),
+        colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),
+        border=androidx.compose.foundation.BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant.copy(alpha=0.65f))) {
+        Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(applicant.fullName,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium)
+                    Text(applicant.jobTitle,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
+                }
+                Surface(color=MaterialTheme.colorScheme.secondaryContainer,shape=RoundedCornerShape(50)) {
+                    Text(status.replace('_',' ').replaceFirstChar{it.uppercase()},Modifier.padding(horizontal=10.dp,vertical=6.dp),style=MaterialTheme.typography.labelMedium)
+                }
+            }
+            if(applicant.email.isNotBlank()) Text("Email: ${applicant.email}",style=MaterialTheme.typography.bodySmall)
+            if(applicant.phone.isNotBlank()) Text("Phone: ${applicant.phone}",style=MaterialTheme.typography.bodySmall)
+            if(applicant.location.isNotBlank()) Text("Location: ${applicant.location}",style=MaterialTheme.typography.bodySmall)
+            if(applicant.experience.isNotBlank()) Text("Experience: ${applicant.experience}",style=MaterialTheme.typography.bodySmall)
+            if(applicant.skills.isNotEmpty()) Text("Skills: ${applicant.skills.joinToString(", ")}",style=MaterialTheme.typography.bodySmall)
+            if(applicant.coverLetter.isNotBlank()) {
+                Text("Cover letter",fontWeight=FontWeight.SemiBold,style=MaterialTheme.typography.labelMedium)
+                Text(applicant.coverLetter,style=MaterialTheme.typography.bodySmall,maxLines=5)
+            }
+            if(applicant.resumeUrl.startsWith("https://") || applicant.resumeUrl.startsWith("http://")) {
+                TextButton(onClick={runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(applicant.resumeUrl)))}}) {
+                    Icon(Icons.Default.Description,null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Open resume")
+                }
+            }
+            if(status!="shortlisted" && status!="rejected") {
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled=!updating,onClick=onReject,modifier=Modifier.weight(1f)){Text("Reject")}
+                    Button(enabled=!updating,onClick=onShortlist,modifier=Modifier.weight(1f)){
+                        if(updating) CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp) else Text("Shortlist")
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun NativeEmployerStatCard(label:String,value:String,modifier:Modifier=Modifier) {
     Card(modifier,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),shape=RoundedCornerShape(14.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
             Text(value,style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.primary)
