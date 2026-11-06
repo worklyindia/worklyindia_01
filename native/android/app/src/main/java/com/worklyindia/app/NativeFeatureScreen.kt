@@ -496,11 +496,11 @@ fun NativeFeatureScreen(
                     OutlinedTextField(interviewDateTime,{interviewDateTime=it},Modifier.fillMaxWidth(),label={Text("Date & time")},supportingText={Text("YYYY-MM-DDTHH:MM (device local time)")},singleLine=true)
                     Text("Interview type",style=MaterialTheme.typography.labelMedium)
                     Row(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                        listOf("jitsi","online","phone","in_person").forEach { mode -> FilterChip(selected=interviewMode==mode,onClick={interviewMode=mode},label={Text(when(mode){"jitsi"->"Free video";"online"->"Custom link";"phone"->"Phone";else->"In person"})}) }
+                        listOf("jitsi","100ms","online","phone","in_person").forEach { mode -> FilterChip(selected=interviewMode==mode,onClick={interviewMode=mode},label={Text(when(mode){"jitsi"->"Jitsi";"100ms"->"100ms video";"online"->"Custom link";"phone"->"Phone";else->"In person"})}) }
                     }
                     OutlinedTextField(interviewLocation,{interviewLocation=it},Modifier.fillMaxWidth(),label={Text(if(interviewMode=="online") "Meeting link (optional)" else if(interviewMode=="jitsi") "Auto-generated Jitsi link" else if(interviewMode=="phone") "Phone details (optional)" else "Interview address (optional)")},singleLine=true)
                     OutlinedTextField(interviewNotes,{interviewNotes=it},Modifier.fillMaxWidth(),label={Text("Notes (optional)")},minLines=2)
-                    Text(if(interviewMode=="jitsi") "30-minute Jitsi video room will be created automatically." else "30-minute interview. Candidate notification depends on existing notification setup.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(when(interviewMode){"jitsi"->"30-minute Jitsi video room will be created automatically.";"100ms"->"30-minute 100ms room and separate employer/candidate join codes will be created.";"online"->"30-minute interview. Add your meeting link." ;else->"30-minute interview. Candidate notification depends on existing notification setup."},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
