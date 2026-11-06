@@ -1,5 +1,7 @@
 package com.worklyindia.app
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -32,6 +34,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import org.jitsi.meet.sdk.JitsiMeetActivity
+import org.jitsi.meet.sdk.JitsiMeetConferenceOptions
 
 @Composable
 fun NativeFeatureScreen(
@@ -194,7 +198,26 @@ fun NativeFeatureScreen(
                                 val meetingLink=interview.jitsiMeetingUrl.ifBlank { interview.locationUrl }
                                 if(meetingLink.isNotBlank()) {
                                     if(meetingLink.startsWith("https://") || meetingLink.startsWith("http://")) {
-                                        TextButton(onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(meetingLink))) }}) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Join interview") }
+                                        TextButton(onClick={
+                                            runCatching {
+                                                if(interview.videoPlatform=="jitsi" && Uri.parse(meetingLink).host=="meet.jit.si") {
+                                                    val room=Uri.parse(meetingLink).lastPathSegment?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{5,128}")) }
+                                                        ?: throw IllegalArgumentException("Meeting room link valid nahi hai.")
+                                                    val options=JitsiMeetConferenceOptions.Builder()
+                                                        .setServerURL(URL("https://meet.jit.si"))
+                                                        .setRoom(room)
+                                                        .setAudioOnly(false)
+                                                        .setAudioMuted(false)
+                                                        .setVideoMuted(false)
+                                                        .setFeatureFlag("welcomepage.enabled",false)
+                                                        .setFeatureFlag("prejoinpage.enabled",true)
+                                                        .build()
+                                                    JitsiMeetActivity.launch(context as Activity,options)
+                                                } else {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(meetingLink)))
+                                                }
+                                            }.onFailure { error=it.message ?: "Meeting open nahi ho saki." }
+                                        }) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text(if(interview.videoPlatform=="jitsi") "Join video interview" else "Open meeting link") }
                                     } else Text(meetingLink,style=MaterialTheme.typography.bodySmall)
                                 }
                                 if(interview.hostUserId==session.userId && interview.status=="scheduled") {
