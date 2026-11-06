@@ -83,6 +83,15 @@ object NativeHomeApi {
 }
 
 @Composable
+fun NativeScrollReveal(content: @Composable () -> Unit) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(24); visible = true }
+    val alpha by animateFloatAsState(if (visible) 1f else 0f, tween(600, easing = FastOutSlowInEasing), label = "homeRevealAlpha")
+    val offset by animateFloatAsState(if (visible) 0f else 30f, tween(600, easing = FastOutSlowInEasing), label = "homeRevealOffset")
+    androidx.compose.foundation.layout.Box(Modifier.graphicsLayer { this.alpha = alpha; translationY = offset }) { content() }
+}
+
+@Composable
 fun NativeHomeBannerCarousel(data:NativeHomeData) {
     if(data.banners.isEmpty()) return
     var index by remember(data.banners) { mutableIntStateOf(0) }
