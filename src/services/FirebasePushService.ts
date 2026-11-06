@@ -137,6 +137,10 @@ export class FirebasePushService {
     });
   }
 
+  static isNativeAndroidApp(): boolean {
+    return isNativeAndroidApp();
+  }
+
   static isBrowserPushSupported(): boolean {
     return (
       typeof window !== 'undefined' &&
@@ -254,6 +258,7 @@ export class FirebasePushService {
 
   /** Loads the Firebase messaging SDK and registers the service worker. */
   static async initialize(_guestMode = false): Promise<void> {
+    if (isNativeAndroidApp()) return; // Native FCM is handled by the Android bridge.
     await this.syncNotificationIcon();
     if (this.initialized) return;
     if (!this.isBrowserPushSupported()) return;
@@ -359,6 +364,9 @@ export class FirebasePushService {
    * a live user gesture. That is why this is separate from token saving.
    */
   static async ensurePermission(): Promise<'granted' | 'denied' | 'default'> {
+    // Native Android WebView uses Android's runtime permission dialog, not the
+    // browser Notification API (which WebView may not expose).
+    if (isNativeAndroidApp()) return await this.checkPermissionStatus();
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     if (Notification.permission === 'granted') return 'granted';
     if (Notification.permission === 'denied') return 'denied';
@@ -609,7 +617,26 @@ export class FirebasePushService {
   }
 
   static async isSubscribed(): Promise<boolean> {
-    if (typeof window === 'undefined' || !('Notification' in window)) return false;
+    if (typeof window === 'undefined') return false;
+    if (isNativeAndroidApp()) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData.session?.user?.id;
+        if (!userId) return false;
+        const { data, error } = await supabase
+          .from('push_subscriptions')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('platform', 'android')
+          .eq('enabled', true)
+          .maybeSingle();
+        return !error && Boolean(data);
+      } catch (error) {
+        console.warn('Could not check native Android push subscription:', error);
+        return false;
+      }
+    }
+    if (!('Notification' in window)) return false;
     if (Notification.permission !== 'granted') return false;
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session?.user?.id;
