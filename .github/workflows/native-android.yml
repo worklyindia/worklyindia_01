@@ -66,14 +66,21 @@ jobs:
         run: |
           python -m pip install --quiet Pillow
           python - <<'PY'
-          from PIL import Image
+          from PIL import Image, ImageFile
           from pathlib import Path
           icon = Path("native/android/app/src/main/res/drawable-nodpi/ic_workly_launcher_image.png")
+          if not icon.is_file():
+              raise SystemExit(f"Launcher icon is missing: {icon}")
+          # Recover decodable pixels from a truncated PNG without replacing the artwork.
+          ImageFile.LOAD_TRUNCATED_IMAGES = True
           with Image.open(icon) as source:
-              source.load()
               rgba = source.convert("RGBA")
+              if rgba.width < 96 or rgba.height < 96:
+                  raise SystemExit(f"Launcher icon dimensions are too small: {rgba.size}")
               rgba.save(icon, format="PNG", optimize=True)
-          print(f"Validated launcher icon: {icon}")
+          with Image.open(icon) as check:
+              check.verify()
+          print(f"Recovered and validated launcher icon: {icon} ({rgba.width}x{rgba.height})")
           PY
 
       - name: Build signed public release APK and Play Store bundle
