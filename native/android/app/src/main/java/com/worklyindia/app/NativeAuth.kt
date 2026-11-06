@@ -45,7 +45,13 @@ object NativeAuth {
             .putString("data", Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
     }
 
-    fun saveWebSession(context: Context, accessToken: String, refreshToken: String, userId: String, email: String, userRole: String): NativeSession {\n        val session = NativeSession(accessToken, refreshToken, userId, email, userRole)\n        save(context, session)\n        return session\n    }\n\n    fun session(context: Context): NativeSession? = runCatching {
+    fun saveWebSession(context: Context, accessToken: String, refreshToken: String, userId: String, email: String, userRole: String): NativeSession {
+        val session = NativeSession(accessToken, refreshToken, userId, email, userRole)
+        save(context, session)
+        return session
+    }
+
+    fun session(context: Context): NativeSession? = runCatching {
         val p = context.getSharedPreferences("native_auth", Context.MODE_PRIVATE)
         val iv = Base64.decode(p.getString("iv", null) ?: return null, Base64.NO_WRAP)
         val data = Base64.decode(p.getString("data", null) ?: return null, Base64.NO_WRAP)
