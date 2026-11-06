@@ -15,6 +15,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
+import com.google.firebase.FirebaseOptions
 import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,6 +28,60 @@ object NativePushManager {
     private const val SUPABASE_URL = "https://jubwzelupbntbetpajqb.supabase.co"
     private const val SUPABASE_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
     private const val CHANNEL_ID = "workly_updates"
+
+    /**
+     * Native Firebase config is loaded from the same public push-config action
+     * used by the website. The checked-in google-services.json in this repo
+     * does not contain an api_key block, so FirebaseApp.initializeApp(context)
+     * alone cannot create Firebase Installations / FCM tokens on a fresh APK.
+     */
+    private fun getFirebaseApp(context: Context): FirebaseApp? {
+        FirebaseApp.getApps(context)
+            .firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
+            ?.let { return it }
+
+        val connection = (URL("$SUPABASE_URL/functions/v1/email-api").openConnection() as HttpURLConnection)
+        connection.requestMethod = "POST"
+        connection.connectTimeout = 15000
+        connection.readTimeout = 20000
+        connection.setRequestProperty("apikey", SUPABASE_KEY)
+        connection.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        connection.outputStream.use {
+            it.write(JSONObject().put("action", "push_config").toString().toByteArray(Charsets.UTF_8))
+        }
+        val status = connection.responseCode
+        val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+        connection.disconnect()
+        if (status !in 200..299) {
+            android.util.Log.e("WorklyPush", "Firebase push-config failed [$status]: $response")
+            return null
+        }
+
+        val root = JSONObject(response)
+        if (!root.optBoolean("configured")) {
+            android.util.Log.e("WorklyPush", "Firebase web push configuration is incomplete")
+            return null
+        }
+        val config = root.optJSONObject("config") ?: return null
+        val apiKey = config.optString("apiKey")
+        val appId = config.optString("appId")
+        val projectId = config.optString("projectId")
+        val senderId = config.optString("messagingSenderId")
+        if (apiKey.isBlank() || appId.isBlank() || projectId.isBlank() || senderId.isBlank()) {
+            android.util.Log.e("WorklyPush", "Firebase push-config response is missing required native fields")
+            return null
+        }
+        val options = FirebaseOptions.Builder()
+            .setApiKey(apiKey)
+            .setApplicationId(appId)
+            .setProjectId(projectId)
+            .setGcmSenderId(senderId)
+            .build()
+        return FirebaseApp.initializeApp(context, options)
+    }
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -44,16 +99,15 @@ object NativePushManager {
 
     suspend fun register(context: Context, session: NativeSession): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Initialize explicitly as a safety net for fresh installs and OEM startup timing.
-            if (FirebaseApp.getApps(context).isEmpty() && FirebaseApp.initializeApp(context) == null) {
-                android.util.Log.e("WorklyPush", "Firebase default app could not initialize; check google-services.json")
-                return@withContext false
-            }
+            // Initialize with the live public Firebase config. The repository's
+            // google-services.json omits api_key, so the standard resource-based
+            // initializer returns null on a clean install.
+            val firebaseApp = getFirebaseApp(context) ?: return@withContext false
             // Register the device token even when notification permission is currently denied.
             // Android will suppress display until the user grants POST_NOTIFICATIONS, but the
             // token is ready immediately after they enable it in system settings.
             createChannel(context)
-            val token = Tasks.await(FirebaseMessaging.getInstance().token)
+            val token = Tasks.await(FirebaseMessaging.getInstance(firebaseApp).token)
             if (token.isNullOrBlank()) return@withContext false
 
             val info = JSONObject()
@@ -118,8 +172,8 @@ object NativePushManager {
 
     suspend fun unregister(context: Context, session: NativeSession) = withContext(Dispatchers.IO) {
         try {
-            if (FirebaseApp.getApps(context).isEmpty()) return@withContext
-            val token = Tasks.await(FirebaseMessaging.getInstance().token)
+            val firebaseApp = getFirebaseApp(context) ?: return@withContext
+            val token = Tasks.await(FirebaseMessaging.getInstance(firebaseApp).token)
             if (token.isNullOrBlank()) return@withContext
             val encoded = URLEncoder.encode(token, "UTF-8")
             val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&fcm_token=eq.$encoded").openConnection() as HttpURLConnection)
