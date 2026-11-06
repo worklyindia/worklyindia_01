@@ -530,7 +530,7 @@ private fun NativeAIChatScreen(session: NativeSession) {
                                 onClick = { showComposerMenu = false; imagePicker.launch("image/*") }
                             )
                             DropdownMenuItem(
-                                text = { Text("Files (PDF, TXT, DOC, CSV)") }, leadingIcon = { Icon(Icons.Default.AttachFile, null) },
+                                text = { Text("Files (PDF, TXT, CSV, JSON, MD)") }, leadingIcon = { Icon(Icons.Default.AttachFile, null) },
                                 onClick = { showComposerMenu = false; documentPicker.launch("*/*") }
                             )
                             DropdownMenuItem(
