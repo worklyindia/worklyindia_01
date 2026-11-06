@@ -1060,7 +1060,7 @@ private fun AccountScreen(
                         Text("Aapka account native app mein connected hai.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick = { scope.launch { NativePushManager.unregister(ctx, session); NativeAuth.signOut(ctx); ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", "job_seeker").apply(); accountType = "job_seeker"; onSession(null); password = "" } }, Modifier.fillMaxWidth()) { Text("Logout") }
                     } else {
-                        val authAvatar = if (accountType == "employer") homeData.employerLoginAvatar else homeData.seekerLoginAvatar
+                        val authAvatar = if (accountType == "employer") homeData.employerLoginAvatar ?: "https://raw.githubusercontent.com/worklyindia/worklyindia_01/main/src/assets/employer-hero.webp" else homeData.seekerLoginAvatar ?: "https://raw.githubusercontent.com/worklyindia/worklyindia_01/main/src/assets/job-seeker-hero.webp"
                         if (authAvatar != null) AsyncImage(authAvatar, if (accountType == "employer") "Employer" else "Job seeker", Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(14.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                         Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         Text("Apna account type select karke continue karein.", color = MaterialTheme.colorScheme.onSurfaceVariant)
