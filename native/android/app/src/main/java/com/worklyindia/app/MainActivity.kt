@@ -46,12 +46,6 @@ class MainActivity : Activity() {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
         }
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
-        }
-
         webView = WebView(this)
         webView.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -172,8 +166,9 @@ class MainActivity : Activity() {
     inner class WorklyWebBridge {
         @JavascriptInterface
         fun isNotificationPermissionGranted(): Boolean {
-            return Build.VERSION.SDK_INT < 33 ||
+            val runtimeGranted = Build.VERSION.SDK_INT < 33 ||
                 ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            return runtimeGranted && NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
         }
 
         @JavascriptInterface
@@ -187,6 +182,23 @@ class MainActivity : Activity() {
                 return false
             }
             return NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
+        }
+
+        @JavascriptInterface
+        fun registerPushNotifications() {
+            runOnUiThread {
+                val session = NativeAuth.session(this@MainActivity) ?: return@runOnUiThread
+                if (!isNotificationPermissionGranted()) return@runOnUiThread
+                activityScope.launch(Dispatchers.IO) {
+                    NativePushManager.register(this@MainActivity, session)
+                    runOnUiThread {
+                        webView.evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete'));",
+                            null
+                        )
+                    }
+                }
+            }
         }
 
         @JavascriptInterface
@@ -217,8 +229,10 @@ class MainActivity : Activity() {
                         user.optString("email"),
                         if (role.equals("employer", true)) "employer" else "jobseeker"
                     )
-                    activityScope.launch(Dispatchers.IO) {
-                        NativePushManager.register(this@MainActivity, saved)
+                    if (isNotificationPermissionGranted()) {
+                        activityScope.launch(Dispatchers.IO) {
+                            NativePushManager.register(this@MainActivity, saved)
+                        }
                     }
                 } catch (error: Exception) {
                     android.util.Log.w("WorklyWebView", "Website session sync skipped", error)
@@ -236,6 +250,19 @@ class MainActivity : Activity() {
                 val granted = permissions.indices.all { grantResults.getOrNull(it) == PackageManager.PERMISSION_GRANTED }
                 if (granted) request.grant(request.resources) else request.deny()
             }
+        } else if (requestCode == REQUEST_NOTIFICATIONS) {
+            val granted = isNotificationPermissionGranted()
+            if (granted) {
+                NativeAuth.session(this)?.let { session ->
+                    activityScope.launch(Dispatchers.IO) {
+                        NativePushManager.register(this@MainActivity, session)
+                    }
+                }
+            }
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('workly-native-notification-permission', {detail:{granted:$granted}}));",
+                null
+            )
         }
     }
 
