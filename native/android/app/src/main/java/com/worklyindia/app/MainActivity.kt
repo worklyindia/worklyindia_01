@@ -1022,6 +1022,7 @@ private fun AccountScreen(
     val ctx = LocalContext.current
     var accountType by rememberSaveable { mutableStateOf(ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).getString("account_type", "job_seeker") ?: "job_seeker") }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { mode = "login" }
     LaunchedEffect(session?.userId) {
         if (session == null) {
             profileName = ""; profilePhone = ""; profileLocation = ""; profilePosition = ""
