@@ -210,13 +210,15 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Job not found" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 });
       }
-      if (job.company_id) {
-        const { data: company } = await supabaseClient
-          .from('companies').select('user_id').eq('id', job.company_id).maybeSingle();
-        if (company?.user_id && company.user_id !== user.id) {
-          return new Response(JSON.stringify({ error: "Not authorized for this job" }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 });
-        }
+      if (!job.company_id) {
+        return new Response(JSON.stringify({ error: "Job has no verified company owner" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 });
+      }
+      const { data: company, error: companyError } = await supabaseClient
+        .from('companies').select('user_id').eq('id', job.company_id).maybeSingle();
+      if (companyError || !company || company.user_id !== user.id) {
+        return new Response(JSON.stringify({ error: "Not authorized for this job" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 });
       }
 
       // Already paid?
