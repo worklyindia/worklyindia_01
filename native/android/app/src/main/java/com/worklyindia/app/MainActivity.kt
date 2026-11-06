@@ -558,7 +558,7 @@ private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int, on
     val upcomingFestivals = festivals.filter { it.date == nextFestivalDate }
     val shownFestivals = if (todayFestivals.isNotEmpty()) todayFestivals else upcomingFestivals
     val menu = listOf(
-        "Connected accounts", "Website Pricing", "About Us", "Mission", "Vision", "Why Choose Workly India",
+        "AI Chat", "Connected accounts", "Website Pricing", "About Us", "Mission", "Vision", "Why Choose Workly India",
         "Blog", "Trust & Safety", "Employer Guidelines", "Job Seeker Guidelines",
         "Community Guidelines", "Accessibility Statement", "Privacy Policy",
         "Refund & Cancellation", "Terms & Conditions", "FAQ", "Cookie Policy",
@@ -804,6 +804,7 @@ private fun AccountScreen(
         }
         item { Text("More features", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) }
         listOf(
+            "AI Chat" to Icons.Default.AutoAwesome,
             "My applications" to Icons.Default.Description,
             "My resume" to Icons.Default.Article,
             "Cover letter builder" to Icons.Default.EditNote,
