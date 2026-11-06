@@ -105,6 +105,19 @@ object NativeDataApi {
             "resolution=merge-duplicates,return=minimal")
     }
 
+    suspend fun saveCoverLetterDraft(s:NativeSession,role:String,company:String,letter:String) {
+        val data=JSONObject().put("role",role).put("company",company).put("letter",letter)
+            .put("updated_at",java.time.Instant.now().toString())
+        call("/cover_letter_drafts?on_conflict=user_id",s,"POST",JSONObject().put("user_id",s.userId).put("data",data),
+            "resolution=merge-duplicates,return=minimal")
+    }
+
+    suspend fun createSupportTicket(s:NativeSession,title:String,description:String,category:String) {
+        call("/support_tickets",s,"POST",JSONObject().put("user_id",s.userId).put("user_name",s.email.substringBefore("@"))
+            .put("user_email",s.email).put("title",title.trim()).put("description",description.trim())
+            .put("category",category).put("priority","normal").put("status","open"),"return=minimal")
+    }
+
     suspend fun companyId(s:NativeSession):String? {
         val a=JSONArray(call("/companies?select=id&user_id=eq.${enc(s.userId)}&limit=1",s))
         return if(a.length()==0)null else a.getJSONObject(0).optString("id").takeIf{it.isNotBlank()}
