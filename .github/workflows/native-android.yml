@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   public-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -41,7 +41,7 @@ jobs:
           sdkmanager --list_installed
 
       - name: Set up Gradle 8.9 (compatible with Android Gradle Plugin 8.7.3)
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.9'
 
@@ -122,7 +122,7 @@ jobs:
           cp "$AAB_FILE" native/android/app/build/outputs/Workly-India.aab
 
       - name: Upload public release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Workly-India
           path: |
@@ -137,13 +137,19 @@ jobs:
           {
             echo "## Workly India — Public Android Release"
             echo ""
-            printf -- '- **Commit:** `%s`\\n' "$GITHUB_SHA"
+            echo "- **Commit:** `$GITHUB_SHA`"
             echo ""
-            if [ -f "native/android/app/build/outputs/apk/release/app-release.apk" ] && [ -f "native/android/app/build/outputs/bundle/release/app-release.aab" ]; then
+            APK_FILE="native/android/app/build/outputs/Workly-India.apk"
+            AAB_FILE="native/android/app/build/outputs/Workly-India.aab"
+            if [ -s "$APK_FILE" ] && [ -s "$AAB_FILE" ]; then
               echo "- Signed release APK: generated."
               echo "- Google Play AAB: generated."
-              echo "- Artifact: `workly-india-public-release`"
+              echo "- Uploaded artifact: `Workly-India`."
+              echo "- APK size: $(du -h "$APK_FILE" | cut -f1)"
+              echo "- AAB size: $(du -h "$AAB_FILE" | cut -f1)"
             else
-              echo "::error::Public release outputs were not generated."
+              echo "::error::Expected release files are missing from the renamed output directory."
+              ls -lah native/android/app/build/outputs/ || true
+              exit 1
             fi
           } >> "$GITHUB_STEP_SUMMARY"
