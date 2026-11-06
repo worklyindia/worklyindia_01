@@ -47,7 +47,17 @@ object JobsApi {
         withContext(Dispatchers.IO) {
             val q = StringBuilder("$BASE/jobs?select=${enc(SELECT)}&status=eq.active&visibility=eq.public")
             q.append("&order=is_featured.desc,created_at.desc&limit=$limit")
-            if (!category.isNullOrBlank()) q.append("&category=eq.${enc(category)}")
+            when (category?.trim()?.lowercase()) {
+                "remote", "work from home" -> q.append("&work_mode=ilike.*remote*")
+                "hybrid" -> q.append("&work_mode=ilike.*hybrid*")
+                "part-time", "part time" -> q.append("&job_type=ilike.*part*time*")
+                "full-time", "full time" -> q.append("&job_type=ilike.*full*time*")
+                "internship", "internships" -> q.append("&job_type=ilike.*internship*")
+                "contract" -> q.append("&job_type=ilike.*contract*")
+                "fresher", "freshers" -> q.append("&experience_level=ilike.*fresher*")
+                "women", "jobs for women" -> q.append("&category=ilike.*women*")
+                else -> if (!category.isNullOrBlank()) q.append("&category=eq.${enc(category)}")
+            }
             val s = search.trim().replace(Regex("[,()*%]"), " ").trim()
             if (s.isNotEmpty()) {
                 val p = enc("*$s*")
