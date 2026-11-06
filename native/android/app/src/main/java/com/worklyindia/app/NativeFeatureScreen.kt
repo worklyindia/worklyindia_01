@@ -85,7 +85,7 @@ fun NativeFeatureScreen(
     var supportTitle by remember { mutableStateOf("") }
     var supportDescription by remember { mutableStateOf("") }
     var supportCategory by remember { mutableStateOf("Account") }
-    var screenTitle by remember { mutableStateOf(title) }
+    var screenTitle by remember(title) { mutableStateOf(title) }
     var chatReturnScreen by remember { mutableStateOf("Messages") }
     var schedulingApplicant by remember { mutableStateOf<NativeEmployerApplicant?>(null) }
     var interviewDateTime by remember { mutableStateOf("") }
@@ -427,7 +427,7 @@ private fun EmployerApplicantCard(applicant:NativeEmployerApplicant,updating:Boo
             }
             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick=onMessage,modifier=Modifier.weight(1f),enabled=!updating) { Icon(Icons.Default.Chat,null); Spacer(Modifier.width(5.dp)); Text("Message") }
-                OutlinedButton(onClick={onSchedule(applicant)},modifier=Modifier.weight(1f),enabled=!updating) { Icon(Icons.Default.CalendarMonth,null); Spacer(Modifier.width(5.dp)); Text("Interview") }
+                OutlinedButton(onClick={onSchedule(applicant)},modifier=Modifier.weight(1f),enabled=!updating) { Icon(Icons.Default.CalendarToday,null); Spacer(Modifier.width(5.dp)); Text("Interview") }
             }
             if(status!="shortlisted" && status!="rejected") {
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
