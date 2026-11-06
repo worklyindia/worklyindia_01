@@ -659,6 +659,7 @@ private fun AccountScreen(
         listOf(
             "My applications" to Icons.Default.Description,
             "My resume" to Icons.Default.Article,
+            "Cover letter builder" to Icons.Default.EditNote,
             "Employer dashboard" to Icons.Default.BusinessCenter,
             "Messages" to Icons.Default.Chat,
             "Notifications" to Icons.Default.Notifications,
