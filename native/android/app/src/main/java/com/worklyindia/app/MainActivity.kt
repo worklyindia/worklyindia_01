@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Build
 import android.os.Bundle
 import android.webkit.CookieManager
@@ -39,6 +41,14 @@ class MainActivity : Activity() {
     private val allowedHost = "worklyindia.devs.surf"
     private var failedUrl: String? = null
     private var showingOfflinePage = false
+    private val connectivityCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            runOnUiThread {
+                if (showingOfflinePage) retryLastPage()
+            }
+        }
+    }
+    private var connectivityCallbackRegistered = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -175,6 +185,12 @@ class MainActivity : Activity() {
         webView.loadUrl(target)
     }
 
+    private fun retryLastPage() {
+        val target = failedUrl ?: website
+        showingOfflinePage = false
+        webView.loadUrl(target)
+    }
+
     private fun showOfflinePage() {
         if (showingOfflinePage) return
         showingOfflinePage = true
@@ -302,11 +318,7 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun retryConnection() {
-            runOnUiThread {
-                val target = failedUrl ?: website
-                showingOfflinePage = false
-                webView.loadUrl(target)
-            }
+            runOnUiThread { retryLastPage() }
         }
 
         @JavascriptInterface
@@ -395,6 +407,27 @@ class MainActivity : Activity() {
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!connectivityCallbackRegistered) {
+            val manager = getSystemService(ConnectivityManager::class.java)
+            runCatching {
+                manager.registerDefaultNetworkCallback(connectivityCallback)
+                connectivityCallbackRegistered = true
+            }.onFailure { android.util.Log.w("WorklyWebView", "Network callback unavailable", it) }
+        }
+    }
+
+    override fun onStop() {
+        if (connectivityCallbackRegistered) {
+            runCatching {
+                getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(connectivityCallback)
+            }
+            connectivityCallbackRegistered = false
+        }
+        super.onStop()
     }
 
     override fun onResume() {
