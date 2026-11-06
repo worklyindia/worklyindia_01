@@ -87,9 +87,13 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         )
     }
 
-    override fun onPaymentError(code: Int, response: String?) {
-        razorpayResult = NativeRazorpayResult(null, null, null,
-            response?.take(500) ?: "Payment cancel ya fail hua (code $code).")
+    override fun onPaymentError(code: Int, response: String?, paymentData: PaymentData?) {
+        razorpayResult = NativeRazorpayResult(
+            orderId = paymentData?.orderId,
+            paymentId = paymentData?.paymentId,
+            signature = paymentData?.signature,
+            error = response?.take(500) ?: "Payment cancel ya fail hua (code $code)."
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -153,6 +157,7 @@ private sealed interface LoadState {
 @Composable
 private fun WorklyApp() {
     val ctx = LocalContext.current
+    val paymentActivity = ctx as? MainActivity
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -220,9 +225,9 @@ private fun WorklyApp() {
             selectedFeature != null -> NativeFeatureScreen(
                 m, selectedFeature!!, authSession,
                 onBack = { selectedFeature = null },
-                paymentResult = razorpayResult,
-                onStartCheckout = { order -> openRazorpayCheckout(order, authSession?.email.orEmpty()) },
-                onConsumePaymentResult = { clearRazorpayResult() }
+                paymentResult = paymentActivity?.razorpayResult,
+                onStartCheckout = { order -> paymentActivity?.openRazorpayCheckout(order, authSession?.email.orEmpty()) },
+                onConsumePaymentResult = { paymentActivity?.clearRazorpayResult() }
             )
             tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
