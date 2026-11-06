@@ -1,4 +1,5 @@
 name: Native Android
+# Rebuild the signed native app whenever Kotlin app/auth sources change.
 
 on:
   push:
