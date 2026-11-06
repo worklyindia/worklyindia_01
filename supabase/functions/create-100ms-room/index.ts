@@ -193,8 +193,11 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("jobId, applicantId, scheduledAt and scheduledEndAt are required");
     }
     const { data: job, error: jobError } = await admin
-      .from("jobs").select("id, employer_id").eq("id", jobId).maybeSingle();
-    if (jobError || !job || job.employer_id !== authData.user.id) {
+      .from("jobs").select("id, company_id").eq("id", jobId).maybeSingle();
+    const { data: company, error: companyError } = job?.company_id
+      ? await admin.from("companies").select("user_id").eq("id", job.company_id).maybeSingle()
+      : { data: null, error: null };
+    if (jobError || companyError || !job || !company || company.user_id !== authData.user.id) {
       return new Response(JSON.stringify({ success: false, error: "Only the job owner can create this interview room" }), {
         status: 403, headers: { "Content-Type": "application/json", ...corsHeaders }
       });
