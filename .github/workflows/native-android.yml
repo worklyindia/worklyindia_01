@@ -40,10 +40,13 @@ jobs:
           sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
           sdkmanager --list_installed
 
-      - name: Set up Gradle 8.9 (compatible with Android Gradle Plugin 8.7.3)
+      - name: Set up Gradle 8.14.4 and publish a public Build Scan
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.4'
+          build-scan-publish: true
+          build-scan-terms-of-use-url: 'https://gradle.com/terms-of-service'
+          build-scan-terms-of-use-agree: 'yes'
 
       - name: Prepare release signing key
         id: release-signing
@@ -112,25 +115,23 @@ jobs:
           WORKLY_UPLOAD_KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
           WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
         run: |
-          set -o pipefail
-          gradle assembleRelease bundleRelease --stacktrace --scan \
-            --terms-of-service-url=https://gradle.com/terms-of-service \
-            --terms-of-service-agree 2>&1 | tee "$RUNNER_TEMP/workly-gradle-build.log"
-          SCAN_URL=$(grep -Eo "https://(scans\.gradle\.com|gradle\.com)/s/[a-zA-Z0-9_-]+" "$RUNNER_TEMP/workly-gradle-build.log" | tail -n 1 || true)
-          if [ -n "$SCAN_URL" ]; then
-            echo "GRADLE_BUILD_SCAN_URL=$SCAN_URL" >> "$GITHUB_ENV"
-            echo "- **Public Gradle Build Scan:** $SCAN_URL" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::Gradle did not print a Build Scan URL; inspect the build log."
-          fi
+          gradle assembleRelease bundleRelease --stacktrace
 
       - name: Rename release files for users
         run: |
-          APK_FILE=$(find native/android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)
-          AAB_FILE=$(find native/android/app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' | head -n 1)
-          test -n "$APK_FILE" && test -n "$AAB_FILE"
+          set -euo pipefail
+          APK_FILE=$(find native/android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)
+          AAB_FILE=$(find native/android/app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' -print -quit)
+          if [ -z "$APK_FILE" ] || [ -z "$AAB_FILE" ]; then
+            echo "::error::Release output missing. APK='$APK_FILE' AAB='$AAB_FILE'"
+            find native/android/app/build/outputs -maxdepth 5 -type f -print 2>/dev/null || true
+            exit 1
+          fi
+          mkdir -p native/android/app/build/outputs
           cp "$APK_FILE" native/android/app/build/outputs/Workly-India.apk
           cp "$AAB_FILE" native/android/app/build/outputs/Workly-India.aab
+          test -s native/android/app/build/outputs/Workly-India.apk
+          test -s native/android/app/build/outputs/Workly-India.aab
 
       - name: Upload public release artifacts
         uses: actions/upload-artifact@v6
@@ -148,8 +149,7 @@ jobs:
           {
             echo "## Workly India — Public Android Release"
             echo ""
-            echo "- **Commit:** `$GITHUB_SHA`"
-            echo ""
+            printf -- '- **Commit:** `%s`\n\n' "$GITHUB_SHA"
             APK_FILE="native/android/app/build/outputs/Workly-India.apk"
             AAB_FILE="native/android/app/build/outputs/Workly-India.aab"
             if [ -s "$APK_FILE" ] && [ -s "$AAB_FILE" ]; then
@@ -159,8 +159,7 @@ jobs:
               echo "- APK size: $(du -h "$APK_FILE" | cut -f1)"
               echo "- AAB size: $(du -h "$AAB_FILE" | cut -f1)"
             else
-              echo "::error::Expected release files are missing from the renamed output directory."
-              ls -lah native/android/app/build/outputs/ || true
-              exit 1
+              echo "::warning::Release files are not available; inspect the earlier build or rename step."
+              find native/android/app/build/outputs -maxdepth 5 -type f -print 2>/dev/null || true
             fi
           } >> "$GITHUB_STEP_SUMMARY"
