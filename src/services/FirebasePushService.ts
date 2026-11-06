@@ -26,7 +26,7 @@ interface PushConfigResponse {
 
 const CONFIG_CACHE_KEY = 'firebase_push_config_v1';
 
-declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; registerPushNotifications?: (sessionJson: string) => void; }; } }
+declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; registerPushNotifications?: () => void; syncAuthSession?: (raw: string) => void; }; } }
 
 export class FirebasePushService {
   private static isNativeAndroid(): boolean { return typeof window !== 'undefined' && typeof window.WorklyAndroid?.isNotificationPermissionGranted === 'function' && typeof window.WorklyAndroid?.requestNotificationPermission === 'function'; }
@@ -346,7 +346,8 @@ export class FirebasePushService {
         const timeout = window.setTimeout(() => finish(false), 25000);
         window.addEventListener('workly-native-push-registration-complete', onComplete, { once: true });
         try {
-          window.WorklyAndroid!.registerPushNotifications!(JSON.stringify(sessionData.session));
+          window.WorklyAndroid!.syncAuthSession?.(JSON.stringify(sessionData.session));
+          window.WorklyAndroid!.registerPushNotifications!();
         } catch (error) {
           console.error('Could not call Android push bridge:', error);
           finish(false);
