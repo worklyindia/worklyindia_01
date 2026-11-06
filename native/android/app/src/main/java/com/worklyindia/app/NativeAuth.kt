@@ -15,7 +15,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-data class NativeSession(val accessToken: String, val refreshToken: String, val userId: String, val email: String)
+data class NativeSession(val accessToken: String, val refreshToken: String, val userId: String, val email: String, val userRole: String = "jobseeker")
 
 object NativeAuth {
     private const val BASE = "https://jubwzelupbntbetpajqb.supabase.co"
@@ -37,7 +37,7 @@ object NativeAuth {
         val prefs = context.getSharedPreferences("native_auth", Context.MODE_PRIVATE)
         if (session == null) { prefs.edit().clear().apply(); return }
         val plain = JSONObject().put("access", session.accessToken).put("refresh", session.refreshToken)
-            .put("id", session.userId).put("email", session.email).toString().toByteArray(Charsets.UTF_8)
+            .put("id", session.userId).put("email", session.email).put("role", session.userRole).toString().toByteArray(Charsets.UTF_8)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val encrypted = cipher.doFinal(plain)
@@ -45,14 +45,14 @@ object NativeAuth {
             .putString("data", Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
     }
 
-    fun session(context: Context): NativeSession? = runCatching {
+    fun saveWebSession(context: Context, accessToken: String, refreshToken: String, userId: String, email: String, userRole: String): NativeSession {\n        val session = NativeSession(accessToken, refreshToken, userId, email, userRole)\n        save(context, session)\n        return session\n    }\n\n    fun session(context: Context): NativeSession? = runCatching {
         val p = context.getSharedPreferences("native_auth", Context.MODE_PRIVATE)
         val iv = Base64.decode(p.getString("iv", null) ?: return null, Base64.NO_WRAP)
         val data = Base64.decode(p.getString("data", null) ?: return null, Base64.NO_WRAP)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
         val j = JSONObject(String(cipher.doFinal(data), Charsets.UTF_8))
-        NativeSession(j.getString("access"), j.getString("refresh"), j.getString("id"), j.optString("email"))
+        NativeSession(j.getString("access"), j.getString("refresh"), j.getString("id"), j.optString("email"), j.optString("role", "jobseeker"))
     }.getOrNull()
 
     suspend fun signIn(context: Context, identifier: String, password: String): NativeSession = withContext(Dispatchers.IO) {
@@ -127,7 +127,7 @@ object NativeAuth {
             val user = j.optJSONObject("user")
             val s = NativeSession(j.getString("access_token"), j.getString("refresh_token"),
                 user?.optString("id")?.takeIf { it.isNotBlank() } ?: old.userId,
-                user?.optString("email") ?: old.email)
+                user?.optString("email") ?: old.email, old.userRole)
             save(context, s); s
         } catch (_: Exception) { save(context, null); null }
     }
