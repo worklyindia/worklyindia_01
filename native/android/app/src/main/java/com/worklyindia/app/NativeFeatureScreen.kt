@@ -58,6 +58,21 @@ fun NativeFeatureScreen(
     var resumeExperience by remember { mutableStateOf("") }
     var resumeEducation by remember { mutableStateOf("") }
     var employerJobs by remember { mutableStateOf<List<Pair<String,String>>>(emptyList()) }
+    var companyLoading by remember { mutableStateOf(false) }
+    var companySaving by remember { mutableStateOf(false) }
+    var companyName by remember { mutableStateOf("") }
+    var companyIndustry by remember { mutableStateOf("") }
+    var companySize by remember { mutableStateOf("") }
+    var companyLocation by remember { mutableStateOf("") }
+    var companyWebsite by remember { mutableStateOf("") }
+    var companyDescription by remember { mutableStateOf("") }
+    var companyPhone by remember { mutableStateOf("") }
+    var companyEmail by remember { mutableStateOf("") }
+    var companyCountry by remember { mutableStateOf("India") }
+    var companyState by remember { mutableStateOf("") }
+    var companyCity by remember { mutableStateOf("") }
+    var companyPostalCode by remember { mutableStateOf("") }
+    var companyWhatsapp by remember { mutableStateOf("") }
     var jobTitle by remember { mutableStateOf("") }
     var jobLocation by remember { mutableStateOf("") }
     var jobDescription by remember { mutableStateOf("") }
@@ -85,7 +100,20 @@ fun NativeFeatureScreen(
                     resumeName=d.optString("full_name"); resumeHeadline=d.optString("headline")
                     resumeSkills=d.optString("skills"); resumeExperience=d.optString("experience"); resumeEducation=d.optString("education")
                 }
-                "Employer dashboard" -> employerJobs=NativeDataApi.employerJobs(session)
+                "Employer dashboard" -> {
+                    employerJobs=NativeDataApi.employerJobs(session)
+                    companyLoading=true
+                    NativeDataApi.loadCompany(session)?.let { p ->
+                        companyName=p.optString("company_name"); companyIndustry=p.optString("industry")
+                        companySize=p.optString("company_size"); companyLocation=p.optString("location")
+                        companyWebsite=p.optString("website"); companyDescription=p.optString("description")
+                        companyPhone=p.optString("phone"); companyEmail=p.optString("email")
+                        companyCountry=p.optString("country").ifBlank{"India"}; companyState=p.optString("state")
+                        companyCity=p.optString("city"); companyPostalCode=p.optString("postal_code")
+                        companyWhatsapp=p.optString("whatsapp_number")
+                    }
+                    companyLoading=false
+                }
             }
         } catch(e:Exception) { error=e.message ?: "Data load nahi ho saka." }
         finally { busy=false }
@@ -205,6 +233,56 @@ fun NativeFeatureScreen(
                 item { Button(enabled=!busy&&supportTitle.isNotBlank()&&supportDescription.isNotBlank(),onClick={scope.launch { busy=true; runCatching { NativeDataApi.createSupportTicket(session,supportTitle,supportDescription,supportCategory); supportTitle=""; supportDescription=""; error="Support ticket submitted." }.onFailure{error=it.message}; busy=false }},modifier=Modifier.fillMaxWidth()) { Text("Submit support ticket") } }
             }
             "Employer dashboard" -> LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                item {
+                    Card(colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),shape=RoundedCornerShape(18.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Icon(Icons.Default.Business,null,tint=MaterialTheme.colorScheme.primary,modifier=Modifier.size(28.dp))
+                                Column(Modifier.padding(start=10.dp).weight(1f)) {
+                                    Text("Company profile",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+                                    Text("Employer details candidates ko dikhane ke liye",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if(companyLoading) CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp)
+                            }
+                            OutlinedTextField(companyName,{companyName=it},Modifier.fillMaxWidth(),label={Text("Company name *")},singleLine=true)
+                            OutlinedTextField(companyIndustry,{companyIndustry=it},Modifier.fillMaxWidth(),label={Text("Industry")},singleLine=true)
+                            OutlinedTextField(companySize,{companySize=it},Modifier.fillMaxWidth(),label={Text("Company size")},singleLine=true)
+                            OutlinedTextField(companyLocation,{companyLocation=it},Modifier.fillMaxWidth(),label={Text("Company address / location")},singleLine=true)
+                            OutlinedTextField(companyWebsite,{companyWebsite=it},Modifier.fillMaxWidth(),label={Text("Website")},singleLine=true)
+                            OutlinedTextField(companyDescription,{companyDescription=it},Modifier.fillMaxWidth(),label={Text("About company")},minLines=3)
+                            OutlinedTextField(companyPhone,{companyPhone=it},Modifier.fillMaxWidth(),label={Text("Contact phone")},singleLine=true)
+                            OutlinedTextField(companyEmail,{companyEmail=it},Modifier.fillMaxWidth(),label={Text("Contact email")},singleLine=true)
+                            OutlinedTextField(companyWhatsapp,{companyWhatsapp=it},Modifier.fillMaxWidth(),label={Text("WhatsApp number")},singleLine=true)
+                            OutlinedTextField(companyCountry,{companyCountry=it},Modifier.fillMaxWidth(),label={Text("Country")},singleLine=true)
+                            OutlinedTextField(companyState,{companyState=it},Modifier.fillMaxWidth(),label={Text("State")},singleLine=true)
+                            OutlinedTextField(companyCity,{companyCity=it},Modifier.fillMaxWidth(),label={Text("City")},singleLine=true)
+                            OutlinedTextField(companyPostalCode,{companyPostalCode=it},Modifier.fillMaxWidth(),label={Text("PIN code")},singleLine=true)
+                            Button(enabled=!companySaving&&!companyLoading&&companyName.isNotBlank(),onClick={
+                                companySaving=true
+                                scope.launch {
+                                    val data=JSONObject().put("company_name",companyName.trim()).put("industry",companyIndustry.trim())
+                                        .put("company_size",companySize.trim()).put("location",companyLocation.trim())
+                                        .put("website",companyWebsite.trim()).put("description",companyDescription.trim())
+                                        .put("phone",companyPhone.trim()).put("email",companyEmail.trim())
+                                        .put("country",companyCountry.trim()).put("state",companyState.trim())
+                                        .put("city",companyCity.trim()).put("postal_code",companyPostalCode.trim())
+                                        .put("whatsapp_number",companyWhatsapp.trim())
+                                    runCatching { NativeDataApi.saveCompany(session,data) }
+                                        .onSuccess { error="Company profile saved successfully." }
+                                        .onFailure { error=it.message ?: "Company profile save nahi ho saka." }
+                                    companySaving=false
+                                }
+                            },modifier=Modifier.fillMaxWidth()) { Text(if(companySaving)"Saving company…" else "Save company profile") }
+                        }
+                    }
+                }
+                item {
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        NativeEmployerStatCard("Total jobs",employerJobs.size.toString(),Modifier.weight(1f))
+                        NativeEmployerStatCard("Active",employerJobs.count{it.second.equals("active",true)||it.second.equals("published",true)}.toString(),Modifier.weight(1f))
+                        NativeEmployerStatCard("Drafts",employerJobs.count{it.second.equals("draft",true)}.toString(),Modifier.weight(1f))
+                    }
+                }
                 item { Text("Your job postings",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
                 if(employerJobs.isEmpty()) item { EmptyNative("Company profile not found","Job post karne se pehle employer company profile complete karein.") }
                 items(employerJobs) { NativeRowCard(it.first,"Employer listing",it.second) }
@@ -219,6 +297,15 @@ fun NativeFeatureScreen(
             else -> InfoNativePage(title)
         }
         if(error!=null) Text(error!!,Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),color=if(error!!.contains("saved",true))MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+    }
+}
+
+@Composable private fun NativeEmployerStatCard(label:String,value:String,modifier:Modifier=Modifier) {
+    Card(modifier,colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),shape=RoundedCornerShape(14.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            Text(value,style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.primary)
+            Text(label,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
