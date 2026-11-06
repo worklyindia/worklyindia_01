@@ -103,16 +103,29 @@ fun NativeFeatureScreen(
     val context=LocalContext.current
     val scope= rememberCoroutineScope()
     var pendingHmsRoomCode by remember { mutableStateOf<String?>(null) }
+    var pendingVideoSdkJoin by remember { mutableStateOf<Pair<String,String>?>(null) }
     val hmsPermissionLauncher=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if(grants.values.all { it }) {
-            val roomCode=pendingHmsRoomCode
-            val activity=context as? Activity
-            if(roomCode!=null && activity!=null) {
-                runCatching { HMSRoomKit.launchPrebuilt(roomCode,activity,HMSPrebuiltOptions(userName=session?.email ?: "Workly India",userId=session?.userId)) }
-                    .onFailure { error=it.message ?: "100ms meeting open nahi hui." }
-            } else error="Meeting activity available nahi hai."
+            val video=pendingVideoSdkJoin
+            if(video!=null) {
+                runCatching {
+                    context.startActivity(Intent(context,NativeVideoSDKMeetingActivity::class.java)
+                        .putExtra(NativeVideoSDKMeetingActivity.EXTRA_MEETING_ID,video.first)
+                        .putExtra(NativeVideoSDKMeetingActivity.EXTRA_TOKEN,video.second)
+                        .putExtra(NativeVideoSDKMeetingActivity.EXTRA_NAME,session?.email ?: "Workly India"))
+                }.onFailure { error=it.message ?: "VideoSDK meeting open nahi hui." }
+                pendingVideoSdkJoin=null
+            } else {
+                val roomCode=pendingHmsRoomCode
+                val activity=context as? Activity
+                if(roomCode!=null && activity!=null) {
+                    runCatching { HMSRoomKit.launchPrebuilt(roomCode,activity,HMSPrebuiltOptions(userName=session?.email ?: "Workly India",userId=session?.userId)) }
+                        .onFailure { error=it.message ?: "100ms meeting open nahi hui." }
+                } else error="Meeting activity available nahi hai."
+            }
         } else error="Video interview ke liye camera aur microphone permission zaroori hai."
         pendingHmsRoomCode=null
+        pendingVideoSdkJoin=null
     }
 
     LaunchedEffect(screenTitle,session,refresh,selectedConversation?.id) {
@@ -228,6 +241,31 @@ fun NativeFeatureScreen(
                                             }
                                         }
                                     },modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Join 100ms interview") }
+                                }
+                                if(interview.videoPlatform.equals("videosdk",true) || interview.mode=="videosdk_iframe") {
+                                    val meetingId=interview.videosdkRoomId.ifBlank {
+                                        Uri.parse(interview.videosdkMeetingUrl).getQueryParameter("meetingId").orEmpty()
+                                    }
+                                    val token=if(interview.hostUserId==session.userId) interview.videosdkHostToken
+                                        else interview.videosdkParticipantTokens?.optString(session.userId).orEmpty()
+                                    val usableToken=token.ifBlank { Uri.parse(interview.videosdkMeetingUrl).getQueryParameter("token").orEmpty() }
+                                    Button(enabled=meetingId.isNotBlank() && usableToken.isNotBlank(),onClick={
+                                        if(meetingId.isBlank() || usableToken.isBlank()) error="VideoSDK room/token available nahi hai. Interview website se provider setup complete karwayein."
+                                        else {
+                                            val camera=ContextCompat.checkSelfPermission(context,Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED
+                                            val mic=ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED
+                                            if(camera && mic) runCatching {
+                                                context.startActivity(Intent(context,NativeVideoSDKMeetingActivity::class.java)
+                                                    .putExtra(NativeVideoSDKMeetingActivity.EXTRA_MEETING_ID,meetingId)
+                                                    .putExtra(NativeVideoSDKMeetingActivity.EXTRA_TOKEN,usableToken)
+                                                    .putExtra(NativeVideoSDKMeetingActivity.EXTRA_NAME,session.email.ifBlank{"Workly India"}))
+                                            }.onFailure { error=it.message ?: "VideoSDK meeting open nahi hui." }
+                                            else {
+                                                pendingVideoSdkJoin=meetingId to usableToken
+                                                hmsPermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))
+                                            }
+                                        }
+                                    },modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Join VideoSDK interview") }
                                 }
                                 val meetingLink=interview.jitsiMeetingUrl.ifBlank { interview.locationUrl }
                                 if(meetingLink.isNotBlank()) {
