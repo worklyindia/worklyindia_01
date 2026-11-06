@@ -246,9 +246,10 @@ fun NativeFeatureScreen(
                                     val meetingId=interview.videosdkRoomId.ifBlank {
                                         Uri.parse(interview.videosdkMeetingUrl).getQueryParameter("meetingId").orEmpty()
                                     }
-                                    val token=if(interview.hostUserId==session.userId) interview.videosdkHostToken
+                                    val isHost=interview.hostUserId==session.userId
+                                    val token=if(isHost) interview.videosdkHostToken
                                         else interview.videosdkParticipantTokens?.optString(session.userId).orEmpty()
-                                    val usableToken=token.ifBlank { Uri.parse(interview.videosdkMeetingUrl).getQueryParameter("token").orEmpty() }
+                                    val usableToken=if(isHost) token.ifBlank { Uri.parse(interview.videosdkMeetingUrl).getQueryParameter("token").orEmpty() } else token
                                     Button(enabled=meetingId.isNotBlank() && usableToken.isNotBlank(),onClick={
                                         if(meetingId.isBlank() || usableToken.isBlank()) error="VideoSDK room/token available nahi hai. Interview website se provider setup complete karwayein."
                                         else {
