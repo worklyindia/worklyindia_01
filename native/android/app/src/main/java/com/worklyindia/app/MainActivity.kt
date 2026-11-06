@@ -169,6 +169,25 @@ class MainActivity : Activity() {
 
     inner class WorklyWebBridge {
         @JavascriptInterface
+        fun isNotificationPermissionGranted(): Boolean {
+            return Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        }
+
+        @JavascriptInterface
+        fun requestNotificationPermission(): Boolean {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                runOnUiThread {
+                    ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                }
+                return false
+            }
+            return NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
+        }
+
+        @JavascriptInterface
         fun clearAuthSession() {
             runOnUiThread {
                 val old = NativeAuth.session(this@MainActivity)
