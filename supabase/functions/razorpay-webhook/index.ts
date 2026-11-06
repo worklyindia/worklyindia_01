@@ -187,15 +187,14 @@ serve(async (req) => {
       logInfo("Signature verification successful");
     } catch (sigError) {
       logError("Signature verification error", sigError);
-      // Return 200 to prevent webhook auto-disable, but log the issue
       return new Response(
         JSON.stringify({
-          status: "acknowledged",
-          message: "Signature verification error - webhook ignored",
+          status: "error",
+          message: "Webhook signature verification error",
           requestId,
         }),
         {
-          status: 200,
+          status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
       );
@@ -208,11 +207,11 @@ serve(async (req) => {
     } catch (parseError) {
       logError('Failed to parse webhook body', parseError);
       return new Response(JSON.stringify({ 
-        status: 'acknowledged',
-        message: 'Invalid JSON payload - webhook ignored',
+        status: 'rejected',
+        message: 'Invalid webhook JSON payload',
         requestId 
       }), { 
-        status: 200, 
+        status: 400, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
