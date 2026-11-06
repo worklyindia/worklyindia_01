@@ -258,14 +258,14 @@ private fun HomeScreen(
 ) {
     var q by rememberSaveable { mutableStateOf("") }
     val quickActions = listOf(
-        Triple("My applications", "Track applications", Icons.Default.Description),
-        Triple("My resume", "Build your resume", Icons.Default.Article),
-        Triple("Messages", "Chat with employers", Icons.Default.Chat),
-        Triple("Notifications", "Job updates & alerts", Icons.Default.Notifications),
+        Triple("Employee", "Employer dashboard", Icons.Default.People),
         Triple("Companies", "Explore employers", Icons.Default.Business),
         Triple("Favorites", "Saved opportunities", Icons.Default.Favorite),
+        Triple("Refer", "Invite a friend", Icons.Default.CardGiftcard),
         Triple("AI Chat", "Career assistant", Icons.Default.AutoAwesome),
-        Triple("Refer", "Invite a friend", Icons.Default.CardGiftcard)
+        Triple("Developer", "Developer tools", Icons.Default.Code),
+        Triple("Resume", "Build your resume", Icons.Default.Article),
+        Triple("Post Job", "Create a job listing", Icons.Default.AddBox)
     )
 
     LazyColumn(
