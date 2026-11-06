@@ -59,7 +59,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.razorpay:checkout:1.6.41")
-    implementation("live.videosdk:rtc-android-sdk:3.0.1")
+    implementation("live.videosdk:rtc-android-sdk:2.2.0")
     implementation("live.100ms:room-kit:1.3.9")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
