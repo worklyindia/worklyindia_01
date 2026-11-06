@@ -1,75 +1,24 @@
 import { useCallback } from 'react';
-import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
-import { Capacitor } from '@capacitor/core';
 
+// Web-safe haptic feedback. The native Kotlin app provides its own Android haptics.
 export const useNativeHaptics = () => {
-  const isNative = Capacitor.isNativePlatform();
-
-  const lightImpact = useCallback(async () => {
-    if (!isNative) return;
+  const vibrate = useCallback((pattern: number | number[]) => {
     try {
-      await Haptics.impact({ style: ImpactStyle.Light });
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(pattern);
+      }
     } catch (error) {
-      console.warn('Haptics not available:', error);
+      console.warn('Haptic feedback is not available:', error);
     }
-  }, [isNative]);
+  }, []);
 
-  const mediumImpact = useCallback(async () => {
-    if (!isNative) return;
-    try {
-      await Haptics.impact({ style: ImpactStyle.Medium });
-    } catch (error) {
-      console.warn('Haptics not available:', error);
-    }
-  }, [isNative]);
-
-  const heavyImpact = useCallback(async () => {
-    if (!isNative) return;
-    try {
-      await Haptics.impact({ style: ImpactStyle.Heavy });
-    } catch (error) {
-      console.warn('Haptics not available:', error);
-    }
-  }, [isNative]);
-
-  const successHaptic = useCallback(async () => {
-    if (!isNative) return;
-    try {
-      await Haptics.notification({ type: NotificationType.Success });
-    } catch (error) {
-      console.warn('Haptics not available:', error);
-    }
-  }, [isNative]);
-
-  const warningHaptic = useCallback(async () => {
-    if (!isNative) return;
-    try {
-      await Haptics.notification({ type: NotificationType.Warning });
-    } catch (error) {
-      console.warn('Haptics not available:', error);
-    }
-  }, [isNative]);
-
-  const errorHaptic = useCallback(async () => {
-    if (!isNative) return;
-    try {
-      await Haptics.notification({ type: NotificationType.Error });
-    } catch (error) {
-      console.warn('Haptics not available:', error);
-    }
-  }, [isNative]);
-
-  const selectionHaptic = useCallback(async () => {
-    if (!isNative) return;
-    try {
-      await Haptics.selectionStart();
-      setTimeout(async () => {
-        await Haptics.selectionEnd();
-      }, 100);
-    } catch (error) {
-      console.warn('Haptics not available:', error);
-    }
-  }, [isNative]);
+  const lightImpact = useCallback(async () => vibrate(8), [vibrate]);
+  const mediumImpact = useCallback(async () => vibrate(16), [vibrate]);
+  const heavyImpact = useCallback(async () => vibrate(28), [vibrate]);
+  const successHaptic = useCallback(async () => vibrate([12, 35, 12]), [vibrate]);
+  const warningHaptic = useCallback(async () => vibrate([18, 45, 18]), [vibrate]);
+  const errorHaptic = useCallback(async () => vibrate([25, 40, 25]), [vibrate]);
+  const selectionHaptic = useCallback(async () => vibrate(5), [vibrate]);
 
   return {
     lightImpact,
