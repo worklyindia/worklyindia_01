@@ -163,13 +163,15 @@ class MainActivity : Activity() {
         webView.evaluateJavascript(script, null)
     }
 
+    private fun hasNotificationPermission(): Boolean {
+        val runtimeGranted = Build.VERSION.SDK_INT < 33 ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        return runtimeGranted && NotificationManagerCompat.from(this).areNotificationsEnabled()
+    }
+
     inner class WorklyWebBridge {
         @JavascriptInterface
-        fun isNotificationPermissionGranted(): Boolean {
-            val runtimeGranted = Build.VERSION.SDK_INT < 33 ||
-                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-            return runtimeGranted && NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
-        }
+        fun isNotificationPermissionGranted(): Boolean = hasNotificationPermission()
 
         @JavascriptInterface
         fun requestNotificationPermission(): Boolean {
@@ -188,7 +190,7 @@ class MainActivity : Activity() {
         fun registerPushNotifications() {
             runOnUiThread {
                 val session = NativeAuth.session(this@MainActivity) ?: return@runOnUiThread
-                if (!isNotificationPermissionGranted()) return@runOnUiThread
+                if (!hasNotificationPermission()) return@runOnUiThread
                 activityScope.launch(Dispatchers.IO) {
                     NativePushManager.register(this@MainActivity, session)
                     runOnUiThread {
@@ -251,7 +253,7 @@ class MainActivity : Activity() {
                 if (granted) request.grant(request.resources) else request.deny()
             }
         } else if (requestCode == REQUEST_NOTIFICATIONS) {
-            val granted = isNotificationPermissionGranted()
+            val granted = hasNotificationPermission()
             if (granted) {
                 NativeAuth.session(this)?.let { session ->
                     activityScope.launch(Dispatchers.IO) {
