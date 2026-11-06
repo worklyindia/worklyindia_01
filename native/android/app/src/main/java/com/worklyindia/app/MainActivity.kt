@@ -1105,7 +1105,7 @@ private fun AccountScreen(
                                     scope.launch {
                                         busy = true; onMessage(null)
                                         try {
-                                            NativeAuth.resetPassword(email)
+                                            NativeAuth.resetPassword(email, accountType)
                                             onMessage("Password reset link aapke email par bhej diya gaya hai. Inbox aur spam folder check karein.")
                                         } catch (e: Exception) { onMessage(e.message ?: "Reset email nahi bhej paye. Dobara try karein.") }
                                         finally { busy = false }
