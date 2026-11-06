@@ -734,8 +734,8 @@ async function handleVerifyBoost(supabase: any, params: any, req: Request) {
 
   if (!jobBoostId) throw new Error('Missing job boost reference');
   const { data: boostRecord, error: boostLookupError } = await supabase.from('job_boosts')
-    .select('id, amount_paid, user_id, status, razorpay_payment_id')
-    .eq('id', jobBoostId).eq('user_id', user.id).maybeSingle();
+    .select('id, amount_paid, user_id, status, razorpay_payment_id, razorpay_order_id')
+    .eq('id', jobBoostId).eq('user_id', user.id).eq('razorpay_order_id', razorpay_order_id).maybeSingle();
   if (boostLookupError || !boostRecord) throw new Error('Job boost purchase not found');
   if (boostRecord.status === 'completed' && boostRecord.razorpay_payment_id === razorpay_payment_id) {
     return new Response(JSON.stringify({ status: 'success', already: true, message: 'Boost already activated' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
