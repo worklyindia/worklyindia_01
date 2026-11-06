@@ -82,8 +82,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun openUrl(ctx: Context, url: String) =
-    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+// Native navigation only: app screens must never launch website URLs.
 
 private fun shareJob(ctx: Context, job: Job) {
     val text = "🚀 Job Opening\n📌 ${job.title}\n🏢 ${job.company}\n📍 ${job.location}\n💰 ${job.salary}\n\n👉 Apply here: ${job.webUrl}"
