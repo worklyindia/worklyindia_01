@@ -34,8 +34,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import org.jitsi.meet.sdk.JitsiMeetActivity
-import org.jitsi.meet.sdk.JitsiMeetConferenceOptions
 
 @Composable
 fun NativeFeatureScreen(
@@ -200,22 +198,7 @@ fun NativeFeatureScreen(
                                     if(meetingLink.startsWith("https://") || meetingLink.startsWith("http://")) {
                                         TextButton(onClick={
                                             runCatching {
-                                                if(interview.videoPlatform=="jitsi" && Uri.parse(meetingLink).host=="meet.jit.si") {
-                                                    val room=Uri.parse(meetingLink).lastPathSegment?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{5,128}")) }
-                                                        ?: throw IllegalArgumentException("Meeting room link valid nahi hai.")
-                                                    val options=JitsiMeetConferenceOptions.Builder()
-                                                        .setServerURL(URL("https://meet.jit.si"))
-                                                        .setRoom(room)
-                                                        .setAudioOnly(false)
-                                                        .setAudioMuted(false)
-                                                        .setVideoMuted(false)
-                                                        .setFeatureFlag("welcomepage.enabled",false)
-                                                        .setFeatureFlag("prejoinpage.enabled",true)
-                                                        .build()
-                                                    JitsiMeetActivity.launch(context as Activity,options)
-                                                } else {
-                                                    context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(meetingLink)))
-                                                }
+                                                context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(meetingLink)))
                                             }.onFailure { error=it.message ?: "Meeting open nahi ho saki." }
                                         }) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text(if(interview.videoPlatform=="jitsi") "Join video interview" else "Open meeting link") }
                                     } else Text(meetingLink,style=MaterialTheme.typography.bodySmall)
