@@ -43,14 +43,6 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Download Workly India app logo
-        run: |
-          mkdir -p native/android/app/src/main/res/drawable
-          curl --fail --location --retry 3 --retry-all-errors \\
-            "https://pub-86f7b661e6e34c4e941211a24238bf0a.r2.dev/media/brand/1769cddb-7244-4b4b-a86f-e0ca3bc028db/1793468060418-49a6e54e-37b1-49cc-8521-41c75122aaf4.png" \\
-            --output native/android/app/src/main/res/drawable/ic_workly_launcher.png
-          file native/android/app/src/main/res/drawable/ic_workly_launcher.png
-
       - name: Prepare release signing key
         id: release-signing
         env:
