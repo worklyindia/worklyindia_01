@@ -41,6 +41,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -1050,6 +1051,7 @@ private fun AccountScreen(
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var forgotPassword by rememberSaveable { mutableStateOf(false) }
     var twoFactorPending by rememberSaveable { mutableStateOf(false) }
@@ -1106,8 +1108,14 @@ private fun AccountScreen(
     LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text(if (session != null) "Account" else if (accountType == "employer") "Employer Login" else "Job Seeker Login", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(22.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            ) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     if (session != null) {
                         Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         Text(session.email, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1115,9 +1123,27 @@ private fun AccountScreen(
                         Button(onClick = { scope.launch { NativePushManager.unregister(ctx, session); NativeAuth.signOut(ctx); ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", "job_seeker").apply(); accountType = "job_seeker"; onSession(null); password = "" } }, Modifier.fillMaxWidth()) { Text("Logout") }
                     } else {
                         val authAvatar = if (accountType == "employer") homeData.employerLoginAvatar ?: "https://raw.githubusercontent.com/worklyindia/worklyindia_01/main/src/assets/employer-hero.webp" else homeData.seekerLoginAvatar ?: "https://raw.githubusercontent.com/worklyindia/worklyindia_01/main/src/assets/job-seeker-hero.webp"
-                        if (authAvatar != null) AsyncImage(authAvatar, if (accountType == "employer") "Employer" else "Job seeker", Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(14.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
-                        Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                        Text("Apna account type select karke continue karein.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                            AsyncImage(
+                                model = authAvatar,
+                                contentDescription = if (accountType == "employer") "Employer login artwork" else "Job seeker login artwork",
+                                modifier = Modifier.size(112.dp).clip(RoundedCornerShape(56.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(56.dp)),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                if (accountType == "employer") "Employer Portal" else "Job Seeker Portal",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                if (accountType == "employer") "Your gateway to smarter hiring" else "Your gateway to remote opportunities across India",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Text("Choose account type", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             listOf("job_seeker" to "Job Seeker", "employer" to "Employer").forEach { (type, label) ->
                                 val active = accountType == type
@@ -1148,11 +1174,39 @@ private fun AccountScreen(
                         OutlinedTextField(
                             value = email, onValueChange = { email = it },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text(if (mode == "login" && !forgotPassword) "Email or mobile number" else "Email address") },
-                            placeholder = { Text(if (mode == "login" && !forgotPassword) "name@email.com or +91 98765 43210" else "name@email.com") },
-                            singleLine = true
+                            label = { Text(if (mode == "login" && !forgotPassword) "Email or Mobile" else "Email address") },
+                            placeholder = { Text(if (mode == "login" && !forgotPassword) "Email or mobile number" else "name@email.com") },
+                            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface
+                            )
                         )
-                        if (!forgotPassword) OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                        if (!forgotPassword) OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Password") },
+                            placeholder = { Text("Enter your password") },
+                            leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface
+                            )
+                        )
                         if (forgotPassword) {
                             Button(
                                 enabled = !busy && email.contains("@"),
@@ -1311,12 +1365,22 @@ private fun AccountScreen(
                                 ) { Text(if (busy) "Verifying..." else "Verify & Login") }
                                 TextButton(onClick = { twoFactorPending = false; twoFactorOtp = ""; twoFactorUserId = ""; onMessage("Login cancelled.") }) { Text("Cancel verification") }
                             }
-                            if (mode == "login") TextButton(onClick = { forgotPassword = true; onMessage(null) }) { Text("Forgot password?") }
-                            if (accountType == "job_seeker") TextButton(onClick = { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://worklyindia.devs.surf/auth?mode=signup"))) } }) {
-                                Text("New user? Create account")
-                            } else TextButton(onClick = {
-                                runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://worklyindia.devs.surf/employer-signup"))) }
-                            }) { Text("Create employer account") }
+                            if (mode == "login") {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                    TextButton(onClick = { forgotPassword = true; onMessage(null) }) {
+                                        Text("Forgot password?", color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                            if (accountType == "job_seeker") {
+                                TextButton(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://worklyindia.devs.surf/auth?mode=signup"))) } }
+                                ) { Text("Don't have an account?  Create an account", color = MaterialTheme.colorScheme.primary) }
+                            } else TextButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://worklyindia.devs.surf/employer-signup"))) } }
+                            ) { Text("Create employer account", color = MaterialTheme.colorScheme.primary) }
                         }
                         TextButton(onClick = { onNavigate(if (accountType == "employer") "Employer dashboard" else "My applications") }) {
                             Text(if (accountType == "employer") "Explore employer features" else "Explore job seeker features")
