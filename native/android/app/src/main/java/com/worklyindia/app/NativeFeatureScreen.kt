@@ -197,6 +197,21 @@ fun NativeFeatureScreen(
                                         TextButton(onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(meetingLink))) }}) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Join interview") }
                                     } else Text(meetingLink,style=MaterialTheme.typography.bodySmall)
                                 }
+                                if(interview.hostUserId==session.userId && interview.status=="scheduled") {
+                                    val hasStarted=runCatching { java.time.OffsetDateTime.parse(interview.scheduledAt).isBefore(java.time.OffsetDateTime.now()) }.getOrDefault(false)
+                                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                        if(!hasStarted) OutlinedButton(onClick={scope.launch {
+                                            runCatching { NativeDataApi.updateInterviewStatus(session,interview.id,"cancelled") }
+                                                .onSuccess { error="Interview cancelled."; refresh++ }
+                                                .onFailure { error=it.message ?: "Interview cancel nahi hua." }
+                                        }}) { Text("Cancel") }
+                                        if(hasStarted) Button(onClick={scope.launch {
+                                            runCatching { NativeDataApi.updateInterviewStatus(session,interview.id,"completed") }
+                                                .onSuccess { error="Interview marked completed."; refresh++ }
+                                                .onFailure { error=it.message ?: "Status update nahi hua." }
+                                        }}) { Text("Mark completed") }
+                                    }
+                                }
                                 if(interview.notes.isNotBlank()) Text(interview.notes,style=MaterialTheme.typography.bodySmall)
                             }
                         }
