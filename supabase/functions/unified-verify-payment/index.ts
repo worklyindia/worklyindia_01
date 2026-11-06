@@ -737,7 +737,7 @@ async function handleVerifyBoost(supabase: any, params: any, req: Request) {
     .select('id, amount_paid, user_id, status, razorpay_payment_id, razorpay_order_id')
     .eq('id', jobBoostId).eq('user_id', user.id).eq('razorpay_order_id', razorpay_order_id).maybeSingle();
   if (boostLookupError || !boostRecord) throw new Error('Job boost purchase not found');
-  if (boostRecord.status === 'completed' && boostRecord.razorpay_payment_id === razorpay_payment_id) {
+  if (['completed', 'active'].includes(boostRecord.status) && boostRecord.razorpay_payment_id === razorpay_payment_id) {
     return new Response(JSON.stringify({ status: 'success', already: true, message: 'Boost already activated' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   if (boostRecord.status !== 'pending' && boostRecord.status !== 'created') throw new Error('Job boost is not awaiting payment');
@@ -1097,6 +1097,17 @@ async function handleVerifyJobIndexing(supabase: any, params: any, req: Request)
     .from('app_settings').select('setting_value').eq('setting_key', 'search_engine_indexing_price').maybeSingle();
   const price = Math.max(1, parseInt(setting?.setting_value || '100', 10) || 100);
   await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, price * 100, { service: 'search_listing', ref: user.id, job_id: String(job_id) });
+
+  const { data: priorIndexing } = await supabase.from('job_indexing_status')
+    .select('is_paid_for_indexing, indexing_payment_id').eq('job_id', job_id).maybeSingle();
+  if (priorIndexing?.is_paid_for_indexing) {
+    if (priorIndexing.indexing_payment_id === razorpay_payment_id) {
+      return new Response(JSON.stringify({ success: true, already: true, message: 'Job indexing payment already processed' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ error: 'Job indexing has already been paid for' }),
+      { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
 
   // Upsert job_indexing_status with paid flag
   const nowIso = new Date().toISOString();
