@@ -1,11 +1,16 @@
 package com.worklyindia.app
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
+import android.util.Base64
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -266,7 +271,8 @@ fun NativeFeatureScreen(m:Modifier,title:String,session:NativeSession?,onBack:()
 }
 
 
-private data class NativeAIMessage(val role: String, val content: String)
+private data class NativeAIMessage(val role: String, val content: String, val images: List<String> = emptyList())
+private data class NativeAIFile(val name: String, val text: String)
 
 @Composable
 private fun NativeAIChatScreen(session: NativeSession) {
@@ -277,7 +283,60 @@ private fun NativeAIChatScreen(session: NativeSession) {
     var failure by remember { mutableStateOf<String?>(null) }
     var thinkHarder by remember { mutableStateOf(false) }
     var showComposerMenu by remember { mutableStateOf(false) }
+    var selectedImages by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selectedFiles by remember { mutableStateOf<List<NativeAIFile>>(emptyList()) }
+    var isProcessingAttachment by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            isProcessingAttachment = true
+            try {
+                val room = (5 - selectedImages.size).coerceAtLeast(0)
+                val encoded = uris.take(room).mapNotNull { uri ->
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            val bitmap = android.graphics.BitmapFactory.decodeStream(input) ?: return@withContext null
+                            val scaled = if (bitmap.width > 1400 || bitmap.height > 1400) {
+                                val ratio = minOf(1400f / bitmap.width, 1400f / bitmap.height)
+                                Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true)
+                            } else bitmap
+                            val out = java.io.ByteArrayOutputStream()
+                            scaled.compress(Bitmap.CompressFormat.JPEG, 78, out)
+                            "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+                        }
+                    }
+                }
+                selectedImages = selectedImages + encoded
+            } catch (e: Exception) { failure = e.message ?: "Photo load nahi ho paya." }
+            finally { isProcessingAttachment = false }
+        }
+    }
+    val cameraPicker = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        if (bitmap != null) scope.launch {
+            isProcessingAttachment = true
+            try {
+                val data = withContext(Dispatchers.IO) {
+                    val out = java.io.ByteArrayOutputStream()
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 78, out)
+                    "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+                }
+                if (selectedImages.size < 5) selectedImages = selectedImages + data
+            } catch (e: Exception) { failure = e.message ?: "Camera image process nahi hua." }
+            finally { isProcessingAttachment = false }
+        }
+    }
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            isProcessingAttachment = true
+            try {
+                val docs = uris.take((3 - selectedFiles.size).coerceAtLeast(0)).mapNotNull { uri ->
+                    withContext(Dispatchers.IO) { readNativeAIFile(context, uri) }
+                }
+                selectedFiles = selectedFiles + docs
+            } catch (e: Exception) { failure = e.message ?: "File read nahi ho payi." }
+            finally { isProcessingAttachment = false }
+        }
+    }
     val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (!spoken.isNullOrBlank()) draft = listOf(draft.trim(), spoken).filter { it.isNotBlank() }.joinToString(" ")
@@ -296,8 +355,13 @@ private fun NativeAIChatScreen(session: NativeSession) {
         draft = ""
         thinkHarder = false
         failure = null
-        messages.add(NativeAIMessage("user", prompt))
+        val attachmentContext = selectedFiles.joinToString("\\n\\n") { "--- Attached file: ${it.name} ---\\n${it.text}" }
+        val promptWithFiles = listOf(prompt, attachmentContext).filter { it.isNotBlank() }.joinToString("\\n\\n")
+        val outgoingImages = selectedImages
+        messages.add(NativeAIMessage("user", promptWithFiles, outgoingImages))
         messages.add(NativeAIMessage("assistant", ""))
+        selectedImages = emptyList()
+        selectedFiles = emptyList()
         sending = true
         status = "Thinking…"
         scope.launch {
@@ -420,6 +484,29 @@ private fun NativeAIChatScreen(session: NativeSession) {
         }
         Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 6.dp) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
+                if (selectedImages.isNotEmpty() || selectedFiles.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        selectedImages.forEachIndexed { index, data ->
+                            Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                                Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Image, null, tint = MaterialTheme.colorScheme.primary)
+                                    Text("Photo ${index + 1}", Modifier.padding(horizontal = 5.dp), style = MaterialTheme.typography.labelSmall)
+                                    IconButton(onClick = { selectedImages = selectedImages.filterIndexed { i, _ -> i != index } }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.Close, "Remove photo", modifier = Modifier.size(15.dp)) }
+                                }
+                            }
+                        }
+                        selectedFiles.forEachIndexed { index, file ->
+                            Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                                Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AttachFile, null, tint = MaterialTheme.colorScheme.primary)
+                                    Text(file.name.take(18), Modifier.padding(horizontal = 5.dp), style = MaterialTheme.typography.labelSmall)
+                                    IconButton(onClick = { selectedFiles = selectedFiles.filterIndexed { i, _ -> i != index } }, modifier = Modifier.size(22.dp)) { Icon(Icons.Default.Close, "Remove file", modifier = Modifier.size(15.dp)) }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (isProcessingAttachment) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (thinkHarder) {
                     AssistChip(
                         onClick = { thinkHarder = false },
@@ -434,6 +521,18 @@ private fun NativeAIChatScreen(session: NativeSession) {
                             Icon(Icons.Default.Add, contentDescription = "More options")
                         }
                         DropdownMenu(expanded = showComposerMenu, onDismissRequest = { showComposerMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Camera") }, leadingIcon = { Icon(Icons.Default.CameraAlt, null) },
+                                onClick = { showComposerMenu = false; cameraPicker.launch(null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Photos") }, leadingIcon = { Icon(Icons.Default.Image, null) },
+                                onClick = { showComposerMenu = false; imagePicker.launch("image/*") }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Files (PDF, TXT, DOC, CSV)") }, leadingIcon = { Icon(Icons.Default.AttachFile, null) },
+                                onClick = { showComposerMenu = false; documentPicker.launch("*/*") }
+                            )
                             DropdownMenuItem(
                                 text = { Text(if (thinkHarder) "Turn off Think harder" else "Think harder") },
                                 leadingIcon = { Icon(Icons.Default.Psychology, null) },
@@ -467,7 +566,7 @@ private fun NativeAIChatScreen(session: NativeSession) {
                     }
                     FilledIconButton(
                         onClick = { send(draft) },
-                        enabled = draft.isNotBlank() && !sending,
+                        enabled = (draft.isNotBlank() || selectedImages.isNotEmpty() || selectedFiles.isNotEmpty()) && !sending && !isProcessingAttachment,
                         modifier = Modifier.size(46.dp)
                     ) { Icon(Icons.Default.ArrowUpward, contentDescription = "Send message") }
                 }
@@ -483,6 +582,27 @@ private fun NativeAIChatScreen(session: NativeSession) {
     }
 }
 
+
+private fun readNativeAIFile(context: android.content.Context, uri: Uri): NativeAIFile? {
+    val name = context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0) else null
+    } ?: "attachment"
+    val mime = context.contentResolver.getType(uri).orEmpty()
+    val ext = name.substringAfterLast('.', "").lowercase()
+    val supported = setOf("txt", "md", "csv", "json", "xml", "html", "css", "js", "ts", "py", "java", "log", "yaml", "yml", "pdf")
+    if (ext !in supported && !mime.startsWith("text/") && mime != "application/pdf") {
+        throw IllegalArgumentException("$name: is file type ka text extraction abhi supported nahi hai.")
+    }
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+    if (bytes.size > 5 * 1024 * 1024) throw IllegalArgumentException("$name: file 5 MB se chhoti honi chahiye.")
+    val raw = String(bytes, Charsets.UTF_8)
+    val extracted = if (ext == "pdf" || mime == "application/pdf") {
+        val matches = Regex("\\(([^()] {0,0}[^()]*)\\)").findAll(raw).map { it.groupValues[1] }.filter { it.length > 2 && it.any(Char::isLetter) }.toList()
+        matches.joinToString(" ").ifBlank { "PDF attached. Text extraction limited on this device; ask the user for a text-based copy if needed." }
+    } else raw
+    return NativeAIFile(name, extracted.take(25000))
+}
+
 private suspend fun callNativeCareerAI(
     history: List<NativeAIMessage>,
     session: NativeSession,
@@ -492,10 +612,18 @@ private suspend fun callNativeCareerAI(
     val key = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
     val payload = JSONObject()
         .put("messages", JSONArray().apply {
-            history.forEach { put(JSONObject().put("role", it.role).put("content", it.content)) }
+            history.forEach { item ->
+                val content: Any = if (item.images.isNotEmpty()) {
+                    JSONArray().apply {
+                        put(JSONObject().put("type", "text").put("text", item.content.ifBlank { "Please analyze these images." }))
+                        item.images.forEach { url -> put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", url))) }
+                    }
+                } else item.content
+                put(JSONObject().put("role", item.role).put("content", content))
+            }
         })
         .put("user_id", session.userId)
-        .put("hasImages", false)
+        .put("hasImages", history.any { it.images.isNotEmpty() })
         .put("currentPage", "/ai-assistant")
         .put("audience", "job_seeker")
         .put("pageContext", JSONObject().put("path", "/ai-assistant").put("page", "AI Chat").put("audience", "job_seeker"))
