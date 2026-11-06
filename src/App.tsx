@@ -5,7 +5,6 @@ import React, { useEffect, Suspense } from "react";
 import { lazyRetry } from "@/lib/chunkErrorRecovery";
 import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import { navigationMiddleware } from "@/utils/navigationMiddleware";
-import { Capacitor } from "@capacitor/core";
 import { HelmetProvider } from "react-helmet-async";
 import RouteSEO from "@/components/seo/RouteSEO";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -416,37 +415,7 @@ const AppContent = () => {
   useNativeApp();
   
 
-  useEffect(() => {
-    const handleAppInit = async () => {
-      if (Capacitor.isNativePlatform()) {
-        console.log('Workly India App initialized on native platform');
-        
-        try {
-          const { App: CapacitorApp } = await import('@capacitor/app');
-          
-          CapacitorApp.addListener('appUrlOpen', (event) => {
-            console.log('App opened via URL:', event.url);
-            const url = new URL(event.url);
-            const path = url.pathname;
-            
-            if (path && path !== '/') {
-              // Use React Router navigate instead of window.location.href
-              navigate(path);
-            }
-          });
-          
-          CapacitorApp.addListener('appStateChange', (state) => {
-            console.log('App state changed:', state);
-          });
-          
-        } catch (error) {
-          console.log('App plugin not available:', error);
-        }
-      }
-    };
-    
-    handleAppInit();
-  }, [navigate]);
+  // Native Android is a separate Kotlin application. The web SPA does not import Capacitor plugins.
 
   return (
     <JobStatusNotificationWrapper>
