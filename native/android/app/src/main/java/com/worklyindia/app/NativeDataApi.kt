@@ -9,7 +9,7 @@ import java.net.URL
 import java.net.URLEncoder
 
 data class NativeApplication(val id:String, val jobTitle:String, val company:String, val status:String, val appliedAt:String, val reviewedAt:String?)
-data class NativeEmployerApplicant(val id:String,val jobTitle:String,val fullName:String,val email:String,val phone:String,val location:String,val skills:List<String>,val experience:String,val resumeUrl:String,val coverLetter:String,val status:String,val appliedAt:String)
+data class NativeEmployerApplicant(val id:String,val jobId:String,val applicantId:String,val jobTitle:String,val fullName:String,val email:String,val phone:String,val location:String,val skills:List<String>,val experience:String,val resumeUrl:String,val coverLetter:String,val status:String,val appliedAt:String)
 data class NativeNotification(val id:String, val title:String, val message:String, val createdAt:String, val read:Boolean)
 data class NativeConversation(val id:String, val jobTitle:String, val lastMessage:String, val updatedAt:String)
 data class NativeChatMessage(val id:String, val senderId:String, val message:String, val createdAt:String)
@@ -68,15 +68,36 @@ object NativeDataApi {
 
 
     suspend fun employerApplications(s:NativeSession):List<NativeEmployerApplicant> {
-        val a=JSONArray(call("/job_applications?select=id,job_id,api_full_name,api_email,api_phone,api_location,api_skills,api_experience_years,resume_url,cover_letter,status,applied_at,job:jobs(title)&employer_id=eq.${enc(s.userId)}&order=applied_at.desc&limit=200",s))
+        val a=JSONArray(call("/job_applications?select=id,job_id,applicant_id,api_full_name,api_email,api_phone,api_location,api_skills,api_experience_years,resume_url,cover_letter,status,applied_at,job:jobs(title)&employer_id=eq.${enc(s.userId)}&order=applied_at.desc&limit=200",s))
         return (0 until a.length()).map { i ->
             val o=a.getJSONObject(i); val skills=o.optJSONArray("api_skills")
-            NativeEmployerApplicant(o.optString("id"),o.optJSONObject("job")?.optString("title")?.takeIf{it.isNotBlank()}?:"Job application",
+            NativeEmployerApplicant(o.optString("id"),o.optString("job_id"),o.optString("applicant_id"),o.optJSONObject("job")?.optString("title")?.takeIf{it.isNotBlank()}?:"Job application",
                 o.optString("api_full_name").ifBlank{"Candidate"},o.optString("api_email"),o.optString("api_phone"),o.optString("api_location"),
                 if(skills==null) emptyList() else (0 until skills.length()).map{skills.optString(it)}.filter{it.isNotBlank()},
                 o.optString("api_experience_years").takeIf{it.isNotBlank() && it!="null"}?.let{"$it years"}.orEmpty(),
                 o.optString("resume_url"),o.optString("cover_letter"),o.optString("status","applied"),o.optString("applied_at"))
         }
+    }
+    suspend fun getOrCreateConversation(s:NativeSession, jobId:String, applicantId:String, jobTitle:String):NativeConversation {
+        val path="/conversations?select=id,last_message_at&employer_id=eq."+enc(s.userId)+"&applicant_id=eq."+enc(applicantId)+"&job_id=eq."+enc(jobId)+"&limit=1"
+        val existing=JSONArray(call(path,s))
+        if(existing.length()>0) { val o=existing.getJSONObject(0); return NativeConversation(o.optString("id"),jobTitle,"",o.optString("last_message_at")) }
+        val body=JSONObject().put("job_id",jobId).put("employer_id",s.userId).put("applicant_id",applicantId).put("status","active")
+        val created=JSONArray(call("/conversations",s,"POST",body,"return=representation"))
+        if(created.length()==0) throw IllegalStateException("Conversation create nahi ho saka.")
+        val o=created.getJSONObject(0)
+        return NativeConversation(o.optString("id"),jobTitle,"",o.optString("last_message_at"))
+    }
+
+    suspend fun scheduleInterview(s:NativeSession, jobId:String, applicantId:String, localDateTime:String, mode:String, locationOrLink:String, notes:String) {
+        require(mode in setOf("online","phone","in_person")) { "Interview mode invalid hai." }
+        val local=java.time.LocalDateTime.parse(localDateTime.trim())
+        val start=local.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime()
+        val end=start.plusMinutes(30)
+        val body=JSONObject().put("job_id",jobId).put("applicant_id",applicantId).put("scheduled_at",start.toString()).put("scheduled_end_at",end.toString()).put("mode",mode).put("status","scheduled").put("host_user_id",s.userId)
+        if(locationOrLink.isNotBlank()) body.put("location_url",locationOrLink.trim())
+        if(notes.isNotBlank()) body.put("notes",notes.trim())
+        call("/interviews",s,"POST",body,"return=minimal")
     }
     suspend fun updateApplicantStatus(s:NativeSession, applicationId:String, status:String) {
         require(status=="shortlisted" || status=="rejected") { "Invalid application status." }
