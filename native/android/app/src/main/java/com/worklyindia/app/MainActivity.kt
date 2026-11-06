@@ -234,13 +234,40 @@ private fun WorklyApp() {
             }
         },
         bottomBar = {
-            if (selected == null && selectedFeature == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Work,
-                    "Activity" to Icons.Default.Timeline, "More" to Icons.Default.Menu)
-                    .forEach { (label, icon) ->
-                        NavigationBarItem(selected = tab == label, onClick = { selectedFeature = null; selected = null; tab = label },
-                            icon = { Icon(icon, contentDescription = label) }, label = { Text(label) })
+            if (selected == null && selectedFeature == null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .border(width = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                            .padding(horizontal = 5.dp, vertical = 5.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Work,
+                            "Activity" to Icons.Default.Timeline, "More" to Icons.Default.Menu)
+                            .forEach { (label, icon) ->
+                                val active = tab == label
+                                Column(
+                                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                                        .clickable { selectedFeature = null; selected = null; tab = label }
+                                        .padding(vertical = 3.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Icon(icon, contentDescription = label,
+                                        tint = if (active) Color(0xFF3B82F6) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(21.dp))
+                                    Text(label, color = if (active) Color(0xFF3B82F6) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelSmall, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+                                }
+                            }
                     }
+                }
             }
         }
     ) { pad ->
