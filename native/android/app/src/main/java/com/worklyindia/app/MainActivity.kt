@@ -28,6 +28,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
+import androidx.webkit.WebViewCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -129,6 +130,19 @@ class MainActivity : Activity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.addJavascriptInterface(WorklyWebBridge(), "WorklyAndroid")
+        // Inject the native-app marker at document start, before any React code
+        // runs. onPageFinished alone is too late: notification capability checks
+        // can run during hydration and cache the browser-only unsupported state.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(
+                webView,
+                "Object.defineProperty(window, '__WORKLY_NATIVE_ANDROID__', {value:true, configurable:false, enumerable:false}); window.dispatchEvent(new Event('workly:native-bridge-ready'));",
+                setOf("https://worklyindia.devs.surf")
+            )
+            android.util.Log.i("WorklyWebView", "Native notification marker installed before page scripts")
+        } else {
+            android.util.Log.w("WorklyWebView", "Document-start script unsupported; using bridge and User-Agent detection")
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
