@@ -741,7 +741,7 @@ async function handleVerifyBoost(supabase: any, params: any, req: Request) {
     return new Response(JSON.stringify({ status: 'success', already: true, message: 'Boost already activated' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   if (boostRecord.status !== 'pending' && boostRecord.status !== 'created') throw new Error('Job boost is not awaiting payment');
-  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(boostRecord.amount_paid) * 100));
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(boostRecord.amount_paid) * 100), { user_id: user.id });
   const { data: claimedBoost, error: claimError } = await supabase.from('job_boosts').update({
     razorpay_payment_id, razorpay_signature, status: 'completed', updated_at: new Date().toISOString()
   }).eq('id', jobBoostId).eq('user_id', user.id).in('status', ['pending', 'created']).select('id').maybeSingle();
@@ -824,7 +824,7 @@ async function handleVerifyVerification(supabase: any, params: any, req: Request
     return new Response(JSON.stringify({ status: 'success', already: true, message: 'Verification payment already activated' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   if (purchaseRecord.status !== 'pending') throw new Error('Verification purchase is not pending');
-  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(purchaseRecord.amount_paid) * 100));
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(purchaseRecord.amount_paid) * 100), { user_id, verification_package_id: String(verification_package_id) });
 
   const { data: updatedPurchase, error: updateError } = await supabase.from('verification_purchases').update({
     razorpay_payment_id, razorpay_signature, status: 'completed'
@@ -862,13 +862,25 @@ async function handleVerifyVerification(supabase: any, params: any, req: Request
 }
 
 
-async function verifyCapturedRazorpayPayment(orderId: string, paymentId: string, expectedAmountPaise: number) {
+async function verifyCapturedRazorpayPayment(orderId: string, paymentId: string, expectedAmountPaise: number, expectedNotes: Record<string, string> = {}) {
   const keyId = Deno.env.get('RAZORPAY_KEY_ID')?.trim();
   const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET')?.trim();
   if (!keyId || !keySecret) throw new Error('Razorpay API credentials are not configured');
   if (!Number.isFinite(expectedAmountPaise) || expectedAmountPaise < 1) throw new Error('Invalid expected payment amount');
+  const auth = `Basic ${btoa(`${keyId}:${keySecret}`)}`;
+  const orderResponse = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}`, {
+    headers: { Authorization: auth },
+  });
+  if (!orderResponse.ok) throw new Error('Unable to confirm Razorpay order');
+  const order = await orderResponse.json();
+  if (order.id !== orderId || order.status !== 'paid' || Number(order.amount) !== expectedAmountPaise || order.currency !== 'INR') {
+    throw new Error('Razorpay order is not paid or does not match the expected amount and currency');
+  }
+  for (const [key, value] of Object.entries(expectedNotes)) {
+    if (String(order.notes?.[key] ?? '') !== String(value)) throw new Error('Razorpay order does not match the expected payer or purchase');
+  }
   const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-    headers: { Authorization: `Basic ${btoa(`${keyId}:${keySecret}`)}` },
+    headers: { Authorization: auth },
   });
   if (!response.ok) throw new Error('Unable to confirm payment status with Razorpay');
   const payment = await response.json();
@@ -1077,6 +1089,7 @@ async function handleVerifyJobIndexing(supabase: any, params: any, req: Request)
   const { data: setting } = await supabase
     .from('app_settings').select('setting_value').eq('setting_key', 'search_engine_indexing_price').maybeSingle();
   const price = Math.max(1, parseInt(setting?.setting_value || '100', 10) || 100);
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, price * 100, { service: 'search_listing', ref: user.id });
 
   // Upsert job_indexing_status with paid flag
   const nowIso = new Date().toISOString();
@@ -1164,7 +1177,7 @@ async function handleVerifyJobPayment(supabase: any, params: any, req: Request) 
     .select('*').eq('razorpay_order_id', razorpay_order_id).eq('user_id', user.id).maybeSingle();
   if (!pending) return json({ error: 'Payment not found' }, 404);
   if (pending.status === 'completed') return json({ success: true, data: pending.result, already: true });
-  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(pending.amount_inr) * 100));
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(pending.amount_inr) * 100), { ref: user.id });
 
   // Claim atomically so a double submit cannot fulfil twice
   const { data: claimed } = await supabase.from('pending_payments')
