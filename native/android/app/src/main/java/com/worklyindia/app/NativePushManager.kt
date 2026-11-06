@@ -1,6 +1,8 @@
 package com.worklyindia.app
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -148,31 +150,86 @@ object NativePushManager {
         createChannel(context)
         val title = data["title"]?.takeIf { it.isNotBlank() } ?: "Workly India"
         val body = data["body"]?.takeIf { it.isNotBlank() } ?: "You have a new update."
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("notification_url", data["url"])
-            putExtra("notification_type", data["type"])
+        val notificationUrl = data["url"]?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        val tag = data["tag"]?.takeIf { it.isNotBlank() } ?: "workly-${System.currentTimeMillis()}"
+
+        fun activityPendingIntent(url: String?, requestCode: Int): PendingIntent {
+            val openIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("notification_url", url)
+                putExtra("notification_type", data["type"])
+            }
+            return PendingIntent.getActivity(
+                context, requestCode, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
         }
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            (data["tag"] ?: title).hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setContentIntent(pendingIntent)
+            .setContentIntent(activityPendingIntent(notificationUrl, tag.hashCode()))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .build()
-        NotificationManagerCompat.from(context).notify(
-            data["tag"] ?: "workly-${System.currentTimeMillis()}",
-            (data["tag"] ?: title).hashCode(),
-            notification
-        )
+
+        // Download the optional rich-media image with strict time/size limits.
+        val imageUrl = data["image"]?.takeIf { it.startsWith("https://") }
+        if (imageUrl != null) {
+            runCatching {
+                val connection = URL(imageUrl).openConnection() as HttpURLConnection
+                connection.connectTimeout = 5000
+                connection.readTimeout = 7000
+                connection.instanceFollowRedirects = true
+                connection.setRequestProperty("User-Agent", "WorklyIndia-Android")
+                connection.connect()
+                val bitmap = connection.inputStream.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > 2 * 1024 * 1024) throw IllegalStateException("Notification image exceeds 2 MB")
+                        output.write(buffer, 0, count)
+                    }
+                    BitmapFactory.decodeByteArray(output.toByteArray(), 0, total)
+                }
+                connection.disconnect()
+                bitmap
+            }.getOrNull()?.let { bitmap ->
+                builder.setStyle(
+                    NotificationCompat.BigPictureStyle()
+                        .bigPicture(bitmap)
+                        .setSummaryText(body)
+                )
+            }
+        }
+
+        // FCM carries up to two action descriptors as a JSON string in data.actions.
+        runCatching {
+            val actions = org.json.JSONArray(data["actions"] ?: "[]")
+            for (index in 0 until minOf(actions.length(), 2)) {
+                val action = actions.optJSONObject(index) ?: continue
+                val label = action.optString("title").takeIf { it.isNotBlank() } ?: continue
+                val actionUrl = action.optString("url").takeIf {
+                    it.startsWith("https://") || it.startsWith("http://")
+                } ?: notificationUrl
+                if (actionUrl != null) {
+                    builder.addAction(
+                        0,
+                        label,
+                        activityPendingIntent(actionUrl, tag.hashCode() + index + 1)
+                    )
+                }
+            }
+        }.onFailure {
+            android.util.Log.w("WorklyPush", "Could not parse notification actions", it)
+        }
+
+        NotificationManagerCompat.from(context).notify(tag, tag.hashCode(), builder.build())
     }
 }
