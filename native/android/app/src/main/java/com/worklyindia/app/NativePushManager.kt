@@ -131,12 +131,12 @@ object NativePushManager {
     }
 
     suspend fun unregister(context: Context, session: NativeSession): Boolean = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
         try {
-            if (FirebaseApp.getApps(context).isEmpty()) return@withContext false
-            val token = Tasks.await(FirebaseMessaging.getInstance().token)
-            if (token.isNullOrBlank()) return@withContext false
-            val encoded = URLEncoder.encode(token, "UTF-8")
-            val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&platform=eq.android&fcm_token=eq.$encoded").openConnection() as HttpURLConnection)
+            // The schema keeps one Android subscription row per account. Delete
+            // by account + platform rather than the current FCM token: tokens can
+            // rotate, and a stale local token must never leave a live server row.
+            connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&platform=eq.android").openConnection() as HttpURLConnection)
             connection.requestMethod = "DELETE"
             connection.connectTimeout = 15000
             connection.readTimeout = 20000
@@ -146,15 +146,17 @@ object NativePushManager {
             val status = connection.responseCode
             if (status !in 200..299) {
                 val response = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                android.util.Log.e("WorklyPush", "Token removal failed [$status]: $response")
+                android.util.Log.e("WorklyPush", "Android subscription removal failed [$status]: $response")
+                return@withContext false
             }
-            connection.disconnect()
-            val success = status in 200..299
-            if (success) setOptedIn(context, false)
-            success
+            setOptedIn(context, false)
+            android.util.Log.i("WorklyPush", "Native Android push subscription removed")
+            true
         } catch (error: Exception) {
-            android.util.Log.w("WorklyPush", "Token cleanup failed during logout", error)
+            android.util.Log.w("WorklyPush", "Android subscription removal failed", error)
             false
+        } finally {
+            connection?.disconnect()
         }
     }
 
