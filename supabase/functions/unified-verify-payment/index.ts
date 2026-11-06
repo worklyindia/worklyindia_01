@@ -90,7 +90,7 @@ serve(async (req) => {
         return await handleVerifyBoost(supabaseService, params, req);
       
       case 'verify-verification':
-        return await handleVerifyVerification(supabaseService, params);
+        return await handleVerifyVerification(supabaseService, params, req);
       
       case 'verify-donation':
         return await handleVerifyDonation(supabaseService, params);
@@ -732,17 +732,23 @@ async function handleVerifyBoost(supabase: any, params: any, req: Request) {
     throw new Error('Invalid payment signature');
   }
 
-  // Update boost record
-  await supabase.from('job_boosts').update({
+  if (!jobBoostId) throw new Error('Missing job boost reference');
+  const { data: boostRecord, error: boostLookupError } = await supabase.from('job_boosts')
+    .select('id, amount_paid, user_id, status, razorpay_payment_id')
+    .eq('id', jobBoostId).eq('user_id', user.id).maybeSingle();
+  if (boostLookupError || !boostRecord) throw new Error('Job boost purchase not found');
+  if (boostRecord.status === 'completed' && boostRecord.razorpay_payment_id === razorpay_payment_id) {
+    return new Response(JSON.stringify({ status: 'success', already: true, message: 'Boost already activated' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  if (boostRecord.status !== 'pending' && boostRecord.status !== 'created') throw new Error('Job boost is not awaiting payment');
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(boostRecord.amount_paid) * 100));
+  const { data: claimedBoost, error: claimError } = await supabase.from('job_boosts').update({
     razorpay_payment_id, razorpay_signature, status: 'completed', updated_at: new Date().toISOString()
-  }).eq('id', jobBoostId).eq('user_id', user.id);
+  }).eq('id', jobBoostId).eq('user_id', user.id).in('status', ['pending', 'created']).select('id').maybeSingle();
+  if (claimError || !claimedBoost) throw new Error('Job boost payment was already processed');
 
-  // Activate boost
   const { error: activateError } = await supabase.rpc('activate_job_boost', { p_job_boost_id: jobBoostId });
   if (activateError) throw new Error('Failed to activate job boost');
-
-  // Get boost record for referral commission
-  const { data: boostRecord } = await supabase.from('job_boosts').select('amount_paid, user_id').eq('id', jobBoostId).single();
 
   if (boostRecord) {
     await supabase.rpc('process_referral_commission', {
@@ -773,10 +779,15 @@ async function handleVerifyBoost(supabase: any, params: any, req: Request) {
 // VERIFY VERIFICATION PAYMENT
 // =============================================
 
-async function handleVerifyVerification(supabase: any, params: any) {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, user_id, verification_package_id } = params;
+async function handleVerifyVerification(supabase: any, params: any, req: Request) {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, verification_package_id } = params;
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) throw new Error('Missing authorization');
+  const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.slice(7));
+  if (authError || !user) throw new Error('User not authenticated');
+  const user_id = user.id;
 
-  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) throw new Error('Missing payment verification parameters');
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !verification_package_id) throw new Error('Missing payment verification parameters');
 
   // Verify signature
   const razorpaySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
@@ -800,19 +811,30 @@ async function handleVerifyVerification(supabase: any, params: any) {
     throw new Error('Invalid payment signature');
   }
 
-  // Update verification purchase
-  await supabase.from('verification_purchases').update({
-    razorpay_payment_id, razorpay_signature, status: 'completed'
-  }).eq('razorpay_order_id', razorpay_order_id).eq('user_id', user_id);
+  // Confirm the order belongs to this user and package before activating anything.
+  const { data: purchaseRecord, error: purchaseError } = await supabase
+    .from('verification_purchases')
+    .select('id, amount_paid, user_id, verification_package_id, status, razorpay_payment_id')
+    .eq('razorpay_order_id', razorpay_order_id)
+    .eq('user_id', user_id)
+    .eq('verification_package_id', verification_package_id)
+    .maybeSingle();
+  if (purchaseError || !purchaseRecord) throw new Error('Matching verification purchase not found');
+  if (purchaseRecord.status === 'completed' && purchaseRecord.razorpay_payment_id === razorpay_payment_id) {
+    return new Response(JSON.stringify({ status: 'success', already: true, message: 'Verification payment already activated' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  if (purchaseRecord.status !== 'pending') throw new Error('Verification purchase is not pending');
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(purchaseRecord.amount_paid) * 100));
 
-  // Activate verification
+  const { data: updatedPurchase, error: updateError } = await supabase.from('verification_purchases').update({
+    razorpay_payment_id, razorpay_signature, status: 'completed'
+  }).eq('id', purchaseRecord.id).eq('status', 'pending').select('id').maybeSingle();
+  if (updateError || !updatedPurchase) throw new Error('Verification purchase was already processed');
+
   const { error: activationError } = await supabase.rpc('activate_company_verification', {
     p_user_id: user_id, p_verification_package_id: verification_package_id
   });
   if (activationError) throw new Error('Failed to activate verification');
-
-  // Get purchase for referral commission
-  const { data: purchaseRecord } = await supabase.from('verification_purchases').select('amount_paid, user_id').eq('razorpay_order_id', razorpay_order_id).eq('user_id', user_id).single();
 
   if (purchaseRecord) {
     await supabase.rpc('process_referral_commission', {
@@ -837,6 +859,22 @@ async function handleVerifyVerification(supabase: any, params: any) {
   } catch (e) { console.error('[verify-verification] receipt email failed:', e); }
 
   return new Response(JSON.stringify({ status: 'success', message: 'Verification activated successfully' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
+
+async function verifyCapturedRazorpayPayment(orderId: string, paymentId: string, expectedAmountPaise: number) {
+  const keyId = Deno.env.get('RAZORPAY_KEY_ID')?.trim();
+  const keySecret = Deno.env.get('RAZORPAY_KEY_SECRET')?.trim();
+  if (!keyId || !keySecret) throw new Error('Razorpay API credentials are not configured');
+  if (!Number.isFinite(expectedAmountPaise) || expectedAmountPaise < 1) throw new Error('Invalid expected payment amount');
+  const response = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+    headers: { Authorization: `Basic ${btoa(`${keyId}:${keySecret}`)}` },
+  });
+  if (!response.ok) throw new Error('Unable to confirm payment status with Razorpay');
+  const payment = await response.json();
+  if (payment.order_id !== orderId || payment.status !== 'captured' || Number(payment.amount) !== expectedAmountPaise || payment.currency !== 'INR') {
+    throw new Error('Razorpay payment is not captured or does not match the expected order, amount and currency');
+  }
 }
 
 // =============================================
@@ -1126,6 +1164,7 @@ async function handleVerifyJobPayment(supabase: any, params: any, req: Request) 
     .select('*').eq('razorpay_order_id', razorpay_order_id).eq('user_id', user.id).maybeSingle();
   if (!pending) return json({ error: 'Payment not found' }, 404);
   if (pending.status === 'completed') return json({ success: true, data: pending.result, already: true });
+  await verifyCapturedRazorpayPayment(razorpay_order_id, razorpay_payment_id, Math.round(Number(pending.amount_inr) * 100));
 
   // Claim atomically so a double submit cannot fulfil twice
   const { data: claimed } = await supabase.from('pending_payments')
