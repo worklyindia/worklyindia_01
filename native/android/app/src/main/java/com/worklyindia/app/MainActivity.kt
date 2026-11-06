@@ -1,404 +1,356 @@
 package com.worklyindia.app
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import kotlinx.coroutines.delay
 
-private val WorklyGreen = Color(0xFF128A52)
-private val PageBg = Color(0xFFF5F8F5)
-private val Ink = Color(0xFF17231C)
-private val Muted = Color(0xFF647168)
-
-private data class Job(
-    val title: String, val company: String, val location: String,
-    val salary: String, val type: String, val category: String
-)
-
-private val sampleJobs = listOf(
-    Job("Customer Support Executive", "Workly Partner", "Remote • India", "₹15,000–25,000 / month", "Full time", "Customer support"),
-    Job("Telecaller (Fresher)", "Bright Services", "Ahmedabad, Gujarat", "₹14,000–22,000 / month", "Full time", "Sales"),
-    Job("Junior Web Developer", "Digital Studio", "Remote • India", "₹20,000–35,000 / month", "Full time", "IT & software"),
-    Job("Data Entry Operator", "Office Solutions", "India", "₹12,000–18,000 / month", "Part time", "Admin"),
-    Job("HR Recruiter", "Talent Connect", "Hybrid • Gujarat", "₹18,000–28,000 / month", "Full time", "HR")
-)
+private val Brand = Color(0xFF1646C8)
+private val PageBg = Color(0xFFF4F6FB)
+private val Ink = Color(0xFF151B2C)
+private val Muted = Color(0xFF636B80)
+private val Soft = Color(0xFFE7EDFC)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            WorklyTheme { WorklyApp() }
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Brand, onPrimary = Color.White, background = PageBg,
+                    surface = Color.White, onSurface = Ink, secondaryContainer = Soft
+                )
+            ) { WorklyApp() }
         }
     }
 }
 
-@Composable
-private fun WorklyTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = WorklyGreen, onPrimary = Color.White,
-            secondary = Color(0xFF28764A), background = PageBg,
-            surface = Color.White, onSurface = Ink
-        ),
-        content = content
-    )
+private fun openUrl(ctx: Context, url: String) =
+    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+
+private fun shareJob(ctx: Context, job: Job) {
+    val text = "🚀 Job Opening\n📌 ${job.title}\n🏢 ${job.company}\n📍 ${job.location}\n💰 ${job.salary}\n\n👉 Apply here: ${job.webUrl}"
+    ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share job"))
+}
+
+/** Saved jobs persist on the device. */
+private class SavedStore(ctx: Context) {
+    private val p = ctx.getSharedPreferences("workly", Context.MODE_PRIVATE)
+    fun load(): Set<String> = p.getStringSet("saved", emptySet())!!.toSet()
+    fun save(ids: Set<String>) = p.edit().putStringSet("saved", ids).apply()
+}
+
+private sealed interface LoadState {
+    data object Loading : LoadState
+    data class Error(val msg: String) : LoadState
+    data class Ready(val jobs: List<Job>) : LoadState
 }
 
 @Composable
 private fun WorklyApp() {
-    var tab by remember { mutableStateOf("Home") }
-    var selectedJob by remember { mutableStateOf<Job?>(null) }
-    var search by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("All") }
-    var role by remember { mutableStateOf("Job seeker") }
-    var saved by remember { mutableStateOf(setOf<String>()) }
-    var applied by remember { mutableStateOf(setOf<String>()) }
+    val ctx = LocalContext.current
+    val store = remember { SavedStore(ctx) }
+    var tab by rememberSaveable { mutableStateOf("Home") }
+    var selected by remember { mutableStateOf<Job?>(null) }
+    var saved by remember { mutableStateOf(store.load()) }
+    var search by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var categories by remember { mutableStateOf(listOf<String>()) }
+    var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
+    var reload by remember { mutableIntStateOf(0) }
+    val known = remember { mutableStateMapOf<String, Job>() }
 
-    val visibleJobs = sampleJobs.filter {
-        (category == "All" || it.category == category) &&
-        (search.isBlank() || it.title.contains(search, true) || it.company.contains(search, true) ||
-            it.location.contains(search, true) || it.category.contains(search, true))
+    LaunchedEffect(Unit) { runCatching { categories = JobsApi.fetchCategories() } }
+    LaunchedEffect(search, category, reload) {
+        if (search.isNotEmpty()) delay(350)
+        state = LoadState.Loading
+        state = runCatching { JobsApi.fetchJobs(search, category) }.fold(
+            { list -> list.forEach { known[it.id] = it }; LoadState.Ready(list) },
+            { LoadState.Error("Internet check karein aur dobara try karein.") }
+        )
+    }
+    val toggleSave: (Job) -> Unit = { j ->
+        saved = if (j.id in saved) saved - j.id else saved + j.id; store.save(saved)
+    }
+
+    BackHandler(enabled = selected != null || tab != "Home") {
+        if (selected != null) selected = null else tab = "Home"
     }
 
     Scaffold(
         containerColor = PageBg,
         bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                listOf(
-                    Triple("Home", Icons.Default.Home, "Home"),
-                    Triple("Jobs", Icons.Default.Search, "Jobs"),
-                    Triple("Saved", Icons.Default.Bookmark, "Saved"),
-                    Triple("Profile", Icons.Default.Person, "Profile")
-                ).forEach { (label, icon, destination) ->
-                    NavigationBarItem(
-                        selected = tab == destination,
-                        onClick = { selectedJob = null; tab = destination },
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = { Text(label) }
-                    )
-                }
+            if (selected == null) NavigationBar(containerColor = Color.White) {
+                listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Search,
+                    "Saved" to Icons.Default.Bookmark, "Account" to Icons.Default.Person)
+                    .forEach { (label, icon) ->
+                        NavigationBarItem(selected = tab == label, onClick = { tab = label },
+                            icon = { Icon(icon, contentDescription = label) }, label = { Text(label) })
+                    }
             }
         }
-    ) { padding ->
+    ) { pad ->
+        val m = Modifier.padding(pad)
+        val job = selected
         when {
-            selectedJob != null -> JobDetail(
-                job = selectedJob!!,
-                isSaved = saved.contains(selectedJob!!.title),
-                isApplied = applied.contains(selectedJob!!.title),
-                onBack = { selectedJob = null },
-                onSave = { title -> saved = if (saved.contains(title)) saved - title else saved + title },
-                onApply = { title -> applied = applied + title }
-            )
-            tab == "Home" -> HomeScreen(
-                modifier = Modifier.padding(padding),
-                search = search, onSearch = { search = it },
-                onExplore = { tab = "Jobs" },
-                onRole = { role = it },
-                role = role,
-                jobs = sampleJobs.take(3),
-                onJob = { selectedJob = it },
-                onPost = { tab = "Post Job" }
-            )
-            tab == "Jobs" -> JobsScreen(
-                modifier = Modifier.padding(padding),
-                search = search, onSearch = { search = it },
-                category = category, onCategory = { category = it },
-                jobs = visibleJobs, onJob = { selectedJob = it }
-            )
-            tab == "Saved" -> JobsScreen(
-                modifier = Modifier.padding(padding),
-                search = "", onSearch = {},
-                category = "All", onCategory = {},
-                jobs = sampleJobs.filter { saved.contains(it.title) },
-                onJob = { selectedJob = it },
-                heading = "Saved jobs"
-            )
-            tab == "Profile" -> ProfileScreen(
-                modifier = Modifier.padding(padding),
-                role = role, onRole = { role = it },
-                onPost = { tab = "Post Job" }
-            )
-            tab == "Post Job" -> PostJobScreen(
-                modifier = Modifier.padding(padding),
-                onBack = { tab = "Profile" }
-            )
+            job != null -> JobDetail(m, job, job.id in saved, { selected = null }, toggleSave,
+                onApply = { openUrl(ctx, job.externalApplyUrl ?: job.webUrl) }, onShare = { shareJob(ctx, job) })
+            tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
+                onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
+                onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" })
+            tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
+                saved, toggleSave, { selected = it }, { reload++ })
+            tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
+            else -> AccountScreen(m) { openUrl(ctx, JobsApi.SITE + it) }
         }
     }
 }
 
 @Composable
 private fun HomeScreen(
-    modifier: Modifier, search: String, onSearch: (String) -> Unit,
-    onExplore: () -> Unit, onRole: (String) -> Unit, role: String,
-    jobs: List<Job>, onJob: (Job) -> Unit, onPost: () -> Unit
+    m: Modifier, state: LoadState, categories: List<String>, saved: Set<String>, onSave: (Job) -> Unit,
+    onSearch: (String) -> Unit, onCategory: (String) -> Unit, onJob: (Job) -> Unit, onRetry: () -> Unit, onAll: () -> Unit
 ) {
-    LazyColumn(modifier = modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    var q by remember { mutableStateOf("") }
+    LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(42.dp).background(WorklyGreen, RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(42.dp).background(Brand, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                     Text("W", color = Color.White, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
                 }
                 Column(Modifier.padding(start = 10.dp)) {
                     Text("Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text("Find work. Build your future.", color = Muted, style = MaterialTheme.typography.labelSmall)
-                }
-                Spacer(Modifier.weight(1f))
-                Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications", tint = Ink)
-            }
-        }
-        item {
-            Surface(color = Color(0xFFE4F3E8), shape = RoundedCornerShape(24.dp)) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("YOUR NEXT OPPORTUNITY", color = WorklyGreen, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                    Text("Find a job that
-fits your life.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.ExtraBold, color = Ink)
-                    Text("Explore opportunities across India, including remote jobs.", color = Muted)
-                    OutlinedTextField(
-                        value = search, onValueChange = onSearch, modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Job title, skill or company") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                        singleLine = true, shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White)
-                    )
-                    Button(onClick = onExplore, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                        Text("Search jobs", fontWeight = FontWeight.Bold)
-                    }
+                    Text("Verified jobs across India", color = Muted, style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("I am here to…", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.weight(1f))
-                Text("Change", color = WorklyGreen, modifier = Modifier.clickable { onRole(if (role == "Job seeker") "Employer" else "Job seeker") })
+            Surface(color = Soft, shape = RoundedCornerShape(22.dp)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Find a job that fits your life", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold, color = Ink)
+                    OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true,
+                        placeholder = { Text("Job title, city or company") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White))
+                    Button({ onSearch(q) }, Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) { Text("Search jobs", fontWeight = FontWeight.Bold) }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                RoleCard("Find a job", "Explore & apply", role == "Job seeker", Modifier.weight(1f)) { onRole("Job seeker") }
-                RoleCard("Hire talent", "Post a vacancy", role == "Employer", Modifier.weight(1f)) { onRole("Employer"); onPost() }
+        }
+        if (categories.isNotEmpty()) item {
+            Text("Categories", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                categories.take(12).forEach { c -> AssistChip({ onCategory(c) }, { Text(c) }) }
             }
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Popular categories", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Latest jobs", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
-                Text("See all", color = WorklyGreen, modifier = Modifier.clickable(onClick = onExplore))
-            }
-            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CategoryTag("Customer support")
-                CategoryTag("IT & software")
-            }
-            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CategoryTag("Sales")
-                CategoryTag("Work from home")
+                TextButton(onAll) { Text("See all") }
             }
         }
-        item { Text("Featured opportunities", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) }
-        items(jobs) { JobCard(it, false, {}, onJob) }
-        item {
-            OutlinedButton(onClick = onExplore, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                Text("Explore all jobs")
-            }
-        }
+        jobList(state, saved, onSave, onJob, onRetry, take = 5)
     }
 }
 
-@Composable
-private fun RoleCard(title: String, subtitle: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Card(modifier.clickable(onClick), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFFE6F4EA) else Color.White)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(if (title == "Find a job") Icons.Default.WorkOutline else Icons.Default.BusinessCenter, contentDescription = null, tint = WorklyGreen)
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
+private fun androidx.compose.foundation.lazy.LazyListScope.jobList(
+    state: LoadState, saved: Set<String>, onSave: (Job) -> Unit, onJob: (Job) -> Unit, onRetry: () -> Unit, take: Int = Int.MAX_VALUE
+) {
+    when (state) {
+        LoadState.Loading -> item { Box(Modifier.fillMaxWidth().padding(32.dp), Alignment.Center) { CircularProgressIndicator() } }
+        is LoadState.Error -> item {
+            Message(Icons.Default.WifiOff, "Jobs load nahi hue", state.msg) { Button(onRetry) { Text("Retry") } }
+        }
+        is LoadState.Ready -> {
+            if (state.jobs.isEmpty()) item { Message(Icons.Default.SearchOff, "Koi job nahi mili", "Dusra shabd ya category try karein.") }
+            items(state.jobs.take(take), key = { it.id }) { JobCard(it, it.id in saved, { onSave(it) }) { onJob(it) } }
         }
     }
 }
 
 @Composable
 private fun JobsScreen(
-    modifier: Modifier, search: String, onSearch: (String) -> Unit,
-    category: String, onCategory: (String) -> Unit, jobs: List<Job>,
-    onJob: (Job) -> Unit, heading: String = "Explore jobs"
+    m: Modifier, state: LoadState, search: String, onSearch: (String) -> Unit, categories: List<String>,
+    category: String?, onCategory: (String?) -> Unit, saved: Set<String>, onSave: (Job) -> Unit, onJob: (Job) -> Unit, onRetry: () -> Unit
 ) {
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Text(heading, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
-        if (heading != "Saved jobs") {
-            item {
-                OutlinedTextField(
-                    value = search, onValueChange = onSearch, modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search title, company, location") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true, shape = RoundedCornerShape(14.dp)
-                )
-            }
-            item {
-                Text("Category", fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    listOf("All", "Customer support", "Sales", "IT & software", "Admin", "HR").forEach {
-                        FilterChip(selected = category == it, onClick = { onCategory(it) }, label = { Text(it) })
-                    }
-                }
+    LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Explore jobs", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        item {
+            OutlinedTextField(search, onSearch, Modifier.fillMaxWidth(), singleLine = true,
+                placeholder = { Text("Search title, city, company") }, leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = { if (search.isNotEmpty()) IconButton({ onSearch("") }) { Icon(Icons.Default.Close, "Clear") } },
+                shape = RoundedCornerShape(14.dp))
+        }
+        item {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(category == null, { onCategory(null) }, { Text("All") })
+                categories.forEach { c -> FilterChip(category == c, { onCategory(c) }, { Text(c) }) }
             }
         }
-        item { Text("${jobs.size} opportunities", color = Muted, style = MaterialTheme.typography.bodySmall) }
-        if (jobs.isEmpty()) item { EmptyState("No jobs found", "Try another search or save jobs to see them here.") }
-        items(jobs) { JobCard(it, false, {}, onJob) }
+        if (state is LoadState.Ready) item { Text("${state.jobs.size} jobs", color = Muted, style = MaterialTheme.typography.bodySmall) }
+        jobList(state, saved, onSave, onJob, onRetry)
     }
 }
 
 @Composable
-private fun JobCard(job: Job, saved: Boolean, onSave: () -> Unit, onOpen: (Job) -> Unit) {
-    Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+private fun SavedScreen(m: Modifier, jobs: List<Job>, count: Int, saved: Set<String>, onSave: (Job) -> Unit, onJob: (Job) -> Unit) {
+    LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Saved jobs", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        if (count == 0) item { Message(Icons.Default.BookmarkBorder, "Abhi koi saved job nahi", "Job card par bookmark dabakar save karein.") }
+        items(jobs, key = { it.id }) { JobCard(it, it.id in saved, { onSave(it) }) { onJob(it) } }
+    }
+}
+
+@Composable
+private fun JobCard(job: Job, saved: Boolean, onSave: () -> Unit, onOpen: () -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Top) {
-                Box(Modifier.size(42.dp).background(Color(0xFFE8F4EC), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Text(job.company.take(1), color = WorklyGreen, fontWeight = FontWeight.Bold)
-                }
-                Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                    Text(job.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Logo(job)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(job.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(job.company, color = Muted, style = MaterialTheme.typography.bodySmall)
                 }
-                IconButton(onClick = onSave) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, contentDescription = "Save job", tint = WorklyGreen) }
+                IconButton(onSave) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save job", tint = Brand) }
             }
+            Text("📍 ${job.location}", color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                AssistChip(onClick = {}, label = { Text(job.type) })
-                AssistChip(onClick = {}, label = { Text(job.location) })
+                Pill(job.type)
+                if (job.experience.isNotBlank()) Pill("${job.experience} yrs")
+                if (job.featured) Pill("⭐ Featured")
             }
-            Text(job.salary, color = WorklyGreen, fontWeight = FontWeight.SemiBold)
-            Button(onClick = { onOpen(job) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                Text("View job & apply")
+            Text(job.salary, color = Brand, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun Logo(job: Job) {
+    val mod = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)).background(Soft)
+    if (job.logoUrl != null) AsyncImage(job.logoUrl, job.company, mod, contentScale = ContentScale.Crop)
+    else Box(mod, Alignment.Center) { Text(job.company.take(1), color = Brand, fontWeight = FontWeight.Bold) }
+}
+
+@Composable
+private fun Pill(t: String) = Surface(color = Soft, shape = RoundedCornerShape(50)) {
+    Text(t, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = Ink)
+}
+
+@Composable
+private fun JobDetail(m: Modifier, job: Job, saved: Boolean, onBack: () -> Unit, onSave: (Job) -> Unit, onApply: () -> Unit, onShare: () -> Unit) {
+    Column(m.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().background(Color.White).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onBack) { Icon(Icons.Default.ArrowBack, "Back") }
+            Text("Job details", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            IconButton(onShare) { Icon(Icons.Default.Share, "Share") }
+            IconButton({ onSave(job) }) { Icon(if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, "Save", tint = Brand) }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Logo(job)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(job.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(job.company, color = Muted)
+                }
+            }
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(16.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("💰 ${job.salary}", color = Brand, fontWeight = FontWeight.Bold)
+                    Text("📍 ${job.location}")
+                    Text("💼 ${job.type}" + if (job.experience.isNotBlank()) " • ${job.experience} yrs experience" else "")
+                    Text("👥 ${job.openings} opening" + if (job.openings > 1) "s" else "")
+                }
+            }
+            Section("About this job", job.description)
+            Section("Requirements", job.requirements)
+            Section("Benefits", job.benefits)
+            if (job.skills.isNotEmpty()) {
+                Text("Skills", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { job.skills.forEach { Pill(it) } }
+            }
+        }
+        Surface(color = Color.White, shadowElevation = 6.dp) {
+            Button(onApply, Modifier.fillMaxWidth().padding(14.dp).height(50.dp), shape = RoundedCornerShape(12.dp)) {
+                Text("Apply now", fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 @Composable
-private fun JobDetail(job: Job, isSaved: Boolean, isApplied: Boolean, onBack: () -> Unit, onSave: (String) -> Unit, onApply: (String) -> Unit) {
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
-            Text("Job details", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-        }
-        Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(job.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(job.company, color = Muted)
-                Text(job.salary, color = WorklyGreen, fontWeight = FontWeight.Bold)
-                Text("📍 ${job.location}")
-                Text("Employment: ${job.type}")
-                Text("About this role", fontWeight = FontWeight.Bold)
-                Text("We are looking for motivated candidates. Review the role details and apply when you are ready. Verify employer information before sharing personal details.")
-                Text("Requirements", fontWeight = FontWeight.Bold)
-                Text("• Communication and role-related skills\n• Willingness to learn\n• Relevant experience is an advantage")
-            }
-        }
-        OutlinedButton(onClick = { onSave(job.title) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Icon(if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder, contentDescription = null)
-            Spacer(Modifier.width(8.dp)); Text(if (isSaved) "Saved" else "Save job")
-        }
-        Button(onClick = { onApply(job.title) }, modifier = Modifier.fillMaxWidth(), enabled = !isApplied, shape = RoundedCornerShape(12.dp)) {
-            Text(if (isApplied) "Application started (demo)" else "Apply now")
-        }
-        Text("Demo content: live listings and application submission require backend integration.", color = Muted, style = MaterialTheme.typography.bodySmall)
-    }
+private fun Section(title: String, body: String) {
+    if (body.isBlank()) return
+    Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+    Text(body, color = Ink, style = MaterialTheme.typography.bodyMedium)
 }
 
 @Composable
-private fun ProfileScreen(modifier: Modifier, role: String, onRole: (String) -> Unit, onPost: () -> Unit) {
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Text("My profile", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+private fun AccountScreen(m: Modifier, open: (String) -> Unit) {
+    LazyColumn(m.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { Text("Account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Box(Modifier.size(58.dp).background(Color(0xFFE4F3E8), RoundedCornerShape(50)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = WorklyGreen, modifier = Modifier.size(32.dp))
-                    }
                     Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                    Text("Sign in to sync your profile, applications and saved jobs.", color = Muted)
-                    Button(onClick = { onRole("Job seeker") }, modifier = Modifier.fillMaxWidth()) { Text("Continue as job seeker") }
-                    OutlinedButton(onClick = { onRole("Employer") }, modifier = Modifier.fillMaxWidth()) { Text("Continue as employer") }
+                    Text("Apne Workly India account se login karein.", color = Muted)
+                    Button({ open("/auth") }, Modifier.fillMaxWidth()) { Text("Job seeker login") }
+                    OutlinedButton({ open("/employer-auth") }, Modifier.fillMaxWidth()) { Text("Employer login") }
                 }
             }
         }
-        item { ProfileMenuRow("Build my resume", "Create a professional resume", Icons.Default.Description) }
-        item { ProfileMenuRow("My applications", "Track your job applications", Icons.Default.Assignment) }
-        item { ProfileMenuRow("Help & support", "Contact Workly India", Icons.Default.SupportAgent) }
-        item { ProfileMenuRow("Privacy & safety", "Stay safe while job searching", Icons.Default.Security) }
-        item { if (role == "Employer") Button(onClick = onPost, modifier = Modifier.fillMaxWidth()) { Text("Post a job") } }
-        item { Text("Native app preview • Account services are not connected yet", color = Muted, style = MaterialTheme.typography.bodySmall) }
-    }
-}
-
-@Composable
-private fun ProfileMenuRow(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = WorklyGreen)
-            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = Muted, style = MaterialTheme.typography.bodySmall)
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Muted)
-        }
-    }
-}
-
-@Composable
-private fun PostJobScreen(modifier: Modifier, onBack: () -> Unit) {
-    var title by remember { mutableStateOf("") }
-    var company by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var salary by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var submitted by remember { mutableStateOf(false) }
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
-            Text("Post a job", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        } }
-        item { Text("Reach candidates across India. Fill in the role details below.", color = Muted) }
-        item { OutlinedTextField(title, { title = it }, label = { Text("Job title *") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-        item { OutlinedTextField(company, { company = it }, label = { Text("Company name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-        item { OutlinedTextField(location, { location = it }, label = { Text("Location / Remote *") }, modifier = Modifier.fillMaxWidth(), singleLine = true) }
-        item { OutlinedTextField(salary, { salary = it }, label = { Text("Salary range") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)) }
-        item { OutlinedTextField(description, { description = it }, label = { Text("Job description *") }, modifier = Modifier.fillMaxWidth(), minLines = 4) }
-        item {
-            Button(onClick = { submitted = true }, enabled = title.isNotBlank() && company.isNotBlank() && location.isNotBlank() && description.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                Text("Preview job post")
+        listOf(
+            Triple("Build my resume", "/resume-builder", Icons.Default.Description),
+            Triple("Post a job", "/employer-auth", Icons.Default.BusinessCenter),
+            Triple("Contact us", "/contact", Icons.Default.SupportAgent),
+            Triple("Privacy policy", "/privacy", Icons.Default.Security),
+        ).forEach { (t, path, icon) ->
+            item {
+                Card(Modifier.fillMaxWidth().clickable { open(path) }, colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(icon, null, tint = Brand); Text(t, Modifier.padding(start = 12.dp).weight(1f), fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                    }
+                }
             }
         }
-        if (submitted) item { Text("Preview ready. Publishing requires employer sign-in and server validation.", color = WorklyGreen, fontWeight = FontWeight.SemiBold) }
-        item { Text("This is a UI preview; no job is published or sent to a server.", color = Muted, style = MaterialTheme.typography.bodySmall) }
+        item { Text("Version 1.0.0", color = Muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
 @Composable
-private fun CategoryTag(label: String) {
-    Surface(color = Color.White, shape = RoundedCornerShape(50)) {
-        Text(label, modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp), color = WorklyGreen, style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-@Composable
-private fun EmptyState(title: String, body: String) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 30.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(Icons.Default.SearchOff, contentDescription = null, tint = Muted, modifier = Modifier.size(40.dp))
-        Text(title, fontWeight = FontWeight.Bold)
-        Text(body, color = Muted)
+private fun Message(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: (@Composable () -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, tint = Muted, modifier = Modifier.size(40.dp))
+        Text(title, fontWeight = FontWeight.Bold); Text(body, color = Muted)
+        action?.invoke()
     }
 }
