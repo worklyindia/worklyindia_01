@@ -218,24 +218,14 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun registerPushNotifications(rawSession: String) {
+        fun registerPushNotifications() {
             runOnUiThread {
                 try {
-                    // Always use the latest Supabase access token from the live web
-                    // session; the encrypted native copy may otherwise expire.
-                    val sessionJson = JSONObject(rawSession)
-                    val user = sessionJson.getJSONObject("user")
-                    val metadata = user.optJSONObject("user_metadata") ?: JSONObject()
-                    val role = metadata.optString("user_type",
-                        metadata.optString("account_type", metadata.optString("role", "jobseeker")))
-                    val session = NativeAuth.saveWebSession(
-                        this@MainActivity,
-                        sessionJson.getString("access_token"),
-                        sessionJson.getString("refresh_token"),
-                        user.getString("id"),
-                        user.optString("email"),
-                        if (role.equals("employer", true)) "employer" else "jobseeker"
-                    )
+                    // The website syncs its latest Supabase session immediately
+                    // before calling this method. Retain the no-argument bridge
+                    // for compatibility with the currently deployed web bundle.
+                    val session = NativeAuth.session(this@MainActivity)
+                        ?: throw IllegalStateException("Sign in again to enable notifications")
                     if (!hasNotificationPermission()) {
                         webView.evaluateJavascript(
                             "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:false,reason:'permission_denied'}}));",
@@ -253,7 +243,7 @@ class MainActivity : Activity() {
                         }
                     }
                 } catch (error: Exception) {
-                    android.util.Log.e("WorklyPush", "Could not read fresh website session", error)
+                    android.util.Log.e("WorklyPush", "Could not start native push registration", error)
                     webView.evaluateJavascript(
                         "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:false,reason:'session_unavailable'}}));",
                         null
