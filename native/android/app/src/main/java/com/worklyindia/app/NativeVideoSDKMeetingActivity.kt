@@ -1,6 +1,7 @@
 package com.worklyindia.app
 
 import android.Manifest
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -78,7 +79,7 @@ private fun NativeVideoSDKMeetingScreen(
     ) { result ->
         if (result.values.all { it }) {
             joinNativeVideoSDKMeeting(
-                meetingId, token, participantName,
+                context.applicationContext, meetingId, token, participantName,
                 onMeeting = { meeting = it },
                 onParticipants = { list -> participants.clear(); participants.addAll(list) },
                 onError = { error = it },
@@ -206,6 +207,7 @@ private fun NativeVideoSDKParticipantTile(participant: Participant) {
 }
 
 private fun joinNativeVideoSDKMeeting(
+    appContext: Context,
     meetingId: String,
     token: String,
     participantName: String,
@@ -217,7 +219,7 @@ private fun joinNativeVideoSDKMeeting(
     try {
         VideoSDK.config(token)
         val meeting = VideoSDK.initMeeting(
-            null,
+            appContext,
             meetingId,
             participantName,
             true,
