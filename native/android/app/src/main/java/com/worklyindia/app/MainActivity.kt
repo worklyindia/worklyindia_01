@@ -468,25 +468,28 @@ private fun HomeScreen(
             }
         }
         item {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Find your next opportunity", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedTextField(
-                    value = q, onValueChange = { q = it }, modifier = Modifier.fillMaxWidth(),
-                    singleLine = true, placeholder = { Text("Job title, skill, city or company") },
+                    value = q, onValueChange = { q = it },
+                    modifier = Modifier.weight(1f).heightIn(min = 46.dp),
+                    singleLine = true, placeholder = { Text("Search jobs, companies", maxLines = 1) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search jobs") },
-                    trailingIcon = { if (q.isNotBlank()) IconButton(onClick = { q = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear search") } },
-                    shape = RoundedCornerShape(16.dp),
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (q.isNotBlank()) IconButton(onClick = { q = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear search") }
+                            IconButton(onClick = { onSearch(q.trim()) }) { Icon(Icons.Default.Mic, contentDescription = "Voice search") }
+                        }
+                    },
+                    shape = RoundedCornerShape(18.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = .72f),
                         focusedContainerColor = MaterialTheme.colorScheme.surface
                     )
                 )
-                Button(onClick = { onSearch(q.trim()) }, modifier = Modifier.fillMaxWidth().height(48.dp), shape = RoundedCornerShape(14.dp)) {
-                    Icon(Icons.Default.Search, null); Spacer(Modifier.width(8.dp)); Text("Search jobs", fontWeight = FontWeight.Bold)
-                }
-                OutlinedButton(onClick = onEmployer, modifier = Modifier.fillMaxWidth().height(46.dp), shape = RoundedCornerShape(14.dp)) {
-                    Icon(Icons.Default.BusinessCenter, null); Spacer(Modifier.width(8.dp)); Text("I'm hiring — post a job")
-                }
+                IconButton(onClick = { onSearch(q.trim()) }) { Icon(Icons.Default.Tune, contentDescription = "Search filters") }
             }
         }
         item {
@@ -501,8 +504,10 @@ private fun HomeScreen(
                         "Remote" to Icons.Default.Home,
                         "Part-time" to Icons.Default.Schedule,
                         "Full-time" to Icons.Default.BusinessCenter,
+                        "Near Me" to Icons.Default.LocationOn,
                         "Internship" to Icons.Default.School,
                         "Contract" to Icons.Default.Description,
+                        "Freelance" to Icons.Default.Laptop,
                         "Hybrid" to Icons.Default.Laptop
                     )
                     filters.forEach { (label, icon) ->
@@ -518,13 +523,19 @@ private fun HomeScreen(
         }
         item {
             NativeScrollReveal(type = "zoom-in") {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    HomeQuickStat(Modifier.weight(1f), "Find jobs", Icons.Default.Work, onAll)
-                    HomeQuickStat(Modifier.weight(1f), "Resume tools", Icons.Default.Description) { onFeature("My resume") }
-                    HomeQuickStat(Modifier.weight(1f), "For employers", Icons.Default.BusinessCenter, onEmployer)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HomeQuickStat(Modifier.weight(1f), "Employee", Icons.Default.People) { onFeature("Employee") }
+                        HomeQuickStat(Modifier.weight(1f), "Companies", Icons.Default.Business) { onFeature("Companies") }
+                        HomeQuickStat(Modifier.weight(1f), "Favorites", Icons.Default.Favorite) { onFeature("Favorites") }
+                        HomeQuickStat(Modifier.weight(1f), "Refer", Icons.Default.CardGiftcard) { onFeature("Refer") }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HomeQuickStat(Modifier.weight(1f), "AI Chat", Icons.Default.AutoAwesome) { onFeature("AI Chat") }
+                        HomeQuickStat(Modifier.weight(1f), "Developer", Icons.Default.Code) { onFeature("Developer") }
+                        HomeQuickStat(Modifier.weight(1f), "Resume", Icons.Default.Description) { onFeature("Resume") }
+                        HomeQuickStat(Modifier.weight(1f), "Post Job", Icons.Default.AddBox) { onFeature("Post Job") }
+                    }
                 }
             }
         }
