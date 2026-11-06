@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- Minimal white circular field; the emblem now fills almost the entire icon. -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M256,8 A248,248 0,1 0,256 504 A248,248 0,1 0,256 8 Z" />
+    <!-- Blue outer ring. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#0756A8"
+        android:strokeWidth="13"
+        android:pathData="M256,35 A221,221 0,1 0,256 477 A221,221 0,1 0,256 35 Z" />
+    <!-- Gold lower-right sweep. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#D6A52B"
+        android:strokeWidth="12"
+        android:strokeLineCap="round"
+        android:pathData="M388,112 C455,180 458,301 389,382 C344,435 289,451 232,440" />
+    <!-- Crown. -->
+    <path android:fillColor="#D6A52B" android:pathData="M164,169 L190,105 L225,146 L256,91 L287,146 L322,105 L348,169 Z" />
+    <path android:fillColor="#F3D36A" android:pathData="M190,105 L225,146 L256,91 L256,169 L164,169 Z" />
+    <path android:fillColor="#0756A8" android:pathData="M256,130 L271,151 L256,171 L241,151 Z" />
+    <!-- Large blue W with a gold central stroke. -->
+    <path android:fillColor="#0756A8" android:pathData="M88,190 L151,190 L197,330 L244,228 L278,228 L325,330 L371,190 L434,190 L354,402 L303,402 L256,298 L209,402 L158,402 Z" />
+    <path android:fillColor="#D6A52B" android:pathData="M226,245 L256,228 L286,245 L256,376 L229,402 L199,402 Z" />
+</vector>
