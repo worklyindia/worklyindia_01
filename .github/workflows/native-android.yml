@@ -62,6 +62,19 @@ jobs:
             exit 1
           fi
 
+      - name: Normalize launcher icon PNG
+        run: |
+          python - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          icon = Path("native/android/app/src/main/res/drawable-nodpi/ic_workly_launcher_image.png")
+          with Image.open(icon) as source:
+              source.load()
+              rgba = source.convert("RGBA")
+              rgba.save(icon, format="PNG", optimize=True)
+          print(f"Validated launcher icon: {icon}")
+          PY
+
       - name: Build signed public release APK and Play Store bundle
         working-directory: native/android
         env:
