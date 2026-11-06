@@ -81,7 +81,9 @@ private fun NativeVideoSDKMeetingScreen(
             joinNativeVideoSDKMeeting(
                 context.applicationContext, meetingId, token, participantName,
                 onMeeting = { meeting = it },
-                onParticipants = { list -> participants.clear(); participants.addAll(list) },
+                onLocalParticipant = { peer -> if(participants.none { it.id == peer.id }) participants.add(peer) },
+                onPeerJoined = { peer -> if(participants.none { it.id == peer.id }) participants.add(peer) },
+                onPeerLeft = { peer -> participants.removeAll { it.id == peer.id } },
                 onError = { error = it },
                 onJoined = { joining = false }
             )
@@ -98,7 +100,9 @@ private fun NativeVideoSDKMeetingScreen(
             joinNativeVideoSDKMeeting(
                 context.applicationContext, meetingId, token, participantName,
                 onMeeting = { meeting = it },
-                onParticipants = { list -> participants.clear(); participants.addAll(list) },
+                onLocalParticipant = { peer -> if(participants.none { it.id == peer.id }) participants.add(peer) },
+                onPeerJoined = { peer -> if(participants.none { it.id == peer.id }) participants.add(peer) },
+                onPeerLeft = { peer -> participants.removeAll { it.id == peer.id } },
                 onError = { error = it },
                 onJoined = { joining = false }
             )
@@ -212,7 +216,9 @@ private fun joinNativeVideoSDKMeeting(
     token: String,
     participantName: String,
     onMeeting: (Meeting) -> Unit,
-    onParticipants: (List<Participant>) -> Unit,
+    onLocalParticipant: (Participant) -> Unit,
+    onPeerJoined: (Participant) -> Unit,
+    onPeerLeft: (Participant) -> Unit,
     onError: (String) -> Unit,
     onJoined: () -> Unit
 ) {
@@ -233,18 +239,17 @@ private fun joinNativeVideoSDKMeeting(
         )
         meeting.addEventListener(object : MeetingEventListener() {
             override fun onMeetingJoined() {
-                val current = meeting.localParticipant
-                onParticipants(listOf(current))
+                onLocalParticipant(meeting.localParticipant)
                 onJoined()
             }
             override fun onParticipantJoined(participant: Participant) {
-                onParticipants((meeting.participants.values.toList() + meeting.localParticipant).distinctBy { it.id })
+                onPeerJoined(participant)
             }
             override fun onParticipantLeft(participant: Participant) {
-                onParticipants((meeting.participants.values.toList() + meeting.localParticipant).distinctBy { it.id })
+                onPeerJoined(participant)
             }
             override fun onMeetingLeft() {
-                onParticipants(emptyList())
+                onPeerLeft(meeting.localParticipant)
             }
             override fun onError(errorData: org.json.JSONObject) {
                 onError(errorData.optString("message").ifBlank { "VideoSDK meeting error." })
