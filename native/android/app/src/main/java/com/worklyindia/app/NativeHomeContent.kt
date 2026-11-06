@@ -47,18 +47,20 @@ data class NativeHomeData(val banners:List<NativeHomeBanner> = emptyList(),val v
 object NativeHomeApi {
     suspend fun load():NativeHomeData = withContext(Dispatchers.IO) {
         var banners=emptyList<NativeHomeBanner>(); var videos=emptyList<String>(); var hero:String?=null; var seekersImage:String?=null
-        var badges=emptyList<NativeHomeBadge>(); var seekers=emptyList<NativeHomePerson>(); var companies=emptyList<NativeHomePerson>(); var logoUrl:String?=null; var brandName="Workly India"; var tagline="Find.Work.Grow"
+        var badges=emptyList<NativeHomeBadge>(); var seekers=emptyList<NativeHomePerson>(); var companies=emptyList<NativeHomePerson>(); var logoUrl:String?=null; var brandName="Workly India"; var tagline="Find.Work.Grow"; var seekerAvatar:String?=null; var employerAvatar:String?=null
         runCatching {
             val a=JSONArray(request("$HOME_BASE_URL/rest/v1/rpc/get_active_hero_banners","POST","{}"))
             banners=(0 until a.length()).mapNotNull { i -> val o=a.optJSONObject(i) ?: return@mapNotNull null
                 NativeHomeBanner(o.optString("title"),o.optString("subtitle"),o.optString("image_url").takeIf{it.startsWith("http")},o.optString("youtube_url").takeIf{it.startsWith("http")}) }
         }
         runCatching {
-            val a=JSONArray(request("$HOME_BASE_URL/rest/v1/app_settings?select=setting_key,setting_value&setting_key=in.(home_seekers_video_url,home_hero_image,home_seekers_image)"))
+            val a=JSONArray(request("$HOME_BASE_URL/rest/v1/app_settings?select=setting_key,setting_value&setting_key=in.(home_seekers_video_url,home_hero_image,home_seekers_image,job_seeker_login_avatar,employer_login_avatar)"))
             for(i in 0 until a.length()) { val o=a.getJSONObject(i); when(o.optString("setting_key")) {
                 "home_seekers_video_url" -> videos=o.optString("setting_value").split(Regex("[\\n,]+")).map{it.trim()}.filter{it.contains("youtu")}
                 "home_hero_image" -> hero=o.optString("setting_value").takeIf{it.startsWith("http")}
                 "home_seekers_image" -> seekersImage=o.optString("setting_value").takeIf{it.startsWith("http")}
+                "job_seeker_login_avatar" -> seekerAvatar=o.optString("setting_value").takeIf{it.startsWith("http")}
+                "employer_login_avatar" -> employerAvatar=o.optString("setting_value").takeIf{it.startsWith("http")}
             } }
         }
         runCatching {
@@ -67,7 +69,7 @@ object NativeHomeApi {
         }
         runCatching { seekers=people("get_trust_seekers") }; runCatching { companies=people("get_trust_companies") }
         runCatching { val o=JSONObject(request("$HOME_BASE_URL/rest/v1/rpc/get_brand_assets","POST","{}")); logoUrl=o.optString("logo_url").takeIf{it.startsWith("http")}; brandName=o.optString("brand_name").ifBlank{"Workly India"}; tagline=o.optString("brand_tagline").ifBlank{"Find.Work.Grow"} }
-        NativeHomeData(banners,videos,hero,seekersImage,badges,seekers,companies,logoUrl,brandName,tagline)
+        NativeHomeData(banners,videos,hero,seekersImage,badges,seekers,companies,logoUrl,brandName,tagline,seekerAvatar,employerAvatar)
     }
     private fun people(fn:String):List<NativeHomePerson> {
         val a=JSONArray(request("$HOME_BASE_URL/rest/v1/rpc/$fn","POST","{\"_limit\":30}"))
