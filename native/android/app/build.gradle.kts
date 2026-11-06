@@ -45,6 +45,10 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
     implementation("androidx.core:core-ktx:1.15.0")
+    // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
+    implementation("androidx.credentials:credentials:1.6.0-beta02")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0-beta02")
+    implementation("androidx.webkit:webkit:1.14.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
 
