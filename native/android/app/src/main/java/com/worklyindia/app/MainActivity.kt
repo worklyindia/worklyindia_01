@@ -372,6 +372,10 @@ private fun Section(title: String, body: String) {
 private fun MoreScreen(m: Modifier) {
     var now by remember { mutableStateOf(LocalDateTime.now(ZoneId.of("Asia/Kolkata"))) }
     var selectedOption by remember { mutableStateOf<String?>(null) }
+    var festivals by remember { mutableStateOf<List<Festival>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        festivals = runCatching { JobsApi.fetchFestivals() }.getOrDefault(emptyList())
+    }
     LaunchedEffect(Unit) {
         while (true) {
             now = LocalDateTime.now(ZoneId.of("Asia/Kolkata"))
@@ -387,6 +391,11 @@ private fun MoreScreen(m: Modifier) {
     }
     val time = now.format(DateTimeFormatter.ofPattern("hh:mm:ss a"))
     val date = now.format(DateTimeFormatter.ofPattern("EEEE, dd MMMM yyyy"))
+    val todayKey = now.toLocalDate().toString()
+    val todayFestivals = festivals.filter { it.date == todayKey }
+    val nextFestivalDate = festivals.firstOrNull { it.date > todayKey }?.date
+    val upcomingFestivals = festivals.filter { it.date == nextFestivalDate }
+    val shownFestivals = if (todayFestivals.isNotEmpty()) todayFestivals else upcomingFestivals
     val links = listOf(
         "Website Pricing", "About Us", "Mission", "Vision", "Why Choose Workly India",
         "Blog", "Trust & Safety", "Employer Guidelines", "Job Seeker Guidelines",
@@ -410,7 +419,15 @@ private fun MoreScreen(m: Modifier) {
                         Text("Festival calendar", Modifier.padding(start = 10.dp).weight(1f), fontWeight = FontWeight.SemiBold)
                         TextButton(onClick = { selectedOption = "Festival calendar" }) { Text("View") }
                     }
-                    Text("Festival dates and celebrations will appear here when the calendar data is connected.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (shownFestivals.isNotEmpty()) {
+                        Text(if (todayFestivals.isNotEmpty()) "Today's Festival" else "Upcoming Festival", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text(shownFestivals.joinToString(" • ") { it.name }, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                        if (todayFestivals.isEmpty() && nextFestivalDate != null) {
+                            Text(nextFestivalDate, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        Text("Festival calendar is loading or no upcoming festival is listed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
