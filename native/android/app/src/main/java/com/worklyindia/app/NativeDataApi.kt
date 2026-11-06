@@ -8,7 +8,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-data class NativeApplication(val id:String, val jobTitle:String, val company:String, val status:String, val appliedAt:String)
+data class NativeApplication(val id:String, val jobTitle:String, val company:String, val status:String, val appliedAt:String, val reviewedAt:String?)
 data class NativeNotification(val id:String, val title:String, val message:String, val createdAt:String, val read:Boolean)
 data class NativeConversation(val id:String, val jobTitle:String, val lastMessage:String, val updatedAt:String)
 data class NativeChatMessage(val id:String, val senderId:String, val message:String, val createdAt:String)
@@ -56,13 +56,18 @@ object NativeDataApi {
     }
 
     suspend fun applications(s:NativeSession):List<NativeApplication> {
-        val a=JSONArray(call("/job_applications?select=id,status,applied_at,job:jobs(title,api_company_name,companies(company_name))&applicant_id=eq.${enc(s.userId)}&order=applied_at.desc&limit=100",s))
+        val a=JSONArray(call("/job_applications?select=id,status,applied_at,reviewed_at,job:jobs(title,api_company_name,companies(company_name))&applicant_id=eq.${enc(s.userId)}&order=applied_at.desc&limit=100",s))
         return (0 until a.length()).map { i ->
             val o=a.getJSONObject(i); val j=o.optJSONObject("job"); val co=j?.optJSONObject("companies")
             NativeApplication(o.optString("id"),j?.optString("title")?.takeIf{it.isNotBlank()}?:"Job application",
                 co?.optString("company_name")?.takeIf{it.isNotBlank()}?:j?.optString("api_company_name","")?:"",
-                o.optString("status","submitted"),o.optString("applied_at"))
+                o.optString("status","submitted"),o.optString("applied_at"),o.optString("reviewed_at").takeIf{it.isNotBlank() && it!="null"})
         }
+    }
+
+    suspend fun hasApplied(s:NativeSession, jobId:String):Boolean {
+        val a=JSONArray(call("/job_applications?select=id&applicant_id=eq.${enc(s.userId)}&job_id=eq.${enc(jobId)}&limit=1",s))
+        return a.length()>0
     }
 
     suspend fun notifications(s:NativeSession):List<NativeNotification> {
