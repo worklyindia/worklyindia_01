@@ -21,6 +21,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,7 +40,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         // Let Android lay out the app below the real system status bar.
         // Avoid manual inset padding: it can create a second, visible gap above the website.
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.WHITE
         window.navigationBarColor = android.graphics.Color.WHITE
         if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
@@ -122,8 +124,25 @@ class MainActivity : Activity() {
                 else callback.invoke(origin, false, false)
             }
         }
-        // Android handles the status/navigation bar insets; WebView starts immediately below status bar.
-        setContentView(webView)
+        // Apply Android system-bar insets exactly once to the native WebView container.
+        // This keeps fixed/sticky website headers below the status bar on every route,
+        // without relying on inconsistent CSS env(safe-area-inset-top) values.
+        val root = FrameLayout(this)
+        root.addView(webView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.statusBars() or
+                    WindowInsetsCompat.Type.navigationBars() or
+                    WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(0, systemBars.top, 0, systemBars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+        setContentView(root)
         val target = intent.getStringExtra("notification_url")
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
