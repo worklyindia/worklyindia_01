@@ -8,4 +8,5 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.paypal-webhook]
+# PayPal authenticates each delivery using its remote webhook-signature verification API.
 verify_jwt = false
