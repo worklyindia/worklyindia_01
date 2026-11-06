@@ -1,3 +1,4 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 /**
@@ -80,6 +81,24 @@ const handler = async (req: Request): Promise<Response> => {
     });
   }
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const authorization = req.headers.get("Authorization") || "";
+    const accessToken = authorization.replace(/^Bearer\\s+/i, "");
+    if (!supabaseUrl || !anonKey || !serviceRoleKey || !accessToken || accessToken === authorization) {
+      return new Response(JSON.stringify({ success: false, error: "Authentication required" }), {
+        status: 401, headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
+    }
+    const authClient = createClient(supabaseUrl, anonKey);
+    const { data: authData, error: authError } = await authClient.auth.getUser(accessToken);
+    if (authError || !authData.user) {
+      return new Response(JSON.stringify({ success: false, error: "Invalid session" }), {
+        status: 401, headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
+    }
+    const admin = createClient(supabaseUrl, serviceRoleKey);
     // Get 100ms credentials from environment
     const HMS_ACCESS_KEY = Deno.env.get('HMS_ACCESS_KEY');
     const HMS_SECRET = Deno.env.get('HMS_SECRET');
@@ -118,8 +137,38 @@ const handler = async (req: Request): Promise<Response> => {
       applicantId,
       applicantName,
       scheduledAt,
-      scheduledEndAt
-    }: CreateRoomRequest = await req.json();
+      scheduledEndAt,
+      interviewId
+    }: CreateRoomRequest & { interviewId?: string } = await req.json();
+    if (!jobId || !applicantId || !scheduledAt || !scheduledEndAt) {
+      throw new Error("jobId, applicantId, scheduledAt and scheduledEndAt are required");
+    }
+    const { data: job, error: jobError } = await admin
+      .from("jobs").select("id, employer_id").eq("id", jobId).maybeSingle();
+    if (jobError || !job || job.employer_id !== authData.user.id) {
+      return new Response(JSON.stringify({ success: false, error: "Only the job owner can create this interview room" }), {
+        status: 403, headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
+    }
+    const { data: application, error: applicationError } = await admin
+      .from("job_applications").select("id")
+      .eq("job_id", jobId).eq("applicant_id", applicantId).maybeSingle();
+    if (applicationError || !application) {
+      return new Response(JSON.stringify({ success: false, error: "Candidate application not found for this job" }), {
+        status: 404, headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
+    }
+    if (interviewId) {
+      const { data: interview, error: interviewLookupError } = await admin
+        .from("interviews").select("id, job_id, applicant_id, host_user_id")
+        .eq("id", interviewId).maybeSingle();
+      if (interviewLookupError || !interview || interview.job_id !== jobId ||
+          interview.applicant_id !== applicantId || interview.host_user_id !== authData.user.id) {
+        return new Response(JSON.stringify({ success: false, error: "Interview does not belong to this employer and candidate" }), {
+          status: 403, headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+    }
 
     // Validate scheduledAt
     const startTime = new Date(scheduledAt).getTime();
@@ -220,6 +269,19 @@ const handler = async (req: Request): Promise<Response> => {
     // Construct clean meeting URLs using room codes directly in path (100ms standard format)
     const hostUrl = `https://${HMS_TEMPLATE_SUBDOMAIN}.app.100ms.live/meeting/${hostCode}`;
     const participantUrl = `https://${HMS_TEMPLATE_SUBDOMAIN}.app.100ms.live/meeting/${participantCode}`;
+    if (interviewId) {
+      const { error: updateError } = await admin.from("interviews").update({
+        video_platform: "100ms",
+        hms_room_id: roomData.id,
+        hms_room_url: hostUrl,
+        hms_host_token: hostCode,
+        hms_participant_tokens: { [applicantId]: participantCode },
+        hms_host_prebuilt_url: hostUrl,
+        hms_participant_prebuilt_urls: { [applicantId]: participantUrl },
+        location_url: hostUrl
+      }).eq("id", interviewId).eq("host_user_id", authData.user.id);
+      if (updateError) throw new Error(`Room created but interview update failed: ${updateError.message}`);
+    }
     return new Response(JSON.stringify({
       success: true,
       roomId: roomData.id,
