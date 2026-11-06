@@ -135,11 +135,7 @@ serve(async (req) => {
       throw new Error('Razorpay credentials not configured');
     }
 
-    console.log('🔐 Using Razorpay credentials', { 
-      keyIdPreview: razorpayKeyId.substring(0, 8) + '...',
-      keyIdLength: razorpayKeyId.length,
-      keySecretLength: razorpayKeySecret.length 
-    });
+    console.log('Razorpay credentials available:', { hasKeyId: !!razorpayKeyId, hasKeySecret: !!razorpayKeySecret });
 
     const orderAmount = plan.price_inr * 100; // Convert to paise
     const rzpCustomerId = await ensureRazorpayCustomer(user);
@@ -156,7 +152,7 @@ serve(async (req) => {
     };
 
     const basicAuth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
-    console.log('🔐 Basic auth preview (first 12 chars):', basicAuth.substring(0, 12) + '...', 'len:', basicAuth.length);
+    // Never log Basic auth headers or encoded API credentials.
 
     const razorpayResponse = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
