@@ -158,7 +158,8 @@ private sealed interface LoadState {
 private fun WorklyApp() {
     val ctx = LocalContext.current
     val paymentActivity = ctx as? MainActivity
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    var notificationPermissionGranted by remember { mutableStateOf(Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> notificationPermissionGranted = granted }
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -194,6 +195,12 @@ private fun WorklyApp() {
     LaunchedEffect(authSession?.userId) {
         val session = authSession
         if (session != null) runCatching { saved = NativeDataApi.savedJobIds(session); store.save(saved) }
+    }
+    LaunchedEffect(authSession?.userId, notificationPermissionGranted) {
+        val session = authSession
+        if (session != null && notificationPermissionGranted) {
+            runCatching { NativePushManager.register(ctx, session) }
+        }
     }
     val toggleSave: (Job) -> Unit = { j ->
         val wasSaved = j.id in saved
