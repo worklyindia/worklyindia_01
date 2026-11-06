@@ -1,14 +1,1 @@
-1[
-  {
-    "relation": [
-      "delegate_permission/common.handle_all_urls"
-    ],
-    "target": {
-      "namespace": "android_app",
-      "package_name": "co.median.android.abzoawm",
-      "sha256_cert_fingerprints": [
-        "5A:C0:86:69:51:D5:20:74:8B:74:14:15:74:37:84:33:1A:6F:90:05:28:EA:4B:67:B4:DE:F6:00:C3:89:1A:8C"
-      ]
-    }
-  }
-]
+[]
