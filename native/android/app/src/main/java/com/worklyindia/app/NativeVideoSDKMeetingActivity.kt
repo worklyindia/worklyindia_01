@@ -246,7 +246,7 @@ private fun joinNativeVideoSDKMeeting(
                 onPeerJoined(participant)
             }
             override fun onParticipantLeft(participant: Participant) {
-                onPeerJoined(participant)
+                onPeerLeft(participant)
             }
             override fun onMeetingLeft() {
                 onPeerLeft(meeting.localParticipant)
