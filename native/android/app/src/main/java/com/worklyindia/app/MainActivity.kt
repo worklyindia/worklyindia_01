@@ -289,6 +289,8 @@ class MainActivity : Activity() {
     }
 
     private fun openAppNotificationSettings() {
+        getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).edit()
+            .putBoolean(NOTIFICATION_SETTINGS_OPENED, true).apply()
         val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
             putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
         }
@@ -321,8 +323,14 @@ class MainActivity : Activity() {
         super.onResume()
         // Returning from Android notification settings should refresh FCM
         // registration automatically once the user has enabled notifications.
-        if (::webView.isInitialized && getNotificationPermissionStatusForActivity() == "granted") {
-            registerNativePushAndNotifyJs(true)
+        val returnedFromNotificationSettings = getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE)
+            .getBoolean(NOTIFICATION_SETTINGS_OPENED, false)
+        if (returnedFromNotificationSettings) {
+            getSharedPreferences(NOTIFICATION_PREFS, MODE_PRIVATE).edit()
+                .putBoolean(NOTIFICATION_SETTINGS_OPENED, false).apply()
+            if (::webView.isInitialized && getNotificationPermissionStatusForActivity() == "granted") {
+                registerNativePushAndNotifyJs(true)
+            }
         }
     }
 
@@ -360,5 +368,6 @@ class MainActivity : Activity() {
         private const val REQUEST_MEDIA = 702
         private const val NOTIFICATION_PREFS = "workly_notification_permissions"
         private const val NOTIFICATION_PERMISSION_ASKED = "post_notifications_asked"
+        private const val NOTIFICATION_SETTINGS_OPENED = "notification_settings_opened"
     }
 }
