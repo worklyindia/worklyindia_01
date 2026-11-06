@@ -96,7 +96,7 @@ private fun NativeVideoSDKMeetingScreen(
         val microphone = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (camera && microphone) {
             joinNativeVideoSDKMeeting(
-                meetingId, token, participantName,
+                context.applicationContext, meetingId, token, participantName,
                 onMeeting = { meeting = it },
                 onParticipants = { list -> participants.clear(); participants.addAll(list) },
                 onError = { error = it },
