@@ -191,10 +191,11 @@ fun NativeFeatureScreen(
                                 Text(whenText,style=MaterialTheme.typography.bodyMedium)
                                 Text("Type: "+when(interview.mode){"online"->"Custom link";"jitsi"->"Jitsi video";"phone"->"Phone";"in_person"->"In person";else->interview.mode},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(if(interview.applicantId==session.userId) "Your interview" else "Candidate interview",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                if(interview.locationUrl.isNotBlank()) {
-                                    if(interview.locationUrl.startsWith("https://") || interview.locationUrl.startsWith("http://")) {
-                                        TextButton(onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(interview.locationUrl))) }}) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Open meeting / details") }
-                                    } else Text(interview.locationUrl,style=MaterialTheme.typography.bodySmall)
+                                val meetingLink=interview.jitsiMeetingUrl.ifBlank { interview.locationUrl }
+                                if(meetingLink.isNotBlank()) {
+                                    if(meetingLink.startsWith("https://") || meetingLink.startsWith("http://")) {
+                                        TextButton(onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(meetingLink))) }}) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Join interview") }
+                                    } else Text(meetingLink,style=MaterialTheme.typography.bodySmall)
                                 }
                                 if(interview.notes.isNotBlank()) Text(interview.notes,style=MaterialTheme.typography.bodySmall)
                             }
