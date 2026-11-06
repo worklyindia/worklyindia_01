@@ -195,19 +195,12 @@ function buildMessage(token: string, payload: PushPayload) {
     message: {
       token,
       data,
+      // Data-only high-priority delivery is required so the native Android
+      // messaging service can render the rich image + action buttons itself.
+      // A notification envelope makes Android auto-display a plain notification
+      // in the background and bypasses onMessageReceived().
       android: {
         priority: 'HIGH',
-        // Include an Android notification envelope as a delivery fallback.
-        // Background Android can display it even if data callbacks are delayed;
-        // foreground delivery is still handled by WorklyFirebaseMessagingService.
-        notification: {
-          title: payload.title,
-          body: payload.body,
-          channel_id: payload.androidChannelId || 'workly_updates',
-          icon: 'ic_stat_workly',
-          sound: 'default',
-          tag: data.tag,
-        },
       },
       apns: {
         headers: { 'apns-priority': '10' },
