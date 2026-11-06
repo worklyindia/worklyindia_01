@@ -26,6 +26,26 @@ interface PushConfigResponse {
 
 const CONFIG_CACHE_KEY = 'firebase_push_config_v1';
 
+declare global {
+  interface Window {
+    WorklyAndroid?: {
+      isNativeAndroidApp?: () => boolean;
+      getNotificationPermissionStatus?: () => string;
+      requestNativeNotifications?: () => void;
+    };
+  }
+}
+
+type NativeNotificationResult = { granted: boolean; registered: boolean };
+
+const isNativeAndroidApp = (): boolean => {
+  try {
+    return Boolean(window.WorklyAndroid?.isNativeAndroidApp?.());
+  } catch {
+    return false;
+  }
+};
+
 export class FirebasePushService {
   private static configPromise: Promise<PushConfigResponse | null> | null = null;
   private static initialized = false;
@@ -86,6 +106,37 @@ export class FirebasePushService {
 
   // ---------------------------------------------------------- capabilities
 
+  private static requestNativeNotificationSetup(): Promise<NativeNotificationResult> {
+    if (!isNativeAndroidApp() || !window.WorklyAndroid?.requestNativeNotifications) {
+      return Promise.resolve({ granted: false, registered: false });
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: NativeNotificationResult) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('workly:native-notification-result', onResult);
+        window.clearTimeout(timeout);
+        resolve(result);
+      };
+      const onResult = (event: Event) => {
+        const detail = (event as CustomEvent<NativeNotificationResult>).detail;
+        if (detail) finish({ granted: Boolean(detail.granted), registered: Boolean(detail.registered) });
+      };
+      const timeout = window.setTimeout(() => finish({ granted: false, registered: false }), 25000);
+      window.addEventListener('workly:native-notification-result', onResult, { once: true });
+      try {
+        // Called from the Subscribe button click; Android shows its runtime
+        // permission dialog directly from this user gesture.
+        window.WorklyAndroid!.requestNativeNotifications!();
+      } catch (error) {
+        console.error('Native notification request failed:', error);
+        finish({ granted: false, registered: false });
+      }
+    });
+  }
+
   static isBrowserPushSupported(): boolean {
     return (
       typeof window !== 'undefined' &&
@@ -108,7 +159,7 @@ export class FirebasePushService {
       isIOS: /iPad|iPhone|iPod/.test(ua),
       isAndroid: /Android/i.test(ua),
       hostname: typeof window !== 'undefined' ? window.location.hostname : '',
-      supported: this.isBrowserPushSupported(),
+      supported: this.isBrowserPushSupported() || isNativeAndroidApp(),
       userAgent: ua,
     };
   }
