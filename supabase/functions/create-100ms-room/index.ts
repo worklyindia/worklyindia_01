@@ -99,6 +99,55 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
     const admin = createClient(supabaseUrl, serviceRoleKey);
+    const requestBody = await req.json();
+    if (requestBody.action === "get-access") {
+      const { interviewId } = requestBody;
+      if (!interviewId) throw new Error("interviewId is required");
+      const { data: interview, error: lookupError } = await admin.from("interviews")
+        .select("id,applicant_id,host_user_id,video_platform,jitsi_meeting_url,location_url,videosdk_room_id,videosdk_host_token,videosdk_participant_tokens,hms_room_id,hms_room_url,hms_host_token,hms_participant_tokens,hms_host_prebuilt_url,hms_participant_prebuilt_urls")
+        .eq("id", interviewId).maybeSingle();
+      if (lookupError || !interview) {
+        return new Response(JSON.stringify({ success: false, error: "Interview not found" }), {
+          status: 404, headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+      const uid = authData.user.id;
+      const isHost = interview.host_user_id === uid;
+      const isApplicant = interview.applicant_id === uid;
+      if (!isHost && !isApplicant) {
+        return new Response(JSON.stringify({ success: false, error: "You are not a participant in this interview" }), {
+          status: 403, headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+      const platform = (interview.video_platform || "").toLowerCase();
+      if (platform === "100ms") {
+        const roomCode = isHost ? interview.hms_host_token : interview.hms_participant_tokens?.[uid];
+        const meetingUrl = isHost ? (interview.hms_host_prebuilt_url || interview.hms_room_url) :
+          (interview.hms_participant_prebuilt_urls?.[uid] || interview.hms_room_url);
+        if (!roomCode) return new Response(JSON.stringify({ success: false, error: "100ms room access is not ready" }), {
+          status: 409, headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+        return new Response(JSON.stringify({ success: true, provider: "100ms", roomCode, meetingUrl }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+      if (platform === "videosdk") {
+        const token = isHost ? interview.videosdk_host_token : interview.videosdk_participant_tokens?.[uid];
+        if (!interview.videosdk_room_id || !token) return new Response(JSON.stringify({ success: false, error: "VideoSDK room access is not ready" }), {
+          status: 409, headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+        return new Response(JSON.stringify({ success: true, provider: "videosdk", meetingId: interview.videosdk_room_id, token }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+      if (platform === "jitsi") {
+        const meetingUrl = interview.jitsi_meeting_url || interview.location_url;
+        return new Response(JSON.stringify({ success: true, provider: "jitsi", meetingUrl }), {
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+      throw new Error("Unsupported meeting provider");
+    }
     // Get 100ms credentials from environment
     const HMS_ACCESS_KEY = Deno.env.get('HMS_ACCESS_KEY');
     const HMS_SECRET = Deno.env.get('HMS_SECRET');
@@ -139,7 +188,7 @@ const handler = async (req: Request): Promise<Response> => {
       scheduledAt,
       scheduledEndAt,
       interviewId
-    }: CreateRoomRequest & { interviewId?: string } = await req.json();
+    }: CreateRoomRequest & { interviewId?: string } = requestBody;
     if (!jobId || !applicantId || !scheduledAt || !scheduledEndAt) {
       throw new Error("jobId, applicantId, scheduledAt and scheduledEndAt are required");
     }
