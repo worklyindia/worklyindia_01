@@ -26,7 +26,11 @@ interface PushConfigResponse {
 
 const CONFIG_CACHE_KEY = 'firebase_push_config_v1';
 
+declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; }; } }
+
 export class FirebasePushService {
+  private static isNativeAndroid(): boolean { return typeof window !== 'undefined' && typeof window.WorklyAndroid?.isNotificationPermissionGranted === 'function' && typeof window.WorklyAndroid?.requestNotificationPermission === 'function'; }
+
   private static configPromise: Promise<PushConfigResponse | null> | null = null;
   private static initialized = false;
   private static messagingApp: unknown = null;
@@ -87,6 +91,7 @@ export class FirebasePushService {
   // ---------------------------------------------------------- capabilities
 
   static isBrowserPushSupported(): boolean {
+    if (this.isNativeAndroid()) return true;
     return (
       typeof window !== 'undefined' &&
       'Notification' in window &&
@@ -141,6 +146,7 @@ export class FirebasePushService {
   }
 
   static async checkPermissionStatus(): Promise<'granted' | 'denied' | 'default'> {
+    if (this.isNativeAndroid()) return window.WorklyAndroid!.isNotificationPermissionGranted!() ? 'granted' : 'default';
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     return Notification.permission;
   }
@@ -300,6 +306,7 @@ export class FirebasePushService {
    * a live user gesture. That is why this is separate from token saving.
    */
   static async ensurePermission(): Promise<'granted' | 'denied' | 'default'> {
+    if (this.isNativeAndroid()) return window.WorklyAndroid!.requestNotificationPermission!() ? 'granted' : 'default';
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     if (Notification.permission === 'granted') return 'granted';
     if (Notification.permission === 'denied') return 'denied';
@@ -313,6 +320,16 @@ export class FirebasePushService {
 
   /** Asks for permission (if needed), gets an FCM token and saves it. */
   static async requestPermissionAndSaveToken(_forceLink = false): Promise<boolean> {
+    if (this.isNativeAndroid()) {
+      const permission = await this.ensurePermission();
+      if (permission !== 'granted') return false;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      if (!userId) return false;
+      const { data, error } = await supabase.from('push_subscriptions').select('fcm_token').eq('user_id', userId).eq('platform', 'android').eq('enabled', true).maybeSingle();
+      if (error) console.warn('Native Android push registration not yet visible:', error.message);
+      return Boolean(data?.fcm_token);
+    }
     const canEnable = this.canEnableNotifications();
     if (!canEnable.canEnable) {
       console.log('🔔 Cannot enable notifications:', canEnable.reason);
@@ -539,6 +556,14 @@ export class FirebasePushService {
   }
 
   static async isSubscribed(): Promise<boolean> {
+    if (this.isNativeAndroid()) {
+      if (!window.WorklyAndroid!.isNotificationPermissionGranted!()) return false;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id;
+      if (!userId) return false;
+      const { data } = await supabase.from('push_subscriptions').select('fcm_token').eq('user_id', userId).eq('platform', 'android').eq('enabled', true).maybeSingle();
+      return Boolean(data?.fcm_token);
+    }
     if (typeof window === 'undefined' || !('Notification' in window)) return false;
     if (Notification.permission !== 'granted') return false;
     const { data: sessionData } = await supabase.auth.getSession();
