@@ -124,7 +124,6 @@ serve(async (req) => {
     const body = await req.text();
     
     logInfo('Webhook request received', {
-      hasSignature: !!signature,
       userAgent,
       bodyLength: body.length,
       hasSignature: !!signature
@@ -133,8 +132,8 @@ serve(async (req) => {
     if (!body || body.trim() === '') {
       logError('Empty or invalid payload');
       return new Response(JSON.stringify({ 
-        status: 'acknowledged',
-        message: 'Invalid payload - webhook ignored',
+        status: 'rejected',
+        message: 'Invalid webhook payload',
         requestId 
       }), { 
         status: 400, 
