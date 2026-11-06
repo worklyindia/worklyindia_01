@@ -452,18 +452,7 @@ private fun NativeWebsiteHeader(
                     TextButton(onClick = onProfile) { Icon(Icons.Default.Login, contentDescription = null); Spacer(Modifier.width(4.dp)); Text("Log in") }
                 }
             }
-            OutlinedButton(
-                onClick = onSearch,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 0.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
-            ) {
-                Icon(Icons.Default.Search, contentDescription = null)
-                Spacer(Modifier.width(9.dp))
-                Text("Search jobs, skills, city or company", modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Icon(Icons.Default.Tune, contentDescription = "Search filters")
-            }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(4.dp))
         }
     }
 }
