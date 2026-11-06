@@ -277,7 +277,7 @@ private fun WorklyApp() {
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
             tab == "More" -> MoreScreen(m, authSession, saved.size, onNavigate = { if (it == "Login") tab = "Account" else selectedFeature = it })
-            else -> AccountScreen(m, authSession, authMessage, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." }, onNavigate = { selectedFeature = it })
+            else -> AccountScreen(m, authSession, authMessage, homeData, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." }, onNavigate = { selectedFeature = it })
         }
     }
     if (applyConfirmation != null) {
@@ -986,6 +986,7 @@ private fun AccountScreen(
     m: Modifier,
     session: NativeSession?,
     message: String?,
+    homeData: NativeHomeData,
     onMessage: (String?) -> Unit,
     onSession: (NativeSession?) -> Unit,
     onNavigate: (String) -> Unit
@@ -1049,6 +1050,8 @@ private fun AccountScreen(
                         Text("Aapka account native app mein connected hai.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick = { scope.launch { NativePushManager.unregister(ctx, session); NativeAuth.signOut(ctx); ctx.getSharedPreferences("workly", Context.MODE_PRIVATE).edit().putString("account_type", "job_seeker").apply(); accountType = "job_seeker"; onSession(null); password = "" } }, Modifier.fillMaxWidth()) { Text("Logout") }
                     } else {
+                        val authAvatar = if (accountType == "employer") homeData.employerLoginAvatar else homeData.seekerLoginAvatar
+                        if (authAvatar != null) AsyncImage(authAvatar, if (accountType == "employer") "Employer" else "Job seeker", Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(14.dp)), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
                         Text("Welcome to Workly India", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         Text("Apna account type select karke continue karein.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
