@@ -1008,6 +1008,16 @@ const FALLBACK_NOTIFICATION_ICON = `${WEBSITE_DOMAIN}/icons/icon-192x192.png`;
 // ---------------------------------------------------------------------------
 const PUSH_IMAGE_MAX_WIDTH = 1080;
 const PUSH_IMAGE_QUALITY = 72;
+/** Resolve template CTA paths before sending to Android, whose PendingIntent requires an absolute URL. */
+function absolutePushUrl(value: unknown, fallback: string = SITE): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  try {
+    return new URL(raw || fallback, SITE).toString();
+  } catch {
+    return SITE;
+  }
+}
+
 function capPushImageUrl(url: unknown): string | undefined {
   if (typeof url !== 'string') return undefined;
   const u = url.trim();
@@ -1336,7 +1346,7 @@ async function processOne(sb: any, row: any, requestId: string): Promise<{
             title: evt.title,
             message: evt.message
           });
-          const pushUrl = filled.buttonUrl || evt.ctaUrl || SITE;
+          const pushUrl = absolutePushUrl(filled.buttonUrl || evt.ctaUrl || SITE);
           const r = await sendToUsers(sb, [recipient.user_id], {
             title: filled.title,
             body: filled.message,
@@ -2452,7 +2462,7 @@ serve(async req => {
         title: String(template.title),
         message: String(template.body)
       });
-      const lifecycleUrl = filled.buttonUrl || '/';
+      const lifecycleUrl = absolutePushUrl(filled.buttonUrl || '/');
       const lifecycleActions = filled.buttonText ? [{
         action: 'open',
         title: filled.buttonText,
