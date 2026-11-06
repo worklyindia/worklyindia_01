@@ -42,7 +42,7 @@ private const val HOME_PUBLIC_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeY
 data class NativeHomeBanner(val title:String,val subtitle:String,val image:String?,val youtube:String?)
 data class NativeHomeBadge(val title:String,val subtitle:String,val description:String,val image:String?)
 data class NativeHomePerson(val name:String,val image:String?)
-data class NativeHomeData(val banners:List<NativeHomeBanner> = emptyList(),val videos:List<String> = emptyList(),val heroImage:String? = null,val seekersImage:String? = null,val badges:List<NativeHomeBadge> = emptyList(),val seekers:List<NativeHomePerson> = emptyList(),val companies:List<NativeHomePerson> = emptyList(),val logoUrl:String? = null,val brandName:String = "Workly India",val tagline:String = "Find.Work.Grow")
+data class NativeHomeData(val banners:List<NativeHomeBanner> = emptyList(),val videos:List<String> = emptyList(),val heroImage:String? = null,val seekersImage:String? = null,val badges:List<NativeHomeBadge> = emptyList(),val seekers:List<NativeHomePerson> = emptyList(),val companies:List<NativeHomePerson> = emptyList(),val logoUrl:String? = null,val brandName:String = "Workly India",val tagline:String = "Find.Work.Grow",val seekerLoginAvatar:String? = null,val employerLoginAvatar:String? = null)
 
 object NativeHomeApi {
     suspend fun load():NativeHomeData = withContext(Dispatchers.IO) {
