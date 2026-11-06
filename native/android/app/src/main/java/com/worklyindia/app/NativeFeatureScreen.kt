@@ -50,6 +50,7 @@ fun NativeFeatureScreen(
     var employerApplications by remember { mutableStateOf<List<NativeEmployerApplicant>>(emptyList()) }
     var updatingApplicantId by remember { mutableStateOf<String?>(null) }
     var notifications by remember { mutableStateOf<List<NativeNotification>>(emptyList()) }
+    var interviews by remember { mutableStateOf<List<NativeInterview>>(emptyList()) }
     var conversations by remember { mutableStateOf<List<NativeConversation>>(emptyList()) }
     var chatMessages by remember { mutableStateOf<List<NativeChatMessage>>(emptyList()) }
     var selectedConversation by remember { mutableStateOf<NativeConversation?>(null) }
@@ -101,6 +102,7 @@ fun NativeFeatureScreen(
             when(screenTitle) {
                 "My applications" -> applications=NativeDataApi.applications(session)
                 "Notifications" -> notifications=NativeDataApi.notifications(session)
+                "Interviews" -> interviews=NativeDataApi.interviews(session)
                 "Messages" -> {
                     if(selectedConversation==null) conversations=NativeDataApi.conversations(session)
                     else chatMessages=NativeDataApi.messages(session,selectedConversation!!.id)
@@ -133,7 +135,7 @@ fun NativeFeatureScreen(
         Row(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
             IconButton(onClick={ if(screenTitle=="Messages" && selectedConversation!=null) { selectedConversation=null; chatMessages=emptyList(); error=null; screenTitle=chatReturnScreen } else onBack() }) { Icon(Icons.Default.ArrowBack,"Back") }
             Text(selectedConversation?.jobTitle ?: screenTitle,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)
-            if(screenTitle in listOf("My applications","Notifications","Messages","Employer dashboard")) IconButton(onClick={refresh++}) { Icon(Icons.Default.Refresh,"Refresh") }
+            if(screenTitle in listOf("My applications","Notifications","Interviews","Messages","Employer dashboard")) IconButton(onClick={refresh++}) { Icon(Icons.Default.Refresh,"Refresh") }
         }
         if(session==null) {
             Box(Modifier.fillMaxSize().padding(24.dp),contentAlignment=Alignment.Center) {
@@ -170,6 +172,33 @@ fun NativeFeatureScreen(
                         Text("Employer ke response ke saath status yahan update hoga.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     items(applications,key={it.id}) { a -> ApplicationStatusCard(a) }
+                }
+            }
+            "Interviews" -> {
+                if(busy) LoadingNative()
+                else if(interviews.isEmpty()) EmptyNative("No interviews scheduled","Aapke scheduled interviews yahan dikhai denge.")
+                else LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                    item { Text("${interviews.size} interviews",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold) }
+                    items(interviews,key={it.id}) { interview ->
+                        val whenText=runCatching { java.time.OffsetDateTime.parse(interview.scheduledAt).atZoneSameInstant(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a")) }.getOrDefault(interview.scheduledAt)
+                        Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),shape=RoundedCornerShape(16.dp)) {
+                            Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                                Row(verticalAlignment=Alignment.CenterVertically) {
+                                    Text(interview.jobTitle,Modifier.weight(1f),fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium)
+                                    AssistChip(onClick={},label={Text(interview.status.replace("_"," ").replaceFirstChar{it.uppercase()})})
+                                }
+                                Text(whenText,style=MaterialTheme.typography.bodyMedium)
+                                Text("Type: "+when(interview.mode){"online"->"Online";"phone"->"Phone";"in_person"->"In person";else->interview.mode},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(if(interview.applicantId==session.userId) "Your interview" else "Candidate interview",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                if(interview.locationUrl.isNotBlank()) {
+                                    if(interview.locationUrl.startsWith("https://") || interview.locationUrl.startsWith("http://")) {
+                                        TextButton(onClick={runCatching { context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(interview.locationUrl))) }}) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Open meeting / details") }
+                                    } else Text(interview.locationUrl,style=MaterialTheme.typography.bodySmall)
+                                }
+                                if(interview.notes.isNotBlank()) Text(interview.notes,style=MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
                 }
             }
             "Notifications" -> {
