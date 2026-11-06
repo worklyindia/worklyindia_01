@@ -135,8 +135,15 @@ private fun WorklyApp() {
             { LoadState.Error("Internet check karein aur dobara try karein.") }
         )
     }
+    LaunchedEffect(authSession?.userId) {
+        val session = authSession
+        if (session != null) runCatching { saved = NativeDataApi.savedJobIds(session); store.save(saved) }
+    }
     val toggleSave: (Job) -> Unit = { j ->
-        saved = if (j.id in saved) saved - j.id else saved + j.id; store.save(saved)
+        val wasSaved = j.id in saved
+        saved = if (wasSaved) saved - j.id else saved + j.id
+        store.save(saved)
+        authSession?.let { session -> scope.launch { runCatching { if (wasSaved) NativeDataApi.unsaveJob(session,j.id) else NativeDataApi.saveJob(session,j.id) } } }
     }
 
     BackHandler(enabled = selected != null || selectedFeature != null || tab != "Home") {
@@ -146,11 +153,11 @@ private fun WorklyApp() {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (selected == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            if (selected == null && selectedFeature == null) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 listOf("Home" to Icons.Default.Home, "Jobs" to Icons.Default.Search,
                     "Saved" to Icons.Default.Bookmark, "More" to Icons.Default.Menu, "Account" to Icons.Default.Person)
                     .forEach { (label, icon) ->
-                        NavigationBarItem(selected = tab == label, onClick = { tab = label },
+                        NavigationBarItem(selected = tab == label, onClick = { selectedFeature = null; selected = null; tab = label },
                             icon = { Icon(icon, contentDescription = label) }, label = { Text(label) })
                     }
             }
