@@ -10,8 +10,8 @@
         android:name=".WorklyApplication"
         android:allowBackup="true"
         android:label="Workly India"
-        android:icon="@drawable/ic_workly_launcher"
-        android:roundIcon="@drawable/ic_workly_launcher"
+        android:icon="@drawable/ic_workly_launcher_image"
+        android:roundIcon="@drawable/ic_workly_launcher_image"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <service
