@@ -7,6 +7,8 @@ import android.webkit.WebViewClient
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -114,7 +116,7 @@ fun NativeHomeBannerCarousel(data:NativeHomeData) {
         if(userInteracting) { delay(3000); userInteracting = false }
     }
     val b=data.banners[index.coerceIn(data.banners.indices)]
-    Card(Modifier.fillMaxWidth().padding(horizontal=12.dp),shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
+    Card(Modifier.fillMaxWidth().padding(horizontal=12.dp).pointerInput(data.banners.size) { var drag = 0f; detectHorizontalDragGestures(onHorizontalDrag = { _, amount -> drag += amount }, onDragEnd = { if (drag > 40f) { userInteracting = true; index = (index - 1 + data.banners.size) % data.banners.size } else if (drag < -40f) { userInteracting = true; index = (index + 1) % data.banners.size }; drag = 0f }, onDragCancel = { drag = 0f }) },shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface)) {
         Column {
             if(b.image!=null) AsyncImage(b.image,b.title,Modifier.fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(topStart=18.dp,topEnd=18.dp)),contentScale=androidx.compose.ui.layout.ContentScale.Fit)
             if(b.title.isNotBlank() || b.subtitle.isNotBlank()) Column(Modifier.padding(horizontal=15.dp,vertical=12.dp)){if(b.title.isNotBlank())Text(b.title,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);if(b.subtitle.isNotBlank())Text(b.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
