@@ -319,6 +319,18 @@ private fun HomeScreen(
         }
 
         item {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AssistChip(onClick = onAll, label = { Text("All Jobs") }, leadingIcon = { Icon(Icons.Default.Work, null) })
+                categories.take(8).forEach { item ->
+                    AssistChip(onClick = { onCategory(item) }, label = { Text(item) }, leadingIcon = { Icon(Icons.Default.WorkOutline, null) })
+                }
+            }
+        }
+
+        item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Search your next opportunity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 OutlinedTextField(
@@ -399,7 +411,7 @@ private fun HomeScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Your career tools", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                quickActions.chunked(2).forEach { pair ->
+                quickActions.chunked(4).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         pair.forEach { (title, subtitle, icon) ->
                             Card(
@@ -431,7 +443,7 @@ private fun HomeScreen(
             }
         }
         jobList(state, saved, onSave, onJob, onRetry, take = 10)
-        item { NativeHomeExtraSections(homeData, onFeature) }
+        item { NativeHomeExtraSections(homeData, onFeature, onCategory) }
     }
 }
 
