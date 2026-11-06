@@ -1,6 +1,8 @@
 package com.worklyindia.app
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -9,6 +11,7 @@ import android.util.Base64
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -32,6 +35,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import live.hms.roomkit.ui.HMSRoomKit
+import live.hms.roomkit.ui.HMSPrebuiltOptions
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -97,6 +102,18 @@ fun NativeFeatureScreen(
     var interviewNotes by remember { mutableStateOf("") }
     val context=LocalContext.current
     val scope= rememberCoroutineScope()
+    var pendingHmsRoomCode by remember { mutableStateOf<String?>(null) }
+    val hmsPermissionLauncher=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        if(grants.values.all { it }) {
+            val roomCode=pendingHmsRoomCode
+            val activity=context as? Activity
+            if(roomCode!=null && activity!=null) {
+                runCatching { HMSRoomKit.launchPrebuilt(roomCode,activity,HMSPrebuiltOptions(userName=session?.email ?: "Workly India",userId=session?.userId)) }
+                    .onFailure { error=it.message ?: "100ms meeting open nahi hui." }
+            } else error="Meeting activity available nahi hai."
+        } else error="Video interview ke liye camera aur microphone permission zaroori hai."
+        pendingHmsRoomCode=null
+    }
 
     LaunchedEffect(screenTitle,session,refresh,selectedConversation?.id) {
         if(session==null) return@LaunchedEffect
@@ -191,8 +208,27 @@ fun NativeFeatureScreen(
                                     AssistChip(onClick={},label={Text(interview.status.replace("_"," ").replaceFirstChar{it.uppercase()})})
                                 }
                                 Text(whenText,style=MaterialTheme.typography.bodyMedium)
-                                Text("Type: "+if(interview.videoPlatform=="jitsi") "Jitsi video" else when(interview.mode){"online"->"Custom link";"phone"->"Phone";"in_person"->"In person";else->interview.mode},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Type: "+when(interview.videoPlatform.lowercase()){"jitsi"->"Jitsi video";"100ms"->"100ms native video";"videosdk"->"VideoSDK native video";else->when(interview.mode){"online"->"Custom link";"phone"->"Phone";"in_person"->"In person";else->interview.mode}},style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(if(interview.applicantId==session.userId) "Your interview" else "Candidate interview",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                if(interview.videoPlatform.equals("100ms",true) || interview.mode=="100ms_iframe") {
+                                    val roomCode=if(interview.hostUserId==session.userId) interview.hmsHostToken else interview.hmsParticipantTokens?.optString(session.userId).orEmpty()
+                                    Button(enabled=roomCode.isNotBlank(),onClick={
+                                        if(roomCode.isBlank()) error="100ms room code available nahi hai. Employer se interview dobara schedule karwayein."
+                                        else {
+                                            val camera=ContextCompat.checkSelfPermission(context,Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED
+                                            val mic=ContextCompat.checkSelfPermission(context,Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED
+                                            if(camera && mic) {
+                                                val activity=context as? Activity
+                                                if(activity!=null) runCatching { HMSRoomKit.launchPrebuilt(roomCode,activity,HMSPrebuiltOptions(userName=session.email.ifBlank{"Workly India"},userId=session.userId)) }
+                                                    .onFailure { error=it.message ?: "100ms meeting open nahi hui." }
+                                                else error="Meeting activity available nahi hai."
+                                            } else {
+                                                pendingHmsRoomCode=roomCode
+                                                hmsPermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO))
+                                            }
+                                        }
+                                    },modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.VideoCall,null); Spacer(Modifier.width(6.dp)); Text("Join 100ms interview") }
+                                }
                                 val meetingLink=interview.jitsiMeetingUrl.ifBlank { interview.locationUrl }
                                 if(meetingLink.isNotBlank()) {
                                     if(meetingLink.startsWith("https://") || meetingLink.startsWith("http://")) {
