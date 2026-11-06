@@ -117,6 +117,7 @@ private fun WorklyApp() {
     val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf("Home") }
     var selected by remember { mutableStateOf<Job?>(null) }
+    var selectedFeature by rememberSaveable { mutableStateOf<String?>(null) }
     var saved by remember { mutableStateOf(store.load()) }
     var search by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
@@ -138,8 +139,8 @@ private fun WorklyApp() {
         saved = if (j.id in saved) saved - j.id else saved + j.id; store.save(saved)
     }
 
-    BackHandler(enabled = selected != null || tab != "Home") {
-        if (selected != null) selected = null else tab = "Home"
+    BackHandler(enabled = selected != null || selectedFeature != null || tab != "Home") {
+        if (selected != null) selected = null else if (selectedFeature != null) selectedFeature = null else tab = "Home"
     }
 
     Scaffold(
@@ -160,6 +161,7 @@ private fun WorklyApp() {
         when {
             job != null -> JobDetail(m, job, job.id in saved, { selected = null }, toggleSave,
                 onApply = { if (!job.externalApplyUrl.isNullOrBlank()) externalApplyNotice = true else if (authSession == null) { authMessage = "Apply karne ke liye login karein."; tab = "Account"; selected = null } else scope.launch { authMessage = try { NativeAuth.apply(ctx, job.id, job.employerId ?: throw IllegalStateException("Employer details nahi mile. Is job ke liye native apply support available nahi hai.")); "Application submit ho gayi." } catch (e: Exception) { e.message ?: "Apply nahi ho saka." }; selected = null; tab = "Account" } }, onShare = { shareJob(ctx, job) })
+            selectedFeature != null -> NativeFeatureScreen(m, selectedFeature!!, authSession) { selectedFeature = null }
             tab == "Home" -> HomeScreen(m, state, categories, saved, toggleSave,
                 onSearch = { search = it; tab = "Jobs" }, onCategory = { category = it; tab = "Jobs" },
                 onJob = { selected = it }, onRetry = { reload++ }, onAll = { tab = "Jobs" },
@@ -167,8 +169,8 @@ private fun WorklyApp() {
             tab == "Jobs" -> JobsScreen(m, state, search, { search = it }, categories, category, { category = it },
                 saved, toggleSave, { selected = it }, { reload++ })
             tab == "Saved" -> SavedScreen(m, known.values.filter { it.id in saved }, saved.size, saved, toggleSave) { selected = it }
-            tab == "More" -> MoreScreen(m, authSession, saved.size)
-            else -> AccountScreen(m, authSession, authMessage, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." })
+            tab == "More" -> MoreScreen(m, authSession, saved.size, onNavigate = { if (it == "Login") tab = "Account" else selectedFeature = it })
+            else -> AccountScreen(m, authSession, authMessage, onMessage = { authMessage = it }, onSession = { authSession = it; authMessage = if (it == null) "Logout successful." else "Login successful." }, onNavigate = { selectedFeature = it })
         }
     }
     if (externalApplyNotice) AlertDialog(
@@ -367,7 +369,7 @@ private fun Section(title: String, body: String) {
 }
 
 @Composable
-private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int) {
+private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int, onNavigate: (String) -> Unit) {
     var now by remember { mutableStateOf(LocalDateTime.now(ZoneId.of("Asia/Kolkata"))) }
     var selectedOption by remember { mutableStateOf<String?>(null) }
     var festivals by remember { mutableStateOf<List<Festival>>(emptyList()) }
@@ -429,7 +431,7 @@ private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int) {
                         Text("Browsing as Guest", fontWeight = FontWeight.SemiBold)
                         Text("Login to unlock all features and sync your data across devices.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton(onClick = { selectedOption = "Login" }) { Text("Login") }
+                    TextButton(onClick = { onNavigate("Login") }) { Text("Login") }
                 }
             }
         }
@@ -542,7 +544,7 @@ private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int) {
                 menu.forEachIndexed { index, label ->
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
                     Row(
-                        Modifier.fillMaxWidth().clickable { selectedOption = label }
+                        Modifier.fillMaxWidth().clickable { onNavigate(label) }
                             .padding(horizontal = 20.dp, vertical = 15.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -563,14 +565,7 @@ private fun MoreScreen(m: Modifier, session: NativeSession?, savedCount: Int) {
             )
         }
     }
-    if (selectedOption != null) {
-        AlertDialog(
-            onDismissRequest = { selectedOption = null },
-            title = { Text(selectedOption!!) },
-            text = { Text(if (selectedOption == "Login") "Login and signup are available in the Account tab." else "Yeh section Workly India ke More menu mein hai. Iska full native page abhi integrate hona baaki hai.") },
-            confirmButton = { TextButton(onClick = { selectedOption = null }) { Text("OK") } }
-        )
-    }
+
 }
 
 @Composable
@@ -598,7 +593,8 @@ private fun AccountScreen(
     session: NativeSession?,
     message: String?,
     onMessage: (String?) -> Unit,
-    onSession: (NativeSession?) -> Unit
+    onSession: (NativeSession?) -> Unit,
+    onNavigate: (String) -> Unit
 ) {
     var mode by rememberSaveable { mutableStateOf("login") }
     var name by rememberSaveable { mutableStateOf("") }
@@ -662,11 +658,11 @@ private fun AccountScreen(
             "Help & support" to Icons.Default.SupportAgent
         ).forEach { (title, icon) ->
             item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
+                Card(onClick = { onNavigate(title) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(14.dp)) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
                         Text(title, Modifier.padding(start = 12.dp).weight(1f), fontWeight = FontWeight.SemiBold)
-                        Text("Coming next", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
