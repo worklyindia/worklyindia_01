@@ -36,7 +36,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = android.graphics.Color.rgb(255, 255, 255)
         window.navigationBarColor = android.graphics.Color.rgb(255, 255, 255)
-        if (Build.VERSION.SDK_INT >= 26) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
+        if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
         if (Build.VERSION.SDK_INT >= 23) {
             window.decorView.systemUiVisibility =
                 android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
