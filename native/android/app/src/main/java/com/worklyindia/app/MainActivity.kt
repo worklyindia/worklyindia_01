@@ -713,57 +713,6 @@ class MainActivity : Activity() {
             setLineSpacing(dp(4).toFloat(), 1.05f)
             setPadding(0, dp(14), 0, dp(26))
         }
-        val retry = TextView(this).apply {
-            text = "Check connection"
-            textSize = 16f
-            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(dp(28), dp(15), dp(28), dp(15))
-            this.background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.rgb(22, 163, 122))
-                cornerRadius = dp(14).toFloat()
-            }
-            isClickable = true
-            isFocusable = true
-            contentDescription = "Check internet connection"
-            setOnClickListener { clickedView ->
-                val button = clickedView as? TextView ?: return@setOnClickListener
-                if (reconnectCheckInProgress) return@setOnClickListener
-                reconnectCheckInProgress = true
-                button.text = "Checking…"
-                button.isEnabled = false
-                message.text = "Checking your internet connection. Please wait…"
-
-                // Android may take a few seconds to validate mobile data after it is
-                // switched on. Recheck briefly instead of immediately showing a false
-                // offline error to the user.
-                activityScope.launch {
-                    var connected = false
-                    for (attempt in 0 until 15) {
-                        if (hasInternetConnection()) {
-                            connected = true
-                            break
-                        }
-                        delay(700)
-                    }
-
-                    if (connected || hasInternetConnection()) {
-                        reconnectCheckInProgress = false
-                        message.text = "Internet connection detected. Loading Workly India…"
-                        showStartupLoading()
-                        hideOfflineScreen()
-                        webView.loadUrl(lastLoadedUrl)
-                    } else {
-                        reconnectCheckInProgress = false
-                        button.text = "Check connection"
-                        button.isEnabled = true
-                        message.text = "No internet connection detected. Turn on mobile data or connect to Wi-Fi, then tap Check connection again. Wi-Fi without internet will not work."
-                    }
-                }
-            }
-        }
         val footer = TextView(this).apply {
             text = "Workly India • Your next opportunity awaits"
             textSize = 12f
@@ -775,7 +724,6 @@ class MainActivity : Activity() {
         card.addView(eyebrow)
         card.addView(heading)
         card.addView(message)
-        card.addView(retry)
         card.addView(footer)
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
