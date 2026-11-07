@@ -1287,41 +1287,25 @@ class MainActivity : Activity() {
                         }
                     }
                     info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
-                        info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> showUpdateAvailableDialog(info)
+                        info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> {
+                        // Launch Google's Play-owned in-app update UI directly.
+                        // Do not show a separate Workly AlertDialog first.
+                        runCatching {
+                            appUpdateManager.startUpdateFlowForResult(
+                                info, this,
+                                AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
+                                REQUEST_APP_UPDATE
+                            )
+                        }.onFailure { error ->
+                            android.util.Log.e("WorklyAppUpdate", "Could not start Play update UI", error)
+                        }
+                    }
                 }
             }
             .addOnFailureListener { error ->
                 updateCheckInProgress = false
                 android.util.Log.w("WorklyAppUpdate", "Could not check Play Store update", error)
             }
-    }
-
-    private fun showUpdateAvailableDialog(info: com.google.android.play.core.appupdate.AppUpdateInfo) {
-        if (updateDialogVisible || isFinishing || isDestroyed) return
-        updateDialogVisible = true
-        AlertDialog.Builder(this)
-            .setTitle("Update available")
-            .setMessage("A new version of Workly India is available. Update now to get the latest improvements and features.")
-            .setCancelable(true)
-            .setNegativeButton("Later") { dialog, _ ->
-                updateDialogVisible = false
-                dialog.dismiss()
-            }
-            .setPositiveButton("Update now") { dialog, _ ->
-                updateDialogVisible = false
-                dialog.dismiss()
-                runCatching {
-                    appUpdateManager.startUpdateFlowForResult(
-                        info, this,
-                        AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
-                        REQUEST_APP_UPDATE
-                    )
-                }.onFailure { error ->
-                    android.util.Log.e("WorklyAppUpdate", "Could not start in-app update", error)
-                }
-            }
-            .setOnCancelListener { updateDialogVisible = false }
-            .show()
     }
 
     private fun showUpdateDownloadedDialog() {
