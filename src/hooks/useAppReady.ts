@@ -50,9 +50,14 @@ export const useAppReady = (authLoading: boolean, profileLoading: boolean, user:
     fetchJobs();
   }, []);
 
-  // Safety timeout: never block longer than 5 seconds
+  // Give the native WebView longer to finish auth/profile and first-screen
+  // data loading on mobile networks, while keeping the website's browser
+  // fallback short so a slow request never leaves users stuck on a splash.
   useEffect(() => {
-    const timer = setTimeout(() => setTimedOut(true), 5000);
+    const isNativeAndroid = typeof navigator !== 'undefined' &&
+      /WorklyIndiaApp\/1\.0/i.test(navigator.userAgent);
+    const maxWait = isNativeAndroid ? 15000 : 5000;
+    const timer = setTimeout(() => setTimedOut(true), maxWait);
     return () => clearTimeout(timer);
   }, []);
 
