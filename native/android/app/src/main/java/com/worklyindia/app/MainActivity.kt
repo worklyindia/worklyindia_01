@@ -62,6 +62,8 @@ class MainActivity : Activity() {
     private var pendingGeoCallback: android.webkit.GeolocationPermissions.Callback? = null
     private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var offlineOverlay: FrameLayout? = null
+    private var lastLoadedUrl: String = "https://worklyindia.devs.surf/"
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
@@ -380,7 +382,10 @@ class MainActivity : Activity() {
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
             ?: website
+        lastLoadedUrl = target
         webView.loadUrl(target)
+        // If the app starts without data, show a branded native offline screen.
+        if (!hasInternetConnection()) showOfflineScreen()
         // Native failsafe independent of JavaScript/React bridge callbacks.
         // Never keep the splash over the website indefinitely on a slow device.
         rootLayout.postDelayed({ hideStartupLoading() }, 25000)
@@ -583,6 +588,89 @@ class MainActivity : Activity() {
         webView.evaluateJavascript(script, null)
     }
 
+    private fun hasInternetConnection(): Boolean {
+        val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+    private fun showOfflineScreen() {
+        if (!::rootLayout.isInitialized || offlineOverlay?.parent != null) return
+        val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val background = if (dark) Color.rgb(5, 13, 29) else Color.rgb(246, 249, 252)
+        val cardColor = if (dark) Color.rgb(17, 27, 45) else Color.WHITE
+        val textColor = if (dark) Color.WHITE else Color.rgb(24, 35, 52)
+        val mutedColor = if (dark) Color.rgb(180, 193, 210) else Color.rgb(100, 116, 139)
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+
+        val overlay = FrameLayout(this).apply { setBackgroundColor(background) }
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(28), dp(32), dp(28), dp(32))
+            setBackgroundColor(cardColor)
+            elevation = dp(8).toFloat()
+        }
+        val heading = TextView(this).apply {
+            text = "You're temporarily offline"
+            textSize = 22f
+            setTextColor(textColor)
+            gravity = Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        val message = TextView(this).apply {
+            text = "Your connection is unavailable. Workly India will be ready when you're back online."
+            textSize = 15f
+            setTextColor(mutedColor)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, dp(22))
+        }
+        val retry = TextView(this).apply {
+            text = "Try again"
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setPadding(dp(28), dp(14), dp(28), dp(14))
+            setBackgroundColor(Color.rgb(22, 163, 122))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                if (hasInternetConnection()) {
+                    hideOfflineScreen()
+                    webView.loadUrl(lastLoadedUrl)
+                } else {
+                    Toast.makeText(this@MainActivity, "Please turn on your internet connection", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        card.addView(heading)
+        card.addView(message)
+        card.addView(retry)
+        overlay.addView(card, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ).apply {
+            leftMargin = dp(28)
+            rightMargin = dp(28)
+        })
+        offlineOverlay = overlay
+        rootLayout.addView(overlay, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+    }
+
+    private fun hideOfflineScreen() {
+        offlineOverlay?.let { overlay ->
+            (overlay.parent as? android.view.ViewGroup)?.removeView(overlay)
+        }
+        offlineOverlay = null
+    }
+
     private fun registerNetworkListener() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -590,10 +678,16 @@ class MainActivity : Activity() {
             override fun onAvailable(network: android.net.Network) {
                 dispatchNativeEvent("workly-native-network-change", "{connected:true}")
                 dispatchNativeEvent("online")
+                runOnUiThread {
+                    val wasOffline = offlineOverlay?.parent != null
+                    hideOfflineScreen()
+                    if (wasOffline && ::webView.isInitialized) webView.loadUrl(lastLoadedUrl)
+                }
             }
             override fun onLost(network: android.net.Network) {
                 dispatchNativeEvent("workly-native-network-change", "{connected:false}")
                 dispatchNativeEvent("offline")
+                if (!hasInternetConnection()) runOnUiThread { showOfflineScreen() }
             }
         }
         runCatching {
