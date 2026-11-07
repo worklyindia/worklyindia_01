@@ -144,6 +144,28 @@ class MainActivity : Activity() {
                         (function() {
                           document.documentElement.dataset.worklyNative = 'android';
 
+                          // Keep Android system bars and the WebView canvas in sync
+                          // with the website's system-following light/dark theme.
+                          if (!window.__worklyNativeThemeSyncInstalled) {
+                            window.__worklyNativeThemeSyncInstalled = true;
+                            var applyNativeTheme = function() {
+                              var dark = window.matchMedia &&
+                                window.matchMedia('(prefers-color-scheme: dark)').matches;
+                              if (window.WorklyAndroid && window.WorklyAndroid.setSystemTheme) {
+                                window.WorklyAndroid.setSystemTheme(!!dark);
+                              }
+                            };
+                            applyNativeTheme();
+                            if (window.matchMedia) {
+                              var themeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                              if (themeQuery.addEventListener) themeQuery.addEventListener('change', applyNativeTheme);
+                              else if (themeQuery.addListener) themeQuery.addListener(applyNativeTheme);
+                            }
+                            new MutationObserver(applyNativeTheme).observe(
+                              document.documentElement, { attributes: true, attributeFilter: ['class'] }
+                            );
+                          }
+
                           // Do not rely only on the React hook to dismiss the native
                           // splash: a failed/slow auth request or an older cached bundle
                           // must never leave the user staring at the splash forever.
@@ -510,6 +532,23 @@ class MainActivity : Activity() {
                 val parsed = runCatching { Color.parseColor(color) }.getOrDefault(Color.WHITE)
                 window.statusBarColor = parsed
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkIcons
+            }
+        }
+
+        @JavascriptInterface
+        fun setSystemTheme(dark: Boolean) {
+            runOnUiThread {
+                val barColor = if (dark) Color.rgb(1, 8, 22) else Color.rgb(247, 249, 251)
+                window.statusBarColor = barColor
+                window.navigationBarColor = barColor
+                if (Build.VERSION.SDK_INT >= 28) {
+                    window.navigationBarDividerColor = if (dark) Color.rgb(35, 43, 58) else Color.rgb(230, 233, 240)
+                }
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+                if (::webView.isInitialized) webView.setBackgroundColor(barColor)
             }
         }
 
