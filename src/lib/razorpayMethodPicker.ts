@@ -138,6 +138,12 @@ function showPicker(amountPaise?: number, showPaypal = true): Promise<"upi_bank"
   });
 }
 
+function isNativeAndroidWebView(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as any;
+  return !!(w.WorklyAndroid || /WorklyIndiaApp\/Android/i.test(navigator.userAgent));
+}
+
 function wrapRazorpay(Real: any) {
   if (!Real || Real.__methodPickerWrapped) return Real;
   function Wrapped(this: any, opts: AnyOpts) {
@@ -175,7 +181,12 @@ function wrapRazorpay(Real: any) {
           if (r === "closed") return;
         }
         savePending(opts, { stage: "checkout", choice: choice as "upi_bank" | "qr" });
-        const finalOpts = { ...tracked(opts), config: buildConfig(choice as "upi_bank" | "qr") };
+        const finalOpts = {
+          ...tracked(opts),
+          // Razorpay requires this flag for UPI Intent inside Android WebView.
+          ...(isNativeAndroidWebView() ? { webview_intent: true } : {}),
+          config: buildConfig(choice as "upi_bank" | "qr"),
+        };
         instance = new Real(finalOpts);
         listeners.forEach(([ev, cb]) => instance.on(ev, cb));
         instance.open();
