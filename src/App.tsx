@@ -344,6 +344,13 @@ const AppContent = () => {
         if ((window as any).__hideLoadingScreen) {
           (window as any).__hideLoadingScreen();
         }
+        // Tell the Android shell to remove its native loading overlay only after
+        // auth/profile and the critical first-screen data have finished loading.
+        if (isWorklyAndroidApp()) {
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            (window as any).WorklyAndroid?.onWebsiteReady?.();
+          }));
+        }
       }, remaining);
       return () => clearTimeout(timer);
     }
