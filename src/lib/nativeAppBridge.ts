@@ -4,6 +4,7 @@
  * this bridge only exposes device capabilities.
  */
 export interface WorklyAndroidBridge {
+  getNativeDeviceInfo(): string;
   isNotificationPermissionGranted(): boolean;
   requestNotificationPermission(): boolean;
   registerPushNotifications(): void;
@@ -25,3 +26,35 @@ export const isWorklyAndroidApp = (): boolean =>
 
 export const getWorklyAndroidBridge = (): WorklyAndroidBridge | null =>
   isWorklyAndroidApp() ? (window as WorklyWindow).WorklyAndroid ?? null : null;
+
+export interface NativeDeviceInfo {
+  manufacturer: string;
+  brand: string;
+  model: string;
+  device: string;
+  product: string;
+  hardware: string;
+  androidVersion: string;
+  apiLevel: number;
+  securityPatch: string;
+  supportedAbis: string;
+  totalRamGb: string;
+  screenPixels: string;
+  screenDensityDpi: number;
+  batteryPercent: number | null;
+  appVersion: string;
+  appVersionCode: number;
+  locale: string;
+}
+
+export const getNativeDeviceInfo = (): NativeDeviceInfo | null => {
+  const bridge = getWorklyAndroidBridge();
+  if (!bridge || typeof bridge.getNativeDeviceInfo !== 'function') return null;
+  try {
+    const parsed = JSON.parse(bridge.getNativeDeviceInfo()) as NativeDeviceInfo & { error?: string };
+    return parsed.error ? null : parsed;
+  } catch {
+    return null;
+  }
+};
+
