@@ -2,7 +2,7 @@ import { Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { SITE_CONFIG } from "@/config/siteConfig";
-import { shareText } from "@/utils/openExternalShareUrl";
+import { shareText as shareNativeText } from "@/utils/openExternalShareUrl";
 
 interface ShareReviewButtonProps {
   reviewId: string;
@@ -16,7 +16,7 @@ export const ShareReviewButton = ({ userName, rating, reviewText }: ShareReviewB
     const shareText = `Check out this ${rating}-star review on Workly India App!\n\n${userName} says: "${reviewText || "Great app!"}"\n\nDownload: ${SITE_CONFIG.PRODUCTION_DOMAIN}`;
 
     try {
-      const shared = await shareText(
+      const shared = await shareNativeText(
         `${rating}-star Review - Workly India`,
         shareText,
         SITE_CONFIG.PRODUCTION_DOMAIN
