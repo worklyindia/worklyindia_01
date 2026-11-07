@@ -1,6 +1,7 @@
 import { MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatJobForWhatsApp } from '@/utils/whatsappFormatter';
+import { openExternalShareUrl } from '@/utils/openExternalShareUrl';
 
 interface Job {
   id: string;
@@ -45,7 +46,7 @@ export const ShareJobWhatsApp = ({
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     
     // Open WhatsApp
-    window.open(whatsappUrl, '_blank');
+    openExternalShareUrl(whatsappUrl);
   };
 
   return (
