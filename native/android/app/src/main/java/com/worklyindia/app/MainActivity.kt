@@ -50,6 +50,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import org.json.JSONObject
 import java.io.File
@@ -63,6 +64,7 @@ class MainActivity : Activity() {
     private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var offlineOverlay: FrameLayout? = null
+    private var reconnectCheckInProgress = false
     private var lastLoadedUrl: String = "https://worklyindia.devs.surf/"
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
@@ -681,22 +683,42 @@ class MainActivity : Activity() {
             isFocusable = true
             contentDescription = "Check internet connection"
             setOnClickListener { clickedView ->
-                if (hasInternetConnection()) {
-                    message.text = "Internet connection detected. Loading Workly India…"
-                    (clickedView as? TextView)?.apply {
-                        text = "Connecting…"
-                        isEnabled = false
+                val button = clickedView as? TextView ?: return@setOnClickListener
+                if (reconnectCheckInProgress) return@setOnClickListener
+                reconnectCheckInProgress = true
+                button.text = "Checking…"
+                button.isEnabled = false
+                message.text = "Checking your internet connection. Please wait…"
+
+                // Android may take a few seconds to validate mobile data after it is
+                // switched on. Recheck briefly instead of immediately showing a false
+                // offline error to the user.
+                activityScope.launch {
+                    var connected = false
+                    repeat(15) {
+                        if (hasInternetConnection()) {
+                            connected = true
+                            return@repeat
+                        }
+                        delay(700)
                     }
-                    showStartupLoading()
-                    hideOfflineScreen()
-                    webView.loadUrl(lastLoadedUrl)
-                } else {
-                    message.text = "No internet connection detected. Turn on mobile data or connect to Wi-Fi, then tap Check connection again. Wi-Fi without internet will not work."
-                    Toast.makeText(
-                        this@MainActivity,
-                        "No internet connection. Turn on mobile data or connect to Wi-Fi, then try again.",
-                        Toast.LENGTH_LONG
-                    ).show()
+
+                    if (connected || hasInternetConnection()) {
+                        message.text = "Internet connection detected. Loading Workly India…"
+                        showStartupLoading()
+                        hideOfflineScreen()
+                        webView.loadUrl(lastLoadedUrl)
+                    } else {
+                        reconnectCheckInProgress = false
+                        button.text = "Check connection"
+                        button.isEnabled = true
+                        message.text = "No internet connection detected. Turn on mobile data or connect to Wi-Fi, then tap Check connection again. Wi-Fi without internet will not work."
+                        Toast.makeText(
+                            this@MainActivity,
+                            "No internet connection yet. Please check mobile data or Wi-Fi.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         }
@@ -756,9 +778,11 @@ class MainActivity : Activity() {
                     dispatchNativeEvent("online")
                     runOnUiThread {
                         val wasOffline = offlineOverlay?.parent != null
-                        if (wasOffline && ::webView.isInitialized) showStartupLoading()
-                        hideOfflineScreen()
-                        if (wasOffline && ::webView.isInitialized) webView.loadUrl(lastLoadedUrl)
+                        if (wasOffline && !reconnectCheckInProgress && ::webView.isInitialized) {
+                            showStartupLoading()
+                            hideOfflineScreen()
+                            webView.loadUrl(lastLoadedUrl)
+                        }
                     }
                 } else {
                     dispatchNativeEvent("offline")
