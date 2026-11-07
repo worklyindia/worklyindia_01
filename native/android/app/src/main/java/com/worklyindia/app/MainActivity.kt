@@ -538,7 +538,7 @@ class MainActivity : Activity() {
                 insertedUri?.let { runCatching { contentResolver.delete(it, null, null) } }
                 android.util.Log.e("WorklyDownload", "Could not save generated website file", error)
                 runOnUiThread {
-                    Toast.makeText(this, "Download failed. Please try again.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "Download failed. Please try again.", Toast.LENGTH_LONG).show()
                 }
                 false
             }
