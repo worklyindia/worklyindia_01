@@ -241,7 +241,7 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Download started. Check Downloads.", Toast.LENGTH_LONG).show()
             }.onFailure { error ->
                 android.util.Log.e("WorklyDownload", "Could not start website download", error)
-                Toast.makeText(this, "Download failed. Please try again.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, "Download failed. Please try again.", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -462,7 +462,7 @@ class MainActivity : Activity() {
                     File(directory, safeName).writeBytes(bytes)
                 }
                 runOnUiThread {
-                    Toast.makeText(this, "File saved in Downloads: $safeName", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "File saved in Downloads: $safeName", Toast.LENGTH_LONG).show()
                 }
                 true
             } catch (error: Exception) {
