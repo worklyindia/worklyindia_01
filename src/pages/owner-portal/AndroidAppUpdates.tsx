@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Download, Loader2, Package, RefreshCw, Upload } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Package, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -93,6 +93,23 @@ export default function AndroidAppUpdates() {
     else { toast.success("Release unpublish ho gaya"); await load(); }
   };
 
+  const deleteRelease = async (release: Release) => {
+    const confirmed = window.confirm(`Version ${release.version_name} (code ${release.version_code}) permanently delete karein? Published release delete karne se direct APK users ko update feed nahi milega.`);
+    if (!confirmed) return;
+    const { error: rowError } = await supabase.from("android_app_releases").delete().eq("id", release.id);
+    if (rowError) {
+      toast.error(rowError.message);
+      return;
+    }
+    const { error: fileError } = await supabase.storage.from(BUCKET).remove([release.apk_path]);
+    if (fileError) {
+      toast.error("Release record delete ho gaya, lekin APK storage cleanup fail hua: " + fileError.message);
+    } else {
+      toast.success(`Version ${release.version_name} delete ho gaya`);
+    }
+    await load();
+  };
+
   const downloadUrl = (path: string) => supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
   return <div className="container mx-auto max-w-5xl space-y-6 p-4 md:p-6">
@@ -126,6 +143,7 @@ export default function AndroidAppUpdates() {
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => window.open(downloadUrl(release.apk_path), "_blank", "noopener,noreferrer")}><Download className="mr-2 h-4 w-4" /> APK</Button>
               {release.is_published ? <Button size="sm" variant="secondary" onClick={() => void unpublish(release)}>Unpublish</Button> : <Button size="sm" onClick={() => void publish(release)}>Publish</Button>}
+              <Button size="sm" variant="destructive" onClick={() => void deleteRelease(release)} aria-label={`Delete version ${release.version_name}`}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
             </div>
           </div>)}
       </CardContent></Card>
