@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { sanitizeHtml } from "@/utils/sanitize";
+import { shareText } from "@/utils/openExternalShareUrl";
 
 interface BlogPost {
   id: string;
@@ -60,25 +61,19 @@ const BlogPost = () => {
   };
 
   const handleShare = async (post: BlogPost) => {
-    const shareUrl = `${window.location.origin}/blog/${post.slug}`;
-    const shareData = {
-      title: post.title,
-      text: post.excerpt,
-      url: shareUrl,
-    };
+    const shareUrl = new URL(`/blog/${post.slug}`, window.location.origin).toString();
 
     try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-        toast.success("Article shared successfully!");
+      const shared = await shareText(post.title, post.excerpt, shareUrl);
+      if (shared) {
+        toast.success("Choose an app to share this article.");
       } else {
-        await navigator.clipboard.writeText(shareUrl);
-        toast.success("Link copied to clipboard!");
+        toast.error("Sharing is not available on this device. Please try again.");
       }
     } catch (error) {
-      if ((error as Error).name !== 'AbortError') {
-        console.error("Error sharing:", error);
-        toast.error("Failed to share article");
+      if ((error as Error).name !== "AbortError") {
+        console.error("Error sharing article:", error);
+        toast.error("Could not open the share menu. Please try again.");
       }
     }
   };
