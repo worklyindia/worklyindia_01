@@ -12,8 +12,8 @@ export const useNativeApp = () => {
 
   // Setup status bar
   const statusBar = useNativeStatusBar({
-    color: '#2563eb',
-    style: 'light',
+    color: '#ffffff',
+    style: 'dark',
   });
 
   // Setup keyboard
