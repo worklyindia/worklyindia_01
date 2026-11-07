@@ -12,6 +12,7 @@ import { calculateRiskScore, type RiskScoreResult } from '@/utils/calculateRiskS
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { getNetworkType } from '@/utils/networkOptimizer';
 import { useUserLocation } from '@/contexts/UserLocationContext';
+import { getNativeDeviceInfo, type NativeDeviceInfo } from '@/lib/nativeAppBridge';
 
 interface DeviceInfoSheetProps {
   isOpen: boolean;
@@ -119,6 +120,7 @@ const SectionHeader = ({ icon: Icon, title }: { icon: React.ElementType; title: 
 
 export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClose }) => {
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [nativeDeviceInfo, setNativeDeviceInfo] = useState<NativeDeviceInfo | null>(null);
   const [fingerprint, setFingerprint] = useState<string>('');
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [networkLoading, setNetworkLoading] = useState(false);
@@ -152,6 +154,7 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
     if (isOpen) {
       const info = getDeviceInfo();
       setDeviceInfo(info);
+      setNativeDeviceInfo(getNativeDeviceInfo());
       setAdditionalSignals(getAdditionalSignals());
       fetchNetworkAndSaveDeviceInfo(info);
       fetchLoginFrequency();
@@ -435,6 +438,34 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
                   <Badge className="text-[10px] h-5 bg-green-500/10 text-green-600 border-0">✅ None</Badge>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Native Android hardware details are provided by Android APIs, not limited WebView APIs. */}
+        {nativeDeviceInfo && (
+          <div>
+            <SectionHeader icon={Smartphone} title="Native Android Device Details" />
+            <div className="bg-muted/30 rounded-xl p-3">
+              <InfoRow label="Manufacturer" value={nativeDeviceInfo.manufacturer} />
+              <InfoRow label="Brand" value={nativeDeviceInfo.brand} />
+              <InfoRow label="Model" value={nativeDeviceInfo.model} />
+              <InfoRow label="Device" value={nativeDeviceInfo.device} />
+              <InfoRow label="Product" value={nativeDeviceInfo.product} />
+              <InfoRow label="Hardware" value={nativeDeviceInfo.hardware} />
+              <InfoRow label="Android Version" value={nativeDeviceInfo.androidVersion} />
+              <InfoRow label="Android API" value={String(nativeDeviceInfo.apiLevel)} />
+              <InfoRow label="Security Patch" value={nativeDeviceInfo.securityPatch} />
+              <InfoRow label="Supported CPU ABIs" value={nativeDeviceInfo.supportedAbis} />
+              <InfoRow label="Total RAM" value={nativeDeviceInfo.totalRamGb} />
+              <InfoRow label="Native Screen" value={nativeDeviceInfo.screenPixels} />
+              <InfoRow label="Screen Density" value={`${nativeDeviceInfo.screenDensityDpi} DPI`} />
+              {nativeDeviceInfo.batteryPercent !== null && (
+                <InfoRow label="Native Battery" value={`${nativeDeviceInfo.batteryPercent}%`} />
+              )}
+              <InfoRow label="App Version" value={nativeDeviceInfo.appVersion} />
+              <InfoRow label="App Build" value={String(nativeDeviceInfo.appVersionCode)} />
+              <InfoRow label="Device Locale" value={nativeDeviceInfo.locale} />
             </div>
           </div>
         )}
