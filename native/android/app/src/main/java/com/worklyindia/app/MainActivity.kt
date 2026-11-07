@@ -24,6 +24,7 @@ import android.provider.MediaStore
 import android.util.Base64
 import android.view.WindowManager
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.ViewCompat
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -70,7 +71,7 @@ class MainActivity : Activity() {
         // Let Android lay out the app below the real system status bar.
         // Avoid manual inset padding: it can create a second, visible gap above the website.
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         window.statusBarColor = android.graphics.Color.WHITE
         window.navigationBarColor = android.graphics.Color.WHITE
@@ -142,26 +143,7 @@ class MainActivity : Activity() {
                     view.evaluateJavascript("""
                         (function() {
                           document.documentElement.dataset.worklyNative = 'android';
-                          // Keep the native splash visible until the SPA has rendered and painted.
-                          var readySent = false;
-                          var readyPoll = null;
-                          function markWebsiteReady() {
-                            if (readySent) return;
-                            readySent = true;
-                            if (readyPoll) clearInterval(readyPoll);
-                            if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteReady) {
-                              window.WorklyAndroid.onWebsiteReady();
-                            }
-                          }
-                          function checkWebsiteReady() {
-                            var appRoot = document.getElementById('root');
-                            if (document.readyState !== 'complete' || !appRoot || !appRoot.firstElementChild) return;
-                            Promise.resolve(document.fonts && document.fonts.ready).catch(function() {}).then(function() {
-                              requestAnimationFrame(function() { requestAnimationFrame(markWebsiteReady); });
-                            });
-                          }
-                          readyPoll = setInterval(checkWebsiteReady, 120);
-                          checkWebsiteReady();
+                          // The React app calls the native bridge only after its critical data is ready.
                           if (window.__worklyNativeDownloadHandlerInstalled) return;
                           window.__worklyNativeDownloadHandlerInstalled = true;
                           document.addEventListener('click', function(event) {
@@ -275,10 +257,18 @@ class MainActivity : Activity() {
             }
         }
 
-        // Let Android fit the WebView between the status and navigation bars.
-        // Do not add CSS/native safe-area padding a second time.
+        // Android 15 enforces edge-to-edge for targetSdk 35. Apply system-bar
+        // insets exactly once to the root container so the WebView starts directly
+        // below the status bar and ends above the navigation bar.
         rootLayout = FrameLayout(this)
         rootLayout.setBackgroundColor(Color.WHITE)
+        ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            WindowInsetsCompat.CONSUMED
+        }
         rootLayout.addView(webView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
@@ -289,6 +279,7 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
         setContentView(rootLayout)
+        ViewCompat.requestApplyInsets(rootLayout)
         registerNetworkListener()
         val target = intent.getStringExtra("notification_url")
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
@@ -308,7 +299,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
         val logo = ImageView(this).apply {
-            setImageResource(R.drawable.ic_workly_launcher_image)
+            setImageResource(R.drawable.ic_workly_launcher)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Workly India app logo"
         }
