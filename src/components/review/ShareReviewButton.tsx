@@ -27,12 +27,10 @@ export const ShareReviewButton = ({ userName, rating, reviewText }: ShareReviewB
           description: "Choose WhatsApp, Messages or another app to share this review"
         });
       } else {
-        // Fallback for browsers without a share target.
-        await navigator.clipboard.writeText(shareText);
-        toast({
-          title: "Review link copied!",
-          description: "Share link has been copied to clipboard"
-        });
+        // A Share button must never silently behave like Copy. On browsers
+        // without Web Share, open WhatsApp as a real share destination.
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
       }
     } catch (error) {
       console.error('Error sharing:', error);
