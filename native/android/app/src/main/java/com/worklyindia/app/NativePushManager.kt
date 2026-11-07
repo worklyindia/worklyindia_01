@@ -27,7 +27,7 @@ import java.net.URLEncoder
 object NativePushManager {
     private const val SUPABASE_URL = "https://jubwzelupbntbetpajqb.supabase.co"
     private const val SUPABASE_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
-    private const val CHANNEL_ID = "workly_updates"
+    private const val CHANNEL_ID = "workly_updates_v2"
 
     /**
      * Native Firebase config is loaded from the same public push-config action
@@ -235,8 +235,12 @@ object NativePushManager {
         } else {
             emptyList()
         }
-        val alreadyActive = activeNotifications.any { it.tag == tag && it.id == tag.hashCode() }
-        val badgeCount = (activeNotifications.size + if (alreadyActive) 0 else 1).coerceAtLeast(1)
+        // Count only Workly notifications in the current badge-enabled channel.
+        // A new channel ID is used so Android recreates the channel with badges
+        // enabled even on devices where the old channel was created with badges off.
+        val worklyActive = activeNotifications.filter { it.notification.channelId == CHANNEL_ID }
+        val alreadyActive = worklyActive.any { it.tag == tag && it.id == tag.hashCode() }
+        val badgeCount = (worklyActive.size + if (alreadyActive) 0 else 1).coerceAtLeast(1)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setNumber(badgeCount)
