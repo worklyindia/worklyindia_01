@@ -329,7 +329,7 @@ object NativePushManager {
         // FCM carries up to two action descriptors as a JSON string in data.actions.
         runCatching {
             val actions = org.json.JSONArray(data["actions"] ?: "[]")
-            for (index in 0 until minOf(actions.length(), 2)) {
+            for (index in 0 until minOf(actions.length(), 3)) {
                 val action = actions.optJSONObject(index) ?: continue
                 val label = action.optString("title").takeIf { it.isNotBlank() } ?: continue
                 val actionUrl = action.optString("url").takeIf {
