@@ -49,6 +49,7 @@ import { useNativeStatusBar } from "@/hooks/useNativeStatusBar";
 import { useNativeKeyboard } from "@/hooks/useNativeKeyboard";
 import { useNativeBackButton } from "@/hooks/useNativeBackButton";
 import { useNativeNetwork } from "@/hooks/useNativeNetwork";
+import { isWorklyAndroidApp } from "@/lib/nativeAppBridge";
 
 const isBandwidthSaverMode = import.meta.env.VITE_BANDWIDTH_SAVER !== 'false';
 
@@ -350,7 +351,7 @@ const AppContent = () => {
   
   // Initialize PWA install prompt listener
   useEffect(() => {
-    initPwaInstallListener();
+    if (!isWorklyAndroidApp()) initPwaInstallListener();
   }, []);
 
   // Clean up expired jobs cache entries (older than 24h) on app start so old
@@ -426,7 +427,7 @@ const AppContent = () => {
     <JobStatusNotificationWrapper>
       <BrandMetaTags />
       {!isBandwidthSaverMode && <JobRecommendationNotifier />}
-      {!isBandwidthSaverMode && <InstallPromptBanner />}
+      {!isBandwidthSaverMode && !isWorklyAndroidApp() && <InstallPromptBanner />}
       
       <RoutePreserver />
       <PendingReferralApplier />
