@@ -77,11 +77,8 @@ class MainActivity : Activity() {
         if (requestCode == REQUEST_FILE_CHOOSER) {
             val callback = pendingFileChooserCallback
             pendingFileChooserCallback = null
-            val results = if (resultCode == RESULT_OK && data?.data != null) {
-                arrayOf(data.data!!)
-            } else {
-                WebChromeClient.FileChooserParams.parseResult(resultCode, data)
-            }
+            // parseResult preserves both single-file and multi-select ClipData results.
+            val results = WebChromeClient.FileChooserParams.parseResult(resultCode, data)
             callback?.onReceiveValue(results)
         }
     }
@@ -310,15 +307,9 @@ class MainActivity : Activity() {
                 // the files the user selects; broad storage permissions are not needed.
                 pendingFileChooserCallback?.onReceiveValue(null)
                 pendingFileChooserCallback = filePathCallback
-                val acceptTypes = fileChooserParams.acceptTypes
-                    .flatMap { it.split(",") }
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() && it != "*/*" }
-                    .distinct()
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = if (acceptTypes.size == 1) acceptTypes.first() else "*/*"
-                    if (acceptTypes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes.toTypedArray())
+                // Let WebView construct the picker intent so accept types,
+                // camera capture hints and multiple-selection mode are respected.
+                val intent = fileChooserParams.createIntent().apply {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 return try {
