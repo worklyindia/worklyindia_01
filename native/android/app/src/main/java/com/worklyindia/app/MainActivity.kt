@@ -149,8 +149,9 @@ class MainActivity : Activity() {
                           if (!window.__worklyNativeThemeSyncInstalled) {
                             window.__worklyNativeThemeSyncInstalled = true;
                             var applyNativeTheme = function() {
-                              var dark = window.matchMedia &&
-                                window.matchMedia('(prefers-color-scheme: dark)').matches;
+                              var dark = window.WorklyAndroid && window.WorklyAndroid.isSystemDarkMode
+                                ? window.WorklyAndroid.isSystemDarkMode()
+                                : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
                               if (window.WorklyAndroid && window.WorklyAndroid.setSystemTheme) {
                                 window.WorklyAndroid.setSystemTheme(!!dark);
                               }
@@ -533,6 +534,12 @@ class MainActivity : Activity() {
                 window.statusBarColor = parsed
                 WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkIcons
             }
+        }
+
+        @JavascriptInterface
+        fun isSystemDarkMode(): Boolean {
+            val nightMode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+            return nightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
         }
 
         @JavascriptInterface
