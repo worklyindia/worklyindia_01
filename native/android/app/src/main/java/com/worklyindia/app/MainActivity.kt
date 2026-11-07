@@ -2,6 +2,7 @@ package com.worklyindia.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.ContentValues
 import android.app.DownloadManager
@@ -45,7 +46,7 @@ import com.google.android.play.core.install.InstallState
 import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.InstallStatus
 import com.google.android.play.core.install.model.UpdateAvailability
-import com.google.android.play.core.appupdate.AppUpdateType
+import com.google.android.play.core.install.model.AppUpdateType
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -60,6 +61,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
@@ -79,6 +82,49 @@ class MainActivity : Activity() {
     private lateinit var appUpdateManager: AppUpdateManager
     private var updateDialogVisible = false
     private var updateCheckInProgress = false
+    private var websiteUpdateCheckInProgress = false
+    private var websiteUpdateDialogVisible = false
+    private var websiteUpdateDismissedThisSession = false
+    private var pendingWebsiteInstallUri: Uri? = null
+    private var websiteDownloadId: Long = -1L
+    private var websiteDownloadRelease: JSONObject? = null
+    private val isPlayStoreInstall: Boolean by lazy {
+        runCatching {
+            val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                packageManager.getInstallSourceInfo(packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getInstallerPackageName(packageName)
+            }
+            installer == "com.android.vending"
+        }.getOrDefault(false)
+    }
+    private val websiteDownloadReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+            val completedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
+            if (completedId != websiteDownloadId) return
+            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val query = DownloadManager.Query().setFilterById(completedId)
+            manager.query(query).use { cursor ->
+                if (!cursor.moveToFirst()) return
+                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                    val uri = manager.getUriForDownloadedFile(completedId)
+                    if (uri != null) {
+                        pendingWebsiteInstallUri = uri
+                        runOnUiThread { continueWebsiteInstallIfAllowed() }
+                    } else {
+                        runOnUiThread { Toast.makeText(this@MainActivity, "Update download could not be opened. Please try again.", Toast.LENGTH_LONG).show() }
+                    }
+                } else {
+                    val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                    android.util.Log.e("WorklyAppUpdate", "Website APK download failed: $reason")
+                    runOnUiThread { Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show() }
+                }
+            }
+        }
+    }
     private val appUpdateListener = InstallStateUpdatedListener { state ->
         if (state.installStatus() == InstallStatus.DOWNLOADED) {
             runOnUiThread { showUpdateDownloadedDialog() }
@@ -107,6 +153,11 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         appUpdateManager = AppUpdateManagerFactory.create(this)
         appUpdateManager.registerListener(appUpdateListener)
+        ContextCompat.registerReceiver(
+            this, websiteDownloadReceiver,
+            android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         // Let Android lay out the app below the real system status bar.
         // Avoid manual inset padding: it can create a second, visible gap above the website.
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -1267,7 +1318,141 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (::appUpdateManager.isInitialized) checkForPlayStoreUpdate()
+        if (pendingWebsiteInstallUri != null) {
+            continueWebsiteInstallIfAllowed()
+        } else if (::appUpdateManager.isInitialized) {
+            if (isPlayStoreInstall) checkForPlayStoreUpdate() else checkForWebsiteRelease()
+        }
+    }
+
+    // Direct APK installs are updated from the public Workly release feed.
+    // Play Store installs are deliberately kept on Google's official Play Core flow.
+    private fun checkForWebsiteRelease() {
+        if (websiteUpdateCheckInProgress || websiteUpdateDialogVisible ||
+            websiteUpdateDismissedThisSession || isFinishing || isDestroyed) return
+        websiteUpdateCheckInProgress = true
+        activityScope.launch(Dispatchers.IO) {
+            var release: JSONObject? = null
+            try {
+                val endpoint = URL(
+                    "https://jubwzelupbntbetpajqb.supabase.co/rest/v1/android_app_releases" +
+                        "?select=id,version_code,version_name,apk_path,release_notes,min_supported_version_code" +
+                        "&is_published=eq.true&order=version_code.desc&limit=1"
+                )
+                val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 12000
+                    readTimeout = 12000
+                    setRequestProperty("apikey", "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o")
+                    setRequestProperty("Authorization", "Bearer sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o")
+                    setRequestProperty("Accept", "application/json")
+                }
+                try {
+                    if (connection.responseCode in 200..299) {
+                        val body = connection.inputStream.bufferedReader().use { it.readText() }
+                        val rows = org.json.JSONArray(body)
+                        if (rows.length() > 0) release = rows.getJSONObject(0)
+                    } else {
+                        android.util.Log.w("WorklyAppUpdate", "Release feed HTTP " + connection.responseCode)
+                    }
+                } finally { connection.disconnect() }
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyAppUpdate", "Could not check website APK release feed", error)
+            }
+            runOnUiThread {
+                websiteUpdateCheckInProgress = false
+                val latest = release ?: return@runOnUiThread
+                val latestCode = latest.optInt("version_code", 0)
+                if (latestCode > BuildConfig.VERSION_CODE) showWebsiteUpdateDialog(latest)
+            }
+        }
+    }
+
+    private fun showWebsiteUpdateDialog(release: JSONObject) {
+        if (websiteUpdateDialogVisible || isFinishing || isDestroyed) return
+        val versionName = release.optString("version_name", "New version")
+        val notes = release.optString("release_notes", "").trim()
+        val minimumCode = release.optInt("min_supported_version_code", 1)
+        val mandatory = BuildConfig.VERSION_CODE < minimumCode
+        val message = buildString {
+            append("A new Workly India version is available: ")
+            append(versionName)
+            if (notes.isNotBlank()) append("\\n\\nWhat's new:\\n").append(notes)
+            if (mandatory) append("\\n\\nPlease update to continue using Workly India.")
+        }
+        websiteUpdateDialogVisible = true
+        val builder = AlertDialog.Builder(this)
+            .setTitle("Update Workly India")
+            .setMessage(message)
+            .setCancelable(false)
+            .setPositiveButton("Update now") { dialog, _ ->
+                websiteUpdateDialogVisible = false
+                dialog.dismiss()
+                downloadWebsiteUpdate(release)
+            }
+        if (!mandatory) {
+            builder.setNegativeButton("Later") { dialog, _ ->
+                websiteUpdateDialogVisible = false
+                websiteUpdateDismissedThisSession = true
+                dialog.dismiss()
+            }
+        }
+        builder.show()
+    }
+
+    private fun downloadWebsiteUpdate(release: JSONObject) {
+        val apkPath = release.optString("apk_path", "").trim()
+        if (apkPath.isBlank() || apkPath.startsWith("/") || apkPath.contains("..")) {
+            Toast.makeText(this, "Update file is not configured correctly.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val encodedPath = apkPath.split("/").joinToString("/") {
+            java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+        }
+        val apkUrl = "https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/android-app-releases/" + encodedPath
+        try {
+            val request = DownloadManager.Request(Uri.parse(apkUrl))
+                .setTitle("Workly India update")
+                .setDescription("Downloading version " + release.optString("version_name"))
+                .setMimeType("application/vnd.android.package-archive")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(false)
+                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "workly-india-update.apk")
+            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            websiteDownloadRelease = release
+            websiteDownloadId = manager.enqueue(request)
+            Toast.makeText(this, "Update download started.", Toast.LENGTH_SHORT).show()
+        } catch (error: Exception) {
+            android.util.Log.e("WorklyAppUpdate", "Could not start APK download", error)
+            Toast.makeText(this, "Could not download the update. Please try again.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun continueWebsiteInstallIfAllowed() {
+        val apkUri = pendingWebsiteInstallUri ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            val settingsIntent = Intent(
+                android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:" + packageName)
+            )
+            runCatching { startActivity(settingsIntent) }.onFailure {
+                Toast.makeText(this, "Allow Workly India to install updates in Android settings.", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        try {
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(installIntent)
+            pendingWebsiteInstallUri = null
+        } catch (error: Exception) {
+            android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
+            Toast.makeText(this, "Could not open the installer. Please try again.", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun checkForPlayStoreUpdate() {
