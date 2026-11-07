@@ -38,6 +38,7 @@ import { JobStatusNotificationWrapper } from "@/components/JobStatusNotification
 import { JobRecommendationNotifier } from "@/components/JobRecommendationNotifier";
 import { useLiveSessionTracking } from "@/hooks/useLiveSessionTracking";
 import { InstallPromptBanner } from "@/components/InstallPromptBanner";
+import { NotificationPermissionPrompt } from "@/components/NotificationPermissionPrompt";
 
 import { VPNGuard } from "@/components/VPNGuard";
 import SocialTokenCapture from "@/components/social/SocialTokenCapture";
@@ -1491,6 +1492,7 @@ const App = () => {
             <AuthProvider>
               <EmployerAuthProvider>
                 <SocialTokenCapture />
+                <NotificationPermissionPrompt autoShow />
                 <UserLocationProvider>
                     <VPNGuard>
                       <SafeErrorBoundary context="Main Application Content">
