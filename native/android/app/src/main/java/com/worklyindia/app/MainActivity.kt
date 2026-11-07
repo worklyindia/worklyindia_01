@@ -630,20 +630,53 @@ class MainActivity : Activity() {
             }
             elevation = dp(10).toFloat()
         }
-        val iconWrap = TextView(this).apply {
-            text = "⌁"
-            textSize = 42f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            this.background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(Color.rgb(22, 163, 122))
+        // Animated Wi-Fi symbol: three clean signal arcs and a connection dot.
+        val iconWrap = object : android.view.View(this) {
+            private val signalPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = dp(4).toFloat()
+                strokeCap = android.graphics.Paint.Cap.ROUND
+            }
+            private val dotPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = android.graphics.Paint.Style.FILL
+            }
+            override fun onDraw(canvas: android.graphics.Canvas) {
+                super.onDraw(canvas)
+                val cx = width / 2f
+                val cy = height / 2f + dp(8)
+                val radii = floatArrayOf(dp(29).toFloat(), dp(19).toFloat(), dp(9).toFloat())
+                radii.forEach { radius ->
+                    val bounds = android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+                    canvas.drawArc(bounds, 225f, 90f, false, signalPaint)
+                }
+                canvas.drawCircle(cx, cy + dp(2), dp(3.5f).toFloat(), dotPaint)
+            }
+            init {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(Color.rgb(22, 163, 122))
+                }
+                contentDescription = "Animated Wi-Fi connection icon"
             }
         }
         card.addView(iconWrap, LinearLayout.LayoutParams(dp(88), dp(88)).apply {
             gravity = Gravity.CENTER
             bottomMargin = dp(22)
         })
+        android.animation.ObjectAnimator.ofFloat(iconWrap, "scaleX", 1f, 1.09f, 1f).apply {
+            duration = 1500
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
+        android.animation.ObjectAnimator.ofFloat(iconWrap, "scaleY", 1f, 1.09f, 1f).apply {
+            duration = 1500
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
         val eyebrow = TextView(this).apply {
             text = "CONNECTION INTERRUPTED"
             textSize = 11f
