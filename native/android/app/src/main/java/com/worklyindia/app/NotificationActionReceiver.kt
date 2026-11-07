@@ -23,7 +23,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     }
                     putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        putExtra(NotificationManager.EXTRA_CHANNEL_ID, "workly_updates_v2")
+                        putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, "workly_updates_v2")
                     }
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
