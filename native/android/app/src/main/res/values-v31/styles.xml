@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="WorklyLaunchTheme" parent="@android:style/Theme.SplashScreen">
+        <item name="android:windowSplashScreenBackground">#050D1D</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_workly_launcher_image</item>
+        <item name="android:windowSplashScreenAnimationDuration">250</item>
+        <item name="android:postSplashScreenTheme">@android:style/Theme.Material.Light.NoActionBar</item>
+    </style>
+</resources>
