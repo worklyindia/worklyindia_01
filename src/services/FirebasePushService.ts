@@ -38,6 +38,7 @@ declare global {
       registerPushNotifications?: () => void;
       registerPushNotificationsWithSession?: (rawSession: string) => void;
       syncAuthSession?: (raw: string) => void;
+      registerPushNotificationsWithSessionAndConfig?: (rawSession: string, rawFirebaseConfig: string) => void;
     };
     __WORKLY_NATIVE_ANDROID__?: boolean;
   }
@@ -452,8 +453,18 @@ export class FirebasePushService {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       if (!userId || !sessionData.session) return false;
-      if (!window.WorklyAndroid?.registerPushNotificationsWithSession &&
+      if (!window.WorklyAndroid?.registerPushNotificationsWithSessionAndConfig &&
+          !window.WorklyAndroid?.registerPushNotificationsWithSession &&
           !window.WorklyAndroid?.registerPushNotifications) return false;
+
+      // Fetch Firebase config with the active Supabase session and pass it to
+      // Android. This avoids the native app making a second unauthenticated
+      // Edge Function request that may be rejected by function auth settings.
+      const configResponse = await this.getConfig();
+      if (!configResponse?.configured || !configResponse.config) {
+        console.error('Native Android push setup: Firebase config is unavailable');
+        return false;
+      }
       // Android reports the actual FCM/PostgREST result. This avoids treating
       // an optimistic permission grant or a stale DB row as a successful subscribe.
       const registration = await new Promise<boolean>((resolve) => {
@@ -474,7 +485,12 @@ export class FirebasePushService {
         window.addEventListener('workly-native-push-registration-complete', onComplete, { once: true });
         try {
           const bridge = window.WorklyAndroid!;
-          if (bridge.registerPushNotificationsWithSession) {
+          if (bridge.registerPushNotificationsWithSessionAndConfig) {
+            bridge.registerPushNotificationsWithSessionAndConfig(
+              JSON.stringify(sessionData.session),
+              JSON.stringify(configResponse.config),
+            );
+          } else if (bridge.registerPushNotificationsWithSession) {
             bridge.registerPushNotificationsWithSession(JSON.stringify(sessionData.session));
           } else {
             // Compatibility with already-installed APKs that expose the older bridge.
