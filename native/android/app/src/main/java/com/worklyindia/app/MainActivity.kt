@@ -302,7 +302,7 @@ class MainActivity : Activity() {
             setPadding(32, 32, 32, 32)
         }
         val logo = ImageView(this).apply {
-            setImageResource(R.drawable.ic_workly_launcher)
+            setImageResource(R.drawable.ic_workly_launcher_image)
             scaleType = ImageView.ScaleType.FIT_CENTER
             background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.RECTANGLE
