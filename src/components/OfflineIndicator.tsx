@@ -1,24 +1,9 @@
 import { useEffect, useState } from "react";
 import { WifiOff, RefreshCw } from "lucide-react";
+import { useNativeNetwork } from "@/hooks/useNativeNetwork";
 
 const OfflineIndicator = () => {
-  const [isOnline, setIsOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") setIsOnline(navigator.onLine);
-    };
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, []);
+  const { isOnline } = useNativeNetwork();
 
   if (isOnline) return null;
   return (
