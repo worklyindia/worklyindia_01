@@ -28,11 +28,30 @@ export const NotificationPermissionPrompt: React.FC<NotificationPermissionPrompt
   const isAuthenticated = user || employerUser;
 
   useEffect(() => {
+    let cancelled = false;
     const checkPermissionStatus = async () => {
-      if (!isAuthenticated) return;
-      
+      const isNativeApp = FirebasePushService.isNativeAndroidApp();
+      if (!isAuthenticated && !isNativeApp) return;
+
       const status = await FirebasePushService.checkPermissionStatus();
+      if (cancelled) return;
       setPermissionStatus(status);
+
+      // Native Android can show its runtime permission dialog at app startup.
+      // Browser permission must remain behind an explicit user tap.
+      if (isNativeApp && status === 'default') {
+        window.setTimeout(async () => {
+          if (cancelled) return;
+          const permission = await FirebasePushService.ensurePermission();
+          if (cancelled) return;
+          setPermissionStatus(permission);
+          if (permission === 'granted' && isAuthenticated) {
+            await FirebasePushService.showNotificationPrompt();
+          }
+        }, 1200);
+        return;
+      }
+      if (!isAuthenticated) return;
       
       // Check if user has dismissed the prompt recently
       const dismissedData = localStorage.getItem(NOTIFICATION_STORAGE_KEY);
@@ -61,6 +80,7 @@ export const NotificationPermissionPrompt: React.FC<NotificationPermissionPrompt
     };
 
     checkPermissionStatus();
+    return () => { cancelled = true; };
   }, [isAuthenticated, autoShow]);
 
   const handleEnableNotifications = async () => {
