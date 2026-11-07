@@ -115,13 +115,13 @@ jobs:
           WORKLY_UPLOAD_KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
           WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
         run: |
-          gradle assembleRelease bundleRelease --stacktrace
+          gradle assembleWebsiteRelease bundlePlayStoreRelease --stacktrace
 
       - name: Rename release files for users
         run: |
           set -euo pipefail
-          APK_FILE=$(find native/android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)
-          AAB_FILE=$(find native/android/app/build/outputs/bundle/release -maxdepth 1 -type f -name '*.aab' -print -quit)
+          APK_FILE=$(find native/android/app/build/outputs/apk/website/release -maxdepth 1 -type f -name '*.apk' -print -quit)
+          AAB_FILE=$(find native/android/app/build/outputs/bundle/playStoreRelease -maxdepth 1 -type f -name '*.aab' -print -quit)
           if [ -z "$APK_FILE" ] || [ -z "$AAB_FILE" ]; then
             echo "::error::Release output missing. APK='$APK_FILE' AAB='$AAB_FILE'"
             find native/android/app/build/outputs -maxdepth 5 -type f -print 2>/dev/null || true
