@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AppLoadingSpinner from "@/components/AppLoadingSpinner";
 import OfflineIndicator from "@/components/OfflineIndicator";
+import { NotificationPermissionPrompt } from "@/components/NotificationPermissionPrompt";
 import SlowNetworkBanner from "@/components/SlowNetworkBanner";
 import ServiceUnavailableOverlay from "@/components/ServiceUnavailableOverlay";
 import App from "./App.tsx";
@@ -92,6 +93,7 @@ root.render(
             </Suspense>
             <SlowNetworkBanner />
             <OfflineIndicator />
+            <NotificationPermissionPrompt autoShow />
             <ServiceUnavailableOverlay />
             <Toaster />
           </ThemeProvider>
