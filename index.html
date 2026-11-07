@@ -859,7 +859,7 @@
           var jobs = [];
           if (window.caches && caches.keys) {
             jobs.push(caches.keys().then(function (keys) {
-              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              return Promise.all(keys.filter(function (k) { return k.indexOf('workly-offline-shell-') !== 0 && k.indexOf('workly-static-assets-') !== 0; }).map(function (k) { return caches.delete(k); }));
             }).catch(function () {}));
           }
           if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
@@ -890,9 +890,15 @@
         });
 
         // Only the Firebase messaging worker may own the root scope, otherwise it
-        // gets replaced and push notifications lose their image/actions.
+        // gets replaced and push images and action buttons lose functionality.
         if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
           window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+              scope: '/',
+              updateViaCache: 'none'
+            }).catch(function (error) {
+              console.warn('[SW] Offline worker registration failed:', error);
+            });
             navigator.serviceWorker.getRegistrations().then(function (rs) {
               rs.forEach(function (r) {
                 var url = (r.active && r.active.scriptURL) || (r.installing && r.installing.scriptURL) || '';
