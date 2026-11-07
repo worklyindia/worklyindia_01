@@ -99,6 +99,7 @@ object NativePushManager {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Jobs, applications, messages and account updates"
+                setShowBadge(true)
                 enableVibration(true)
             }
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
