@@ -1377,8 +1377,8 @@ class MainActivity : Activity() {
         val message = buildString {
             append("A new Workly India version is available: ")
             append(versionName)
-            if (notes.isNotBlank()) append("\\n\\nWhat's new:\\n").append(notes)
-            if (mandatory) append("\\n\\nPlease update to continue using Workly India.")
+            if (notes.isNotBlank()) append("\n\nWhat's new:\n").append(notes)
+            if (mandatory) append("\n\nPlease update to continue using Workly India.")
         }
         websiteUpdateDialogVisible = true
         val builder = AlertDialog.Builder(this)
