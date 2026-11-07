@@ -281,6 +281,7 @@ const SignupOtpSettings = lazyRetry(() => import("./pages/owner-portal/SignupOtp
 const InterviewAnalytics = lazyRetry(() => import("./pages/owner-portal/InterviewAnalytics"));
 const SupabaseUsageMonitor = lazyRetry(() => import("./pages/owner-portal/SupabaseUsageMonitor"));
 const StorageManager = lazyRetry(() => import("./pages/owner-portal/StorageManager"));
+const AndroidAppUpdates = lazyRetry(() => import("./pages/owner-portal/AndroidAppUpdates"));
 const SecretsManager = lazyRetry(() => import("./pages/owner-portal/SecretsManager"));
 
 const GoogleIntegrations = lazyRetry(() => import("./pages/owner-portal/GoogleIntegrations"));
@@ -996,6 +997,12 @@ const AppContent = () => {
             <SupabaseUsageMonitor />
           </ProtectedPermissionRoute>
         } />
+        <Route path="/owner-portal/android-app-updates" element={
+          <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
+            <AndroidAppUpdates />
+          </ProtectedPermissionRoute>
+        } />
+
         <Route path="/owner-portal/storage" element={
           <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
             <StorageManager />
