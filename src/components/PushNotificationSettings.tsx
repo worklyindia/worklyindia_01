@@ -65,18 +65,9 @@ export const PushNotificationSettings: React.FC = () => {
       const granted = Boolean((event as CustomEvent<{ granted?: boolean }>).detail?.granted);
       const permission = await FirebasePushService.checkPermissionStatus();
       setPermissionStatus(permission);
-      if (granted && permission === 'granted') {
-        setIsLoading(true);
-        try {
-          const success = await FirebasePushService.requestPermissionAndSaveToken();
-          setIsSubscribed(success);
-          if (success) toast({ title: 'Notifications on', description: 'This Android device is subscribed.' });
-          else toast({ title: 'Almost there', description: 'Android permission is allowed, but device registration has not completed yet.', variant: 'destructive' });
-        } finally {
-          setIsLoading(false);
-          await loadSettings();
-        }
-      } else {
+      // The active subscribe request awaits this event and continues into FCM
+      // registration itself. Do not start a second registration here.
+      if (!granted || permission !== 'granted') {
         await loadSettings();
       }
     };
