@@ -680,11 +680,13 @@ class MainActivity : Activity() {
             isClickable = true
             isFocusable = true
             contentDescription = "Check internet connection"
-            setOnClickListener {
+            setOnClickListener { clickedView ->
                 if (hasInternetConnection()) {
                     message.text = "Internet connection detected. Loading Workly India…"
-                    retry.text = "Connecting…"
-                    retry.isEnabled = false
+                    (clickedView as? TextView)?.apply {
+                        text = "Connecting…"
+                        isEnabled = false
+                    }
                     showStartupLoading()
                     hideOfflineScreen()
                     webView.loadUrl(lastLoadedUrl)
