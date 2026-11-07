@@ -394,7 +394,41 @@ export class FirebasePushService {
    * a live user gesture. That is why this is separate from token saving.
    */
   static async ensurePermission(): Promise<'granted' | 'denied' | 'default'> {
-    if (this.isNativeAndroid()) return this.checkPermissionStatus();
+    if (this.isNativeAndroid()) {
+      const current = await this.checkPermissionStatus();
+      if (current === 'granted') return 'granted';
+      const bridge = window.WorklyAndroid;
+      if (!bridge?.requestNotificationPermission) return current;
+
+      // Android 13+ asks through the native runtime permission dialog. Wait for
+      // MainActivity's permission-result event instead of treating the initial
+      // synchronous "request started" false return as a denial.
+      return await new Promise((resolve) => {
+        let settled = false;
+        const finish = (value: 'granted' | 'denied' | 'default') => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener('workly-native-notification-permission', onResult);
+          window.clearTimeout(timeout);
+          resolve(value);
+        };
+        const onResult = (event: Event) => {
+          const granted = Boolean((event as CustomEvent<{ granted?: boolean }>).detail?.granted);
+          finish(granted ? 'granted' : 'denied');
+        };
+        const timeout = window.setTimeout(() => {
+          void this.checkPermissionStatus().then((status) => finish(status));
+        }, 45000);
+        window.addEventListener('workly-native-notification-permission', onResult, { once: true });
+        try {
+          const alreadyGranted = bridge.requestNotificationPermission?.() === true;
+          if (alreadyGranted) finish('granted');
+        } catch (error) {
+          console.warn('🔔 Native Android permission request failed:', error);
+          finish('default');
+        }
+      });
+    }
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     if (Notification.permission === 'granted') return 'granted';
     if (Notification.permission === 'denied') return 'denied';
