@@ -686,12 +686,15 @@ export class FirebasePushService {
 
   static async isSubscribed(): Promise<boolean> {
     if (this.isNativeAndroid()) {
-      if (!window.WorklyAndroid!.isNotificationPermissionGranted!()) return false;
+      const permission = await this.checkPermissionStatus();
+      if (permission !== 'granted') return false;
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       if (!userId) return false;
-      const { data } = await supabase.from('push_subscriptions').select('fcm_token').eq('user_id', userId).eq('platform', 'android').eq('enabled', true).maybeSingle();
-      return Boolean(data?.fcm_token);
+      const { data, error } = await supabase.from('push_subscriptions')
+        .select('fcm_token').eq('user_id', userId).eq('platform', 'android')
+        .eq('enabled', true).maybeSingle();
+      return !error && Boolean(data?.fcm_token);
     }
     if (typeof window === 'undefined' || !('Notification' in window)) return false;
     if (Notification.permission !== 'granted') return false;
