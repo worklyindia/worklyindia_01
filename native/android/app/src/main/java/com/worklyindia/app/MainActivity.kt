@@ -441,6 +441,8 @@ class MainActivity : Activity() {
                 val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
                 val batteryLevel = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
                 val appInfo = packageManager.getPackageInfo(packageName, 0)
+                @Suppress("DEPRECATION")
+                val appVersionCode = if (Build.VERSION.SDK_INT >= 28) appInfo.longVersionCode else appInfo.versionCode.toLong()
                 JSONObject()
                     .put("manufacturer", Build.MANUFACTURER.orEmpty().ifBlank { "Unknown" })
                     .put("brand", Build.BRAND.orEmpty().ifBlank { "Unknown" })
@@ -457,7 +459,7 @@ class MainActivity : Activity() {
                     .put("screenDensityDpi", metrics.densityDpi)
                     .put("batteryPercent", if (batteryLevel in 0..100) batteryLevel else JSONObject.NULL)
                     .put("appVersion", appInfo.versionName ?: "Unknown")
-                    .put("appVersionCode", if (Build.VERSION.SDK_INT >= 28) appInfo.longVersionCode else @Suppress("DEPRECATION") appInfo.versionCode.toLong())
+                    .put("appVersionCode", appVersionCode)
                     .put("locale", resources.configuration.locales[0].toLanguageTag())
                     .toString()
             }.getOrElse { error ->
