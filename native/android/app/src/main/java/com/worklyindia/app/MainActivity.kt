@@ -678,32 +678,36 @@ class MainActivity : Activity() {
             start()
         }
         val eyebrow = TextView(this).apply {
-            text = "CONNECTION INTERRUPTED"
+            text = "INTERNET CONNECTION"
             textSize = 11f
-            letterSpacing = 0.12f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+            letterSpacing = 0.14f
             setTextColor(Color.rgb(22, 163, 122))
             gravity = Gravity.CENTER
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
         val heading = TextView(this).apply {
             text = "You're offline"
-            textSize = 26f
+            textSize = 28f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
             setTextColor(textColor)
             gravity = Gravity.CENTER
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setPadding(0, dp(10), 0, 0)
         }
         val message = TextView(this).apply {
-            text = "It looks like your internet connection is off. Turn on mobile data or connect to Wi-Fi to continue using Workly India."
+            text = "No internet connection detected. Turn on mobile data or connect to Wi-Fi, then check again. Wi-Fi without internet will not work."
             textSize = 15f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             setTextColor(mutedColor)
             gravity = Gravity.CENTER
-            setLineSpacing(dp(3).toFloat(), 1f)
-            setPadding(0, dp(12), 0, dp(24))
+            setLineSpacing(dp(4).toFloat(), 1.05f)
+            setPadding(0, dp(14), 0, dp(26))
         }
         val retry = TextView(this).apply {
             text = "Check connection"
             textSize = 16f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -747,11 +751,6 @@ class MainActivity : Activity() {
                         button.text = "Check connection"
                         button.isEnabled = true
                         message.text = "No internet connection detected. Turn on mobile data or connect to Wi-Fi, then tap Check connection again. Wi-Fi without internet will not work."
-                        Toast.makeText(
-                            this@MainActivity,
-                            "No internet connection yet. Please check mobile data or Wi-Fi.",
-                            Toast.LENGTH_LONG
-                        ).show()
                     }
                 }
             }
@@ -759,6 +758,7 @@ class MainActivity : Activity() {
         val footer = TextView(this).apply {
             text = "Workly India • Your next opportunity awaits"
             textSize = 12f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             setTextColor(mutedColor)
             gravity = Gravity.CENTER
             setPadding(0, dp(22), 0, 0)
