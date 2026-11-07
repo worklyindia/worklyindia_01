@@ -9,6 +9,10 @@ interface UserLocation {
   city: string | null;
   state: string | null;
   country: string | null;
+  fullAddress: string | null;
+  postcode: string | null;
+  district: string | null;
+  road: string | null;
   timestamp: number | null;
 }
 
@@ -51,6 +55,10 @@ export const UserLocationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       city: null,
       state: null,
       country: null,
+      fullAddress: null,
+      postcode: null,
+      district: null,
+      road: null,
       timestamp: null,
     };
   });
@@ -63,6 +71,10 @@ export const UserLocationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     longitude?: number;
     accuracy?: number;
     source?: 'gps' | 'ip' | 'browser-geo';
+    fullAddress?: string;
+    postcode?: string;
+    district?: string;
+    road?: string;
   }) => {
     const newLocation: UserLocation = {
       latitude: detectedLocation.latitude || null,
@@ -72,6 +84,10 @@ export const UserLocationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       city: detectedLocation.city,
       state: detectedLocation.state,
       country: detectedLocation.country,
+      fullAddress: detectedLocation.fullAddress || null,
+      postcode: detectedLocation.postcode || null,
+      district: detectedLocation.district || null,
+      road: detectedLocation.road || null,
       timestamp: Date.now(),
     };
 
