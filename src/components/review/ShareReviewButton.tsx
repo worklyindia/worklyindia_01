@@ -2,6 +2,7 @@ import { Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { SITE_CONFIG } from "@/config/siteConfig";
+import { shareText } from "@/utils/openExternalShareUrl";
 
 interface ShareReviewButtonProps {
   reviewId: string;
@@ -15,18 +16,18 @@ export const ShareReviewButton = ({ userName, rating, reviewText }: ShareReviewB
     const shareText = `Check out this ${rating}-star review on Workly India App!\n\n${userName} says: "${reviewText || "Great app!"}"\n\nDownload: ${SITE_CONFIG.PRODUCTION_DOMAIN}`;
 
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `${rating}-star Review - Workly India`,
-          text: shareText,
-          url: SITE_CONFIG.PRODUCTION_DOMAIN
-        });
+      const shared = await shareText(
+        `${rating}-star Review - Workly India`,
+        shareText,
+        SITE_CONFIG.PRODUCTION_DOMAIN
+      );
+      if (shared) {
         toast({
-          title: "Shared successfully!",
-          description: "Thanks for sharing this review"
+          title: "Share sheet opened",
+          description: "Choose WhatsApp, Messages or another app to share this review"
         });
       } else {
-        // Fallback: copy to clipboard
+        // Fallback for browsers without a share target.
         await navigator.clipboard.writeText(shareText);
         toast({
           title: "Review link copied!",
