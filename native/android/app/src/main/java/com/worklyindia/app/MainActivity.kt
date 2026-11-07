@@ -619,20 +619,37 @@ class MainActivity : Activity() {
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
-        // Use one seamless, edge-to-edge offline page rather than a small card
-        // floating in the middle of another screen.
+        // Reuse the same branded gradient and floating-orb background as the
+        // startup loading screen so both native states feel like one app.
+        val backgroundStart = if (dark) Color.rgb(5, 13, 29) else Color.rgb(244, 249, 255)
+        val backgroundMiddle = if (dark) Color.rgb(8, 27, 39) else Color.rgb(238, 250, 249)
+        val backgroundEnd = if (dark) Color.rgb(20, 14, 38) else Color.rgb(250, 247, 255)
         val overlay = FrameLayout(this).apply {
             background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                if (dark) intArrayOf(
-                    Color.rgb(3, 10, 25), Color.rgb(7, 22, 39), Color.rgb(12, 12, 31)
-                ) else intArrayOf(
-                    Color.rgb(241, 248, 255), Color.rgb(232, 249, 246), Color.rgb(247, 243, 255)
-                )
+                intArrayOf(backgroundStart, backgroundMiddle, backgroundEnd)
             )
             isClickable = true
             isFocusable = true
         }
+        fun addOfflineOrb(size: Int, color: Int, gravity: Int, xMargin: Int, yMargin: Int) {
+            val orb = android.view.View(this).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(color)
+                }
+                alpha = if (dark) 0.20f else 0.42f
+            }
+            overlay.addView(orb, FrameLayout.LayoutParams(dp(size), dp(size), gravity).apply {
+                leftMargin = dp(xMargin)
+                rightMargin = dp(xMargin)
+                topMargin = dp(yMargin)
+                bottomMargin = dp(yMargin)
+            })
+        }
+        addOfflineOrb(190, if (dark) Color.rgb(41, 91, 150) else Color.rgb(183, 218, 255), Gravity.TOP or Gravity.END, 0, -55)
+        addOfflineOrb(150, if (dark) Color.rgb(25, 116, 105) else Color.rgb(175, 239, 226), Gravity.BOTTOM or Gravity.START, 0, -35)
+        addOfflineOrb(82, if (dark) Color.rgb(91, 65, 139) else Color.rgb(222, 203, 255), Gravity.TOP or Gravity.START, 24, 105)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
