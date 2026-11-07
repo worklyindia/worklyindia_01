@@ -460,7 +460,8 @@ export class FirebasePushService {
       // Fetch Firebase config with the active Supabase session and pass it to
       // Android. This avoids the native app making a second unauthenticated
       // Edge Function request that may be rejected by function auth settings.
-      const configResponse = await this.getConfig();
+      const configResponse = await this.fetchConfig();
+      this.configPromise = Promise.resolve(configResponse);
       if (!configResponse?.configured || !configResponse.config) {
         console.error('Native Android push setup: Firebase config is unavailable');
         return false;
