@@ -59,11 +59,10 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       return;
     }
 
-    console.log('🌍 Starting IP location detection...');
+    cleanup();
     isDetectingRef.current = true;
     setState('detecting-ip');
     setError('');
-    cleanup();
     
     try {
       abortControllerRef.current = new AbortController();
@@ -144,11 +143,10 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       return;
     }
 
-    console.log('🎯 Starting exact location detection...');
+    cleanup();
     isDetectingRef.current = true;
     setState('detecting-geo');
     setError('');
-    cleanup();
 
     const geoCheck = checkGeolocationSupport();
     if (!geoCheck.supported) {
