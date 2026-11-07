@@ -117,7 +117,9 @@ export const NotificationPermissionPrompt: React.FC<NotificationPermissionPrompt
         </CardHeader>
         <CardContent className="pt-0">
           <CardDescription className="text-orange-700 text-xs mb-3">
-            Notifications are blocked. Enable them in your browser settings to get updates about jobs and applications.
+            {FirebasePushService.isNativeAndroidApp()
+              ? 'Notifications are disabled in Android settings. Enable notifications for Workly India in your device settings.'
+              : 'Notifications are blocked. Enable them in your browser settings to get updates about jobs and applications.'}
           </CardDescription>
           <Button 
             variant="outline" 
