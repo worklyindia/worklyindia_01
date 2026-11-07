@@ -104,11 +104,16 @@ const OwnerPortal = () => {
   // Check permissions for all menu items
   useEffect(() => {
     const checkAllPermissions = async () => {
-      if (!user) return;
+      if (!user) {
+        setIsOwner(false);
+        setMenuPermissions({});
+        return;
+      }
 
       try {
-        // Check if user is owner
-        const ownerStatus = await isSuperAdmin();
+        // Use the same admin_users role already verified for the signed-in account.
+        // This avoids a second, potentially racing owner check that can leave menu items locked.
+        const ownerStatus = adminRole === 'owner';
         setIsOwner(ownerStatus);
 
         // If owner, grant all permissions (including routes not in ROUTE_PERMISSIONS)
@@ -158,7 +163,7 @@ const OwnerPortal = () => {
     if (!permissionsLoading) {
       checkAllPermissions();
     }
-  }, [user, checkPermission, isSuperAdmin, permissionsLoading]);
+  }, [user, adminRole, checkPermission, permissionsLoading]);
 
   // Helper function to get user initials
   const getUserInitials = () => {
