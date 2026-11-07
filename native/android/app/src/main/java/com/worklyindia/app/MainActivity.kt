@@ -1190,7 +1190,15 @@ class MainActivity : Activity() {
         setIntent(intent)
         val target = intent.getStringExtra("notification_url")
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
-        if (!target.isNullOrBlank()) webView.loadUrl(target)
+        if (!target.isNullOrBlank()) {
+            lastLoadedUrl = target
+            if (hasInternetConnection()) {
+                hideOfflineScreen()
+                webView.loadUrl(target)
+            } else {
+                showOfflineScreen()
+            }
+        }
     }
 
     @Deprecated("Deprecated in Android API")
