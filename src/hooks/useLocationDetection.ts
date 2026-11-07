@@ -154,6 +154,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
     if (!geoCheck.supported) {
       console.log('❌ Geolocation not supported, falling back to IP location...');
       await handleGeoLocationFallback();
+      isDetectingRef.current = false;
       return;
     }
 
@@ -181,7 +182,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       
       if (abortControllerRef.current?.signal.aborted) return;
       
-      const isNativeGPS = false;
+      const isNativeGPS = /WorklyIndiaApp\\/1\\.0/i.test(navigator.userAgent);
       console.log(`📍 Got ${isNativeGPS ? 'GPS' : 'browser'} position:`, position.coords, `accuracy: ${position.coords.accuracy}m`);
       
       const lat = position.coords.latitude;
