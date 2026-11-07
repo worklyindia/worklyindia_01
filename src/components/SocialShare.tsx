@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Share2, Facebook, Twitter, Linkedin, Instagram, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import { openExternalShareUrl } from "@/utils/openExternalShareUrl";
 
 interface SocialShareProps {
   url?: string;
@@ -41,7 +42,7 @@ const SocialShare = ({
   };
 
   const handleShare = (platform: keyof typeof shareLinks) => {
-    window.open(shareLinks[platform], '_blank', 'width=600,height=400');
+    openExternalShareUrl(shareLinks[platform]);
     setIsOpen(false);
     
     // Track sharing for off-page SEO analytics
