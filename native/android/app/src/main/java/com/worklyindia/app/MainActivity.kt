@@ -563,6 +563,36 @@ class MainActivity : Activity() {
             }
         }
 
+        // Preferred path: pass the Firebase config fetched by the authenticated
+        // website session, rather than relying on an unauthenticated native fetch.
+        @JavascriptInterface
+        fun registerPushNotificationsWithSessionAndConfig(rawSession: String, rawFirebaseConfig: String) {
+            runOnUiThread {
+                try {
+                    val sessionJson = JSONObject(rawSession)
+                    val user = sessionJson.getJSONObject("user")
+                    val metadata = user.optJSONObject("user_metadata") ?: JSONObject()
+                    val role = metadata.optString(
+                        "user_type",
+                        metadata.optString("account_type", metadata.optString("role", "jobseeker"))
+                    )
+                    val session = NativeAuth.saveWebSession(
+                        this@MainActivity,
+                        sessionJson.getString("access_token"),
+                        sessionJson.getString("refresh_token"),
+                        user.getString("id"),
+                        user.optString("email"),
+                        if (role.equals("employer", true)) "employer" else "jobseeker"
+                    )
+                    val firebaseConfig = JSONObject(rawFirebaseConfig)
+                    startNativePushRegistration(session, firebaseConfig)
+                } catch (error: Exception) {
+                    android.util.Log.e("WorklyPush", "Could not read website session/Firebase config", error)
+                    dispatchPushRegistrationResult(false, "session_or_config_unavailable")
+                }
+            }
+        }
+
         private fun startNativePushRegistration(session: NativeSession, firebaseConfig: JSONObject? = null) {
             if (!hasNotificationPermission()) {
                 dispatchPushRegistrationResult(false, "permission_denied")
