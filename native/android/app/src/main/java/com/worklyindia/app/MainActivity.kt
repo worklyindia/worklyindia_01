@@ -31,6 +31,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -68,6 +69,7 @@ class MainActivity : Activity() {
         // Avoid manual inset padding: it can create a second, visible gap above the website.
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WindowCompat.setDecorFitsSystemWindows(window, true)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         window.statusBarColor = android.graphics.Color.WHITE
         window.navigationBarColor = android.graphics.Color.WHITE
         if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
@@ -129,7 +131,6 @@ class MainActivity : Activity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                hideStartupLoading()
                 if (Uri.parse(url).host == allowedHost) {
                     syncWebsiteSession()
                     dispatchNativeEvent("workly-native-bridge-ready")
@@ -139,6 +140,27 @@ class MainActivity : Activity() {
                     view.evaluateJavascript("""
                         (function() {
                           document.documentElement.dataset.worklyNative = 'android';
+                          // Keep the native splash visible until the SPA has rendered and painted.
+                          var readySent = false;
+                          var readyPoll = null;
+                          function markWebsiteReady() {
+                            if (readySent) return;
+                            readySent = true;
+                            if (readyPoll) clearInterval(readyPoll);
+                            if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteReady) {
+                              window.WorklyAndroid.onWebsiteReady();
+                            }
+                          }
+                          function checkWebsiteReady() {
+                            var appRoot = document.getElementById('root');
+                            if (document.readyState !== 'complete' || !appRoot || !appRoot.firstElementChild) return;
+                            Promise.resolve(document.fonts && document.fonts.ready).catch(function() {}).then(function() {
+                              requestAnimationFrame(function() { requestAnimationFrame(markWebsiteReady); });
+                            });
+                          }
+                          readyPoll = setInterval(checkWebsiteReady, 120);
+                          setTimeout(markWebsiteReady, 20000);
+                          checkWebsiteReady();
                           if (window.__worklyNativeDownloadHandlerInstalled) return;
                           window.__worklyNativeDownloadHandlerInstalled = true;
                           document.addEventListener('click', function(event) {
@@ -284,6 +306,11 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
+        val logo = ImageView(this).apply {
+            setImageResource(R.drawable.ic_workly_launcher_image)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "Workly India app logo"
+        }
         val brand = TextView(this).apply {
             text = "Workly India"
             setTextColor(Color.WHITE)
@@ -301,6 +328,8 @@ class MainActivity : Activity() {
             isIndeterminate = true
             indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
         }
+        val logoSize = (88 * resources.displayMetrics.density).toInt()
+        content.addView(logo, LinearLayout.LayoutParams(logoSize, logoSize).apply { bottomMargin = 16 })
         content.addView(brand, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = 12 })
@@ -444,6 +473,11 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun exitApp() {
             runOnUiThread { finish() }
+        }
+
+        @JavascriptInterface
+        fun onWebsiteReady() {
+            runOnUiThread { hideStartupLoading() }
         }
 
         @JavascriptInterface
