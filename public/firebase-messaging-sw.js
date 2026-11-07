@@ -136,22 +136,100 @@ self.addEventListener('pushsubscriptionchange', (event) => {
   );
 });
 
-/* Offline fallback (previously handled by the removed /sw.js worker). */
-const CACHE = 'app-shell-v1';
+/* Offline-first app shell and static-asset cache.
+   Keep this in the same root worker as push notifications: a second root-scope
+   worker would replace the notification handler and break push delivery. */
+const SHELL_CACHE = 'workly-offline-shell-v2';
+const ASSET_CACHE = 'workly-static-assets-v2';
 const OFFLINE_URL = '/offline.html';
+const MAX_ASSET_ENTRIES = 180;
+const BYPASS_PREFIXES = [
+  '/rest/', '/auth/', '/storage/', '/functions/', '/realtime/',
+  '/api/', '/graphql/', '/_vercel/'
+];
+
+function isCacheableAppRequest(request, url) {
+  if (url.origin !== self.location.origin) return false;
+  if (BYPASS_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) return false;
+  if (url.pathname === '/firebase-messaging-sw.js' || url.pathname === '/offline.html') return false;
+  if (request.headers.has('authorization')) return false;
+  if (request.headers.get('accept')?.includes('application/json')) return false;
+  return ['script', 'style', 'image', 'font', 'worker'].includes(request.destination);
+}
+
+async function trimAssetCache(cache) {
+  const keys = await cache.keys();
+  if (keys.length <= MAX_ASSET_ENTRIES) return;
+  await Promise.all(keys.slice(0, keys.length - MAX_ASSET_ENTRIES).map((key) => cache.delete(key)));
+}
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || req.mode !== 'navigate') return;
-  event.respondWith(
-    fetch(req).catch(() => caches.match(OFFLINE_URL).then((r) => r || Response.error())),
-  );
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (req.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(req);
+        if (response && response.ok) {
+          const cache = await caches.open(SHELL_CACHE);
+          await cache.put(req, response.clone());
+          // Preserve the canonical SPA entry point as the offline navigation fallback.
+          if (url.pathname === '/') await cache.put('/', response.clone());
+        }
+        return response;
+      } catch (_error) {
+        const cache = await caches.open(SHELL_CACHE);
+        return (await cache.match(req)) ||
+          (await cache.match('/')) ||
+          (await caches.match(OFFLINE_URL)) ||
+          Response.error();
+      }
+    })());
+    return;
+  }
+
+  if (!isCacheableAppRequest(req, url)) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(ASSET_CACHE);
+    const cached = await cache.match(req);
+    const network = fetch(req).then(async (response) => {
+      if (response && response.ok && response.type !== 'opaque') {
+        await cache.put(req, response.clone());
+        await trimAssetCache(cache);
+      }
+      return response;
+    });
+    if (cached) {
+      event.waitUntil(network.catch(() => undefined));
+      return cached;
+    }
+    try {
+      return await network;
+    } catch (_error) {
+      return cached || Response.error();
+    }
+  })());
 });
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll([OFFLINE_URL])).catch(() => undefined),
+    caches.open(SHELL_CACHE)
+      .then((cache) => cache.addAll(['/', OFFLINE_URL]))
+      .catch(() => undefined),
   );
   self.skipWaiting();
 });
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter((key) => (key.startsWith('workly-offline-shell-') && key !== SHELL_CACHE) ||
+                       (key.startsWith('workly-static-assets-') && key !== ASSET_CACHE))
+      .map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
