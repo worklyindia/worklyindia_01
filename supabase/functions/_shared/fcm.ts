@@ -331,6 +331,7 @@ export interface LegacyPayload {
   chrome_web_image?: string;
   chrome_web_icon?: string;
   web_buttons?: { id?: string; text?: string; url?: string; icon?: string }[];
+  buttons?: { id?: string; text?: string; url?: string; icon?: string }[];
   include_subscription_ids?: string[];
   include_player_ids?: string[];
   tokens?: string[];
@@ -359,7 +360,9 @@ export async function sendLegacyPush(
     url: payload.url,
     icon: payload.chrome_web_icon,
     image: payload.big_picture ?? payload.chrome_web_image,
-    actions: (payload.web_buttons ?? [])
+    // The legacy send_push path sends buttons; raw pushes use web_buttons.
+    // Forward either shape so native Android can render the same action buttons.
+    actions: (payload.web_buttons ?? payload.buttons ?? [])
       .filter((b) => b && b.text)
       .slice(0, 2)
       .map((b, i) => ({ action: b!.id ?? `act${i}`, title: b!.text!, url: b!.url, icon: b!.icon })),
