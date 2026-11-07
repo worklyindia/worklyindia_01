@@ -10,6 +10,8 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -19,7 +21,13 @@ import android.webkit.WebResourceError
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.Gravity
+import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -37,6 +45,12 @@ import org.json.JSONObject
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
+    private lateinit var loadingOverlay: FrameLayout
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var loadingStartedAt = 0L
+    private var lastReadyFingerprint = ""
+    private var stableReadyChecks = 0
+    private var readyCheckRunnable: Runnable? = null
     private var pendingWebPermission: PermissionRequest? = null
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
@@ -81,12 +95,23 @@ class MainActivity : Activity() {
         )
         webView.setBackgroundColor(android.graphics.Color.WHITE)
 
+        // A native branded loading layer hides the WebView until the website has
+        // rendered and its initial API requests/images have settled.
         // Keep the Android status bar visible and place the whole website below it.
         // A root container is used so the WebView viewport itself starts below the inset.
         val root = FrameLayout(this).apply {
             setBackgroundColor(android.graphics.Color.WHITE)
             addView(webView)
         }
+        loadingOverlay = createLoadingOverlay()
+        root.addView(
+            loadingOverlay,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+        showLoadingOverlay()
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, windowInsets ->
             val systemBars = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
@@ -136,7 +161,41 @@ class MainActivity : Activity() {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                "Object.defineProperty(window, '__WORKLY_NATIVE_ANDROID__', {value:true, configurable:false, enumerable:false}); window.dispatchEvent(new Event('workly:native-bridge-ready'));",
+                """
+                (function(){
+                  Object.defineProperty(window, '__WORKLY_NATIVE_ANDROID__', {value:true, configurable:false, enumerable:false});
+                  window.__worklyPendingRequests = 0;
+                  var originalFetch = window.fetch;
+                  if (originalFetch) window.fetch = function(){
+                    window.__worklyPendingRequests++;
+                    return originalFetch.apply(this, arguments).finally(function(){
+                      window.__worklyPendingRequests = Math.max(0, window.__worklyPendingRequests - 1);
+                    });
+                  };
+                  var originalOpen = XMLHttpRequest.prototype.open;
+                  var originalSend = XMLHttpRequest.prototype.send;
+                  XMLHttpRequest.prototype.open = function(){
+                    this.__worklyTrack = true;
+                    return originalOpen.apply(this, arguments);
+                  };
+                  XMLHttpRequest.prototype.send = function(){
+                    if (this.__worklyTrack) {
+                      window.__worklyPendingRequests++;
+                      var finish = function(){
+                        if (!this.__worklyFinished) {
+                          this.__worklyFinished = true;
+                          window.__worklyPendingRequests = Math.max(0, window.__worklyPendingRequests - 1);
+                        }
+                      }.bind(this);
+                      this.addEventListener('loadend', finish, {once:true});
+                      this.addEventListener('error', finish, {once:true});
+                      this.addEventListener('abort', finish, {once:true});
+                    }
+                    return originalSend.apply(this, arguments);
+                  };
+                  window.dispatchEvent(new Event('workly:native-bridge-ready'));
+                })();
+                """.trimIndent(),
                 setOf("https://worklyindia.devs.surf")
             )
             android.util.Log.i("WorklyWebView", "Native notification marker installed before page scripts")
@@ -144,6 +203,11 @@ class MainActivity : Activity() {
             android.util.Log.w("WorklyWebView", "Document-start script unsupported; using bridge and User-Agent detection")
         }
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                if (Uri.parse(url).host == allowedHost) showLoadingOverlay()
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 if (uri.scheme == "https" && uri.host == allowedHost) return false
@@ -178,6 +242,9 @@ class MainActivity : Activity() {
                         null
                     )
                     syncWebsiteSession()
+                    startWebsiteReadyCheck()
+                } else if (showingOfflinePage) {
+                    mainHandler.postDelayed({ hideLoadingOverlay() }, 350)
                 }
             }
         }
@@ -221,6 +288,139 @@ class MainActivity : Activity() {
         val appTarget = withNativeAppMarker(target)
         failedUrl = appTarget
         if (isNetworkAvailable()) webView.loadUrl(appTarget) else showOfflinePage()
+    }
+
+    private fun createLoadingOverlay(): FrameLayout {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(android.graphics.Color.rgb(10, 20, 43))
+            isClickable = true
+            isFocusable = true
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(32, 32, 32, 32)
+        }
+        val logo = ImageView(this).apply {
+            setImageResource(R.drawable.ic_workly_launcher)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = 24f * resources.displayMetrics.density
+                setColor(android.graphics.Color.WHITE)
+            }
+            setPadding(18, 18, 18, 18)
+        }
+        content.addView(logo, LinearLayout.LayoutParams(88.dp(), 88.dp()).apply {
+            bottomMargin = 22.dp()
+        })
+        val title = TextView(this).apply {
+            text = "Workly India"
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 27f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        }
+        content.addView(title, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        val subtitle = TextView(this).apply {
+            text = "Getting everything ready for you"
+            setTextColor(android.graphics.Color.rgb(190, 203, 225))
+            textSize = 14f
+            gravity = Gravity.CENTER
+        }
+        content.addView(subtitle, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = 9.dp() })
+        val progress = ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.rgb(96, 165, 250))
+        }
+        content.addView(progress, LinearLayout.LayoutParams(34.dp(), 34.dp()).apply {
+            topMargin = 28.dp()
+        })
+        overlay.addView(content, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        return overlay
+    }
+
+    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
+
+    private fun showLoadingOverlay() {
+        if (!::loadingOverlay.isInitialized) return
+        readyCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+        loadingStartedAt = System.currentTimeMillis()
+        lastReadyFingerprint = ""
+        stableReadyChecks = 0
+        loadingOverlay.visibility = View.VISIBLE
+        loadingOverlay.alpha = 1f
+    }
+
+    private fun hideLoadingOverlay() {
+        if (!::loadingOverlay.isInitialized || loadingOverlay.visibility != View.VISIBLE) return
+        loadingOverlay.animate().alpha(0f).setDuration(220).withEndAction {
+            loadingOverlay.visibility = View.GONE
+            loadingOverlay.alpha = 1f
+        }.start()
+    }
+
+    private fun startWebsiteReadyCheck() {
+        readyCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+        val check = object : Runnable {
+            override fun run() {
+                if (isFinishing || isDestroyed || showingOfflinePage) return
+                webView.evaluateJavascript(
+                    """
+                    (function(){
+                      var body = document.body;
+                      var imagesReady = !body || Array.prototype.every.call(body.querySelectorAll('img'), function(img){ return img.complete; });
+                      var textLength = body ? (body.innerText || '').trim().length : 0;
+                      var height = body ? body.scrollHeight : 0;
+                      var rootChildren = document.getElementById('root') ? document.getElementById('root').children.length : 0;
+                      return JSON.stringify({
+                        complete: document.readyState === 'complete',
+                        pending: window.__worklyPendingRequests || 0,
+                        imagesReady: imagesReady,
+                        textLength: textLength,
+                        fingerprint: textLength + ':' + height + ':' + rootChildren
+                      });
+                    })();
+                    """.trimIndent()
+                ) { raw ->
+                    try {
+                        val decoded = org.json.JSONTokener(raw).nextValue() as? String
+                        val state = decoded?.let { JSONObject(it) }
+                        val elapsed = System.currentTimeMillis() - loadingStartedAt
+                        if (state != null) {
+                            val ready = state.optBoolean("complete") &&
+                                state.optInt("pending", 0) == 0 &&
+                                state.optBoolean("imagesReady") &&
+                                state.optInt("textLength", 0) > 20
+                            val fingerprint = state.optString("fingerprint")
+                            if (ready && fingerprint == lastReadyFingerprint) stableReadyChecks++ else stableReadyChecks = 0
+                            lastReadyFingerprint = fingerprint
+                            if ((ready && stableReadyChecks >= 3 && elapsed >= 1200) ||
+                                (elapsed >= 15000 && state.optBoolean("complete") && state.optInt("textLength", 0) > 20)
+                            ) {
+                                hideLoadingOverlay()
+                                return@evaluateJavascript
+                            }
+                        }
+                    } catch (_: Exception) {
+                        // Keep the branded screen visible and retry while the page initializes.
+                    }
+                    if (System.currentTimeMillis() - loadingStartedAt < 18000) {
+                        mainHandler.postDelayed(this, 450)
+                    } else {
+                        hideLoadingOverlay()
+                    }
+                }
+            }
+        }
+        readyCheckRunnable = check
+        mainHandler.postDelayed(check, 250)
     }
 
     private fun withNativeAppMarker(url: String): String = runCatching {
@@ -528,6 +728,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        readyCheckRunnable?.let { mainHandler.removeCallbacks(it) }
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("WorklyAndroid")
             webView.stopLoading()
