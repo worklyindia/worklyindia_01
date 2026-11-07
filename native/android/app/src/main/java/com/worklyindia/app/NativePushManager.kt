@@ -326,25 +326,51 @@ object NativePushManager {
             }
         }
 
-        // FCM carries up to two action descriptors as a JSON string in data.actions.
+        // Accept action descriptors from both current FCM and legacy web-push
+        // payloads. Older templates may use buttons/web_buttons and text instead
+        // of actions/title; normalize those formats before rendering.
+        val source = listOf("source", "platform", "source_platform", "integration", "provider", "channel")
+            .mapNotNull { data[it]?.lowercase() }
+            .joinToString(" ")
+        val platform = when {
+            "whatsapp" in source -> "whatsapp"
+            "instagram" in source -> "instagram"
+            "messenger" in source -> "messenger"
+            "facebook" in source -> "facebook"
+            else -> null
+        }
+        val actionJson = data["actions"] ?: data["buttons"] ?: data["web_buttons"] ?: "[]"
+        val parsedActions = mutableListOf<Pair<String, String>>()
         runCatching {
-            val actions = org.json.JSONArray(data["actions"] ?: "[]")
+            val actions = org.json.JSONArray(actionJson)
             for (index in 0 until minOf(actions.length(), 3)) {
                 val action = actions.optJSONObject(index) ?: continue
-                val label = action.optString("title").takeIf { it.isNotBlank() } ?: continue
-                val actionUrl = action.optString("url").takeIf {
+                val label = (action.optString("title").takeIf { it.isNotBlank() }
+                    ?: action.optString("text").takeIf { it.isNotBlank() }) ?: continue
+                val actionUrl = (action.optString("url").takeIf {
                     it.startsWith("https://") || it.startsWith("http://")
-                } ?: notificationUrl
-                if (actionUrl != null) {
-                    builder.addAction(
-                        0,
-                        label,
-                        activityPendingIntent(actionUrl, tag.hashCode() + index + 1)
-                    )
-                }
+                } ?: notificationUrl ?: "https://worklyindia.devs.surf/")
+                parsedActions.add(label to actionUrl)
             }
         }.onFailure {
             android.util.Log.w("WorklyPush", "Could not parse notification actions", it)
+        }
+
+        // Keep notifications from connected social channels actionable even when
+        // an older template omitted its buttons array.
+        if (parsedActions.isEmpty() && platform != null) {
+            val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
+            val replyLabel = if (platform == "whatsapp") "Reply" else "Open chat"
+            parsedActions.add(replyLabel to chatUrl)
+            parsedActions.add("Open Workly" to chatUrl)
+        }
+
+        parsedActions.take(3).forEachIndexed { index, action ->
+            builder.addAction(
+                0,
+                action.first,
+                activityPendingIntent(action.second, tag.hashCode() + index + 1)
+            )
         }
 
         NotificationManagerCompat.from(context).notify(tag, tag.hashCode(), builder.build())
