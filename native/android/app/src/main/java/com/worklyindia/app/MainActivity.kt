@@ -754,13 +754,28 @@ class MainActivity : Activity() {
                     }
                 }
                 if (payload.isBlank()) return false
+                // Launch the chooser on Android's UI thread and handle launch
+                // failures there (the JavaScript bridge caller runs on a WebView thread).
                 runOnUiThread {
-                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_SUBJECT, title.take(120))
-                        putExtra(Intent.EXTRA_TEXT, payload)
+                    try {
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, title.take(120))
+                            putExtra(Intent.EXTRA_TEXT, payload)
+                        }
+                        val chooser = Intent.createChooser(
+                            sendIntent,
+                            title.ifBlank { "Share with" }
+                        )
+                        startActivity(chooser)
+                    } catch (launchError: Exception) {
+                        android.util.Log.e("WorklyShare", "Android share chooser launch failed", launchError)
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Unable to open sharing apps. Please try again.",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
-                    startActivity(Intent.createChooser(sendIntent, title.ifBlank { "Share with" }))
                 }
                 true
             } catch (error: Exception) {
