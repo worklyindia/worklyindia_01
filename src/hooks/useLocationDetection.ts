@@ -182,7 +182,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       
       if (abortControllerRef.current?.signal.aborted) return;
       
-      const isNativeGPS = /WorklyIndiaApp\\/1\\.0/i.test(navigator.userAgent);
+      const isNativeGPS = navigator.userAgent.includes('WorklyIndiaApp/1.0');
       console.log(`📍 Got ${isNativeGPS ? 'GPS' : 'browser'} position:`, position.coords, `accuracy: ${position.coords.accuracy}m`);
       
       const lat = position.coords.latitude;
