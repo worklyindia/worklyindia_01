@@ -33,7 +33,7 @@ function readPayload(event) {
   }
 }
 
-function getPlatformNotificationIcon(data, notification, params) {
+function getPlatformNotificationBadge(data, notification) {
   // Integration notifications should carry the source platform's own artwork.
   // Accept common field names because legacy and newer senders use different keys.
   const source = [
@@ -84,11 +84,11 @@ function buildNotification(payload) {
 
   const options = {
     body: notification.body || data.body || '',
-    icon: getPlatformNotificationIcon(data, notification, params) ||
-      toAbsolute(notification.icon || data.icon || params.brandIcon) || FALLBACK_ICON,
-    // Restored custom badge at the owner's request. Android controls its tint.
-    // Reversible Chrome-icon test: omit only this badge property again.
-    badge: toAbsolute(params.badge) || '/icons/workly-notification-logo.png',
+    // Keep Workly India as the primary notification icon. The source platform
+    // is shown separately in the small notification badge where the OS supports it.
+    icon: toAbsolute(params.brandIcon) || FALLBACK_ICON,
+    badge: getPlatformNotificationBadge(data, notification) ||
+      toAbsolute(params.badge) || '/icons/workly-notification-logo.png',
     data: {
       url,
       actionUrls: actions.reduce((acc, a) => {
