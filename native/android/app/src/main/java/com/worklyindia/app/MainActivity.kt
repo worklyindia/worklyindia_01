@@ -143,7 +143,41 @@ class MainActivity : Activity() {
                     view.evaluateJavascript("""
                         (function() {
                           document.documentElement.dataset.worklyNative = 'android';
-                          // The React app calls the native bridge only after its critical data is ready.
+
+                          // Do not rely only on the React hook to dismiss the native
+                          // splash: a failed/slow auth request or an older cached bundle
+                          // must never leave the user staring at the splash forever.
+                          if (!window.__worklyNativeSplashWatcherInstalled) {
+                            window.__worklyNativeSplashWatcherInstalled = true;
+                            var splashStartedAt = Date.now();
+                            var splashReadySince = 0;
+                            var splashWatcher = setInterval(function() {
+                              var root = document.getElementById('root');
+                              var hasRenderedApp = !!(root && root.firstElementChild &&
+                                (root.innerText || '').trim().length > 0);
+                              var pageReady = document.readyState === 'complete';
+                              if (pageReady && hasRenderedApp) {
+                                if (!splashReadySince) splashReadySince = Date.now();
+                                if (Date.now() - splashReadySince >= 900) {
+                                  clearInterval(splashWatcher);
+                                  if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteReady) {
+                                    window.WorklyAndroid.onWebsiteReady();
+                                  }
+                                }
+                              } else {
+                                splashReadySince = 0;
+                              }
+                              // Absolute safety fallback: show the page/error state
+                              // rather than trapping the user on the startup overlay.
+                              if (Date.now() - splashStartedAt >= 20000) {
+                                clearInterval(splashWatcher);
+                                if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteReady) {
+                                  window.WorklyAndroid.onWebsiteReady();
+                                }
+                              }
+                            }, 200);
+                          }
+
                           if (window.__worklyNativeDownloadHandlerInstalled) return;
                           window.__worklyNativeDownloadHandlerInstalled = true;
                           document.addEventListener('click', function(event) {
@@ -286,6 +320,9 @@ class MainActivity : Activity() {
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
             ?: website
         webView.loadUrl(target)
+        // Native failsafe independent of JavaScript/React bridge callbacks.
+        // Never keep the splash over the website indefinitely on a slow device.
+        rootLayout.postDelayed({ hideStartupLoading() }, 25000)
     }
 
     private fun createStartupLoadingOverlay(): FrameLayout {
@@ -299,7 +336,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
         val logo = ImageView(this).apply {
-            setImageResource(R.drawable.ic_workly_launcher)
+            // Use the exact saved Workly India primary-logo bitmap generated
+            // by the Android release workflow, not the simplified launcher vector.
+            setImageResource(R.drawable.ic_workly_launcher_image)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Workly India app logo"
         }
