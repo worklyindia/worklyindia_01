@@ -7,6 +7,8 @@ android {
     namespace = "com.worklyindia.app"
     compileSdk = 35
 
+    buildFeatures { buildConfig = true }
+
     flavorDimensions += "distribution"
     productFlavors {
         create("playStore") { dimension = "distribution" }
