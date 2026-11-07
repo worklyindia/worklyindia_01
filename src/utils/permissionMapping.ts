@@ -100,6 +100,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   '/owner-portal/api-docs': 'settings.view',
   '/owner-portal/supabase-usage': 'analytics.view',
   '/owner-portal/storage': 'settings.edit',
+  '/owner-portal/android-app-updates': 'settings.edit',
   '/owner-portal/cloudflare-storage': 'settings.edit',
 
   
@@ -119,6 +120,7 @@ export const OWNER_ONLY_ROUTES = [
   '/owner-portal/paypal-payment-events',
   '/owner-portal/storage',
   '/owner-portal/cloudflare-storage',
+  '/owner-portal/android-app-updates',
 
 ];
 
