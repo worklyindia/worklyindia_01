@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { NativeBottomSheet } from '@/components/NativeBottomSheet';
 import { Smartphone, Globe, Fingerprint, Shield, ShieldAlert, Copy, Check, Monitor, Activity, MapPin, AlertTriangle, ChevronRight, Wifi, Battery, BatteryCharging, Eye, Radio, Skull, Lock, EyeOff, ShieldBan, Volume2, Key, Type, Puzzle } from 'lucide-react';
 import { detectWebRTCLeak, type WebRTCLeakResult } from '@/utils/webrtcLeakDetect';
-import { getDeviceInfo, getFingerprintComponents, getBatteryInfo, fetchRealAndroidVersion, type DeviceInfo } from '@/utils/deviceInfo';
+import { getDeviceInfo, getFingerprintComponents, getBatteryInfo, fetchRealAndroidVersion, getNativeAndroidDeviceInfo, type NativeAndroidDeviceInfo, type DeviceInfo } from '@/utils/deviceInfo';
 import { getAudioFingerprint, detectIncognitoMode, detectAdBlocker, getPermissionStatuses, getAdditionalSignals, type PermissionStatus, type AdditionalDeviceSignals } from '@/utils/advancedDeviceDetection';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
@@ -119,6 +119,7 @@ const SectionHeader = ({ icon: Icon, title }: { icon: React.ElementType; title: 
 
 export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClose }) => {
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [nativeDeviceInfo, setNativeDeviceInfo] = useState<NativeAndroidDeviceInfo | null>(null);
   const [fingerprint, setFingerprint] = useState<string>('');
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [networkLoading, setNetworkLoading] = useState(false);
@@ -152,6 +153,7 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
     if (isOpen) {
       const info = getDeviceInfo();
       setDeviceInfo(info);
+      setNativeDeviceInfo(getNativeAndroidDeviceInfo());
       setAdditionalSignals(getAdditionalSignals());
       fetchNetworkAndSaveDeviceInfo(info);
       fetchLoginFrequency();
@@ -284,6 +286,7 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
           },
           body: JSON.stringify({
             device_info: info,
+            native_device_info: nativeDeviceInfo,
             fingerprint_components: components,
             network_type: getNetworkType(),
             downlink_speed: `${networkStatus.downlink} Mbps`,
@@ -403,6 +406,20 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
               <InfoRow label="CPU Cores" value={deviceInfo.hardware_concurrency} />
               <InfoRow label="Timezone" value={deviceInfo.timezone} />
               <InfoRow label="Language" value={deviceInfo.language} />
+              {nativeDeviceInfo && (
+                <>
+                  <div className="pt-2 pb-1 text-[11px] font-semibold text-primary">Native Android App</div>
+                  <InfoRow label="Manufacturer" value={nativeDeviceInfo.manufacturer || 'N/A'} />
+                  <InfoRow label="Brand / Model" value={`${nativeDeviceInfo.brand || ''} ${nativeDeviceInfo.model || ''}`.trim() || 'N/A'} />
+                  <InfoRow label="Android Version" value={nativeDeviceInfo.android_release || 'N/A'} />
+                  <InfoRow label="Android API" value={nativeDeviceInfo.android_sdk ? String(nativeDeviceInfo.android_sdk) : 'N/A'} />
+                  <InfoRow label="App Version" value={nativeDeviceInfo.app_version || 'N/A'} />
+                  <InfoRow label="WebView Version" value={nativeDeviceInfo.webview_version || 'N/A'} />
+                  <InfoRow label="Native Screen" value={nativeDeviceInfo.screen_width_px && nativeDeviceInfo.screen_height_px ? `${nativeDeviceInfo.screen_width_px} × ${nativeDeviceInfo.screen_height_px}` : 'N/A'} />
+                  <InfoRow label="Install ID" value={nativeDeviceInfo.install_id || 'N/A'} />
+                </>
+              )}
+
               {batteryInfo && (
                 <div className="flex items-center justify-between py-2 border-b border-border/50">
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
