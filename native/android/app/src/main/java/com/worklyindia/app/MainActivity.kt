@@ -227,10 +227,13 @@ class MainActivity : Activity() {
 
     private fun dispatchNativeEvent(name: String, detail: String = "{}") {
         val safeName = name.replace(Regex("[^a-zA-Z0-9_-]"), "")
-        webView.evaluateJavascript(
-            "window.dispatchEvent(new CustomEvent('$safeName',{detail:$detail}));",
-            null
-        )
+        runOnUiThread {
+            if (!::webView.isInitialized) return@runOnUiThread
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('$safeName',{detail:$detail}));",
+                null
+            )
+        }
     }
 
     private fun hasNotificationPermission(): Boolean {
@@ -270,10 +273,13 @@ class MainActivity : Activity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val manager = getSystemService(VibratorManager::class.java)
                 manager.defaultVibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 @Suppress("DEPRECATION")
                 (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
                     .vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator).vibrate(duration)
             }
         }
 
