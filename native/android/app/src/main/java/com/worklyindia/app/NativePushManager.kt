@@ -253,6 +253,45 @@ object NativePushManager {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
 
+        // Show the originating platform logo as the large notification icon,
+        // while keeping the Workly India monochrome app icon in the status bar.
+        val source = listOf("source", "platform", "channel", "integration", "provider", "type")
+            .mapNotNull { data[it]?.lowercase() }
+            .joinToString(" ")
+        val platformIconUrl = data["platform_icon"]?.takeIf { it.startsWith("https://") }
+            ?: data["source_icon"]?.takeIf { it.startsWith("https://") }
+            ?: when {
+                "whatsapp" in source -> "https://img.icons8.com/color/96/whatsapp--v1.png"
+                "instagram" in source -> "https://img.icons8.com/fluency/96/instagram-new.png"
+                "messenger" in source -> "https://img.icons8.com/color/96/facebook-messenger--v1.png"
+                "facebook" in source -> "https://img.icons8.com/color/96/facebook-new.png"
+                else -> null
+            }
+        if (platformIconUrl != null) {
+            runCatching {
+                val connection = URL(platformIconUrl).openConnection() as HttpURLConnection
+                connection.connectTimeout = 4000
+                connection.readTimeout = 5000
+                connection.instanceFollowRedirects = true
+                connection.setRequestProperty("User-Agent", "WorklyIndia-Android")
+                val bitmap = connection.inputStream.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(4096)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > 512 * 1024) throw IllegalStateException("Platform icon exceeds 512 KB")
+                        output.write(buffer, 0, count)
+                    }
+                    BitmapFactory.decodeByteArray(output.toByteArray(), 0, total)
+                }
+                connection.disconnect()
+                bitmap
+            }.getOrNull()?.let { builder.setLargeIcon(it) }
+        }
+
         // Download the optional rich-media image with strict time/size limits.
         val imageUrl = data["image"]?.takeIf { it.startsWith("https://") }
         if (imageUrl != null) {
