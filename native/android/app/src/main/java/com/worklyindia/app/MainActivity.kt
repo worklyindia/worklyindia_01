@@ -52,6 +52,8 @@ class MainActivity : Activity() {
     private var stableReadyChecks = 0
     private var readyCheckRunnable: Runnable? = null
     private var pendingWebPermission: PermissionRequest? = null
+    private var pendingGeolocationOrigin: String? = null
+    private var pendingGeolocationCallback: android.webkit.GeolocationPermissions.Callback? = null
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
@@ -271,8 +273,24 @@ class MainActivity : Activity() {
             }
 
             override fun onGeolocationPermissionsShowPrompt(origin: String, callback: android.webkit.GeolocationPermissions.Callback) {
-                if (Uri.parse(origin).host == allowedHost) callback.invoke(origin, true, false)
-                else callback.invoke(origin, false, false)
+                if (Uri.parse(origin).host != allowedHost) {
+                    callback.invoke(origin, false, false)
+                    return
+                }
+                val fineGranted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val coarseGranted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                if (fineGranted || coarseGranted) {
+                    callback.invoke(origin, true, false)
+                    return
+                }
+                // Request permission only when the user invokes location detection.
+                pendingGeolocationOrigin = origin
+                pendingGeolocationCallback = callback
+                ActivityCompat.requestPermissions(
+                    this@MainActivity,
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                    REQUEST_LOCATION
+                )
             }
         }
         // The native container reserves the status/navigation bar areas exactly once.
@@ -628,6 +646,15 @@ class MainActivity : Activity() {
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
             registerNativePushAndNotifyJs(granted)
         }
+        if (requestCode == REQUEST_LOCATION) {
+            val origin = pendingGeolocationOrigin
+            val callback = pendingGeolocationCallback
+            pendingGeolocationOrigin = null
+            pendingGeolocationCallback = null
+            val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (origin != null && callback != null) callback.invoke(origin, granted, false)
+        }
         if (requestCode == REQUEST_MEDIA) {
             val request = pendingWebPermission
             pendingWebPermission = null
@@ -729,6 +756,11 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         readyCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+        pendingGeolocationCallback?.let { callback ->
+            pendingGeolocationOrigin?.let { origin -> runCatching { callback.invoke(origin, false, false) } }
+        }
+        pendingGeolocationCallback = null
+        pendingGeolocationOrigin = null
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("WorklyAndroid")
             webView.stopLoading()
@@ -740,6 +772,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_MEDIA = 702
+        private const val REQUEST_LOCATION = 703
         private const val APP_PREFS = "workly_app_state"
         private const val LAST_PAGE_URL = "last_page_url"
         private const val NOTIFICATION_PREFS = "workly_notification_permissions"
