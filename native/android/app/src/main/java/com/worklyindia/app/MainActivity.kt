@@ -84,7 +84,6 @@ class MainActivity : Activity() {
     private var updateCheckInProgress = false
     private var websiteUpdateCheckInProgress = false
     private var websiteUpdateDialogVisible = false
-    private var websiteUpdateDismissedThisSession = false
     private var pendingWebsiteInstallUri: Uri? = null
     private var websiteDownloadId: Long = -1L
     private var websiteDownloadRelease: JSONObject? = null
@@ -120,7 +119,11 @@ class MainActivity : Activity() {
                 } else {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
                     android.util.Log.e("WorklyAppUpdate", "Website APK download failed: $reason")
-                    runOnUiThread { Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show() }
+                    websiteDownloadId = -1L
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show()
+                        checkForWebsiteRelease()
+                    }
                 }
             }
         }
@@ -1329,7 +1332,7 @@ class MainActivity : Activity() {
     // Play Store installs are deliberately kept on Google's official Play Core flow.
     private fun checkForWebsiteRelease() {
         if (websiteUpdateCheckInProgress || websiteUpdateDialogVisible ||
-            websiteUpdateDismissedThisSession || isFinishing || isDestroyed) return
+            websiteDownloadId != -1L || isFinishing || isDestroyed) return
         websiteUpdateCheckInProgress = true
         activityScope.launch(Dispatchers.IO) {
             var release: JSONObject? = null
@@ -1390,13 +1393,6 @@ class MainActivity : Activity() {
                 dialog.dismiss()
                 downloadWebsiteUpdate(release)
             }
-        if (!mandatory) {
-            builder.setNegativeButton("Later") { dialog, _ ->
-                websiteUpdateDialogVisible = false
-                websiteUpdateDismissedThisSession = true
-                dialog.dismiss()
-            }
-        }
         builder.show()
     }
 
@@ -1449,6 +1445,7 @@ class MainActivity : Activity() {
             }
             startActivity(installIntent)
             pendingWebsiteInstallUri = null
+            websiteDownloadId = -1L
         } catch (error: Exception) {
             android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
             Toast.makeText(this, "Could not open the installer. Please try again.", Toast.LENGTH_LONG).show()
