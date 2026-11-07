@@ -7,6 +7,12 @@ android {
     namespace = "com.worklyindia.app"
     compileSdk = 35
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("playStore") { dimension = "distribution" }
+        create("website") { dimension = "distribution" }
+    }
+
     defaultConfig {
         applicationId = "com.worklyindia.app"
         minSdk = 24
