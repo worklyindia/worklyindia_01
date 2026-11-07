@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { WifiOff, RefreshCw } from "lucide-react";
 import { useNativeNetwork } from "@/hooks/useNativeNetwork";
 
