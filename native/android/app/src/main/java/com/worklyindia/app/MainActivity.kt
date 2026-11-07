@@ -73,14 +73,16 @@ class MainActivity : Activity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        window.statusBarColor = android.graphics.Color.WHITE
-        window.navigationBarColor = android.graphics.Color.WHITE
-        if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
+        val startupDarkMode = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val startupBarColor = if (startupDarkMode) Color.rgb(1, 8, 22) else Color.rgb(247, 249, 251)
+        window.statusBarColor = startupBarColor
+        window.navigationBarColor = startupBarColor
+        if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = if (startupDarkMode) Color.rgb(35, 43, 58) else Color.rgb(230, 233, 240)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             show(WindowInsetsCompat.Type.statusBars())
             show(WindowInsetsCompat.Type.navigationBars())
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
+            isAppearanceLightStatusBars = !startupDarkMode
+            isAppearanceLightNavigationBars = !startupDarkMode
         }
         webView = WebView(this)
         webView.layoutParams = FrameLayout.LayoutParams(
@@ -318,7 +320,7 @@ class MainActivity : Activity() {
         // insets exactly once to the root container so the WebView starts directly
         // below the status bar and ends above the navigation bar.
         rootLayout = FrameLayout(this)
-        rootLayout.setBackgroundColor(Color.WHITE)
+        rootLayout.setBackgroundColor(startupBarColor)
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
@@ -351,6 +353,18 @@ class MainActivity : Activity() {
     private fun createStartupLoadingOverlay(): FrameLayout {
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
+        val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+        val backgroundStart = if (dark) Color.rgb(5, 13, 29) else Color.rgb(244, 249, 255)
+        val backgroundMiddle = if (dark) Color.rgb(8, 27, 39) else Color.rgb(238, 250, 249)
+        val backgroundEnd = if (dark) Color.rgb(20, 14, 38) else Color.rgb(250, 247, 255)
+        val cardColor = if (dark) Color.rgb(17, 27, 45) else Color.WHITE
+        val logoCardColor = if (dark) Color.rgb(26, 40, 61) else Color.rgb(247, 250, 255)
+        val primaryText = if (dark) Color.rgb(239, 245, 255) else Color.rgb(20, 38, 68)
+        val secondaryText = if (dark) Color.rgb(177, 193, 214) else Color.rgb(102, 119, 143)
+        val mutedText = if (dark) Color.rgb(137, 156, 181) else Color.rgb(139, 153, 173)
+        val accentColor = Color.rgb(39, 190, 177)
+        val progressTrack = if (dark) Color.rgb(44, 62, 83) else Color.rgb(225, 237, 245)
 
         fun roundedBackground(color: Int, radius: Int): android.graphics.drawable.GradientDrawable =
             android.graphics.drawable.GradientDrawable().apply {
@@ -359,24 +373,21 @@ class MainActivity : Activity() {
             }
 
         val overlay = FrameLayout(this).apply {
-            // The startup screen is intentionally light, independent of the
-            // phone's dark-mode setting. The website switches theme after load.
             background = android.graphics.drawable.GradientDrawable(
                 android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(244, 249, 255), Color.rgb(238, 250, 249), Color.rgb(250, 247, 255))
+                intArrayOf(backgroundStart, backgroundMiddle, backgroundEnd)
             )
             isClickable = true
             isFocusable = true
         }
 
-        // Soft decorative colour orbs add depth without distracting from the logo.
         fun addOrb(size: Int, color: Int, gravity: Int, xMargin: Int, yMargin: Int) {
             val orb = android.view.View(this).apply {
                 background = android.graphics.drawable.GradientDrawable().apply {
                     shape = android.graphics.drawable.GradientDrawable.OVAL
                     setColor(color)
                 }
-                alpha = 0.42f
+                alpha = if (dark) 0.20f else 0.42f
             }
             overlay.addView(orb, FrameLayout.LayoutParams(dp(size), dp(size), gravity).apply {
                 leftMargin = dp(xMargin)
@@ -385,20 +396,20 @@ class MainActivity : Activity() {
                 bottomMargin = dp(yMargin)
             })
         }
-        addOrb(190, Color.rgb(183, 218, 255), Gravity.TOP or Gravity.END, 0, -55)
-        addOrb(150, Color.rgb(175, 239, 226), Gravity.BOTTOM or Gravity.START, 0, -35)
-        addOrb(82, Color.rgb(222, 203, 255), Gravity.TOP or Gravity.START, 24, 105)
+        addOrb(190, if (dark) Color.rgb(41, 91, 150) else Color.rgb(183, 218, 255), Gravity.TOP or Gravity.END, 0, -55)
+        addOrb(150, if (dark) Color.rgb(25, 116, 105) else Color.rgb(175, 239, 226), Gravity.BOTTOM or Gravity.START, 0, -35)
+        addOrb(82, if (dark) Color.rgb(91, 65, 139) else Color.rgb(222, 203, 255), Gravity.TOP or Gravity.START, 24, 105)
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(28), dp(34), dp(28), dp(30))
-            background = roundedBackground(Color.WHITE, 30)
+            background = roundedBackground(cardColor, 30)
             elevation = dp(12).toFloat()
         }
 
         val logoCard = FrameLayout(this).apply {
-            background = roundedBackground(Color.rgb(247, 250, 255), 26)
+            background = roundedBackground(logoCardColor, 26)
             elevation = dp(5).toFloat()
         }
         val logo = ImageView(this).apply {
@@ -414,7 +425,7 @@ class MainActivity : Activity() {
 
         val brand = TextView(this).apply {
             text = "Workly India"
-            setTextColor(Color.rgb(20, 38, 68))
+            setTextColor(primaryText)
             textSize = 27f
             typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -422,7 +433,7 @@ class MainActivity : Activity() {
         }
         val accent = TextView(this).apply {
             text = "YOUR CAREER. YOUR NEXT CHAPTER."
-            setTextColor(Color.rgb(22, 153, 151))
+            setTextColor(accentColor)
             textSize = 10f
             typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
             letterSpacing = 0.14f
@@ -430,19 +441,19 @@ class MainActivity : Activity() {
         }
         val subtitle = TextView(this).apply {
             text = "Preparing your workspace"
-            setTextColor(Color.rgb(102, 119, 143))
+            setTextColor(secondaryText)
             textSize = 14f
             gravity = Gravity.CENTER
         }
         val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             isIndeterminate = true
-            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(30, 177, 164))
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.rgb(30, 177, 164))
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(225, 237, 245))
+            progressTintList = android.content.res.ColorStateList.valueOf(accentColor)
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(accentColor)
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(progressTrack)
         }
         val footer = TextView(this).apply {
             text = "A brighter path to better opportunities"
-            setTextColor(Color.rgb(139, 153, 173))
+            setTextColor(mutedText)
             textSize = 11f
             gravity = Gravity.CENTER
         }
@@ -475,7 +486,6 @@ class MainActivity : Activity() {
             rightMargin = dp(28)
         })
 
-        // Gentle breathing animation keeps the startup screen feeling alive.
         android.animation.ObjectAnimator.ofFloat(logoCard, "scaleX", 1f, 1.045f, 1f).apply {
             duration = 1800
             repeatCount = android.animation.ValueAnimator.INFINITE
