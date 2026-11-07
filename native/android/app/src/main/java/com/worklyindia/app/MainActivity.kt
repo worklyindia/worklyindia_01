@@ -609,19 +609,19 @@ class MainActivity : Activity() {
     private fun showOfflineScreen() {
         if (!::rootLayout.isInitialized || offlineOverlay?.parent != null) return
         val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
-        val background = if (dark) Color.rgb(5, 13, 29) else Color.rgb(246, 249, 252)
+        val backgroundColor = if (dark) Color.rgb(5, 13, 29) else Color.rgb(246, 249, 252)
         val cardColor = if (dark) Color.rgb(17, 27, 45) else Color.WHITE
         val textColor = if (dark) Color.WHITE else Color.rgb(24, 35, 52)
         val mutedColor = if (dark) Color.rgb(180, 193, 210) else Color.rgb(100, 116, 139)
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
-        val overlay = FrameLayout(this).apply { setBackgroundColor(background) }
+        val overlay = FrameLayout(this).apply { setBackgroundColor(backgroundColor) }
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(28), dp(34), dp(28), dp(30))
-            background = android.graphics.drawable.GradientDrawable().apply {
+            this.background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(cardColor)
                 cornerRadius = dp(28).toFloat()
             }
@@ -632,7 +632,7 @@ class MainActivity : Activity() {
             textSize = 42f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            background = android.graphics.drawable.GradientDrawable().apply {
+            this.background = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
                 setColor(Color.rgb(22, 163, 122))
             }
@@ -672,7 +672,7 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setPadding(dp(28), dp(15), dp(28), dp(15))
-            background = android.graphics.drawable.GradientDrawable().apply {
+            this.background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(Color.rgb(22, 163, 122))
                 cornerRadius = dp(14).toFloat()
             }
