@@ -337,3 +337,45 @@ export const getBatteryInfo = async (): Promise<{ level: number; charging: boole
     return null;
   }
 };
+
+/** Non-sensitive device diagnostics exposed only by the installed Workly Android app. */
+export interface NativeAndroidDeviceInfo {
+  source: 'native-android';
+  install_id?: string;
+  manufacturer?: string;
+  brand?: string;
+  model?: string;
+  device?: string;
+  android_release?: string;
+  android_sdk?: number;
+  app_version?: string;
+  app_version_code?: number;
+  package_name?: string;
+  webview_version?: string;
+  screen_width_px?: number;
+  screen_height_px?: number;
+  screen_density?: number;
+  screen_density_dpi?: number;
+  locale?: string;
+  timezone?: string;
+  network_type?: string;
+  battery_percent?: number;
+  battery_charging?: boolean;
+}
+
+/** Read diagnostics from the trusted native bridge; browser users receive null. */
+export const getNativeAndroidDeviceInfo = (): NativeAndroidDeviceInfo | null => {
+  try {
+    const bridge = (window as any).WorklyAndroid;
+    if (!bridge || typeof bridge.getNativeDeviceInfo !== 'function') return null;
+    const raw = bridge.getNativeDeviceInfo();
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.source !== 'native-android') return null;
+    return parsed as NativeAndroidDeviceInfo;
+  } catch (error) {
+    console.warn('Native Android device diagnostics unavailable:', error);
+    return null;
+  }
+};
+
