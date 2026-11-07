@@ -3,6 +3,7 @@ package com.worklyindia.app
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.ContentValues
 import android.app.DownloadManager
 import android.os.Environment
 import android.webkit.URLUtil
@@ -17,6 +18,10 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Base64
+import android.view.WindowManager
+import androidx.core.view.WindowInsetsCompat
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -39,10 +44,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import org.json.JSONObject
+import java.io.File
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
     private var pendingWebPermission: PermissionRequest? = null
+    private var pendingGeoCallback: android.webkit.GeolocationPermissions.Callback? = null
+    private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
@@ -52,11 +60,14 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         // Let Android lay out the app below the real system status bar.
         // Avoid manual inset padding: it can create a second, visible gap above the website.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WindowCompat.setDecorFitsSystemWindows(window, true)
         window.statusBarColor = android.graphics.Color.WHITE
         window.navigationBarColor = android.graphics.Color.WHITE
         if (Build.VERSION.SDK_INT >= 28) window.navigationBarDividerColor = android.graphics.Color.rgb(230, 233, 240)
         WindowCompat.getInsetsController(window, window.decorView).apply {
+            show(WindowInsetsCompat.Type.statusBars())
+            show(WindowInsetsCompat.Type.navigationBars())
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
         }
@@ -80,6 +91,7 @@ class MainActivity : Activity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
+            setGeolocationEnabled(true)
             loadsImagesAutomatically = true
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(false)
@@ -119,16 +131,42 @@ class MainActivity : Activity() {
                     // safe-area inset, which adds a second blank strip above headers.
                     view.evaluateJavascript("""
                         (function() {
-                          var id = 'workly-native-top-inset-fix';
-                          var style = document.getElementById(id);
-                          if (!style) {
-                            style = document.createElement('style');
-                            style.id = id;
-                            style.textContent = 'html, body { padding-top: 0 !important; margin-top: 0 !important; }';
-                            (document.head || document.documentElement).appendChild(style);
-                          }
                           document.documentElement.dataset.worklyNative = 'android';
-                          if (document.body) document.body.style.setProperty('padding-top', '0', 'important');
+                          if (window.__worklyNativeDownloadHandlerInstalled) return;
+                          window.__worklyNativeDownloadHandlerInstalled = true;
+                          document.addEventListener('click', function(event) {
+                            var target = event.target;
+                            var anchor = target && target.closest ? target.closest('a[download]') : null;
+                            if (!anchor) return;
+                            var href = anchor.href || '';
+                            if (!href.startsWith('blob:') && !href.startsWith('data:')) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            (async function() {
+                              var response = await fetch(href);
+                              if (!response.ok) throw new Error('Could not read generated file');
+                              var blob = await response.blob();
+                              if (blob.size > 25 * 1024 * 1024) throw new Error('File is larger than 25 MB');
+                              var reader = new FileReader();
+                              reader.onloadend = function() {
+                                try {
+                                  var result = String(reader.result || '');
+                                  var comma = result.indexOf(',');
+                                  if (comma < 0) throw new Error('Invalid generated file');
+                                  var saved = window.WorklyAndroid &&
+                                    window.WorklyAndroid.downloadBase64File(
+                                      anchor.download || 'workly-download',
+                                      blob.type || 'application/octet-stream',
+                                      result.slice(comma + 1)
+                                    );
+                                  if (!saved) throw new Error('Android could not save this file');
+                                } catch (error) {
+                                  console.error('[Workly download]', error);
+                                }
+                              };
+                              reader.readAsDataURL(blob);
+                            })().catch(function(error) { console.error('[Workly download]', error); });
+                          }, true);
                         })();
                     """.trimIndent(), null)
                 }
@@ -157,8 +195,24 @@ class MainActivity : Activity() {
             }
 
             override fun onGeolocationPermissionsShowPrompt(origin: String, callback: android.webkit.GeolocationPermissions.Callback) {
-                if (Uri.parse(origin).host == allowedHost) callback.invoke(origin, true, false)
-                else callback.invoke(origin, false, false)
+                if (Uri.parse(origin).host != allowedHost) {
+                    callback.invoke(origin, false, false)
+                    return
+                }
+                val fineGranted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val coarseGranted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                if (fineGranted || coarseGranted || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                    callback.invoke(origin, true, false)
+                } else {
+                    pendingGeoCallback?.invoke(pendingGeoOrigin ?: origin, false, false)
+                    pendingGeoOrigin = origin
+                    pendingGeoCallback = callback
+                    ActivityCompat.requestPermissions(
+                        this@MainActivity,
+                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                        REQUEST_LOCATION
+                    )
+                }
             }
         }
         webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
@@ -375,6 +429,53 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
+        fun downloadBase64File(fileName: String, mimeType: String, base64Data: String): Boolean {
+            var insertedUri: Uri? = null
+            return try {
+                require(base64Data.length <= 36_000_000) { "File is larger than 25 MB" }
+                val safeName = fileName.substringAfterLast('/').substringAfterLast('\\')
+                    .replace(Regex("[\\\\/:*?\\\"<>|]"), "_")
+                    .take(180)
+                    .ifBlank { "workly-download" }
+                val safeMime = mimeType.takeIf { it.matches(Regex("^[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+$")) }
+                    ?: "application/octet-stream"
+                val bytes = Base64.decode(base64Data, Base64.DEFAULT)
+                require(bytes.size <= 25 * 1024 * 1024) { "File is larger than 25 MB" }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+                        put(MediaStore.Downloads.MIME_TYPE, safeMime)
+                        put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                        put(MediaStore.Downloads.IS_PENDING, 1)
+                    }
+                    insertedUri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IllegalStateException("Could not create Downloads file")
+                    contentResolver.openOutputStream(insertedUri!!, "w")?.use { it.write(bytes) }
+                        ?: throw IllegalStateException("Could not write Downloads file")
+                    val completed = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+                    contentResolver.update(insertedUri!!, completed, null, null)
+                } else {
+                    val directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                        ?: throw IllegalStateException("Downloads folder unavailable")
+                    if (!directory.exists()) directory.mkdirs()
+                    File(directory, safeName).writeBytes(bytes)
+                }
+                runOnUiThread {
+                    Toast.makeText(this, "File saved in Downloads: $safeName", Toast.LENGTH_LONG).show()
+                }
+                true
+            } catch (error: Exception) {
+                insertedUri?.let { runCatching { contentResolver.delete(it, null, null) } }
+                android.util.Log.e("WorklyDownload", "Could not save generated website file", error)
+                runOnUiThread {
+                    Toast.makeText(this, "Download failed. Please try again.", Toast.LENGTH_LONG).show()
+                }
+                false
+            }
+        }
+
+        @JavascriptInterface
         fun clearAuthSession() {
             runOnUiThread {
                 val old = NativeAuth.session(this@MainActivity)
@@ -419,6 +520,17 @@ class MainActivity : Activity() {
                 val granted = permissions.indices.all { grantResults.getOrNull(it) == PackageManager.PERMISSION_GRANTED }
                 if (granted) request.grant(request.resources) else request.deny()
             }
+        } else if (requestCode == REQUEST_LOCATION) {
+            val origin = pendingGeoOrigin
+            val callback = pendingGeoCallback
+            pendingGeoOrigin = null
+            pendingGeoCallback = null
+            val granted = permissions.indices.any { index ->
+                (permissions[index] == Manifest.permission.ACCESS_FINE_LOCATION ||
+                    permissions[index] == Manifest.permission.ACCESS_COARSE_LOCATION) &&
+                    grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
+            }
+            if (origin != null && callback != null) callback.invoke(origin, granted, false)
         } else if (requestCode == REQUEST_NOTIFICATIONS) {
             val granted = hasNotificationPermission()
             // The web UI owns the subscribe flow and invokes native registration
@@ -458,6 +570,9 @@ class MainActivity : Activity() {
             }
         }
         networkCallback = null
+        pendingGeoCallback?.invoke(pendingGeoOrigin ?: website, false, false)
+        pendingGeoCallback = null
+        pendingGeoOrigin = null
         activityScope.cancel()
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("WorklyAndroid")
@@ -470,5 +585,6 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_MEDIA = 702
+        private const val REQUEST_LOCATION = 703
     }
 }
