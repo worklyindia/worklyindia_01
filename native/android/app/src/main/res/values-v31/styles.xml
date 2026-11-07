@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="WorklyLaunchTheme" parent="@android:style/Theme.SplashScreen">
-        <item name="android:windowSplashScreenBackground">#050D1D</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_workly_launcher_image</item>
-        <item name="android:windowSplashScreenAnimationDuration">250</item>
-        <item name="android:postSplashScreenTheme">@android:style/Theme.Material.Light.NoActionBar</item>
+    <!-- Keep Android 12+ launch theme compatible with the app's current SDK setup.
+         The branded full-screen loading UI is shown by MainActivity immediately after launch. -->
+    <style name="WorklyLaunchTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@drawable/workly_launch_background</item>
+        <item name="android:colorAccent">#159F78</item>
+        <item name="android:statusBarColor">#050D1D</item>
+        <item name="android:navigationBarColor">#050D1D</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>
