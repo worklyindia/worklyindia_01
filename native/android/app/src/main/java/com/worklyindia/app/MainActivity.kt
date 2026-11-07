@@ -488,20 +488,12 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
         }
 
-        val logoCard = FrameLayout(this).apply {
-            background = roundedBackground(logoCardColor, 26)
-            elevation = dp(5).toFloat()
-        }
+        // Show the brand mark directly on the loading background without a tile/card.
         val logo = ImageView(this).apply {
-            setImageResource(R.drawable.ic_workly_launcher_image)
+            setImageResource(R.drawable.workly_splash_icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Workly India app logo"
-            setPadding(dp(10), dp(10), dp(10), dp(10))
         }
-        logoCard.addView(logo, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        ))
 
         val brand = TextView(this).apply {
             text = "Workly India"
@@ -538,7 +530,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
 
-        content.addView(logoCard, LinearLayout.LayoutParams(dp(112), dp(112)).apply {
+        content.addView(logo, LinearLayout.LayoutParams(dp(112), dp(112)).apply {
             bottomMargin = dp(22)
         })
         content.addView(brand, LinearLayout.LayoutParams(
@@ -562,13 +554,13 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
 
-        android.animation.ObjectAnimator.ofFloat(logoCard, "scaleX", 1f, 1.045f, 1f).apply {
+        android.animation.ObjectAnimator.ofFloat(logo, "scaleX", 1f, 1.045f, 1f).apply {
             duration = 1800
             repeatCount = android.animation.ValueAnimator.INFINITE
             interpolator = android.view.animation.AccelerateDecelerateInterpolator()
             start()
         }
-        android.animation.ObjectAnimator.ofFloat(logoCard, "scaleY", 1f, 1.045f, 1f).apply {
+        android.animation.ObjectAnimator.ofFloat(logo, "scaleY", 1f, 1.045f, 1f).apply {
             duration = 1800
             repeatCount = android.animation.ValueAnimator.INFINITE
             interpolator = android.view.animation.AccelerateDecelerateInterpolator()
