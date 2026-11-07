@@ -162,7 +162,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       abortControllerRef.current = new AbortController();
       
       // Check permissions if available
-      if ('permissions' in navigator) {
+      if (!navigator.userAgent.includes('WorklyIndiaApp/1.0') && 'permissions' in navigator) {
         try {
           const permission = await navigator.permissions.query({ name: 'geolocation' });
           console.log('🔐 Geolocation permission state:', permission.state);
@@ -269,7 +269,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
     }
 
     // Check if permissions API is available
-    if ('permissions' in navigator) {
+    if (!navigator.userAgent.includes('WorklyIndiaApp/1.0') && 'permissions' in navigator) {
       try {
         const permission = await navigator.permissions.query({ name: 'geolocation' });
         console.log('🔐 Geolocation permission state:', permission.state);
