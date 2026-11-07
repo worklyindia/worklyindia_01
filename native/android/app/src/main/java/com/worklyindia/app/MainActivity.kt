@@ -60,6 +60,7 @@ class MainActivity : Activity() {
     private lateinit var rootLayout: FrameLayout
     private lateinit var loadingOverlay: FrameLayout
     private var pendingWebPermission: PermissionRequest? = null
+    private var pendingFileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var pendingGeoCallback: android.webkit.GeolocationPermissions.Callback? = null
     private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -69,6 +70,21 @@ class MainActivity : Activity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
+
+    @Deprecated("Android WebView file chooser result callback")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_FILE_CHOOSER) {
+            val callback = pendingFileChooserCallback
+            pendingFileChooserCallback = null
+            val results = if (resultCode == RESULT_OK && data?.data != null) {
+                arrayOf(data.data!!)
+            } else {
+                WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            }
+            callback?.onReceiveValue(results)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -285,6 +301,36 @@ class MainActivity : Activity() {
             }
         }
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView,
+                filePathCallback: android.webkit.ValueCallback<Array<Uri>>,
+                fileChooserParams: WebChromeClient.FileChooserParams
+            ): Boolean {
+                // Android's system document picker securely grants access only to
+                // the files the user selects; broad storage permissions are not needed.
+                pendingFileChooserCallback?.onReceiveValue(null)
+                pendingFileChooserCallback = filePathCallback
+                val acceptTypes = fileChooserParams.acceptTypes
+                    .flatMap { it.split(",") }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() && it != "*/*" }
+                    .distinct()
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = if (acceptTypes.size == 1) acceptTypes.first() else "*/*"
+                    if (acceptTypes.size > 1) putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes.toTypedArray())
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                return try {
+                    startActivityForResult(intent, REQUEST_FILE_CHOOSER)
+                    true
+                } catch (error: Exception) {
+                    pendingFileChooserCallback = null
+                    filePathCallback.onReceiveValue(null)
+                    Toast.makeText(this@MainActivity, "Unable to open file picker.", Toast.LENGTH_LONG).show()
+                    true
+                }
+            }
             override fun onPermissionRequest(request: PermissionRequest) {
                 if (Uri.parse(request.origin.toString()).host != allowedHost) {
                     request.deny()
@@ -1238,6 +1284,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_NOTIFICATIONS = 701
+        private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_MEDIA = 702
         private const val REQUEST_LOCATION = 703
     }
