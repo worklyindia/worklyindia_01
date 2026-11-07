@@ -37,6 +37,15 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.view.Gravity
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import com.google.android.play.core.appupdate.AppUpdateManager
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.appupdate.AppUpdateOptions
+import com.google.android.play.core.install.InstallState
+import com.google.android.play.core.install.InstallStateUpdatedListener
+import com.google.android.play.core.install.model.InstallStatus
+import com.google.android.play.core.install.model.UpdateAvailability
+import com.google.android.play.core.appupdate.AppUpdateType
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -67,10 +76,24 @@ class MainActivity : Activity() {
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
+    private lateinit var appUpdateManager: AppUpdateManager
+    private var updateDialogVisible = false
+    private var updateCheckInProgress = false
+    private val appUpdateListener = InstallStateUpdatedListener { state ->
+        if (state.installStatus() == InstallStatus.DOWNLOADED) {
+            runOnUiThread { showUpdateDownloadedDialog() }
+        }
+    }
 
     @Deprecated("Android WebView file chooser result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_APP_UPDATE) {
+            if (resultCode != RESULT_OK) {
+                android.util.Log.i("WorklyAppUpdate", "In-app update flow was cancelled or failed: $resultCode")
+            }
+            return
+        }
         if (requestCode == REQUEST_FILE_CHOOSER) {
             val callback = pendingFileChooserCallback
             pendingFileChooserCallback = null
@@ -82,6 +105,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appUpdateManager = AppUpdateManagerFactory.create(this)
+        appUpdateManager.registerListener(appUpdateListener)
         // Let Android lay out the app below the real system status bar.
         // Avoid manual inset padding: it can create a second, visible gap above the website.
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -1240,7 +1265,84 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::appUpdateManager.isInitialized) checkForPlayStoreUpdate()
+    }
+
+    private fun checkForPlayStoreUpdate() {
+        if (updateCheckInProgress || updateDialogVisible || isFinishing || isDestroyed) return
+        updateCheckInProgress = true
+        appUpdateManager.appUpdateInfo
+            .addOnSuccessListener { info ->
+                updateCheckInProgress = false
+                when {
+                    info.installStatus() == InstallStatus.DOWNLOADED -> showUpdateDownloadedDialog()
+                    info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS -> {
+                        if (info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE)) {
+                            appUpdateManager.startUpdateFlowForResult(
+                                info, this, AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build(),
+                                REQUEST_APP_UPDATE
+                            )
+                        }
+                    }
+                    info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE &&
+                        info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE) -> showUpdateAvailableDialog(info)
+                }
+            }
+            .addOnFailureListener { error ->
+                updateCheckInProgress = false
+                android.util.Log.w("WorklyAppUpdate", "Could not check Play Store update", error)
+            }
+    }
+
+    private fun showUpdateAvailableDialog(info: com.google.android.play.core.appupdate.AppUpdateInfo) {
+        if (updateDialogVisible || isFinishing || isDestroyed) return
+        updateDialogVisible = true
+        AlertDialog.Builder(this)
+            .setTitle("Update available")
+            .setMessage("A new version of Workly India is available. Update now to get the latest improvements and features.")
+            .setCancelable(true)
+            .setNegativeButton("Later") { dialog, _ ->
+                updateDialogVisible = false
+                dialog.dismiss()
+            }
+            .setPositiveButton("Update now") { dialog, _ ->
+                updateDialogVisible = false
+                dialog.dismiss()
+                runCatching {
+                    appUpdateManager.startUpdateFlowForResult(
+                        info, this,
+                        AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
+                        REQUEST_APP_UPDATE
+                    )
+                }.onFailure { error ->
+                    android.util.Log.e("WorklyAppUpdate", "Could not start in-app update", error)
+                }
+            }
+            .setOnCancelListener { updateDialogVisible = false }
+            .show()
+    }
+
+    private fun showUpdateDownloadedDialog() {
+        if (updateDialogVisible || isFinishing || isDestroyed) return
+        updateDialogVisible = true
+        AlertDialog.Builder(this)
+            .setTitle("Update ready")
+            .setMessage("Workly India has downloaded the update. Restart the app to finish installing it.")
+            .setCancelable(false)
+            .setPositiveButton("Restart now") { dialog, _ ->
+                updateDialogVisible = false
+                dialog.dismiss()
+                appUpdateManager.completeUpdate()
+            }
+            .show()
+    }
+
     override fun onDestroy() {
+        if (::appUpdateManager.isInitialized) {
+            appUpdateManager.unregisterListener(appUpdateListener)
+        }
         networkCallback?.let { callback ->
             runCatching {
                 (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
@@ -1261,6 +1363,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val REQUEST_APP_UPDATE = 4104
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_MEDIA = 702
