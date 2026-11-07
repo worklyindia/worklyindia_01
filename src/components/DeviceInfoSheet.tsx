@@ -153,9 +153,10 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
     if (isOpen) {
       const info = getDeviceInfo();
       setDeviceInfo(info);
-      setNativeDeviceInfo(getNativeAndroidDeviceInfo());
+      const nativeInfo = getNativeAndroidDeviceInfo();
+      setNativeDeviceInfo(nativeInfo);
       setAdditionalSignals(getAdditionalSignals());
-      fetchNetworkAndSaveDeviceInfo(info);
+      fetchNetworkAndSaveDeviceInfo(info, nativeInfo);
       fetchLoginFrequency();
       getBatteryInfo().then(b => setBatteryInfo(b));
       setWebrtcLoading(true);
@@ -251,7 +252,7 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
     }
   };
 
-  const fetchNetworkAndSaveDeviceInfo = async (info: DeviceInfo) => {
+  const fetchNetworkAndSaveDeviceInfo = async (info: DeviceInfo, nativeInfo: NativeAndroidDeviceInfo | null) => {
     setNetworkLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -286,7 +287,7 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
           },
           body: JSON.stringify({
             device_info: info,
-            native_device_info: nativeDeviceInfo,
+            native_device_info: nativeInfo,
             fingerprint_components: components,
             network_type: getNetworkType(),
             downlink_speed: `${networkStatus.downlink} Mbps`,
