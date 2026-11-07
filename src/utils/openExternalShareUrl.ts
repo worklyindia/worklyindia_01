@@ -1,7 +1,7 @@
 /**
- * Opens a platform share URL from both the website and the Android WebView.
- * Android WebView does not reliably support window.open without a popup window
- * transport, so use the native bridge when the app shell is present.
+ * Opens a real platform share flow from the website and Android WebView.
+ * Explicit "Copy link" controls should use the Clipboard API directly; this
+ * helper is intentionally share-only and never copies content.
  */
 export function openExternalShareUrl(url: string): boolean {
   if (!url || typeof window === "undefined") return false;
@@ -13,32 +13,68 @@ export function openExternalShareUrl(url: string): boolean {
     };
   }).WorklyAndroid;
 
-  // In the Android app, use the real Android Sharesheet instead of opening
-  // a web share URL in Chrome or silently falling back to clipboard.
+  let title = "Share Workly India";
+  let message = "";
+  let sharedLink = "";
+
+  try {
+    const shareUrl = new URL(url, window.location.origin);
+    const params = shareUrl.searchParams;
+    sharedLink = params.get("url") || params.get("u") || "";
+    message = params.get("text") || params.get("quote") || "";
+    if (!message && !sharedLink) message = url;
+    if (shareUrl.hostname.includes("whatsapp")) title = "Share with";
+    else if (shareUrl.hostname.includes("facebook")) title = "Share on Facebook";
+    else if (shareUrl.hostname.includes("twitter") || shareUrl.hostname.includes("x.com")) title = "Share on X";
+    else if (shareUrl.hostname.includes("linkedin")) title = "Share on LinkedIn";
+  } catch {
+    message = url;
+  }
+
+  // Native app: always use Android's chooser instead of opening a web URL
+  // inside WebView (which can look like a copy/share failure).
   if (bridge?.shareText) {
     try {
-      const shareUrl = new URL(url, window.location.origin);
-      const params = shareUrl.searchParams;
-      const sharedLink = params.get("url") || params.get("u") || "";
-      const message =
-        params.get("text") ||
-        params.get("quote") ||
-        params.get("title") ||
-        (sharedLink ? sharedLink : url);
-      const title = shareUrl.hostname.includes("whatsapp")
-        ? "Share with"
-        : "Share Workly India";
-      if (bridge.shareText(title, message, sharedLink)) return true;
+      if (bridge.shareText(title, message || sharedLink || url, sharedLink)) return true;
     } catch {
-      // Fall through to the external URL handler.
+      // Continue to browser share fallback.
     }
   }
 
+  // Mobile browsers expose the operating system's native share sheet.
+  // Do not fall back to clipboard if the user cancels or sharing is unavailable.
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    const sharePayload: ShareData = {
+      title,
+      ...(message ? { text: message } : {}),
+      ...(sharedLink ? { url: sharedLink } : {}),
+    };
+    try {
+      void navigator.share(sharePayload).catch((error: unknown) => {
+        if ((error as DOMException)?.name !== "AbortError") {
+          openShareDestination(url, bridge);
+        }
+      });
+      return true;
+    } catch {
+      // Fall through to the platform destination.
+    }
+  }
+
+  return openShareDestination(url, bridge);
+}
+
+function openShareDestination(
+  url: string,
+  bridge?: {
+    openExternalUrl?: (value: string) => boolean;
+  }
+): boolean {
   if (bridge?.openExternalUrl) {
     try {
       if (bridge.openExternalUrl(url)) return true;
     } catch {
-      // Continue with the browser fallback.
+      // Continue with browser navigation.
     }
   }
 
@@ -51,7 +87,9 @@ export function openExternalShareUrl(url: string): boolean {
 /** Opens the Android system share sheet when running inside Workly India. */
 export async function shareText(title: string, text: string, url = ""): Promise<boolean> {
   if (typeof window !== "undefined") {
-    const bridge = (window as Window & { WorklyAndroid?: { shareText?: (title: string, text: string, url: string) => boolean } }).WorklyAndroid;
+    const bridge = (window as Window & {
+      WorklyAndroid?: { shareText?: (title: string, text: string, url: string) => boolean };
+    }).WorklyAndroid;
     if (bridge?.shareText) {
       try {
         return bridge.shareText(title, text, url);
