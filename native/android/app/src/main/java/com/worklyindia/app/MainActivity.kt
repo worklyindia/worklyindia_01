@@ -17,6 +17,8 @@ import android.view.inputmethod.InputMethodManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
+import android.os.BatteryManager
+import android.app.ActivityManager
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Base64
@@ -429,6 +431,41 @@ class MainActivity : Activity() {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun getNativeDeviceInfo(): String {
+            return runCatching {
+                val metrics = resources.displayMetrics
+                val memory = ActivityManager.MemoryInfo().also {
+                    (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it)
+                }
+                val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                val batteryLevel = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                val appInfo = packageManager.getPackageInfo(packageName, 0)
+                JSONObject()
+                    .put("manufacturer", Build.MANUFACTURER.orEmpty().ifBlank { "Unknown" })
+                    .put("brand", Build.BRAND.orEmpty().ifBlank { "Unknown" })
+                    .put("model", Build.MODEL.orEmpty().ifBlank { "Unknown" })
+                    .put("device", Build.DEVICE.orEmpty().ifBlank { "Unknown" })
+                    .put("product", Build.PRODUCT.orEmpty().ifBlank { "Unknown" })
+                    .put("hardware", Build.HARDWARE.orEmpty().ifBlank { "Unknown" })
+                    .put("androidVersion", Build.VERSION.RELEASE.orEmpty().ifBlank { "Unknown" })
+                    .put("apiLevel", Build.VERSION.SDK_INT)
+                    .put("securityPatch", if (Build.VERSION.SDK_INT >= 23) Build.VERSION.SECURITY_PATCH else "N/A")
+                    .put("supportedAbis", Build.SUPPORTED_ABIS.joinToString(", ").ifBlank { "Unknown" })
+                    .put("totalRamGb", String.format(java.util.Locale.US, "%.1f GB", memory.totalMem / (1024.0 * 1024.0 * 1024.0)))
+                    .put("screenPixels", "${metrics.widthPixels} × ${metrics.heightPixels}")
+                    .put("screenDensityDpi", metrics.densityDpi)
+                    .put("batteryPercent", if (batteryLevel in 0..100) batteryLevel else JSONObject.NULL)
+                    .put("appVersion", appInfo.versionName ?: "Unknown")
+                    .put("appVersionCode", if (Build.VERSION.SDK_INT >= 28) appInfo.longVersionCode else @Suppress("DEPRECATION") appInfo.versionCode.toLong())
+                    .put("locale", resources.configuration.locales[0].toLanguageTag())
+                    .toString()
+            }.getOrElse { error ->
+                android.util.Log.e("WorklyDeviceInfo", "Could not collect native device details", error)
+                JSONObject().put("error", "native_device_info_unavailable").toString()
+            }
+        }
+
         @JavascriptInterface
         fun isNetworkConnected(): Boolean {
             val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
