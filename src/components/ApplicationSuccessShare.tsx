@@ -5,6 +5,7 @@ import { MessageCircle, Facebook, Twitter, Check, ArrowRight, BriefcaseBusiness,
 import { useShareTracking } from '@/hooks/useShareTracking';
 import { SITE_CONFIG } from '@/config/siteConfig';
 import confetti from 'canvas-confetti';
+import { openExternalShareUrl } from '@/utils/openExternalShareUrl';
 
 interface ApplicationSuccessShareProps {
   isOpen: boolean;
@@ -35,7 +36,7 @@ const ApplicationSuccessShare = ({
       facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(jobUrl)}`,
       twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareMessage)}`,
     };
-    window.open(urls[platform], '_blank', 'noopener,noreferrer,width=600,height=600');
+    openExternalShareUrl(urls[platform]);
     void trackShare('job', platform, jobId);
   };
 
