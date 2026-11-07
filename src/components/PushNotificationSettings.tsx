@@ -230,9 +230,10 @@ export const PushNotificationSettings: React.FC = () => {
 
     // Ask for permission FIRST, straight out of the click: any network call
     // before this loses the user gesture and Chrome silently blocks the prompt.
-    const permission = await FirebasePushService.ensurePermission();
+    const isNativeAndroid = FirebasePushService.isNativeAndroidApp();
+    const permission = isNativeAndroid ? 'granted' : await FirebasePushService.ensurePermission();
     setPermissionStatus(permission);
-    if (permission !== 'granted') {
+    if (!isNativeAndroid && permission !== 'granted') {
       if (permission === 'denied') {
         // Show the step-by-step unblock guide instead of a disappearing toast.
         setShowUnblockGuide(true);
@@ -271,12 +272,16 @@ export const PushNotificationSettings: React.FC = () => {
 
         let errorMessage = "Failed to enable push notifications. Please try again.";
 
-        if (!configured) {
+        if (!isNativeAndroid && !configured) {
           errorMessage = "Push notifications are not configured yet. They will work once the Firebase keys are set.";
         } else if (details.isBlocked) {
-          errorMessage = "Notifications are blocked by your browser. Please check site permissions.";
+          errorMessage = isNativeAndroid
+            ? "Notifications are disabled in Android settings. Please allow notifications for Workly India."
+            : "Notifications are blocked by your browser. Please check site permissions.";
         } else if (!details.supported) {
-          errorMessage = "This browser does not support push notifications";
+          errorMessage = isNativeAndroid
+            ? "Native Android notification support is unavailable. Please update the Workly India app."
+            : "This browser does not support push notifications";
         } else if (details.inIframe) {
           errorMessage = "Open the app in a new tab to enable notifications";
         }
