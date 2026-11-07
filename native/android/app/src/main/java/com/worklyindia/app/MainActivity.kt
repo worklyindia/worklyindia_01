@@ -4,6 +4,13 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.Context
+import android.net.ConnectivityManager
+import android.os.Vibrator
+import android.os.VibrationEffect
+import android.os.VibratorManager
+import android.view.inputmethod.InputMethodManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -72,6 +79,7 @@ class MainActivity : Activity() {
             javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(false)
             cacheMode = WebSettings.LOAD_DEFAULT
+            userAgentString = "$userAgentString WorklyIndiaApp/1.0"
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             allowFileAccess = false
             allowContentAccess = true
@@ -100,6 +108,7 @@ class MainActivity : Activity() {
                 super.onPageFinished(view, url)
                 if (Uri.parse(url).host == allowedHost) {
                     syncWebsiteSession()
+                    dispatchNativeEvent("workly-native-bridge-ready")
                     // In this native shell Android already places the WebView below
                     // the status bar. WebView may still report a non-zero CSS
                     // safe-area inset, which adds a second blank strip above headers.
@@ -194,6 +203,14 @@ class MainActivity : Activity() {
         webView.evaluateJavascript(script, null)
     }
 
+    private fun dispatchNativeEvent(name: String, detail: String = "{}") {
+        val safeName = name.replace(Regex("[^a-zA-Z0-9_-]"), "")
+        webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('$safeName',{detail:$detail}));",
+            null
+        )
+    }
+
     private fun hasNotificationPermission(): Boolean {
         val runtimeGranted = Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -201,6 +218,48 @@ class MainActivity : Activity() {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun isNetworkConnected(): Boolean {
+            val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            return manager.activeNetworkInfo?.isConnected == true
+        }
+
+        @JavascriptInterface
+        fun setStatusBar(color: String, darkIcons: Boolean) {
+            runOnUiThread {
+                val parsed = runCatching { Color.parseColor(color) }.getOrDefault(Color.WHITE)
+                window.statusBarColor = parsed
+                WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkIcons
+            }
+        }
+
+        @JavascriptInterface
+        fun hideKeyboard() {
+            runOnUiThread {
+                val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                manager.hideSoftInputFromWindow(webView.windowToken, 0)
+                dispatchNativeEvent("workly-native-keyboard-hidden")
+            }
+        }
+
+        @JavascriptInterface
+        fun vibrate(milliseconds: Int) {
+            val duration = milliseconds.coerceIn(1, 80).toLong()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val manager = getSystemService(VibratorManager::class.java)
+                manager.defaultVibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
+                    .vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
+            }
+        }
+
+        @JavascriptInterface
+        fun exitApp() {
+            runOnUiThread { finish() }
+        }
+
         @JavascriptInterface
         fun isNotificationPermissionGranted(): Boolean = hasNotificationPermission()
 
@@ -318,8 +377,14 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Android API")
     override fun onBackPressed() {
-        if (::webView.isInitialized && webView.canGoBack()) webView.goBack()
-        else super.onBackPressed()
+        if (::webView.isInitialized) {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new Event('workly-native-back'));",
+                null
+            )
+        } else {
+            super.onBackPressed()
+        }
     }
 
     override fun onDestroy() {
