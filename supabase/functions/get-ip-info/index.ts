@@ -380,6 +380,7 @@ Deno.serve(async req => {
               user_id: user.id,
               user_type: body.user_type === 'employer' ? 'employer' : body.user_type === 'job_seeker' ? 'job_seeker' : null,
               device_id: device_info.device_id || 'unknown',
+              native_device_info: body.native_device_info && body.native_device_info.source === 'native-android' ? body.native_device_info : null,
               fingerprint_hash: fingerprintHash || null,
               browser_name: device_info.browser_name || null,
               browser_version: device_info.browser_version || null,
