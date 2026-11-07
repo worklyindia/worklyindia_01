@@ -7,8 +7,7 @@ import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-
 import { navigationMiddleware } from "@/utils/navigationMiddleware";
 import { HelmetProvider } from "react-helmet-async";
 import RouteSEO from "@/components/seo/RouteSEO";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { EmployerAuthProvider } from "@/contexts/EmployerAuthContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { UserLocationProvider } from "@/contexts/UserLocationContext";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -1488,21 +1487,15 @@ const App = () => {
     <HelmetProvider>
       <TooltipProvider delayDuration={300}>
         <ErrorBoundary context="Application Root">
-          <SafeErrorBoundary context="Authentication System">
-            <AuthProvider>
-              <EmployerAuthProvider>
-                <SocialTokenCapture />
-                <NotificationPermissionPrompt autoShow />
-                <UserLocationProvider>
-                    <VPNGuard>
-                      <SafeErrorBoundary context="Main Application Content">
-                        <AppContent />
-                      </SafeErrorBoundary>
-                    </VPNGuard>
-                </UserLocationProvider>
-              </EmployerAuthProvider>
-            </AuthProvider>
-          </SafeErrorBoundary>
+          <SocialTokenCapture />
+          <NotificationPermissionPrompt autoShow />
+          <UserLocationProvider>
+            <VPNGuard>
+              <SafeErrorBoundary context="Main Application Content">
+                <AppContent />
+              </SafeErrorBoundary>
+            </VPNGuard>
+          </UserLocationProvider>
           {/* <CookieConsent /> */}
           <SafeErrorBoundary context="Toast Notifications">
             <Toaster />
