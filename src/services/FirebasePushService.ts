@@ -26,10 +26,80 @@ interface PushConfigResponse {
 
 const CONFIG_CACHE_KEY = 'firebase_push_config_v1';
 
-declare global { interface Window { WorklyAndroid?: { isNotificationPermissionGranted?: () => boolean; requestNotificationPermission?: () => boolean; registerPushNotifications?: () => void; syncAuthSession?: (raw: string) => void; }; } }
+declare global {
+  interface Window {
+    WorklyAndroid?: {
+      isNativeAndroidApp?: () => boolean;
+      getNotificationPermissionStatus?: () => string;
+      requestNativeNotifications?: () => void;
+      unsubscribeNativeNotifications?: () => void;
+      isNotificationPermissionGranted?: () => boolean;
+      requestNotificationPermission?: () => boolean;
+      registerPushNotifications?: () => void;
+      syncAuthSession?: (raw: string) => void;
+    };
+    __WORKLY_NATIVE_ANDROID__?: boolean;
+  }
+}
 
 export class FirebasePushService {
-  private static isNativeAndroid(): boolean { return typeof window !== 'undefined' && typeof window.WorklyAndroid?.isNotificationPermissionGranted === 'function' && typeof window.WorklyAndroid?.requestNotificationPermission === 'function'; }
+  static isNativeAndroidApp(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      if (new URLSearchParams(window.location.search).get('workly_native') === 'android') return true;
+      if (window.__WORKLY_NATIVE_ANDROID__ === true) return true;
+      if (window.WorklyAndroid?.isNativeAndroidApp?.() === true) return true;
+      // Compatibility with earlier Workly Android app builds.
+      return typeof window.WorklyAndroid?.isNotificationPermissionGranted === 'function' &&
+        typeof window.WorklyAndroid?.requestNotificationPermission === 'function';
+    } catch { return false; }
+  }
+
+  private static isNativeAndroid(): boolean { return this.isNativeAndroidApp(); }
+
+  private static requestNativeSetup(): Promise<boolean> {
+    if (!window.WorklyAndroid?.requestNativeNotifications) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('workly:native-notification-result', onResult);
+        window.clearTimeout(timeout);
+        resolve(value);
+      };
+      const onResult = (event: Event) => {
+        const detail = (event as CustomEvent<{ granted?: boolean; registered?: boolean }>).detail;
+        finish(detail?.granted === true && detail?.registered === true);
+      };
+      const timeout = window.setTimeout(() => finish(false), 90000);
+      window.addEventListener('workly:native-notification-result', onResult, { once: true });
+      try { window.WorklyAndroid!.requestNativeNotifications!(); }
+      catch (error) { console.error('Native Android notification request failed:', error); finish(false); }
+    });
+  }
+
+  private static requestNativeUnsubscribe(): Promise<boolean> {
+    if (!window.WorklyAndroid?.unsubscribeNativeNotifications) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('workly:native-unsubscribe-result', onResult);
+        window.clearTimeout(timeout);
+        resolve(value);
+      };
+      const onResult = (event: Event) => {
+        const detail = (event as CustomEvent<{ success?: boolean }>).detail;
+        finish(detail?.success === true);
+      };
+      const timeout = window.setTimeout(() => finish(false), 25000);
+      window.addEventListener('workly:native-unsubscribe-result', onResult, { once: true });
+      try { window.WorklyAndroid!.unsubscribeNativeNotifications!(); }
+      catch (error) { console.error('Native Android unsubscribe failed:', error); finish(false); }
+    });
+  }
 
   private static configPromise: Promise<PushConfigResponse | null> | null = null;
   private static initialized = false;
@@ -113,7 +183,7 @@ export class FirebasePushService {
       isIOS: /iPad|iPhone|iPod/.test(ua),
       isAndroid: /Android/i.test(ua),
       hostname: typeof window !== 'undefined' ? window.location.hostname : '',
-      supported: this.isBrowserPushSupported(),
+      supported: this.isBrowserPushSupported() || this.isNativeAndroidApp(),
       userAgent: ua,
     };
   }
@@ -122,6 +192,7 @@ export class FirebasePushService {
     if (typeof window === 'undefined') {
       return { canEnable: false, reason: 'Not running in a browser' };
     }
+    if (this.isNativeAndroidApp()) return { canEnable: true };
     if (!this.isBrowserPushSupported()) {
       return {
         canEnable: false,
@@ -146,7 +217,11 @@ export class FirebasePushService {
   }
 
   static async checkPermissionStatus(): Promise<'granted' | 'denied' | 'default'> {
-    if (this.isNativeAndroid()) return window.WorklyAndroid!.isNotificationPermissionGranted!() ? 'granted' : 'default';
+    if (this.isNativeAndroid()) {
+      const status = window.WorklyAndroid?.getNotificationPermissionStatus?.();
+      if (status === 'granted' || status === 'denied') return status;
+      return window.WorklyAndroid?.isNotificationPermissionGranted?.() ? 'granted' : 'default';
+    }
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     return Notification.permission;
   }
@@ -306,7 +381,7 @@ export class FirebasePushService {
    * a live user gesture. That is why this is separate from token saving.
    */
   static async ensurePermission(): Promise<'granted' | 'denied' | 'default'> {
-    if (this.isNativeAndroid()) return window.WorklyAndroid!.requestNotificationPermission!() ? 'granted' : 'default';
+    if (this.isNativeAndroid()) return this.checkPermissionStatus();
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     if (Notification.permission === 'granted') return 'granted';
     if (Notification.permission === 'denied') return 'denied';
@@ -321,6 +396,9 @@ export class FirebasePushService {
   /** Asks for permission (if needed), gets an FCM token and saves it. */
   static async requestPermissionAndSaveToken(_forceLink = false): Promise<boolean> {
     if (this.isNativeAndroid()) {
+      if (window.WorklyAndroid?.requestNativeNotifications) {
+        return await this.requestNativeSetup();
+      }
       const permission = await this.ensurePermission();
       if (permission !== 'granted') return false;
       const { data: sessionData } = await supabase.auth.getSession();
@@ -540,6 +618,9 @@ export class FirebasePushService {
   }
 
   static async unsubscribe(): Promise<boolean> {
+    if (this.isNativeAndroid() && window.WorklyAndroid?.unsubscribeNativeNotifications) {
+      return await this.requestNativeUnsubscribe();
+    }
     try {
       if (this.isNativeAndroid()) {
         const { data: sessionData } = await supabase.auth.getSession();
