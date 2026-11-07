@@ -35,37 +35,45 @@ object NativePushManager {
      * does not contain an api_key block, so FirebaseApp.initializeApp(context)
      * alone cannot create Firebase Installations / FCM tokens on a fresh APK.
      */
-    private fun getFirebaseApp(context: Context): FirebaseApp? {
-        FirebaseApp.getApps(context)
+    private fun getFirebaseApp(context: Context, suppliedConfig: JSONObject? = null): FirebaseApp? {
+        val existing = FirebaseApp.getApps(context)
             .firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
-            ?.let { return it }
-
-        val connection = (URL("$SUPABASE_URL/functions/v1/email-api").openConnection() as HttpURLConnection)
-        connection.requestMethod = "POST"
-        connection.connectTimeout = 15000
-        connection.readTimeout = 20000
-        connection.setRequestProperty("apikey", SUPABASE_KEY)
-        connection.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
-        connection.setRequestProperty("Content-Type", "application/json")
-        connection.doOutput = true
-        connection.outputStream.use {
-            it.write(JSONObject().put("action", "push_config").toString().toByteArray(Charsets.UTF_8))
-        }
-        val status = connection.responseCode
-        val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
-            ?.bufferedReader()?.use { it.readText() }.orEmpty()
-        connection.disconnect()
-        if (status !in 200..299) {
-            android.util.Log.e("WorklyPush", "Firebase push-config failed [$status]: $response")
-            return null
+        if (existing != null && !existing.options.apiKey.isNullOrBlank()) return existing
+        if (existing != null) {
+            android.util.Log.w("WorklyPush", "Replacing incomplete default Firebase options")
+            existing.delete()
         }
 
-        val root = JSONObject(response)
-        if (!root.optBoolean("configured")) {
-            android.util.Log.e("WorklyPush", "Firebase web push configuration is incomplete")
-            return null
+        // Prefer the Firebase config already fetched by the signed-in website.
+        // This avoids a second unauthenticated Edge Function request from Android.
+        val config = suppliedConfig ?: run {
+            val connection = (URL("$SUPABASE_URL/functions/v1/email-api").openConnection() as HttpURLConnection)
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 20000
+            connection.setRequestProperty("apikey", SUPABASE_KEY)
+            connection.setRequestProperty("Authorization", "Bearer $SUPABASE_KEY")
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.outputStream.use {
+                it.write(JSONObject().put("action", "push_config").toString().toByteArray(Charsets.UTF_8))
+            }
+            val status = connection.responseCode
+            val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            connection.disconnect()
+            if (status !in 200..299) {
+                android.util.Log.e("WorklyPush", "Firebase push-config failed [$status]: $response")
+                return null
+            }
+            val root = JSONObject(response)
+            if (!root.optBoolean("configured")) {
+                android.util.Log.e("WorklyPush", "Firebase web push configuration is incomplete")
+                return null
+            }
+            root.optJSONObject("config") ?: return null
         }
-        val config = root.optJSONObject("config") ?: return null
+
         val apiKey = config.optString("apiKey")
         val appId = config.optString("appId")
         val projectId = config.optString("projectId")
@@ -97,12 +105,12 @@ object NativePushManager {
         }
     }
 
-    suspend fun register(context: Context, session: NativeSession): Boolean = withContext(Dispatchers.IO) {
+    suspend fun register(context: Context, session: NativeSession, firebaseConfig: JSONObject? = null): Boolean = withContext(Dispatchers.IO) {
         try {
             // Initialize with the live public Firebase config. The repository's
             // google-services.json omits api_key, so the standard resource-based
             // initializer returns null on a clean install.
-            val firebaseApp = getFirebaseApp(context) ?: return@withContext false
+            val firebaseApp = getFirebaseApp(context, firebaseConfig) ?: return@withContext false
             // Register the device token even when notification permission is currently denied.
             // Android will suppress display until the user grants POST_NOTIFICATIONS, but the
             // token is ready immediately after they enable it in system settings.

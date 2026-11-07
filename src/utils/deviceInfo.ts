@@ -27,13 +27,32 @@ export interface DeviceInfo {
 const DEVICE_ID_KEY = 'wfh_device_id';
 
 /** Get or create persistent device ID */
-const getDeviceId = (): string => {
-  let id = localStorage.getItem(DEVICE_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(DEVICE_ID_KEY, id);
+const createDeviceId = (): string => {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {
+    // Use a non-cryptographic fallback only for a local display identifier.
   }
-  return id;
+  return `wfh-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+};
+
+const getDeviceId = (): string => {
+  try {
+    const existing = window.localStorage?.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const id = createDeviceId();
+    try { window.localStorage?.setItem(DEVICE_ID_KEY, id); } catch { /* storage can be disabled */ }
+    return id;
+  } catch {
+    return createDeviceId();
+  }
 };
 
 /** Parse browser name and version from user agent */

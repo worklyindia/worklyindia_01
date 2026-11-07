@@ -45,6 +45,11 @@ import { initPwaInstallListener } from "@/utils/pwaInstallTrigger";
 import CursorFollower from "@/components/animations/CursorFollower";
 
 import { useAppReady } from "@/hooks/useAppReady";
+import { useNativeStatusBar } from "@/hooks/useNativeStatusBar";
+import { useNativeKeyboard } from "@/hooks/useNativeKeyboard";
+import { useNativeBackButton } from "@/hooks/useNativeBackButton";
+import { useNativeNetwork } from "@/hooks/useNativeNetwork";
+import { isWorklyAndroidApp } from "@/lib/nativeAppBridge";
 
 const isBandwidthSaverMode = import.meta.env.VITE_BANDWIDTH_SAVER !== 'false';
 
@@ -311,6 +316,12 @@ const AppContent = () => {
   const { loading: authLoading, profileLoading, user } = useAuth();
   const isAppReady = useAppReady(authLoading, profileLoading, user);
   useTrackWorklyChatReturn();
+  // Activate the shared Android bridge so the native shell and website SPA
+  // respond to the same navigation, keyboard, connectivity and system-bar state.
+  useNativeStatusBar({ color: "#ffffff", style: "dark" });
+  useNativeKeyboard();
+  useNativeBackButton();
+  useNativeNetwork(false);
   
   // Initialize navigation middleware
   useEffect(() => {
@@ -340,7 +351,7 @@ const AppContent = () => {
   
   // Initialize PWA install prompt listener
   useEffect(() => {
-    initPwaInstallListener();
+    if (!isWorklyAndroidApp()) initPwaInstallListener();
   }, []);
 
   // Clean up expired jobs cache entries (older than 24h) on app start so old
@@ -410,15 +421,13 @@ const AppContent = () => {
   // DISABLED: Live session tracking removed to reduce Supabase egress
   // useLiveSessionTracking();
   
-  // Native Android lifecycle and system UI are handled by the separate Kotlin app.
-  
-  // Native Android is a separate Kotlin application. The web SPA does not import Capacitor plugins.
+  // Native Android device capabilities are connected through the WorklyAndroid bridge.
 
   return (
     <JobStatusNotificationWrapper>
       <BrandMetaTags />
       {!isBandwidthSaverMode && <JobRecommendationNotifier />}
-      {!isBandwidthSaverMode && <InstallPromptBanner />}
+      {!isBandwidthSaverMode && !isWorklyAndroidApp() && <InstallPromptBanner />}
       
       <RoutePreserver />
       <PendingReferralApplier />

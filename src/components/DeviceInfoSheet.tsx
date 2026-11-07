@@ -12,6 +12,7 @@ import { calculateRiskScore, type RiskScoreResult } from '@/utils/calculateRiskS
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { getNetworkType } from '@/utils/networkOptimizer';
 import { useUserLocation } from '@/contexts/UserLocationContext';
+import { getNativeDeviceInfo, isWorklyAndroidApp, type NativeDeviceInfo } from '@/lib/nativeAppBridge';
 
 interface DeviceInfoSheetProps {
   isOpen: boolean;
@@ -119,6 +120,7 @@ const SectionHeader = ({ icon: Icon, title }: { icon: React.ElementType; title: 
 
 export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClose }) => {
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [nativeDeviceInfo, setNativeDeviceInfo] = useState<NativeDeviceInfo | null>(null);
   const [fingerprint, setFingerprint] = useState<string>('');
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
   const [networkLoading, setNetworkLoading] = useState(false);
@@ -152,6 +154,29 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
     if (isOpen) {
       const info = getDeviceInfo();
       setDeviceInfo(info);
+
+      // The WebView JavaScript bridge can become available just after the
+      // React sheet opens. Refresh on the native ready event and briefly retry
+      // instead of permanently rendering an empty native-device section.
+      const refreshNativeDeviceInfo = () => {
+        const nativeInfo = getNativeDeviceInfo();
+        if (nativeInfo) {
+          setNativeDeviceInfo(nativeInfo);
+          return true;
+        }
+        return false;
+      };
+      setNativeDeviceInfo(refreshNativeDeviceInfo() ? getNativeDeviceInfo() : null);
+      const handleNativeBridgeReady = () => refreshNativeDeviceInfo();
+      window.addEventListener('workly-native-bridge-ready', handleNativeBridgeReady);
+      let nativeInfoAttempts = 0;
+      const nativeInfoRetry = window.setInterval(() => {
+        nativeInfoAttempts += 1;
+        if (refreshNativeDeviceInfo() || nativeInfoAttempts >= 20) {
+          window.clearInterval(nativeInfoRetry);
+        }
+      }, 250);
+
       setAdditionalSignals(getAdditionalSignals());
       fetchNetworkAndSaveDeviceInfo(info);
       fetchLoginFrequency();
@@ -224,6 +249,10 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
         }
         setPluginsList(plugins);
       } catch { setPluginsList([]); }
+      return () => {
+        window.removeEventListener('workly-native-bridge-ready', handleNativeBridgeReady);
+        window.clearInterval(nativeInfoRetry);
+      };
     }
   }, [isOpen]);
 
@@ -435,6 +464,45 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
                   <Badge className="text-[10px] h-5 bg-green-500/10 text-green-600 border-0">✅ None</Badge>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Native Android hardware details are provided by Android APIs, not limited WebView APIs. */}
+        {isWorklyAndroidApp() && !nativeDeviceInfo && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              Native device details are still loading
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Reopen this panel after the app finishes loading. If details remain unavailable, update the Workly India app.
+            </p>
+          </div>
+        )}
+        {nativeDeviceInfo && (
+          <div>
+            <SectionHeader icon={Smartphone} title="Native Android Device Details" />
+            <div className="bg-muted/30 rounded-xl p-3">
+              <InfoRow label="Manufacturer" value={nativeDeviceInfo.manufacturer} />
+              <InfoRow label="Brand" value={nativeDeviceInfo.brand} />
+              <InfoRow label="Model" value={nativeDeviceInfo.model} />
+              <InfoRow label="Device" value={nativeDeviceInfo.device} />
+              <InfoRow label="Product" value={nativeDeviceInfo.product} />
+              <InfoRow label="Hardware" value={nativeDeviceInfo.hardware} />
+              <InfoRow label="Android Version" value={nativeDeviceInfo.androidVersion} />
+              <InfoRow label="Android API" value={String(nativeDeviceInfo.apiLevel)} />
+              <InfoRow label="Security Patch" value={nativeDeviceInfo.securityPatch} />
+              <InfoRow label="Supported CPU ABIs" value={nativeDeviceInfo.supportedAbis} />
+              <InfoRow label="Total RAM" value={nativeDeviceInfo.totalRamGb} />
+              <InfoRow label="Native Screen" value={nativeDeviceInfo.screenPixels} />
+              <InfoRow label="Screen Density" value={`${nativeDeviceInfo.screenDensityDpi} DPI`} />
+              {nativeDeviceInfo.batteryPercent !== null && (
+                <InfoRow label="Native Battery" value={`${nativeDeviceInfo.batteryPercent}%`} />
+              )}
+              <InfoRow label="App Version" value={nativeDeviceInfo.appVersion} />
+              <InfoRow label="App Build" value={String(nativeDeviceInfo.appVersionCode)} />
+              <InfoRow label="Device Locale" value={nativeDeviceInfo.locale} />
             </div>
           </div>
         )}

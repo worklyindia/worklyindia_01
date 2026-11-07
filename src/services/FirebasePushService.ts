@@ -36,6 +36,7 @@ declare global {
       isNotificationPermissionGranted?: () => boolean;
       requestNotificationPermission?: () => boolean;
       registerPushNotifications?: () => void;
+      registerPushNotificationsWithSession?: (rawSession: string) => void;
       syncAuthSession?: (raw: string) => void;
     };
     __WORKLY_NATIVE_ANDROID__?: boolean;
@@ -394,7 +395,41 @@ export class FirebasePushService {
    * a live user gesture. That is why this is separate from token saving.
    */
   static async ensurePermission(): Promise<'granted' | 'denied' | 'default'> {
-    if (this.isNativeAndroid()) return this.checkPermissionStatus();
+    if (this.isNativeAndroid()) {
+      const current = await this.checkPermissionStatus();
+      if (current === 'granted') return 'granted';
+      const bridge = window.WorklyAndroid;
+      if (!bridge?.requestNotificationPermission) return current;
+
+      // Android 13+ asks through the native runtime permission dialog. Wait for
+      // MainActivity's permission-result event instead of treating the initial
+      // synchronous "request started" false return as a denial.
+      return await new Promise((resolve) => {
+        let settled = false;
+        const finish = (value: 'granted' | 'denied' | 'default') => {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener('workly-native-notification-permission', onResult);
+          window.clearTimeout(timeout);
+          resolve(value);
+        };
+        const onResult = (event: Event) => {
+          const granted = Boolean((event as CustomEvent<{ granted?: boolean }>).detail?.granted);
+          finish(granted ? 'granted' : 'denied');
+        };
+        const timeout = window.setTimeout(() => {
+          void this.checkPermissionStatus().then((status) => finish(status));
+        }, 45000);
+        window.addEventListener('workly-native-notification-permission', onResult, { once: true });
+        try {
+          const alreadyGranted = bridge.requestNotificationPermission?.() === true;
+          if (alreadyGranted) finish('granted');
+        } catch (error) {
+          console.warn('🔔 Native Android permission request failed:', error);
+          finish('default');
+        }
+      });
+    }
     if (typeof window === 'undefined' || !('Notification' in window)) return 'denied';
     if (Notification.permission === 'granted') return 'granted';
     if (Notification.permission === 'denied') return 'denied';
@@ -416,8 +451,9 @@ export class FirebasePushService {
       if (permission !== 'granted') return false;
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
-      if (!userId) return false;
-      if (!sessionData.session || !window.WorklyAndroid!.registerPushNotifications) return false;
+      if (!userId || !sessionData.session) return false;
+      if (!window.WorklyAndroid?.registerPushNotificationsWithSession &&
+          !window.WorklyAndroid?.registerPushNotifications) return false;
       // Android reports the actual FCM/PostgREST result. This avoids treating
       // an optimistic permission grant or a stale DB row as a successful subscribe.
       const registration = await new Promise<boolean>((resolve) => {
@@ -437,8 +473,14 @@ export class FirebasePushService {
         const timeout = window.setTimeout(() => finish(false), 25000);
         window.addEventListener('workly-native-push-registration-complete', onComplete, { once: true });
         try {
-          window.WorklyAndroid!.syncAuthSession?.(JSON.stringify(sessionData.session));
-          window.WorklyAndroid!.registerPushNotifications!();
+          const bridge = window.WorklyAndroid!;
+          if (bridge.registerPushNotificationsWithSession) {
+            bridge.registerPushNotificationsWithSession(JSON.stringify(sessionData.session));
+          } else {
+            // Compatibility with already-installed APKs that expose the older bridge.
+            bridge.syncAuthSession?.(JSON.stringify(sessionData.session));
+            bridge.registerPushNotifications?.();
+          }
         } catch (error) {
           console.error('Could not call Android push bridge:', error);
           finish(false);

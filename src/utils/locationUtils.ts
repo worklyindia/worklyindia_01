@@ -303,7 +303,7 @@ export const getGeolocation = async (): Promise<GeolocationPosition> => {
     navigator.geolocation.getCurrentPosition(
       resolve,
       reject,
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   });
 };

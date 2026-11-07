@@ -1,10 +1,13 @@
 import { useCallback } from 'react';
+import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 
-// Web-safe haptic feedback. The native Kotlin app provides its own Android haptics.
 export const useNativeHaptics = () => {
   const vibrate = useCallback((pattern: number | number[]) => {
     try {
-      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      const duration = Array.isArray(pattern) ? pattern[0] : pattern;
+      const bridge = getWorklyAndroidBridge();
+      if (bridge) bridge.vibrate(duration);
+      else if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         navigator.vibrate(pattern);
       }
     } catch (error) {
@@ -20,13 +23,5 @@ export const useNativeHaptics = () => {
   const errorHaptic = useCallback(async () => vibrate([25, 40, 25]), [vibrate]);
   const selectionHaptic = useCallback(async () => vibrate(5), [vibrate]);
 
-  return {
-    lightImpact,
-    mediumImpact,
-    heavyImpact,
-    successHaptic,
-    warningHaptic,
-    errorHaptic,
-    selectionHaptic,
-  };
+  return { lightImpact, mediumImpact, heavyImpact, successHaptic, warningHaptic, errorHaptic, selectionHaptic };
 };

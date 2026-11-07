@@ -60,10 +60,10 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
     }
 
     console.log('🌍 Starting IP location detection...');
+    cleanup();
     isDetectingRef.current = true;
     setState('detecting-ip');
     setError('');
-    cleanup();
     
     try {
       abortControllerRef.current = new AbortController();
@@ -145,15 +145,16 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
     }
 
     console.log('🎯 Starting exact location detection...');
+    cleanup();
     isDetectingRef.current = true;
     setState('detecting-geo');
     setError('');
-    cleanup();
 
     const geoCheck = checkGeolocationSupport();
     if (!geoCheck.supported) {
       console.log('❌ Geolocation not supported, falling back to IP location...');
       await handleGeoLocationFallback();
+      isDetectingRef.current = false;
       return;
     }
 
@@ -181,7 +182,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       
       if (abortControllerRef.current?.signal.aborted) return;
       
-      const isNativeGPS = false;
+      const isNativeGPS = navigator.userAgent.includes('WorklyIndiaApp/1.0');
       console.log(`📍 Got ${isNativeGPS ? 'GPS' : 'browser'} position:`, position.coords, `accuracy: ${position.coords.accuracy}m`);
       
       const lat = position.coords.latitude;
@@ -281,8 +282,8 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
           console.log('❓ Permission needs to be requested, auto-requesting...');
           await detectExactLocation();
         } else {
-          console.log('❌ Permission denied');
-          setError('Location permission denied');
+          console.log('❌ Precise location permission denied; using approximate IP location');
+          await detectIPLocation();
         }
       } catch (err) {
         console.error('❌ Error checking permissions:', err);
@@ -293,7 +294,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       console.log('ℹ️ Permissions API not available, trying direct geolocation...');
       await detectExactLocation();
     }
-  }, [detectExactLocation]);
+  }, [detectExactLocation, detectIPLocation]);
 
   return {
     ipLocation,
