@@ -488,10 +488,16 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
         }
 
-        // Show the brand mark directly on the loading background without a tile/card.
+        // Reuse the exact installed app launcher artwork, with its square corners
+        // clipped into a clean circular mark so no separate tile/card is shown.
         val logo = ImageView(this).apply {
-            setImageResource(R.drawable.workly_splash_icon)
+            setImageResource(R.drawable.ic_workly_launcher_image)
             scaleType = ImageView.ScaleType.FIT_CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.TRANSPARENT)
+            }
+            clipToOutline = true
             contentDescription = "Workly India app logo"
         }
 
