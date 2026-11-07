@@ -216,9 +216,18 @@ class MainActivity : Activity() {
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
             ?: savedPage
             ?: website
-        failedUrl = target
-        if (isNetworkAvailable()) webView.loadUrl(target) else showOfflinePage()
+        // Explicit native marker is visible to the website before React starts,
+        // including on Android System WebView builds without document-start JS.
+        val appTarget = withNativeAppMarker(target)
+        failedUrl = appTarget
+        if (isNetworkAvailable()) webView.loadUrl(appTarget) else showOfflinePage()
     }
+
+    private fun withNativeAppMarker(url: String): String = runCatching {
+        val uri = Uri.parse(url)
+        if (uri.getQueryParameter("workly_native") == "android") url
+        else uri.buildUpon().appendQueryParameter("workly_native", "android").build().toString()
+    }.getOrDefault(url)
 
     private fun isNetworkAvailable(): Boolean {
         val manager = getSystemService(ConnectivityManager::class.java)
