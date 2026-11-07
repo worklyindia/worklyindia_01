@@ -668,9 +668,16 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun setStatusBar(color: String, darkIcons: Boolean) {
             runOnUiThread {
-                val parsed = runCatching { Color.parseColor(color) }.getOrDefault(Color.WHITE)
+                val nightMode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+                val isDark = nightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                // Never allow website status-bar styling to turn the clock/network/battery
+                // icons dark or blend them into the dark system bar.
+                val parsed = if (isDark) Color.rgb(1, 8, 22)
+                    else runCatching { Color.parseColor(color) }.getOrDefault(Color.WHITE)
                 window.statusBarColor = parsed
-                WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = darkIcons
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.isAppearanceLightStatusBars = if (isDark) false else darkIcons
+                controller.show(WindowInsetsCompat.Type.statusBars())
             }
         }
 
