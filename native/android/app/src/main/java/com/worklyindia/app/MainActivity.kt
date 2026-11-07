@@ -389,9 +389,13 @@ class MainActivity : Activity() {
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
             ?: website
         lastLoadedUrl = target
-        webView.loadUrl(target)
-        // If the app starts without data, show a branded native offline screen.
-        if (!hasInternetConnection()) showOfflineScreen()
+        // Do not start WebView navigation while offline. This prevents a browser
+        // error page from appearing behind the branded offline screen.
+        if (hasInternetConnection()) {
+            webView.loadUrl(target)
+        } else {
+            showOfflineScreen()
+        }
         // Native failsafe independent of JavaScript/React bridge callbacks.
         // Never keep the splash over the website indefinitely on a slow device.
         rootLayout.postDelayed({ hideStartupLoading() }, 25000)
@@ -616,45 +620,86 @@ class MainActivity : Activity() {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(28), dp(32), dp(28), dp(32))
-            setBackgroundColor(cardColor)
-            elevation = dp(8).toFloat()
+            setPadding(dp(28), dp(34), dp(28), dp(30))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(cardColor)
+                cornerRadius = dp(28).toFloat()
+            }
+            elevation = dp(10).toFloat()
         }
-        val heading = TextView(this).apply {
-            text = "You're temporarily offline"
-            textSize = 22f
-            setTextColor(textColor)
+        val iconWrap = TextView(this).apply {
+            text = "⌁"
+            textSize = 42f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Color.rgb(22, 163, 122))
+            }
+        }
+        card.addView(iconWrap, LinearLayout.LayoutParams(dp(88), dp(88)).apply {
+            gravity = Gravity.CENTER
+            bottomMargin = dp(22)
+        })
+        val eyebrow = TextView(this).apply {
+            text = "CONNECTION INTERRUPTED"
+            textSize = 11f
+            letterSpacing = 0.12f
+            setTextColor(Color.rgb(22, 163, 122))
             gravity = Gravity.CENTER
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
+        val heading = TextView(this).apply {
+            text = "You're offline"
+            textSize = 26f
+            setTextColor(textColor)
+            gravity = Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(0, dp(10), 0, 0)
+        }
         val message = TextView(this).apply {
-            text = "Your connection is unavailable. Workly India will be ready when you're back online."
+            text = "It looks like your internet connection is off. Turn on mobile data or connect to Wi-Fi to continue using Workly India."
             textSize = 15f
             setTextColor(mutedColor)
             gravity = Gravity.CENTER
-            setPadding(0, dp(12), 0, dp(22))
+            setLineSpacing(dp(3).toFloat(), 1f)
+            setPadding(0, dp(12), 0, dp(24))
         }
         val retry = TextView(this).apply {
-            text = "Try again"
+            text = "Check connection"
             textSize = 16f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            setPadding(dp(28), dp(14), dp(28), dp(14))
-            setBackgroundColor(Color.rgb(22, 163, 122))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(dp(28), dp(15), dp(28), dp(15))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.rgb(22, 163, 122))
+                cornerRadius = dp(14).toFloat()
+            }
             isClickable = true
             isFocusable = true
+            contentDescription = "Check internet connection"
             setOnClickListener {
                 if (hasInternetConnection()) {
                     hideOfflineScreen()
                     webView.loadUrl(lastLoadedUrl)
                 } else {
-                    Toast.makeText(this@MainActivity, "Please turn on your internet connection", Toast.LENGTH_SHORT).show()
+                    message.text = "No internet connection detected yet. Please switch on mobile data or Wi-Fi. Workly India will resume automatically when you're connected."
                 }
             }
         }
+        val footer = TextView(this).apply {
+            text = "Workly India • Your next opportunity awaits"
+            textSize = 12f
+            setTextColor(mutedColor)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(22), 0, 0)
+        }
+        card.addView(eyebrow)
         card.addView(heading)
         card.addView(message)
         card.addView(retry)
+        card.addView(footer)
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
