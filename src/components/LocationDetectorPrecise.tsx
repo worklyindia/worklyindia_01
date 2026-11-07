@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Navigation, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Navigation, MapPin, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,7 @@ const LocationDetectorPrecise: React.FC<LocationDetectorPreciseProps> = ({
   className = ""
 }) => {
   const {
+    ipLocation,
     geoLocation,
     fullAddress,
     error,
@@ -67,14 +68,22 @@ const LocationDetectorPrecise: React.FC<LocationDetectorPreciseProps> = ({
       );
     }
 
-    if (state === 'success' && fullAddress) {
+    if (state === 'success' && (fullAddress || ipLocation)) {
       return (
         <div className="space-y-2">
-          <div className="flex items-center space-x-2 text-success">
-            <Navigation className="w-4 h-4" />
-            <span className="text-sm font-medium">Location:</span>
-            <span className="text-sm">{fullAddress.formattedAddress}</span>
-          </div>
+          {fullAddress ? (
+            <div className="flex items-center space-x-2 text-success">
+              <Navigation className="w-4 h-4" />
+              <span className="text-sm font-medium">Precise location:</span>
+              <span className="text-sm">{fullAddress.formattedAddress}</span>
+            </div>
+          ) : ipLocation ? (
+            <div className="flex items-center space-x-2 text-muted-foreground">
+              <MapPin className="w-4 h-4" />
+              <span className="text-sm font-medium">Approximate location:</span>
+              <span className="text-sm">{ipLocation.city}, {ipLocation.region}, {ipLocation.country}</span>
+            </div>
+          ) : null}
         </div>
       );
     }
