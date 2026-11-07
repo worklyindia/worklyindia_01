@@ -15,6 +15,8 @@ interface UseLocationDetectionProps {
     fullAddress?: string;
     ip?: string;
     postcode?: string;
+    district?: string;
+    road?: string;
   }) => void;
 }
 
@@ -226,7 +228,9 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
         source: source,
         fullAddress: addressData.formattedAddress,
         ip: ipLocation?.ip,
-        postcode: addressData.postcode
+        postcode: addressData.postcode,
+        district: addressData.district,
+        road: addressData.road
       });
       
       setState('success');
