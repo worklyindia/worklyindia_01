@@ -15,6 +15,10 @@ interface LocationInfo {
   longitude?: number;
   ip?: string;
   postcode?: string;
+  district?: string;
+  road?: string;
+  accuracy?: number;
+  source?: 'gps' | 'ip' | 'browser-geo';
 }
 
 interface JobCounts {
@@ -69,6 +73,15 @@ const LocationDetailsDialog: React.FC<LocationDetailsDialogProps> = ({
                     <p className="font-medium text-sm">
                       <span className="text-muted-foreground">State:</span> {locationInfo.state}
                     </p>
+                  )}
+                  {locationInfo.district && (
+                    <p className="font-medium text-sm"><span className="text-muted-foreground">District:</span> {locationInfo.district}</p>
+                  )}
+                  {locationInfo.road && (
+                    <p className="font-medium text-sm"><span className="text-muted-foreground">Road / Street:</span> {locationInfo.road}</p>
+                  )}
+                  {locationInfo.postcode && (
+                    <p className="font-medium text-sm"><span className="text-muted-foreground">PIN / Postal Code:</span> {locationInfo.postcode}</p>
                   )}
                   {locationInfo.country && (
                     <p className="font-medium text-sm">
@@ -125,6 +138,9 @@ const LocationDetailsDialog: React.FC<LocationDetailsDialogProps> = ({
                 </div>
               )}
               
+              {locationInfo.accuracy != null && (
+                <p className="text-xs text-muted-foreground">GPS accuracy: approximately {Math.round(locationInfo.accuracy)} metres</p>
+              )}
               <div className="flex items-center gap-2 text-sm">
                 <span className={`px-2 py-1 rounded-full text-xs ${
                   locationInfo.isPrecise 
