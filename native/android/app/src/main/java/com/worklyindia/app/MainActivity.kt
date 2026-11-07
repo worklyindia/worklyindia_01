@@ -727,18 +727,38 @@ class MainActivity : Activity() {
         val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: android.net.Network) {
-                dispatchNativeEvent("workly-native-network-change", "{connected:true}")
-                dispatchNativeEvent("online")
-                runOnUiThread {
-                    val wasOffline = offlineOverlay?.parent != null
-                    hideOfflineScreen()
-                    if (wasOffline && ::webView.isInitialized) webView.loadUrl(lastLoadedUrl)
+                // A network can be connected to Wi-Fi/mobile data without having
+                // working internet. Wait for NET_CAPABILITY_VALIDATED below.
+                dispatchNativeEvent("workly-native-network-change", "{connected:false}")
+            }
+
+            override fun onCapabilitiesChanged(
+                network: android.net.Network,
+                capabilities: android.net.NetworkCapabilities
+            ) {
+                val internetReady =
+                    capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                dispatchNativeEvent("workly-native-network-change", "{connected:$internetReady}")
+                if (internetReady) {
+                    dispatchNativeEvent("online")
+                    runOnUiThread {
+                        val wasOffline = offlineOverlay?.parent != null
+                        hideOfflineScreen()
+                        if (wasOffline && ::webView.isInitialized) webView.loadUrl(lastLoadedUrl)
+                    }
+                } else {
+                    dispatchNativeEvent("offline")
+                    runOnUiThread { showOfflineScreen() }
                 }
             }
+
             override fun onLost(network: android.net.Network) {
-                dispatchNativeEvent("workly-native-network-change", "{connected:false}")
-                dispatchNativeEvent("offline")
-                if (!hasInternetConnection()) runOnUiThread { showOfflineScreen() }
+                if (!hasInternetConnection()) {
+                    dispatchNativeEvent("workly-native-network-change", "{connected:false}")
+                    dispatchNativeEvent("offline")
+                    runOnUiThread { showOfflineScreen() }
+                }
             }
         }
         runCatching {
@@ -868,8 +888,8 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun isNetworkConnected(): Boolean {
-            val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            return manager.activeNetworkInfo?.isConnected == true
+            // Report usable internet, not merely an active Wi-Fi/mobile connection.
+            return hasInternetConnection()
         }
 
         @JavascriptInterface
