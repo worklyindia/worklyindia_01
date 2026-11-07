@@ -445,12 +445,13 @@ class MainActivity : Activity() {
         addOrb(150, if (dark) Color.rgb(25, 116, 105) else Color.rgb(175, 239, 226), Gravity.BOTTOM or Gravity.START, 0, -35)
         addOrb(82, if (dark) Color.rgb(91, 65, 139) else Color.rgb(222, 203, 255), Gravity.TOP or Gravity.START, 24, 105)
 
+        // Full-page loading composition: keep the branded background visible
+        // edge-to-edge and remove the floating card container.
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(28), dp(34), dp(28), dp(30))
-            background = roundedBackground(cardColor, 30)
-            elevation = dp(12).toFloat()
+            setPadding(dp(30), dp(34), dp(30), dp(30))
+            setBackgroundColor(Color.TRANSPARENT)
         }
 
         val logoCard = FrameLayout(this).apply {
@@ -524,12 +525,8 @@ class MainActivity : Activity() {
 
         overlay.addView(content, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER
-        ).apply {
-            leftMargin = dp(28)
-            rightMargin = dp(28)
-        })
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
 
         android.animation.ObjectAnimator.ofFloat(logoCard, "scaleX", 1f, 1.045f, 1f).apply {
             duration = 1800
