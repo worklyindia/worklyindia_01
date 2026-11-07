@@ -34,11 +34,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import org.json.JSONObject
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
     private var pendingWebPermission: PermissionRequest? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
@@ -159,6 +161,7 @@ class MainActivity : Activity() {
         // Let Android fit the WebView between the status and navigation bars.
         // Do not add CSS/native safe-area padding a second time.
         setContentView(webView)
+        registerNetworkListener()
         val target = intent.getStringExtra("notification_url")
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
@@ -201,6 +204,25 @@ class MainActivity : Activity() {
             })();
         """.trimIndent()
         webView.evaluateJavascript(script, null)
+    }
+
+    private fun registerNetworkListener() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                dispatchNativeEvent("workly-native-network-change", "{connected:true}")
+            }
+            override fun onLost(network: android.net.Network) {
+                dispatchNativeEvent("workly-native-network-change", "{connected:false}")
+            }
+        }
+        runCatching {
+            manager.registerDefaultNetworkCallback(callback)
+            networkCallback = callback
+        }.onFailure {
+            android.util.Log.w("WorklyWebView", "Network listener unavailable", it)
+        }
     }
 
     private fun dispatchNativeEvent(name: String, detail: String = "{}") {
@@ -388,6 +410,14 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        networkCallback?.let { callback ->
+            runCatching {
+                (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                    .unregisterNetworkCallback(callback)
+            }
+        }
+        networkCallback = null
+        activityScope.cancel()
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("WorklyAndroid")
             webView.stopLoading()
