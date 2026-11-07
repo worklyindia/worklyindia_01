@@ -33,6 +33,27 @@ function readPayload(event) {
   }
 }
 
+function getPlatformNotificationIcon(data, notification, params) {
+  // Integration notifications should carry the source platform's own artwork.
+  // Accept common field names because legacy and newer senders use different keys.
+  const source = [
+    data.platform, data.source, data.provider, data.channel, data.integration,
+    data.type, data.event_type, data.notification_type,
+    notification.platform, notification.source, notification.channel,
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/whats.?app|wa[_-]/.test(source)) {
+    return toAbsolute('/whatsapp-notification-icon.png?v=2');
+  }
+  if (/instagram|insta[_-]/.test(source)) {
+    return toAbsolute('/notifications/instagram.svg');
+  }
+  if (/facebook|meta[_-]/.test(source)) {
+    return toAbsolute('/notifications/facebook.svg');
+  }
+  return null;
+}
+
 function buildNotification(payload) {
   // FCM delivers either { data: {...} } (data-only) or { notification: {...} }.
   const data = payload.data || {};
@@ -63,9 +84,8 @@ function buildNotification(payload) {
 
   const options = {
     body: notification.body || data.body || '',
-    icon: data.type === 'whatsapp_message'
-      ? toAbsolute(data.icon || '/whatsapp-notification-icon.png?v=2')
-      : toAbsolute(notification.icon || data.icon || params.brandIcon) || FALLBACK_ICON,
+    icon: getPlatformNotificationIcon(data, notification, params) ||
+      toAbsolute(notification.icon || data.icon || params.brandIcon) || FALLBACK_ICON,
     // Restored custom badge at the owner's request. Android controls its tint.
     // Reversible Chrome-icon test: omit only this badge property again.
     badge: toAbsolute(params.badge) || '/icons/workly-notification-logo.png',
