@@ -508,7 +508,7 @@ class MainActivity : Activity() {
 
         // Receive the current Supabase session in the same bridge call as registration.
         @JavascriptInterface
-        fun registerPushNotifications(rawSession: String) {
+        fun registerPushNotificationsWithSession(rawSession: String) {
             runOnUiThread {
                 try {
                     val sessionJson = JSONObject(rawSession)
