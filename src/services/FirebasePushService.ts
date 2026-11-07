@@ -48,10 +48,23 @@ export class FirebasePushService {
     try {
       if (new URLSearchParams(window.location.search).get('workly_native') === 'android') return true;
       if (window.__WORKLY_NATIVE_ANDROID__ === true) return true;
-      if (window.WorklyAndroid?.isNativeAndroidApp?.() === true) return true;
+      const bridge = window.WorklyAndroid;
+      // Native-only methods identify the Android app even when an APK omits
+      // the newer isNativeAndroidApp() marker method.
+      if (
+        bridge?.isNativeAndroidApp?.() === true ||
+        typeof bridge?.requestNativeNotifications === 'function' ||
+        typeof bridge?.unsubscribeNativeNotifications === 'function' ||
+        typeof bridge?.getNotificationPermissionStatus === 'function'
+      ) return true;
       // Compatibility with earlier Workly Android app builds.
-      return typeof window.WorklyAndroid?.isNotificationPermissionGranted === 'function' &&
-        typeof window.WorklyAndroid?.requestNotificationPermission === 'function';
+      if (
+        typeof bridge?.isNotificationPermissionGranted === 'function' &&
+        typeof bridge?.requestNotificationPermission === 'function'
+      ) return true;
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+      return /WorklyIndiaApp\\/1\\.0/i.test(ua) ||
+        (/Android/i.test(ua) && /;\\s*wv\\)/i.test(ua));
     } catch { return false; }
   }
 
