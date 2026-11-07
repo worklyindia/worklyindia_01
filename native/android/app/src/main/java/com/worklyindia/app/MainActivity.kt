@@ -619,16 +619,25 @@ class MainActivity : Activity() {
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
-        val overlay = FrameLayout(this).apply { setBackgroundColor(backgroundColor) }
+        // Use one seamless, edge-to-edge offline page rather than a small card
+        // floating in the middle of another screen.
+        val overlay = FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                if (dark) intArrayOf(
+                    Color.rgb(3, 10, 25), Color.rgb(7, 22, 39), Color.rgb(12, 12, 31)
+                ) else intArrayOf(
+                    Color.rgb(241, 248, 255), Color.rgb(232, 249, 246), Color.rgb(247, 243, 255)
+                )
+            )
+            isClickable = true
+            isFocusable = true
+        }
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(dp(28), dp(34), dp(28), dp(30))
-            this.background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(cardColor)
-                cornerRadius = dp(28).toFloat()
-            }
-            elevation = dp(10).toFloat()
+            setPadding(dp(30), dp(30), dp(30), dp(30))
+            setBackgroundColor(Color.TRANSPARENT)
         }
         // Animated Wi-Fi symbol: three clean signal arcs and a connection dot.
         val iconWrap = object : android.view.View(this) {
@@ -770,12 +779,8 @@ class MainActivity : Activity() {
         card.addView(footer)
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.CENTER
-        ).apply {
-            leftMargin = dp(28)
-            rightMargin = dp(28)
-        })
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
         offlineOverlay = overlay
         rootLayout.addView(overlay, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
