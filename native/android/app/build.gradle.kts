@@ -11,8 +11,8 @@ android {
         applicationId = "com.worklyindia.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 4
-        versionName = "2.0.2"
+        versionCode = 5
+        versionName = "2.0.3"
     }
 
     signingConfigs {
