@@ -4071,7 +4071,7 @@ serve(async req => {
                   contents: {
                     en: row.message
                   },
-                  chrome_web_icon: getSocialChromeIcon(row.data) || await getBrandLogoUrl(supabase),
+                  chrome_web_icon: getSocialChromeIcon(row) || await getBrandLogoUrl(supabase),
                   chrome_web_badge: `${WEBSITE_DOMAIN}/icons/notification-badge.png`,
                   small_icon: 'ic_stat_onesignal_default',
                   large_icon: await getBrandLogoUrl(supabase),
