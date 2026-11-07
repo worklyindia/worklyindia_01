@@ -149,13 +149,13 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
     setError('');
 
     const geoCheck = checkGeolocationSupport();
-    if (!geoCheck.supported) {
-      console.log('❌ Geolocation not supported, falling back to IP location...');
-      await handleGeoLocationFallback();
-      return;
-    }
-
     try {
+      if (!geoCheck.supported) {
+        console.log('❌ Geolocation not supported, falling back to IP location...');
+        await handleGeoLocationFallback();
+        return;
+      }
+
       abortControllerRef.current = new AbortController();
       
       // Check permissions if available
@@ -179,7 +179,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       
       if (abortControllerRef.current?.signal.aborted) return;
       
-      const isNativeGPS = false;
+      const isNativeGPS = Boolean((window as any).WorklyAndroid?.isNativeAndroidApp?.());
       console.log(`📍 Got ${isNativeGPS ? 'GPS' : 'browser'} position:`, position.coords, `accuracy: ${position.coords.accuracy}m`);
       
       const lat = position.coords.latitude;
