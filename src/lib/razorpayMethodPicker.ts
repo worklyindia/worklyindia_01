@@ -241,7 +241,11 @@ async function resumePending() {
   if (s.stage === "checkout" && isOnSavedDomain()) {
     const Real = W?.__real || W;
     savePending(opts, { stage: "checkout", choice: s.choice === "qr" ? "qr" : "upi_bank" });
-    new Real({ ...tracked(opts), config: buildConfig(s.choice === "qr" ? "qr" : "upi_bank") }).open();
+    new Real({
+      ...tracked(opts),
+      ...(isNativeAndroidWebView() ? { webview_intent: true } : {}),
+      config: buildConfig(s.choice === "qr" ? "qr" : "upi_bank"),
+    }).open();
   } else {
     new W(opts).open();
   }
