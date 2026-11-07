@@ -32,6 +32,7 @@ export const PushNotificationSettings: React.FC = () => {
   const [domainCheck, setDomainCheck] = useState<{ canEnable: boolean; reason?: string; recommendation?: string } | null>(null);
   const [showUnblockGuide, setShowUnblockGuide] = useState(false);
   const { toast } = useToast();
+  const isNativeAndroid = FirebasePushService.isNativeAndroidApp();
 
   useEffect(() => {
     loadSettings();
@@ -96,7 +97,9 @@ export const PushNotificationSettings: React.FC = () => {
       }
       loadSettings();
     };
-    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+    // Native Android permission is authoritative inside the WebView. Do not let
+    // the browser Permissions API overwrite it with a false denied state.
+    if (!isNativeAndroid && typeof navigator !== 'undefined' && navigator.permissions?.query) {
       navigator.permissions
         .query({ name: 'notifications' as PermissionName })
         .then((status) => {
@@ -373,7 +376,7 @@ export const PushNotificationSettings: React.FC = () => {
     }
     if (permissionStatus === 'granted' && isSubscribed) {
       return <Check className="h-5 w-5 text-green-500" />;
-    } else if (permissionStatus === 'denied') {
+    } else if (permissionStatus === 'denied' && !isNativeAndroid) {
       return <X className="h-5 w-5 text-red-500" />;
     } else {
       return <Bell className="h-5 w-5 text-yellow-500" />;
@@ -384,10 +387,12 @@ export const PushNotificationSettings: React.FC = () => {
     if (domainCheck && !domainCheck.canEnable) {
       return domainCheck.reason || 'Push notifications not available';
     }
-    if (permissionStatus === 'granted' && isSubscribed) {
+    if (isSubscribed && (permissionStatus === 'granted' || isNativeAndroid)) {
       return 'Push notifications are enabled';
     } else if (permissionStatus === 'denied') {
-      return 'Push notifications are blocked in your browser';
+      return isNativeAndroid
+        ? 'Notifications are disabled in Android settings'
+        : 'Push notifications are blocked in your browser';
     } else {
       return 'Push notifications are turned off';
     }
