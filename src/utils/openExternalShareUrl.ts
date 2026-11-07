@@ -21,3 +21,26 @@ export function openExternalShareUrl(url: string): boolean {
   }
   return false;
 }
+
+/** Opens the Android system share sheet when running inside Workly India. */
+export async function shareText(title: string, text: string, url = ""): Promise<boolean> {
+  if (typeof window !== "undefined") {
+    const bridge = (window as Window & { WorklyAndroid?: { shareText?: (title: string, text: string, url: string) => boolean } }).WorklyAndroid;
+    if (bridge?.shareText) {
+      try {
+        return bridge.shareText(title, text, url);
+      } catch {
+        // Continue with the browser API fallback.
+      }
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, ...(url ? { url } : {}) });
+        return true;
+      } catch (error) {
+        if ((error as DOMException)?.name === "AbortError") return false;
+      }
+    }
+  }
+  return false;
+}
