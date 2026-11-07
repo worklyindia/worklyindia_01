@@ -10,6 +10,8 @@ import OfflineIndicator from "@/components/OfflineIndicator";
 import SlowNetworkBanner from "@/components/SlowNetworkBanner";
 import ServiceUnavailableOverlay from "@/components/ServiceUnavailableOverlay";
 import App from "./App.tsx";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { EmployerAuthProvider } from "@/contexts/EmployerAuthContext";
 import "./index.css";
 import { createQueryClient } from "@/utils/queryClient";
 import { initializeApp, hideLoadingFallback, initializePerformanceUtils, initializeErrorMonitoring } from "@/utils/appInitializer";
@@ -86,15 +88,19 @@ root.render(
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <ThemeProvider>
-            <Suspense fallback={null}>
-              <App />
-            </Suspense>
-            <SlowNetworkBanner />
-            <OfflineIndicator />
-            <ServiceUnavailableOverlay />
-            <Toaster />
-          </ThemeProvider>
+          <AuthProvider>
+            <EmployerAuthProvider>
+              <ThemeProvider>
+                <Suspense fallback={null}>
+                  <App />
+                </Suspense>
+                <SlowNetworkBanner />
+                <OfflineIndicator />
+                <ServiceUnavailableOverlay />
+                <Toaster />
+              </ThemeProvider>
+            </EmployerAuthProvider>
+          </AuthProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>
