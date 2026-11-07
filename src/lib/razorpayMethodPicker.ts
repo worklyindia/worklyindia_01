@@ -185,7 +185,9 @@ function wrapRazorpay(Real: any) {
           ...tracked(opts),
           // Razorpay requires this flag for UPI Intent inside Android WebView.
           ...(isNativeAndroidWebView() ? { webview_intent: true } : {}),
-          config: buildConfig(choice as "upi_bank" | "qr"),
+          // Let Razorpay use its native/default method list inside Android WebView.
+          // Custom display blocks can suppress UPI instruments on some WebView checkouts.
+          ...(!isNativeAndroidWebView() ? { config: buildConfig(choice as "upi_bank" | "qr") } : {}),
         };
         instance = new Real(finalOpts);
         listeners.forEach(([ev, cb]) => instance.on(ev, cb));
@@ -244,7 +246,9 @@ async function resumePending() {
     new Real({
       ...tracked(opts),
       ...(isNativeAndroidWebView() ? { webview_intent: true } : {}),
-      config: buildConfig(s.choice === "qr" ? "qr" : "upi_bank"),
+      // Use Razorpay's default enabled methods in Android WebView so UPI is not
+      // filtered by the website's custom checkout display blocks.
+      ...(!isNativeAndroidWebView() ? { config: buildConfig(s.choice === "qr" ? "qr" : "upi_bank") } : {}),
     }).open();
   } else {
     new W(opts).open();
