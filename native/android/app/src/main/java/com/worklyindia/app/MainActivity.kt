@@ -496,39 +496,63 @@ class MainActivity : Activity() {
             return NotificationManagerCompat.from(this@MainActivity).areNotificationsEnabled()
         }
 
+        // Keep the no-argument bridge for older website bundles.
         @JavascriptInterface
         fun registerPushNotifications() {
             runOnUiThread {
+                val session = NativeAuth.session(this@MainActivity)
+                if (session == null) dispatchPushRegistrationResult(false, "session_unavailable")
+                else startNativePushRegistration(session)
+            }
+        }
+
+        // Receive the current Supabase session in the same bridge call as registration.
+        @JavascriptInterface
+        fun registerPushNotifications(rawSession: String) {
+            runOnUiThread {
                 try {
-                    // The website syncs its latest Supabase session immediately
-                    // before calling this method. Retain the no-argument bridge
-                    // for compatibility with the currently deployed web bundle.
-                    val session = NativeAuth.session(this@MainActivity)
-                        ?: throw IllegalStateException("Sign in again to enable notifications")
-                    if (!hasNotificationPermission()) {
-                        webView.evaluateJavascript(
-                            "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:false,reason:'permission_denied'}}));",
-                            null
-                        )
-                        return@runOnUiThread
-                    }
-                    activityScope.launch(Dispatchers.IO) {
-                        val success = NativePushManager.register(this@MainActivity, session)
-                        runOnUiThread {
-                            webView.evaluateJavascript(
-                                "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:$success}}));",
-                                null
-                            )
-                        }
-                    }
-                } catch (error: Exception) {
-                    android.util.Log.e("WorklyPush", "Could not start native push registration", error)
-                    webView.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:false,reason:'session_unavailable'}}));",
-                        null
+                    val sessionJson = JSONObject(rawSession)
+                    val user = sessionJson.getJSONObject("user")
+                    val metadata = user.optJSONObject("user_metadata") ?: JSONObject()
+                    val role = metadata.optString(
+                        "user_type",
+                        metadata.optString("account_type", metadata.optString("role", "jobseeker"))
                     )
+                    val session = NativeAuth.saveWebSession(
+                        this@MainActivity,
+                        sessionJson.getString("access_token"),
+                        sessionJson.getString("refresh_token"),
+                        user.getString("id"),
+                        user.optString("email"),
+                        if (role.equals("employer", true)) "employer" else "jobseeker"
+                    )
+                    startNativePushRegistration(session)
+                } catch (error: Exception) {
+                    android.util.Log.e("WorklyPush", "Could not read current website session", error)
+                    dispatchPushRegistrationResult(false, "session_unavailable")
                 }
             }
+        }
+
+        private fun startNativePushRegistration(session: NativeSession) {
+            if (!hasNotificationPermission()) {
+                dispatchPushRegistrationResult(false, "permission_denied")
+                return
+            }
+            activityScope.launch(Dispatchers.IO) {
+                val success = NativePushManager.register(this@MainActivity, session)
+                runOnUiThread {
+                    dispatchPushRegistrationResult(success, if (success) "registered" else "fcm_or_database_error")
+                }
+            }
+        }
+
+        private fun dispatchPushRegistrationResult(success: Boolean, reason: String) {
+            val safeReason = reason.replace(Regex("[^a-zA-Z0-9_-]"), "")
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('workly-native-push-registration-complete', {detail:{success:" + success + ",reason:'" + safeReason + "'}}));",
+                null
+            )
         }
 
         @JavascriptInterface
