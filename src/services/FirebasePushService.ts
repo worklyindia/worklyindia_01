@@ -63,8 +63,8 @@ export class FirebasePushService {
         typeof bridge?.requestNotificationPermission === 'function'
       ) return true;
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-      return /WorklyIndiaApp\\/1\\.0/i.test(ua) ||
-        (/Android/i.test(ua) && /;\\s*wv\\)/i.test(ua));
+      return /WorklyIndiaApp\/1\.0/i.test(ua) ||
+        (/Android/i.test(ua) && /;\s*wv\)/i.test(ua));
     } catch { return false; }
   }
 
