@@ -1054,6 +1054,24 @@ async function getBrandLogoUrl(client: any): Promise<string> {
   }
   return FALLBACK_NOTIFICATION_ICON;
 }
+
+/** Pick the social platform artwork for Chrome web push without replacing the
+ * Workly brand artwork used by native Android notifications and action icons. */
+function getSocialChromeIcon(source: unknown): string | null {
+  if (!source || typeof source !== 'object') return null;
+  const value = source as Record<string, unknown>;
+  const text = [
+    value.platform, value.source, value.provider, value.channel, value.integration,
+    value.type, value.event_type, value.notification_type, value.template_key,
+    value.templateKey, value.platform_name, value.social_platform
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/whats.?app|\bwa\b/.test(text)) return `${WEBSITE_DOMAIN}/whatsapp-notification-icon.png`;
+  if (/instagram|\binsta\b/.test(text)) return `${WEBSITE_DOMAIN}/notifications/instagram.svg`;
+  if (/messenger/.test(text)) return `${WEBSITE_DOMAIN}/notifications/facebook.svg`;
+  if (/facebook|\bfb\b/.test(text)) return `${WEBSITE_DOMAIN}/notifications/facebook.svg`;
+  return null;
+}
 const EVENT_CATALOG: Record<string, EventTemplate> = {
   push_signup_welcome: {
     title: `Welcome to ${BRAND}! 🎉`,
@@ -2753,7 +2771,10 @@ serve(async req => {
         contents: {
           en: finalMessage
         },
-        chrome_web_icon: LARGE_ICON,
+        // Chrome's large notification artwork is the source-platform icon
+        // (WhatsApp/Instagram/Facebook/Messenger) when the event identifies it.
+        // Workly remains the notification badge and native Android large icon.
+        chrome_web_icon: getSocialChromeIcon(data) || LARGE_ICON,
         chrome_web_badge: SMALL_ICON,
         small_icon: 'ic_stat_onesignal_default',
         // Android resource name
@@ -4050,7 +4071,7 @@ serve(async req => {
                   contents: {
                     en: row.message
                   },
-                  chrome_web_icon: await getBrandLogoUrl(supabase),
+                  chrome_web_icon: getSocialChromeIcon(row.data) || await getBrandLogoUrl(supabase),
                   chrome_web_badge: `${WEBSITE_DOMAIN}/icons/notification-badge.png`,
                   small_icon: 'ic_stat_onesignal_default',
                   large_icon: await getBrandLogoUrl(supabase),
