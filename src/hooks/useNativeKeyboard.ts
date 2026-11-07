@@ -1,50 +1,41 @@
 import { useEffect } from 'react';
-import { Keyboard, KeyboardInfo } from '@capacitor/keyboard';
-import { Capacitor } from '@capacitor/core';
+import { getWorklyAndroidBridge, isWorklyAndroidApp } from '@/lib/nativeAppBridge';
 
 export const useNativeKeyboard = () => {
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!isWorklyAndroidApp()) return;
 
-    const handleKeyboardShow = (info: KeyboardInfo) => {
-      console.log('⌨️ Keyboard shown:', info.keyboardHeight);
-      document.body.classList.add('keyboard-open');
-      
-      // Scroll focused input into view
-      const activeElement = document.activeElement as HTMLElement;
-      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-        setTimeout(() => {
-          activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
+    const viewport = window.visualViewport;
+    let previousHeight = viewport?.height ?? window.innerHeight;
+    const updateKeyboardState = () => {
+      const nextHeight = viewport?.height ?? window.innerHeight;
+      const keyboardOpen = previousHeight - nextHeight > 120 ||
+        window.innerHeight - nextHeight > 120;
+      document.body.classList.toggle('keyboard-open', keyboardOpen);
+      if (keyboardOpen) {
+        const active = document.activeElement as HTMLElement | null;
+        if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) {
+          requestAnimationFrame(() => active.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        }
       }
+      previousHeight = nextHeight;
     };
 
-    const handleKeyboardHide = () => {
-      console.log('⌨️ Keyboard hidden');
-      document.body.classList.remove('keyboard-open');
-    };
-
-    // Add keyboard event listeners
-    Keyboard.addListener('keyboardWillShow', handleKeyboardShow);
-    Keyboard.addListener('keyboardWillHide', handleKeyboardHide);
-
-    // Configure keyboard behavior
-    Keyboard.setAccessoryBarVisible({ isVisible: true }).catch(console.warn);
-    Keyboard.setScroll({ isDisabled: false }).catch(console.warn);
-
+    viewport?.addEventListener('resize', updateKeyboardState);
+    window.addEventListener('resize', updateKeyboardState);
+    const handleNativeHide = () => document.body.classList.remove('keyboard-open');
+    window.addEventListener('workly-native-keyboard-hidden', handleNativeHide);
     return () => {
-      Keyboard.removeAllListeners();
+      viewport?.removeEventListener('resize', updateKeyboardState);
+      window.removeEventListener('resize', updateKeyboardState);
+      window.removeEventListener('workly-native-keyboard-hidden', handleNativeHide);
+      document.body.classList.remove('keyboard-open');
     };
   }, []);
 
   const hideKeyboard = async () => {
-    if (!Capacitor.isNativePlatform()) return;
-    
-    try {
-      await Keyboard.hide();
-    } catch (error) {
-      console.warn('Failed to hide keyboard:', error);
-    }
+    getWorklyAndroidBridge()?.hideKeyboard();
+    (document.activeElement as HTMLElement | null)?.blur?.();
   };
 
   return { hideKeyboard };
