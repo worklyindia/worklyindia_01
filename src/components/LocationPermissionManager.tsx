@@ -28,8 +28,6 @@ const LocationPermissionManager = () => {
     postcode?: string;
     district?: string;
     road?: string;
-    latitude?: number;
-    longitude?: number;
     accuracy?: number;
     source?: 'gps' | 'ip' | 'browser-geo';
   }) => {
