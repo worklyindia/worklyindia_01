@@ -22,6 +22,10 @@ const LocationChip: React.FC<LocationChipProps> = ({ className = "" }) => {
     longitude?: number;
     ip?: string;
     postcode?: string;
+    district?: string;
+    road?: string;
+    accuracy?: number;
+    source?: 'gps' | 'ip' | 'browser-geo';
   } | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -30,7 +34,7 @@ const LocationChip: React.FC<LocationChipProps> = ({ className = "" }) => {
   useEffect(() => {
     // Listen for location updates
     const handleLocationUpdate = (event: CustomEvent) => {
-      const { city, state, country, latitude, longitude, fullAddress, ip, postcode } = event.detail;
+      const { city, state, country, latitude, longitude, fullAddress, ip, postcode, district, road, accuracy, source } = event.detail;
       const newLocationInfo = {
         city,
         state,
@@ -40,7 +44,11 @@ const LocationChip: React.FC<LocationChipProps> = ({ className = "" }) => {
         latitude,
         longitude,
         ip,
-        postcode
+        postcode,
+        district,
+        road,
+        accuracy,
+        source
       };
       
       setLocationInfo(newLocationInfo);
@@ -72,7 +80,11 @@ const LocationChip: React.FC<LocationChipProps> = ({ className = "" }) => {
             latitude: parsed.latitude,
             longitude: parsed.longitude,
             ip: parsed.ip,
-            postcode: parsed.postcode
+            postcode: parsed.postcode,
+            district: parsed.district,
+            road: parsed.road,
+            accuracy: parsed.accuracy,
+            source: parsed.source
           });
         } catch (e) {
           // Ignore parsing errors
