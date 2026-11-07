@@ -624,6 +624,13 @@ html {
     padding-top: env(safe-area-inset-top);
   }
 
+  /* The Android WebView root already receives native status/navigation insets.
+     Applying the browser safe-area top again creates a blank strip under the
+     Android status bar, so keep only the website's own top spacing there. */
+  html[data-workly-native="android"] body {
+    padding-top: 0 !important;
+  }
+
   /* Auth pages have no bottom nav: the 64px body padding painted the page
      below the auth card in the muted page background, so the footer under the
      card looked different. Keep auth pages edge-to-edge in the card color. */
