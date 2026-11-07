@@ -35,7 +35,8 @@ declare global {
       unsubscribeNativeNotifications?: () => void;
       isNotificationPermissionGranted?: () => boolean;
       requestNotificationPermission?: () => boolean;
-      registerPushNotifications?: (rawSession?: string) => void;
+      registerPushNotifications?: () => void;
+      registerPushNotificationsWithSession?: (rawSession: string) => void;
       syncAuthSession?: (raw: string) => void;
     };
     __WORKLY_NATIVE_ANDROID__?: boolean;
@@ -471,8 +472,7 @@ export class FirebasePushService {
         const timeout = window.setTimeout(() => finish(false), 25000);
         window.addEventListener('workly-native-push-registration-complete', onComplete, { once: true });
         try {
-          window.WorklyAndroid!.syncAuthSession?.(JSON.stringify(sessionData.session));
-          window.WorklyAndroid!.registerPushNotifications!(JSON.stringify(sessionData.session));
+          window.WorklyAndroid!.registerPushNotificationsWithSession!(JSON.stringify(sessionData.session));
         } catch (error) {
           console.error('Could not call Android push bridge:', error);
           finish(false);
