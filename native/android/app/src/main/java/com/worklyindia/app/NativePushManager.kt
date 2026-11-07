@@ -329,14 +329,14 @@ object NativePushManager {
         // Accept action descriptors from both current FCM and legacy web-push
         // payloads. Older templates may use buttons/web_buttons and text instead
         // of actions/title; normalize those formats before rendering.
-        val source = listOf("source", "platform", "source_platform", "integration", "provider", "channel")
+        val actionSource = listOf("source", "platform", "source_platform", "integration", "provider", "channel")
             .mapNotNull { data[it]?.lowercase() }
             .joinToString(" ")
         val platform = when {
-            "whatsapp" in source -> "whatsapp"
-            "instagram" in source -> "instagram"
-            "messenger" in source -> "messenger"
-            "facebook" in source -> "facebook"
+            "whatsapp" in actionSource -> "whatsapp"
+            "instagram" in actionSource -> "instagram"
+            "messenger" in actionSource -> "messenger"
+            "facebook" in actionSource -> "facebook"
             else -> null
         }
         val actionJson = data["actions"] ?: data["buttons"] ?: data["web_buttons"] ?: "[]"
