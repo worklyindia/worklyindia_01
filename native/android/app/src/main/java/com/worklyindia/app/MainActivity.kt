@@ -651,7 +651,7 @@ class MainActivity : Activity() {
                     val bounds = android.graphics.RectF(cx - radius, cy - radius, cx + radius, cy + radius)
                     canvas.drawArc(bounds, 225f, 90f, false, signalPaint)
                 }
-                canvas.drawCircle(cx, cy + dp(2), dp(3.5f).toFloat(), dotPaint)
+                canvas.drawCircle(cx, cy + dp(2), dp(4).toFloat(), dotPaint)
             }
             init {
                 background = android.graphics.drawable.GradientDrawable().apply {
