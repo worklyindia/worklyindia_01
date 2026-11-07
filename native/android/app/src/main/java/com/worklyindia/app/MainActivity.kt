@@ -31,6 +31,10 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.view.Gravity
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
@@ -48,6 +52,8 @@ import java.io.File
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
+    private lateinit var rootLayout: FrameLayout
+    private lateinit var loadingOverlay: FrameLayout
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingGeoCallback: android.webkit.GeolocationPermissions.Callback? = null
     private var pendingGeoOrigin: String? = null
@@ -123,6 +129,7 @@ class MainActivity : Activity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
+                hideStartupLoading()
                 if (Uri.parse(url).host == allowedHost) {
                     syncWebsiteSession()
                     dispatchNativeEvent("workly-native-bridge-ready")
@@ -247,13 +254,75 @@ class MainActivity : Activity() {
 
         // Let Android fit the WebView between the status and navigation bars.
         // Do not add CSS/native safe-area padding a second time.
-        setContentView(webView)
+        rootLayout = FrameLayout(this)
+        rootLayout.setBackgroundColor(Color.WHITE)
+        rootLayout.addView(webView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        loadingOverlay = createStartupLoadingOverlay()
+        rootLayout.addView(loadingOverlay, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        setContentView(rootLayout)
         registerNetworkListener()
         val target = intent.getStringExtra("notification_url")
             ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
             ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
             ?: website
         webView.loadUrl(target)
+    }
+
+    private fun createStartupLoadingOverlay(): FrameLayout {
+        val overlay = FrameLayout(this).apply {
+            setBackgroundColor(Color.rgb(10, 16, 30))
+            isClickable = true
+            isFocusable = true
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        val brand = TextView(this).apply {
+            text = "Workly India"
+            setTextColor(Color.WHITE)
+            textSize = 26f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        }
+        val subtitle = TextView(this).apply {
+            text = "Loading your workspace…"
+            setTextColor(Color.rgb(190, 199, 214))
+            textSize = 14f
+            gravity = Gravity.CENTER
+        }
+        val spinner = ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+        }
+        content.addView(brand, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = 12 })
+        content.addView(spinner, LinearLayout.LayoutParams(52, 52).apply { bottomMargin = 18 })
+        content.addView(subtitle, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        overlay.addView(content, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
+        return overlay
+    }
+
+    private fun hideStartupLoading() {
+        if (!::loadingOverlay.isInitialized || !::rootLayout.isInitialized) return
+        if (loadingOverlay.parent == null) return
+        loadingOverlay.animate().alpha(0f).setDuration(220).withEndAction {
+            loadingOverlay.visibility = android.view.View.GONE
+            loadingOverlay.alpha = 1f
+        }.start()
     }
 
     private fun syncWebsiteSession() {
