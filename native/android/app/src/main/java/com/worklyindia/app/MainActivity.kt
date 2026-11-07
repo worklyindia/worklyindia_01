@@ -644,6 +644,32 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
+        fun shareText(title: String, message: String, url: String): Boolean {
+            return try {
+                val payload = buildString {
+                    if (message.isNotBlank()) append(message.trim())
+                    if (url.isNotBlank() && !contains(url)) {
+                        if (isNotEmpty()) append("\n\n")
+                        append(url.trim())
+                    }
+                }
+                if (payload.isBlank()) return false
+                runOnUiThread {
+                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, title.take(120))
+                        putExtra(Intent.EXTRA_TEXT, payload)
+                    }
+                    startActivity(Intent.createChooser(sendIntent, title.ifBlank { "Share with" }))
+                }
+                true
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyShare", "Could not open Android share sheet", error)
+                false
+            }
+        }
+
+        @JavascriptInterface
         fun getNativeDeviceInfo(): String {
             return runCatching {
                 val metrics = resources.displayMetrics
