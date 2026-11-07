@@ -41,6 +41,16 @@ export const PushNotificationSettings: React.FC = () => {
     void FirebasePushService.getConfig();
 
 
+    // WebView bridge injection can finish after React hydration. Re-check once
+    // it is ready so native Android state replaces any early browser fallback.
+    const refreshNativeStatus = () => {
+      if (FirebasePushService.isNativeAndroidApp()) void loadSettings();
+    };
+    const bridgeRetryTimers = [0, 250, 750, 1500, 3000].map((delay) =>
+      window.setTimeout(refreshNativeStatus, delay),
+    );
+    window.addEventListener('workly:native-bridge-ready', refreshNativeStatus);
+
     // Re-check when the user comes back to the page: the browser may have
     // revoked permission or dropped the token while the page was hidden.
     const recheck = () => {
@@ -99,10 +109,12 @@ export const PushNotificationSettings: React.FC = () => {
     };
     // Native Android permission is authoritative inside the WebView. Do not let
     // the browser Permissions API overwrite it with a false denied state.
-    if (!isNativeAndroid && typeof navigator !== 'undefined' && navigator.permissions?.query) {
+    if (!FirebasePushService.isNativeAndroidApp() && typeof navigator !== 'undefined' && navigator.permissions?.query) {
       navigator.permissions
         .query({ name: 'notifications' as PermissionName })
         .then((status) => {
+          // The native bridge may have appeared while the browser query was pending.
+          if (FirebasePushService.isNativeAndroidApp()) return;
           permissionStatusRef = status;
           status.addEventListener('change', onPermissionChange);
           setPermissionStatus(status.state === 'prompt' ? 'default' : status.state);
@@ -115,6 +127,8 @@ export const PushNotificationSettings: React.FC = () => {
       document.removeEventListener('visibilitychange', recheck);
       window.removeEventListener('focus', recheck);
       window.removeEventListener('workly-native-notification-permission', onNativePermission);
+      window.removeEventListener('workly:native-bridge-ready', refreshNativeStatus);
+      bridgeRetryTimers.forEach((timer) => window.clearTimeout(timer));
       permissionStatusRef?.removeEventListener('change', onPermissionChange);
     };
   }, []);
@@ -374,7 +388,7 @@ export const PushNotificationSettings: React.FC = () => {
     if (domainCheck && !domainCheck.canEnable) {
       return <AlertCircle className="h-5 w-5 text-yellow-500" />;
     }
-    if (permissionStatus === 'granted' && isSubscribed) {
+    if ((permissionStatus === 'granted' || isNativeAndroid) && isSubscribed) {
       return <Check className="h-5 w-5 text-green-500" />;
     } else if (permissionStatus === 'denied' && !isNativeAndroid) {
       return <X className="h-5 w-5 text-red-500" />;
@@ -407,7 +421,11 @@ export const PushNotificationSettings: React.FC = () => {
           Push Notifications
         </CardTitle>
         <CardDescription>
-          {getStatusText()}
+          {isNativeAndroid
+            ? (isSubscribed
+                ? 'Workly India app notifications are enabled on this device.'
+                : 'Get notifications directly from the Workly India app. Browser push is not used in the Android app.')
+            : getStatusText()}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
