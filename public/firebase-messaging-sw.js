@@ -214,12 +214,53 @@ self.addEventListener('fetch', (event) => {
   })());
 });
 
+async function precacheAppShell() {
+  const shellCache = await caches.open(SHELL_CACHE);
+  const assetCache = await caches.open(ASSET_CACHE);
+
+  // Cache the app entry and the dedicated offline screen first.
+  const shellResponse = await fetch('/');
+  if (shellResponse.ok) {
+    await shellCache.put('/', shellResponse.clone());
+
+    // Vite emits hashed JS/CSS files and modulepreload links in index.html.
+    // Pre-cache these on the first install so the app can start offline even
+    // if the user switches mobile data off immediately after opening it.
+    const html = await shellResponse.clone().text();
+    const matches = html.matchAll(/(?:src|href)=["']([^"'<>]+\.(?:js|css)(?:\?[^"'<>]*)?)["']/gi);
+    const assets = new Set();
+    for (const match of matches) {
+      try {
+        const assetUrl = new URL(match[1], self.location.origin);
+        if (assetUrl.origin === self.location.origin) assets.add(assetUrl.href);
+      } catch (_error) {
+        // Ignore malformed or external URLs.
+      }
+    }
+
+    await Promise.all(Array.from(assets).map(async (assetUrl) => {
+      try {
+        const response = await fetch(assetUrl);
+        if (response.ok && response.type !== 'opaque') {
+          await assetCache.put(assetUrl, response);
+        }
+      } catch (_error) {
+        // One optional chunk failing must not prevent the offline shell install.
+      }
+    }));
+    await trimAssetCache(assetCache);
+  }
+
+  try {
+    const offlineResponse = await fetch(OFFLINE_URL);
+    if (offlineResponse.ok) await shellCache.put(OFFLINE_URL, offlineResponse);
+  } catch (_error) {
+    // The shell still works if the optional fallback page is unavailable.
+  }
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(['/', OFFLINE_URL]))
-      .catch(() => undefined),
-  );
+  event.waitUntil(precacheAppShell().catch(() => undefined));
   self.skipWaiting();
 });
 
