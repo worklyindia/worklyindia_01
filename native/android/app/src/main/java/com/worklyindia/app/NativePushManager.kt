@@ -226,7 +226,19 @@ object NativePushManager {
             )
         }
 
+        // Android launchers derive the app-icon badge from active notifications.
+        // setNumber supplies the aggregate count on launchers that support numeric badges.
+        val notificationManager = NotificationManagerCompat.from(context)
+        val activeNotifications = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            notificationManager.activeNotifications
+        } else {
+            emptyList()
+        }
+        val alreadyActive = activeNotifications.any { it.tag == tag && it.id == tag.hashCode() }
+        val badgeCount = (activeNotifications.size + if (alreadyActive) 0 else 1).coerceAtLeast(1)
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setNumber(badgeCount)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setContentTitle(title)
             .setContentText(body)
