@@ -511,7 +511,14 @@ export class FirebasePushService {
         console.warn('Android FCM row verification failed:', error.message);
         return false;
       }
-      return Boolean(data?.fcm_token);
+      const nativeToken = data?.fcm_token;
+      if (!nativeToken) return false;
+
+      // Use the same owner-configured subscribe template as website browsers.
+      // Native Android stores its own platform token, so this lifecycle message
+      // is delivered to the app that just opted in (not the web token).
+      await this.sendLifecyclePush('subscribe', nativeToken);
+      return true;
     }
     const canEnable = this.canEnableNotifications();
     if (!canEnable.canEnable) {
@@ -698,8 +705,20 @@ export class FirebasePushService {
         const { data: sessionData } = await supabase.auth.getSession();
         const userId = sessionData.session?.user?.id;
         if (!userId) return false;
-        // Keep the Android token row so the user can re-subscribe without
-        // generating a new FCM token; disabled rows are excluded by send-push.
+        // Send the owner-configured goodbye template while this Android token
+        // is still enabled; then disable only this app's subscription row.
+        const { data: subscription, error: lookupError } = await supabase.from('push_subscriptions')
+          .select('fcm_token').eq('user_id', userId).eq('platform', 'android')
+          .eq('enabled', true).maybeSingle();
+        if (lookupError) {
+          console.error('Native Android subscription lookup failed:', lookupError.message);
+          return false;
+        }
+        if (subscription?.fcm_token) {
+          await this.sendLifecyclePush('unsubscribe', subscription.fcm_token);
+          // Give FCM a moment to hand the goodbye message to Android.
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+        }
         const { error } = await supabase.from('push_subscriptions')
           .update({ enabled: false, last_seen_at: new Date().toISOString() })
           .eq('user_id', userId).eq('platform', 'android');
