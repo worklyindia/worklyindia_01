@@ -36,7 +36,7 @@ declare global {
       isNotificationPermissionGranted?: () => boolean;
       requestNotificationPermission?: () => boolean;
       registerPushNotifications?: () => void;
-      registerPushNotificationsWithSession?: (rawSession: string, rawFirebaseConfig: string) => void;
+      registerPushNotificationsWithSession?: (rawSession: string) => void;
       syncAuthSession?: (raw: string) => void;
     };
     __WORKLY_NATIVE_ANDROID__?: boolean;
@@ -452,11 +452,6 @@ export class FirebasePushService {
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id;
       if (!userId || !sessionData.session) return false;
-      const firebaseConfig = await this.getConfig();
-      if (!firebaseConfig?.configured) {
-        console.error('Native Android push cannot start: Firebase configuration is unavailable');
-        return false;
-      }
       if (!window.WorklyAndroid?.registerPushNotificationsWithSession &&
           !window.WorklyAndroid?.registerPushNotifications) return false;
       // Android reports the actual FCM/PostgREST result. This avoids treating
@@ -480,10 +475,7 @@ export class FirebasePushService {
         try {
           const bridge = window.WorklyAndroid!;
           if (bridge.registerPushNotificationsWithSession) {
-            bridge.registerPushNotificationsWithSession(
-              JSON.stringify(sessionData.session),
-              JSON.stringify(firebaseConfig.config),
-            );
+            bridge.registerPushNotificationsWithSession(JSON.stringify(sessionData.session));
           } else {
             // Compatibility with already-installed APKs that expose the older bridge.
             bridge.syncAuthSession?.(JSON.stringify(sessionData.session));
