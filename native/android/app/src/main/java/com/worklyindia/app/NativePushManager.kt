@@ -326,51 +326,64 @@ object NativePushManager {
             }
         }
 
-        // Accept action descriptors from both current FCM and legacy web-push
-        // payloads. Older templates may use buttons/web_buttons and text instead
-        // of actions/title; normalize those formats before rendering.
-        val actionSource = listOf("source", "platform", "source_platform", "integration", "provider", "channel")
-            .mapNotNull { data[it]?.lowercase() }
-            .joinToString(" ")
-        val platform = when {
-            "whatsapp" in actionSource -> "whatsapp"
-            "instagram" in actionSource -> "instagram"
-            "messenger" in actionSource -> "messenger"
-            "facebook" in actionSource -> "facebook"
-            else -> null
-        }
-        val actionJson = data["actions"] ?: data["buttons"] ?: data["web_buttons"] ?: "[]"
-        val parsedActions = mutableListOf<Pair<String, String>>()
-        runCatching {
-            val actions = org.json.JSONArray(actionJson)
-            for (index in 0 until minOf(actions.length(), 3)) {
-                val action = actions.optJSONObject(index) ?: continue
-                val label = (action.optString("title").takeIf { it.isNotBlank() }
-                    ?: action.optString("text").takeIf { it.isNotBlank() }) ?: continue
-                val actionUrl = (action.optString("url").takeIf {
-                    it.startsWith("https://") || it.startsWith("http://")
-                } ?: notificationUrl ?: "https://worklyindia.devs.surf/")
-                parsedActions.add(label to actionUrl)
-            }
-        }.onFailure {
-            android.util.Log.w("WorklyPush", "Could not parse notification actions", it)
-        }
+        // Keep the three social-inbox actions identical across WhatsApp,
+        // Instagram, Facebook and Messenger notifications. The labels are fixed
+        // intentionally; template-specific single CTAs must not replace them.
+        val allPayloadText = data.entries.joinToString(" ") { "${it.key} ${it.value}" }.lowercase()
+        val isSocialInboxNotification = listOf(
+            "whatsapp", "instagram", "facebook", "messenger",
+            "social_inbox", "social-inbox", "instagram_comment", "facebook_comment"
+        ).any { it in allPayloadText }
 
-        // Keep notifications from connected social channels actionable even when
-        // an older template omitted its buttons array.
-        if (parsedActions.isEmpty() && platform != null) {
+        if (isSocialInboxNotification) {
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
-            val replyLabel = if (platform == "whatsapp") "Reply" else "Open chat"
-            parsedActions.add(replyLabel to chatUrl)
-            parsedActions.add("Open Workly" to chatUrl)
-        }
-
-        parsedActions.take(3).forEachIndexed { index, action ->
             builder.addAction(
                 0,
-                action.first,
-                activityPendingIntent(action.second, tag.hashCode() + index + 1)
+                "Reply",
+                activityPendingIntent(chatUrl, tag.hashCode() + 1)
             )
+            builder.addAction(
+                0,
+                "Mark as read",
+                NotificationActionReceiver.pendingIntent(
+                    context, NotificationActionReceiver.ACTION_MARK_READ,
+                    tag, tag.hashCode(), tag.hashCode() + 2
+                )
+            )
+            builder.addAction(
+                0,
+                "Mute",
+                NotificationActionReceiver.pendingIntent(
+                    context, NotificationActionReceiver.ACTION_MUTE,
+                    tag, tag.hashCode(), tag.hashCode() + 3
+                )
+            )
+        } else {
+            // Non-social notifications continue to use the owner-configured CTA.
+            val actionJson = data["actions"] ?: data["buttons"] ?: data["web_buttons"] ?: "[]"
+            val parsedActions = mutableListOf<Pair<String, String>>()
+            runCatching {
+                val actions = org.json.JSONArray(actionJson)
+                for (index in 0 until minOf(actions.length(), 3)) {
+                    val action = actions.optJSONObject(index) ?: continue
+                    val label = action.optString("title").takeIf { it.isNotBlank() }
+                        ?: action.optString("text").takeIf { it.isNotBlank() }
+                        ?: continue
+                    val actionUrl = action.optString("url").takeIf {
+                        it.startsWith("https://") || it.startsWith("http://")
+                    } ?: notificationUrl ?: "https://worklyindia.devs.surf/"
+                    parsedActions.add(label to actionUrl)
+                }
+            }.onFailure {
+                android.util.Log.w("WorklyPush", "Could not parse notification actions", it)
+            }
+            parsedActions.take(3).forEachIndexed { index, action ->
+                builder.addAction(
+                    0,
+                    action.first,
+                    activityPendingIntent(action.second, tag.hashCode() + index + 1)
+                )
+            }
         }
 
         NotificationManagerCompat.from(context).notify(tag, tag.hashCode(), builder.build())
