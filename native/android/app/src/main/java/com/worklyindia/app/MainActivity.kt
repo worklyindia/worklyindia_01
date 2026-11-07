@@ -623,6 +623,27 @@ class MainActivity : Activity() {
 
     inner class WorklyWebBridge {
         @JavascriptInterface
+        fun openExternalUrl(rawUrl: String): Boolean {
+            return try {
+                val uri = Uri.parse(rawUrl)
+                if (uri.scheme != "https" && uri.scheme != "http") return false
+                if (uri.host.isNullOrBlank()) return false
+                runOnUiThread {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+                    } catch (error: Exception) {
+                        android.util.Log.w("WorklyShare", "No app can open share URL", error)
+                        Toast.makeText(this@MainActivity, "No app available to open this share link", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                true
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyShare", "Invalid share URL", error)
+                false
+            }
+        }
+
+        @JavascriptInterface
         fun getNativeDeviceInfo(): String {
             return runCatching {
                 val metrics = resources.displayMetrics
