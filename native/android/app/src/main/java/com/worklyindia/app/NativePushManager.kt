@@ -326,24 +326,35 @@ object NativePushManager {
             }
         }
 
-        // Keep the three social-inbox actions identical across WhatsApp,
-        // Instagram, Facebook and Messenger notifications. The labels are fixed
-        // intentionally; template-specific single CTAs must not replace them.
-        val allPayloadText = data.entries.joinToString(" ") { "${it.key} ${it.value}" }.lowercase()
+        // Detect social inbox notifications from structured source fields and icon URLs.
+        // Providers have used several payload key names across the website and edge function.
+        val socialSourceText = listOf(
+            "source", "platform", "channel", "integration", "provider", "type",
+            "notification_type", "category", "platform_icon", "source_icon", "icon", "image"
+        ).mapNotNull { key -> data[key]?.takeIf { it.isNotBlank() }?.lowercase() }
+            .joinToString(" ")
         val isSocialInboxNotification = listOf(
             "whatsapp", "instagram", "facebook", "messenger",
-            "social_inbox", "social-inbox", "instagram_comment", "facebook_comment"
-        ).any { it in allPayloadText }
+            "social_inbox", "social-inbox", "instagram_comment", "facebook_comment",
+            "whatsapp_message", "instagram_message", "facebook_message"
+        ).any { marker -> marker in socialSourceText }
 
         if (isSocialInboxNotification) {
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
+            // Re-apply BigTextStyle after optional image handling so the expanded
+            // notification has a consistent readable body and visible action row.
+            builder.setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(body)
+                    .setBigContentTitle(title)
+            )
             builder.addAction(
-                0,
+                android.R.drawable.ic_menu_send,
                 "Reply",
                 activityPendingIntent(chatUrl, tag.hashCode() + 1)
             )
             builder.addAction(
-                0,
+                android.R.drawable.ic_menu_view,
                 "Mark as read",
                 NotificationActionReceiver.pendingIntent(
                     context, NotificationActionReceiver.ACTION_MARK_READ,
@@ -351,7 +362,7 @@ object NativePushManager {
                 )
             )
             builder.addAction(
-                0,
+                android.R.drawable.ic_lock_silent_mode,
                 "Mute",
                 NotificationActionReceiver.pendingIntent(
                     context, NotificationActionReceiver.ACTION_MUTE,
