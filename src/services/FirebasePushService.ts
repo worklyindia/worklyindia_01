@@ -472,7 +472,14 @@ export class FirebasePushService {
         const timeout = window.setTimeout(() => finish(false), 25000);
         window.addEventListener('workly-native-push-registration-complete', onComplete, { once: true });
         try {
-          window.WorklyAndroid!.registerPushNotificationsWithSession!(JSON.stringify(sessionData.session));
+          const bridge = window.WorklyAndroid!;
+          if (bridge.registerPushNotificationsWithSession) {
+            bridge.registerPushNotificationsWithSession(JSON.stringify(sessionData.session));
+          } else {
+            // Compatibility with already-installed APKs that expose the older bridge.
+            bridge.syncAuthSession?.(JSON.stringify(sessionData.session));
+            bridge.registerPushNotifications?.();
+          }
         } catch (error) {
           console.error('Could not call Android push bridge:', error);
           finish(false);
