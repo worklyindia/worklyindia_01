@@ -248,7 +248,7 @@ class MainActivity : Activity() {
                 val fineGranted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 val coarseGranted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 if (fineGranted || coarseGranted || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-                    callback.invoke(origin, true, false)
+                    callback.invoke(origin, true, true)
                 } else {
                     pendingGeoCallback?.invoke(pendingGeoOrigin ?: origin, false, false)
                     pendingGeoOrigin = origin
@@ -755,7 +755,7 @@ class MainActivity : Activity() {
                     permissions[index] == Manifest.permission.ACCESS_COARSE_LOCATION) &&
                     grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
             }
-            if (origin != null && callback != null) callback.invoke(origin, granted, false)
+            if (origin != null && callback != null) callback.invoke(origin, granted, true)
         } else if (requestCode == REQUEST_NOTIFICATIONS) {
             val granted = hasNotificationPermission()
             // The web UI owns the subscribe flow and invokes native registration
