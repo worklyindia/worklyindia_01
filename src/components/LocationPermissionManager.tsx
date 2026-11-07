@@ -26,6 +26,12 @@ const LocationPermissionManager = () => {
     fullAddress?: string;
     ip?: string;
     postcode?: string;
+    district?: string;
+    road?: string;
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+    source?: 'gps' | 'ip' | 'browser-geo';
   }) => {
     // Dispatch custom event for LocationChip
     const event = new CustomEvent('location-detected', { detail: location });
