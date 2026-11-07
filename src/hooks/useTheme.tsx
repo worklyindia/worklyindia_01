@@ -16,6 +16,16 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function getSystemTheme(): Theme {
   if (typeof window === "undefined") return "light";
+  // Android WebView inherits the app's fixed Activity theme, which may not
+  // reflect the phone setting. Read the real Android system night mode instead.
+  try {
+    const nativeBridge = (window as Window & { WorklyAndroid?: { isSystemDarkMode?: () => boolean } }).WorklyAndroid;
+    if (nativeBridge?.isSystemDarkMode) {
+      return nativeBridge.isSystemDarkMode() ? "dark" : "light";
+    }
+  } catch {
+    // Fall back to the browser's preferred colour scheme.
+  }
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
