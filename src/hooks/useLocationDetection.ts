@@ -282,8 +282,8 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
           console.log('❓ Permission needs to be requested, auto-requesting...');
           await detectExactLocation();
         } else {
-          console.log('❌ Permission denied');
-          setError('Location permission denied');
+          console.log('❌ Precise location permission denied; using approximate IP location');
+          await detectIPLocation();
         }
       } catch (err) {
         console.error('❌ Error checking permissions:', err);
@@ -294,7 +294,7 @@ export const useLocationDetection = ({ onLocationDetected }: UseLocationDetectio
       console.log('ℹ️ Permissions API not available, trying direct geolocation...');
       await detectExactLocation();
     }
-  }, [detectExactLocation]);
+  }, [detectExactLocation, detectIPLocation]);
 
   return {
     ipLocation,
