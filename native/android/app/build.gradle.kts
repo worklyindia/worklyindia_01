@@ -49,6 +49,8 @@ dependencies {
     implementation("androidx.credentials:credentials:1.6.0-beta02")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0-beta02")
     implementation("androidx.webkit:webkit:1.14.0")
+    // Render the exact user-supplied WiFi Connecting.json Lottie animation on the offline screen.
+    implementation("com.airbnb.android:lottie:6.6.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
 
