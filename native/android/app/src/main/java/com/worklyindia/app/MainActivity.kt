@@ -507,7 +507,7 @@ class MainActivity : Activity() {
 
         // Receive the current Supabase session in the same bridge call as registration.
         @JavascriptInterface
-        fun registerPushNotificationsWithSession(rawSession: String, rawFirebaseConfig: String) {
+        fun registerPushNotificationsWithSession(rawSession: String) {
             runOnUiThread {
                 try {
                     val sessionJson = JSONObject(rawSession)
@@ -525,8 +525,7 @@ class MainActivity : Activity() {
                         user.optString("email"),
                         if (role.equals("employer", true)) "employer" else "jobseeker"
                     )
-                    val firebaseConfig = JSONObject(rawFirebaseConfig)
-                    startNativePushRegistration(session, firebaseConfig)
+                    startNativePushRegistration(session)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyPush", "Could not read current website session", error)
                     dispatchPushRegistrationResult(false, "session_unavailable")
