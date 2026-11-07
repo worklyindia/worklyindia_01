@@ -122,6 +122,12 @@ class MainActivity : Activity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.addJavascriptInterface(WorklyWebBridge(), "WorklyAndroid")
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                val uri = Uri.parse(url)
+                if (uri.scheme == "https" && uri.host == allowedHost) lastLoadedUrl = url
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
                 if (uri.scheme == "https" && uri.host == allowedHost) return false
