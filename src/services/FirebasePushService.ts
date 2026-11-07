@@ -55,10 +55,16 @@ const isNativeAndroidApp = (): boolean => {
     // MainActivity also marks the document at start/page-finished.
     if ((window as Window & { __WORKLY_NATIVE_ANDROID__?: boolean }).__WORKLY_NATIVE_ANDROID__ === true) return true;
 
-    // The bridge is the authoritative native signal and supports app builds
-    // where the query parameter was lost during an internal navigation.
+    // Any native-only bridge method proves this is the Android app,
+    // including APK builds that do not expose isNativeAndroidApp().
     try {
-      if (window.WorklyAndroid?.isNativeAndroidApp?.() === true) return true;
+      const bridge = window.WorklyAndroid;
+      if (
+        bridge?.isNativeAndroidApp?.() === true ||
+        typeof bridge?.requestNativeNotifications === 'function' ||
+        typeof bridge?.unsubscribeNativeNotifications === 'function' ||
+        typeof bridge?.getNotificationPermissionStatus === 'function'
+      ) return true;
     } catch (error) {
       console.warn('Native Android bridge probe failed:', error);
     }
