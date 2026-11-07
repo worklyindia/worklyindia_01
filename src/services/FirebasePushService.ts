@@ -43,18 +43,27 @@ const isNativeAndroidApp = (): boolean => {
   try {
     if (typeof window === 'undefined') return false;
 
-    // MainActivity marks the document from onPageFinished as an explicit
-    // native-app signal. This avoids relying only on browser-specific UA text.
+    // The native app adds this query marker to every initial WebView URL.
+    // This is available before React hydration, even on System WebView
+    // versions that do not support DOCUMENT_START_SCRIPT.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('workly_native') === 'android') {
+      (window as Window & { __WORKLY_NATIVE_ANDROID__?: boolean }).__WORKLY_NATIVE_ANDROID__ = true;
+      return true;
+    }
+
+    // MainActivity also marks the document at start/page-finished.
     if ((window as Window & { __WORKLY_NATIVE_ANDROID__?: boolean }).__WORKLY_NATIVE_ANDROID__ === true) return true;
 
-    // The native bridge is the strongest signal. Checking the object itself
-    // also supports older installed Workly app builds.
-    if (window.WorklyAndroid) return true;
-    if (window.WorklyAndroid?.isNativeAndroidApp?.() === true) return true;
+    // The bridge is the authoritative native signal and supports app builds
+    // where the query parameter was lost during an internal navigation.
+    try {
+      if (window.WorklyAndroid?.isNativeAndroidApp?.() === true) return true;
+    } catch (error) {
+      console.warn('Native Android bridge probe failed:', error);
+    }
 
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-    // Current releases append this marker; Android System WebView commonly
-    // identifies itself with "; wv)" on older app builds.
     return /WorklyIndiaApp\/1\.0/i.test(ua) ||
       (/Android/i.test(ua) && /;\s*wv\)/i.test(ua));
   } catch {
