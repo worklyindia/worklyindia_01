@@ -131,6 +131,42 @@ class MainActivity : Activity() {
                     runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
                     return true
                 }
+
+                // Razorpay UPI Intent redirects (upi://, gpay://, phonepe:// and
+                // intent://) must leave the WebView and open the installed UPI app.
+                if (uri.scheme == "intent") {
+                    return try {
+                        val intent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME).apply {
+                            addCategory(Intent.CATEGORY_BROWSABLE)
+                            component = null
+                            selector = null
+                        }
+                        try {
+                            startActivity(intent)
+                        } catch (missingApp: android.content.ActivityNotFoundException) {
+                            val fallback = intent.getStringExtra("browser_fallback_url")
+                            if (!fallback.isNullOrBlank()) {
+                                val fallbackUri = Uri.parse(fallback)
+                                if (fallbackUri.scheme == "https") startActivity(Intent(Intent.ACTION_VIEW, fallbackUri))
+                            }
+                        }
+                        true
+                    } catch (error: Exception) {
+                        android.util.Log.w("WorklyPayments", "Could not launch UPI intent", error)
+                        true
+                    }
+                }
+                if (uri.scheme == "upi" || uri.scheme == "gpay" || uri.scheme == "phonepe" ||
+                    uri.scheme == "paytmmp" || uri.scheme == "tez" || uri.scheme == "bhim" ||
+                    uri.scheme == "credpay" || uri.scheme == "amazonpay") {
+                    return try {
+                        startActivity(Intent(Intent.ACTION_VIEW, uri))
+                        true
+                    } catch (error: android.content.ActivityNotFoundException) {
+                        android.util.Log.w("WorklyPayments", "No installed app can handle UPI URI: ${uri.scheme}", error)
+                        true
+                    }
+                }
                 return true
             }
 
