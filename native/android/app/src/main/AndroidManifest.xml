@@ -27,6 +27,9 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:exported="false" />
         <service
             android:name=".WorklyFirebaseMessagingService"
             android:exported="false">
