@@ -1,47 +1,23 @@
 import { useEffect } from 'react';
-import { App as CapacitorApp } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Dialog } from '@capacitor/dialog';
+import { getWorklyAndroidBridge, isWorklyAndroidApp } from '@/lib/nativeAppBridge';
 
 export const useNativeBackButton = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!isWorklyAndroidApp()) return;
 
-    const handleBackButton = async () => {
-      // If on home page, show exit confirmation
-      if (location.pathname === '/') {
-        const { value } = await Dialog.confirm({
-          title: 'Exit App',
-          message: 'Are you sure you want to exit?',
-          okButtonTitle: 'Exit',
-          cancelButtonTitle: 'Cancel',
-        });
-
-        if (value) {
-          CapacitorApp.exitApp();
-        }
+    const handleBackButton = () => {
+      if (location.pathname === '/' || location.pathname === '/welcome') {
+        const shouldExit = window.confirm('Are you sure you want to exit Workly India?');
+        if (shouldExit) getWorklyAndroidBridge()?.exitApp();
       } else {
-        // Navigate back
         navigate(-1);
       }
     };
-
-    let listenerHandle: any;
-    
-    const setupListener = async () => {
-      listenerHandle = await CapacitorApp.addListener('backButton', handleBackButton);
-    };
-    
-    setupListener();
-
-    return () => {
-      if (listenerHandle) {
-        listenerHandle.remove();
-      }
-    };
+    window.addEventListener('workly-native-back', handleBackButton);
+    return () => window.removeEventListener('workly-native-back', handleBackButton);
   }, [location.pathname, navigate]);
 };
