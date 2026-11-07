@@ -10,9 +10,6 @@ import android.webkit.URLUtil
 import android.content.pm.PackageManager
 import android.content.Context
 import android.net.ConnectivityManager
-import android.os.Vibrator
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import android.view.inputmethod.InputMethodManager
 import android.graphics.Color
 import android.net.Uri
@@ -982,17 +979,9 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun vibrate(milliseconds: Int) {
-            val duration = milliseconds.coerceIn(1, 80).toLong()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val manager = getSystemService(VibratorManager::class.java)
-                manager.defaultVibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                @Suppress("DEPRECATION")
-                (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
-                    .vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator).vibrate(duration)
+            // Use Android's built-in touch feedback; this does not require VIBRATE permission.
+            runOnUiThread {
+                webView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
             }
         }
 
