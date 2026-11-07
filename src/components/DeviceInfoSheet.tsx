@@ -12,7 +12,7 @@ import { calculateRiskScore, type RiskScoreResult } from '@/utils/calculateRiskS
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { getNetworkType } from '@/utils/networkOptimizer';
 import { useUserLocation } from '@/contexts/UserLocationContext';
-import { getNativeDeviceInfo, type NativeDeviceInfo } from '@/lib/nativeAppBridge';
+import { getNativeDeviceInfo, isWorklyAndroidApp, type NativeDeviceInfo } from '@/lib/nativeAppBridge';
 
 interface DeviceInfoSheetProps {
   isOpen: boolean;
@@ -154,7 +154,29 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
     if (isOpen) {
       const info = getDeviceInfo();
       setDeviceInfo(info);
-      setNativeDeviceInfo(getNativeDeviceInfo());
+
+      // The WebView JavaScript bridge can become available just after the
+      // React sheet opens. Refresh on the native ready event and briefly retry
+      // instead of permanently rendering an empty native-device section.
+      const refreshNativeDeviceInfo = () => {
+        const nativeInfo = getNativeDeviceInfo();
+        if (nativeInfo) {
+          setNativeDeviceInfo(nativeInfo);
+          return true;
+        }
+        return false;
+      };
+      setNativeDeviceInfo(refreshNativeDeviceInfo() ? getNativeDeviceInfo() : null);
+      const handleNativeBridgeReady = () => refreshNativeDeviceInfo();
+      window.addEventListener('workly-native-bridge-ready', handleNativeBridgeReady);
+      let nativeInfoAttempts = 0;
+      const nativeInfoRetry = window.setInterval(() => {
+        nativeInfoAttempts += 1;
+        if (refreshNativeDeviceInfo() || nativeInfoAttempts >= 20) {
+          window.clearInterval(nativeInfoRetry);
+        }
+      }, 250);
+
       setAdditionalSignals(getAdditionalSignals());
       fetchNetworkAndSaveDeviceInfo(info);
       fetchLoginFrequency();
@@ -227,6 +249,10 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
         }
         setPluginsList(plugins);
       } catch { setPluginsList([]); }
+      return () => {
+        window.removeEventListener('workly-native-bridge-ready', handleNativeBridgeReady);
+        window.clearInterval(nativeInfoRetry);
+      };
     }
   }, [isOpen]);
 
@@ -443,6 +469,17 @@ export const DeviceInfoSheet: React.FC<DeviceInfoSheetProps> = ({ isOpen, onClos
         )}
 
         {/* Native Android hardware details are provided by Android APIs, not limited WebView APIs. */}
+        {isWorklyAndroidApp() && !nativeDeviceInfo && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              Native device details are still loading
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Reopen this panel after the app finishes loading. If details remain unavailable, update the Workly India app.
+            </p>
+          </div>
+        )}
         {nativeDeviceInfo && (
           <div>
             <SectionHeader icon={Smartphone} title="Native Android Device Details" />
