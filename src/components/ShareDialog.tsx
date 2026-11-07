@@ -20,6 +20,7 @@ import {
 } from "@/utils/platformShareFormatters";
 import { getJobShareUrl, getExternalJobShareUrl } from "@/config/domainConfig";
 import { useShortExternalJobUrl, resolveShortExternalJobUrl } from "@/hooks/useShortExternalJobUrl";
+import { openExternalShareUrl } from "@/utils/openExternalShareUrl";
 
 interface ShareDialogProps {
   jobTitle: string;
@@ -169,16 +170,13 @@ const ShareDialog = ({
   };
 
   const handleShare = async (option: typeof shareOptions[0]) => {
-    // Open the window synchronously so popup blockers allow it.
-    const win = isExternal ? window.open('', '_blank', 'width=600,height=400') : null;
     trackShare('job', option.platform, jobId);
     onShare?.();
 
     const url = isExternal ? externalPlatformUrl(option.platform, await getExternalUrl()) : option.getUrl();
     if (url) {
-      if (win) win.location.href = url;
-      else window.open(url, '_blank', 'width=600,height=400');
-    } else win?.close();
+      openExternalShareUrl(url);
+    }
     setIsOpen(false);
   };
 
