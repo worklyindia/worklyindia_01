@@ -289,6 +289,7 @@ const OwnerPortal = () => {
       items: [
         { name: "Site Settings", icon: Settings, path: "/admin-settings" },
         { name: "Storage & Files", icon: HardDrive, path: "/owner-portal/storage" },
+        { name: "Android App Updates", icon: Package, path: "/owner-portal/android-app-updates", badge: "Owner" },
         { name: "Cloudflare CDN Storage & Files", icon: HardDrive, path: "/owner-portal/cloudflare-storage" },
         { name: "Secrets", icon: Lock, path: "/owner-portal/secrets" },
 
