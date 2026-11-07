@@ -159,7 +159,6 @@ class MainActivity : Activity() {
                             });
                           }
                           readyPoll = setInterval(checkWebsiteReady, 120);
-                          setTimeout(markWebsiteReady, 20000);
                           checkWebsiteReady();
                           if (window.__worklyNativeDownloadHandlerInstalled) return;
                           window.__worklyNativeDownloadHandlerInstalled = true;
