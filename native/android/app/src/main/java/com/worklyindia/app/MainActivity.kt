@@ -529,6 +529,76 @@ class MainActivity : Activity() {
     }
 
     inner class WorklyWebBridge {
+
+        @JavascriptInterface
+        fun getNativeDeviceInfo(): String {
+            return try {
+                val prefs = getSharedPreferences("workly_device_diagnostics", MODE_PRIVATE)
+                var installId = prefs.getString("install_id", null)
+                if (installId.isNullOrBlank()) {
+                    installId = java.util.UUID.randomUUID().toString()
+                    prefs.edit().putString("install_id", installId).apply()
+                }
+                val packageInfo = if (Build.VERSION.SDK_INT >= 33) {
+                    packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageManager.getPackageInfo(packageName, 0)
+                }
+                val appVersion = packageInfo.versionName ?: "unknown"
+                val appVersionCode = if (Build.VERSION.SDK_INT >= 28) packageInfo.longVersionCode else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.versionCode.toLong()
+                }
+                val display = resources.displayMetrics
+                val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                val batteryLevel = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                val batteryScale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+                val batteryPercent = if (batteryLevel >= 0 && batteryScale > 0) (batteryLevel * 100 / batteryScale) else -1
+                val batteryStatus = battery?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+                val webViewVersion = runCatching {
+                    packageManager.getPackageInfo("com.google.android.webview", 0).versionName
+                }.getOrNull() ?: runCatching {
+                    packageManager.getPackageInfo("com.android.webview", 0).versionName
+                }.getOrNull() ?: "unknown"
+                val connectivity = getSystemService(ConnectivityManager::class.java)
+                val activeNetwork = connectivity.activeNetwork
+                val caps = activeNetwork?.let { connectivity.getNetworkCapabilities(it) }
+                val network = when {
+                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true -> "Wi-Fi"
+                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true -> "Mobile data"
+                    caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true -> "Ethernet"
+                    else -> "Unknown"
+                }
+                JSONObject().apply {
+                    put("source", "native-android")
+                    put("install_id", installId)
+                    put("manufacturer", Build.MANUFACTURER.orEmpty())
+                    put("brand", Build.BRAND.orEmpty())
+                    put("model", Build.MODEL.orEmpty())
+                    put("device", Build.DEVICE.orEmpty())
+                    put("android_release", Build.VERSION.RELEASE.orEmpty())
+                    put("android_sdk", Build.VERSION.SDK_INT)
+                    put("app_version", appVersion)
+                    put("app_version_code", appVersionCode)
+                    put("package_name", packageName)
+                    put("webview_version", webViewVersion)
+                    put("screen_width_px", display.widthPixels)
+                    put("screen_height_px", display.heightPixels)
+                    put("screen_density", display.density)
+                    put("screen_density_dpi", display.densityDpi)
+                    put("locale", java.util.Locale.getDefault().toLanguageTag())
+                    put("timezone", java.util.TimeZone.getDefault().id)
+                    put("network_type", network)
+                    put("battery_percent", batteryPercent)
+                    put("battery_charging", batteryStatus == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                        batteryStatus == android.os.BatteryManager.BATTERY_STATUS_FULL)
+                }.toString()
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyWebView", "Native device diagnostics unavailable", error)
+                "{}"
+            }
+        }
         @JavascriptInterface
         fun isNativeAndroidApp(): Boolean = true
 
