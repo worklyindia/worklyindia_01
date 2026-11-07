@@ -349,53 +349,145 @@ class MainActivity : Activity() {
     }
 
     private fun createStartupLoadingOverlay(): FrameLayout {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
+
+        fun roundedBackground(color: Int, radius: Int): android.graphics.drawable.GradientDrawable =
+            android.graphics.drawable.GradientDrawable().apply {
+                setColor(color)
+                cornerRadius = dp(radius).toFloat()
+            }
+
         val overlay = FrameLayout(this).apply {
-            setBackgroundColor(Color.rgb(10, 16, 30))
+            // The startup screen is intentionally light, independent of the
+            // phone's dark-mode setting. The website switches theme after load.
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(244, 249, 255), Color.rgb(238, 250, 249), Color.rgb(250, 247, 255))
+            )
             isClickable = true
             isFocusable = true
         }
+
+        // Soft decorative colour orbs add depth without distracting from the logo.
+        fun addOrb(size: Int, color: Int, gravity: Int, xMargin: Int, yMargin: Int) {
+            val orb = android.view.View(this).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(color)
+                }
+                alpha = 0.42f
+            }
+            overlay.addView(orb, FrameLayout.LayoutParams(dp(size), dp(size), gravity).apply {
+                leftMargin = dp(xMargin)
+                rightMargin = dp(xMargin)
+                topMargin = dp(yMargin)
+                bottomMargin = dp(yMargin)
+            })
+        }
+        addOrb(190, Color.rgb(183, 218, 255), Gravity.TOP or Gravity.END, 0, -55)
+        addOrb(150, Color.rgb(175, 239, 226), Gravity.BOTTOM or Gravity.START, 0, -35)
+        addOrb(82, Color.rgb(222, 203, 255), Gravity.TOP or Gravity.START, 24, 105)
+
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            setPadding(dp(28), dp(34), dp(28), dp(30))
+            background = roundedBackground(Color.WHITE, 30)
+            elevation = dp(12).toFloat()
+        }
+
+        val logoCard = FrameLayout(this).apply {
+            background = roundedBackground(Color.rgb(247, 250, 255), 26)
+            elevation = dp(5).toFloat()
         }
         val logo = ImageView(this).apply {
-            // Use the exact saved Workly India primary-logo bitmap generated
-            // by the Android release workflow, not the simplified launcher vector.
             setImageResource(R.drawable.ic_workly_launcher_image)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Workly India app logo"
+            setPadding(dp(10), dp(10), dp(10), dp(10))
         }
+        logoCard.addView(logo, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+
         val brand = TextView(this).apply {
             text = "Workly India"
-            setTextColor(Color.WHITE)
-            textSize = 26f
+            setTextColor(Color.rgb(20, 38, 68))
+            textSize = 27f
             typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            letterSpacing = 0.01f
+        }
+        val accent = TextView(this).apply {
+            text = "YOUR CAREER. YOUR NEXT CHAPTER."
+            setTextColor(Color.rgb(22, 153, 151))
+            textSize = 10f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.BOLD)
+            letterSpacing = 0.14f
             gravity = Gravity.CENTER
         }
         val subtitle = TextView(this).apply {
-            text = "Loading your workspace…"
-            setTextColor(Color.rgb(190, 199, 214))
+            text = "Preparing your workspace"
+            setTextColor(Color.rgb(102, 119, 143))
             textSize = 14f
             gravity = Gravity.CENTER
         }
-        val spinner = ProgressBar(this).apply {
+        val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(30, 177, 164))
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.rgb(30, 177, 164))
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(225, 237, 245))
         }
-        val logoSize = (88 * resources.displayMetrics.density).toInt()
-        content.addView(logo, LinearLayout.LayoutParams(logoSize, logoSize).apply { bottomMargin = 16 })
+        val footer = TextView(this).apply {
+            text = "A brighter path to better opportunities"
+            setTextColor(Color.rgb(139, 153, 173))
+            textSize = 11f
+            gravity = Gravity.CENTER
+        }
+
+        content.addView(logoCard, LinearLayout.LayoutParams(dp(112), dp(112)).apply {
+            bottomMargin = dp(22)
+        })
         content.addView(brand, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = 12 })
-        content.addView(spinner, LinearLayout.LayoutParams(52, 52).apply { bottomMargin = 18 })
+        ).apply { bottomMargin = dp(7) })
+        content.addView(accent, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(22) })
         content.addView(subtitle, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { bottomMargin = dp(14) })
+        content.addView(progress, LinearLayout.LayoutParams(dp(172), dp(4)).apply {
+            bottomMargin = dp(22)
+        })
+        content.addView(footer, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
         ))
+
         overlay.addView(content, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.CENTER
-        ))
+        ).apply {
+            leftMargin = dp(28)
+            rightMargin = dp(28)
+        })
+
+        // Gentle breathing animation keeps the startup screen feeling alive.
+        android.animation.ObjectAnimator.ofFloat(logoCard, "scaleX", 1f, 1.045f, 1f).apply {
+            duration = 1800
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
+        android.animation.ObjectAnimator.ofFloat(logoCard, "scaleY", 1f, 1.045f, 1f).apply {
+            duration = 1800
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
         return overlay
     }
 
