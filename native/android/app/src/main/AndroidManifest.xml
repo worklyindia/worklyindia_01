@@ -26,7 +26,7 @@
         android:roundIcon="@drawable/ic_workly_launcher_image"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/WorklyLaunchTheme">
         <receiver
             android:name=".NotificationActionReceiver"
             android:exported="false" />
