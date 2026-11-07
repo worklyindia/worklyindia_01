@@ -188,7 +188,7 @@ function buildMessage(token: string, payload: PushPayload) {
   if (payload.url) data.url = payload.url;
   if (payload.icon) data.icon = payload.icon;
   if (payload.image) data.image = payload.image;
-  if (payload.actions?.length) data.actions = JSON.stringify(payload.actions.slice(0, 2));
+  if (payload.actions?.length) data.actions = JSON.stringify(payload.actions.slice(0, 3));
   if (!data.tag) data.tag = `workly-${payload.title}`.slice(0, 60);
 
   return {
