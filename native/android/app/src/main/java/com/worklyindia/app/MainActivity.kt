@@ -212,9 +212,11 @@ class MainActivity : Activity() {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: android.net.Network) {
                 dispatchNativeEvent("workly-native-network-change", "{connected:true}")
+                dispatchNativeEvent("online")
             }
             override fun onLost(network: android.net.Network) {
                 dispatchNativeEvent("workly-native-network-change", "{connected:false}")
+                dispatchNativeEvent("offline")
             }
         }
         runCatching {
