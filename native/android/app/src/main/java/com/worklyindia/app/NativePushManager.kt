@@ -36,9 +36,17 @@ object NativePushManager {
      * alone cannot create Firebase Installations / FCM tokens on a fresh APK.
      */
     private fun getFirebaseApp(context: Context): FirebaseApp? {
-        FirebaseApp.getApps(context)
+        val existing = FirebaseApp.getApps(context)
             .firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
-            ?.let { return it }
+        if (existing != null && !existing.options.apiKey.isNullOrBlank()) return existing
+        // The bundled google-services.json can initialise a default app without
+        // an API key. FCM Installations then fails even though the app exists.
+        // Replace that incomplete instance with the same live public config used
+        // by Workly's web push service.
+        if (existing != null) {
+            android.util.Log.w("WorklyPush", "Replacing incomplete default Firebase options")
+            existing.delete()
+        }
 
         val connection = (URL("$SUPABASE_URL/functions/v1/email-api").openConnection() as HttpURLConnection)
         connection.requestMethod = "POST"
@@ -107,7 +115,7 @@ object NativePushManager {
             // Android will suppress display until the user grants POST_NOTIFICATIONS, but the
             // token is ready immediately after they enable it in system settings.
             createChannel(context)
-            val token = Tasks.await(FirebaseMessaging.getInstance().token)
+            val token = Tasks.await(FirebaseMessaging.getInstance(firebaseApp).token)
             if (token.isNullOrBlank()) return@withContext false
 
             val info = JSONObject()
@@ -173,7 +181,7 @@ object NativePushManager {
     suspend fun unregister(context: Context, session: NativeSession) = withContext(Dispatchers.IO) {
         try {
             val firebaseApp = getFirebaseApp(context) ?: return@withContext
-            val token = Tasks.await(FirebaseMessaging.getInstance().token)
+            val token = Tasks.await(FirebaseMessaging.getInstance(firebaseApp).token)
             if (token.isNullOrBlank()) return@withContext
             val encoded = URLEncoder.encode(token, "UTF-8")
             val connection = (URL("$SUPABASE_URL/rest/v1/push_subscriptions?user_id=eq.${session.userId}&fcm_token=eq.$encoded").openConnection() as HttpURLConnection)
