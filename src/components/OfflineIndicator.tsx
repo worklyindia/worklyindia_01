@@ -1,60 +1,43 @@
 import { useEffect, useState } from "react";
-import { WifiOff, Wifi } from "lucide-react";
+import { WifiOff, RefreshCw } from "lucide-react";
 
 const OfflineIndicator = () => {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [showIndicator, setShowIndicator] = useState(!navigator.onLine);
-  const [showOnlineMessage, setShowOnlineMessage] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      setShowOnlineMessage(true);
-      // Hide "Online" message after 2 seconds
-      setTimeout(() => {
-        setShowOnlineMessage(false);
-        setShowIndicator(false);
-      }, 2000);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") setIsOnline(navigator.onLine);
     };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-      setShowIndicator(true);
-      setShowOnlineMessage(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
-  // Show online message or offline message
-  if (!showIndicator && !showOnlineMessage) return null;
-
+  if (isOnline) return null;
   return (
-    <div
-      className={`fixed bottom-20 left-4 right-4 md:left-auto md:right-4 md:w-auto z-50 
-        px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-300
-        ${isOnline ? 'bg-green-500/90 text-white' : 'bg-destructive/90 text-white'}`}
-    >
-      <div className="flex items-center space-x-2">
-        {isOnline ? (
-          <>
-            <Wifi className="w-5 h-5" />
-            <span className="font-medium text-sm">Online</span>
-          </>
-        ) : (
-          <>
-            <WifiOff className="w-5 h-5" />
-            <span className="font-medium text-sm">You are offline</span>
-          </>
-        )}
-      </div>
-    </div>
+    <main role="alert" aria-live="assertive" className="fixed inset-0 z-[100000] flex min-h-screen items-center justify-center bg-background px-6 py-10 text-foreground">
+      <section className="w-full max-w-md text-center">
+        <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-muted">
+          <WifiOff className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
+        </div>
+        <h1 className="mb-3 text-2xl font-bold">You're Offline</h1>
+        <p className="mb-7 text-sm leading-6 text-muted-foreground">
+          Internet connection nahi mil raha hai. Mobile data ya Wi-Fi on karein.
+          Connection wapas aate hi Workly India automatically resume ho jayega.
+        </p>
+        <button type="button" onClick={() => window.location.reload()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground">
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          Try Again
+        </button>
+      </section>
+    </main>
   );
 };
 
