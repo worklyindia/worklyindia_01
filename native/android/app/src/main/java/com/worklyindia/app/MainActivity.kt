@@ -695,15 +695,16 @@ class MainActivity : Activity() {
                 // offline error to the user.
                 activityScope.launch {
                     var connected = false
-                    repeat(15) {
+                    for (attempt in 0 until 15) {
                         if (hasInternetConnection()) {
                             connected = true
-                            return@repeat
+                            break
                         }
                         delay(700)
                     }
 
                     if (connected || hasInternetConnection()) {
+                        reconnectCheckInProgress = false
                         message.text = "Internet connection detected. Loading Workly India…"
                         showStartupLoading()
                         hideOfflineScreen()
