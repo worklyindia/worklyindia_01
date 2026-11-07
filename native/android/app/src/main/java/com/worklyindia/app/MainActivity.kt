@@ -125,7 +125,10 @@ class MainActivity : Activity() {
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 val uri = Uri.parse(url)
-                if (uri.scheme == "https" && uri.host == allowedHost) lastLoadedUrl = url
+                if (uri.scheme == "https" && uri.host == allowedHost) {
+                    lastLoadedUrl = url
+                    runOnUiThread { showStartupLoading() }
+                }
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -235,14 +238,6 @@ class MainActivity : Activity() {
                                 }
                               } else {
                                 splashReadySince = 0;
-                              }
-                              // Absolute safety fallback: show the page/error state
-                              // rather than trapping the user on the startup overlay.
-                              if (Date.now() - splashStartedAt >= 20000) {
-                                clearInterval(splashWatcher);
-                                if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteReady) {
-                                  window.WorklyAndroid.onWebsiteReady();
-                                }
                               }
                             }, 200);
                           }
@@ -396,9 +391,6 @@ class MainActivity : Activity() {
         } else {
             showOfflineScreen()
         }
-        // Native failsafe independent of JavaScript/React bridge callbacks.
-        // Never keep the splash over the website indefinitely on a slow device.
-        rootLayout.postDelayed({ hideStartupLoading() }, 25000)
     }
 
     private fun createStartupLoadingOverlay(): FrameLayout {
@@ -552,9 +544,18 @@ class MainActivity : Activity() {
         return overlay
     }
 
+    private fun showStartupLoading() {
+        if (!::loadingOverlay.isInitialized || !::rootLayout.isInitialized) return
+        if (loadingOverlay.parent !== rootLayout) return
+        loadingOverlay.animate().cancel()
+        loadingOverlay.alpha = 1f
+        loadingOverlay.visibility = android.view.View.VISIBLE
+        loadingOverlay.bringToFront()
+    }
+
     private fun hideStartupLoading() {
         if (!::loadingOverlay.isInitialized || !::rootLayout.isInitialized) return
-        if (loadingOverlay.parent == null) return
+        if (loadingOverlay.parent == null || loadingOverlay.visibility != android.view.View.VISIBLE) return
         loadingOverlay.animate().alpha(0f).setDuration(220).withEndAction {
             loadingOverlay.visibility = android.view.View.GONE
             loadingOverlay.alpha = 1f
@@ -681,10 +682,19 @@ class MainActivity : Activity() {
             contentDescription = "Check internet connection"
             setOnClickListener {
                 if (hasInternetConnection()) {
+                    message.text = "Internet connection detected. Loading Workly India…"
+                    retry.text = "Connecting…"
+                    retry.isEnabled = false
+                    showStartupLoading()
                     hideOfflineScreen()
                     webView.loadUrl(lastLoadedUrl)
                 } else {
-                    message.text = "No internet connection detected yet. Please switch on mobile data or Wi-Fi. Workly India will resume automatically when you're connected."
+                    message.text = "No internet connection detected. Turn on mobile data or connect to Wi-Fi, then tap Check connection again. Wi-Fi without internet will not work."
+                    Toast.makeText(
+                        this@MainActivity,
+                        "No internet connection. Turn on mobile data or connect to Wi-Fi, then try again.",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }
@@ -744,6 +754,7 @@ class MainActivity : Activity() {
                     dispatchNativeEvent("online")
                     runOnUiThread {
                         val wasOffline = offlineOverlay?.parent != null
+                        if (wasOffline && ::webView.isInitialized) showStartupLoading()
                         hideOfflineScreen()
                         if (wasOffline && ::webView.isInitialized) webView.loadUrl(lastLoadedUrl)
                     }
