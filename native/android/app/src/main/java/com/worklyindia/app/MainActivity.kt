@@ -3,6 +3,9 @@ package com.worklyindia.app
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.app.DownloadManager
+import android.os.Environment
+import android.webkit.URLUtil
 import android.content.pm.PackageManager
 import android.content.Context
 import android.net.ConnectivityManager
@@ -158,6 +161,36 @@ class MainActivity : Activity() {
                 else callback.invoke(origin, false, false)
             }
         }
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            runCatching {
+                val downloadUri = Uri.parse(url)
+                require(downloadUri.scheme == "https" || downloadUri.scheme == "http") {
+                    "This download link is not supported"
+                }
+                val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+                    .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                    .take(180)
+                val request = DownloadManager.Request(downloadUri).apply {
+                    setTitle(fileName)
+                    setDescription("Downloading from Workly India")
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                    setAllowedOverMetered(true)
+                    setAllowedOverRoaming(false)
+                    if (!mimeType.isNullOrBlank()) setMimeType(mimeType)
+                    val cookies = CookieManager.getInstance().getCookie(url)
+                    if (!cookies.isNullOrBlank()) addRequestHeader("Cookie", cookies)
+                    if (!userAgent.isNullOrBlank()) addRequestHeader("User-Agent", userAgent)
+                }
+                val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                manager.enqueue(request)
+                Toast.makeText(this, "Download started. Check Downloads.", Toast.LENGTH_LONG).show()
+            }.onFailure { error ->
+                android.util.Log.e("WorklyDownload", "Could not start website download", error)
+                Toast.makeText(this, "Download failed. Please try again.", Toast.LENGTH_LONG).show()
+            }
+        }
+
         // Let Android fit the WebView between the status and navigation bars.
         // Do not add CSS/native safe-area padding a second time.
         setContentView(webView)
