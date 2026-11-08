@@ -137,16 +137,17 @@ class MainActivity : Activity() {
                     websiteUpdatePrefs.edit()
                         .putString(KEY_PENDING_APK_URI, uri.toString())
                         .putLong(KEY_TARGET_VERSION_CODE, websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L)
+                        .putString(KEY_PENDING_RELEASE_JSON, websiteDownloadRelease?.toString() ?: "")
+                        .putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
                         .apply()
                     runOnUiThread {
                         websiteDownloadDialog?.dismiss()
                         websiteDownloadDialog = null
                         websiteDownloadProgressBar = null
                         websiteDownloadProgressLabel = null
-                        // Start the Android install flow immediately. This opens
-                        // the per-app "Install unknown apps" setting only when needed;
-                        // if already allowed, Android's package installer opens now.
-                        continueWebsiteInstallIfAllowed()
+                        // Keep the downloaded APK and let the user explicitly tap
+                        // Install now. Permission is checked only after that tap.
+                        showWebsiteInstallReadyDialog(websiteDownloadRelease)
                     }
                 } else {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
@@ -197,6 +198,8 @@ class MainActivity : Activity() {
         appUpdateManager = AppUpdateManagerFactory.create(this)
         appUpdateManager.registerListener(appUpdateListener)
         pendingWebsiteInstallUri = websiteUpdatePrefs.getString(KEY_PENDING_APK_URI, null)?.let(Uri::parse)
+        websiteDownloadRelease = websiteUpdatePrefs.getString(KEY_PENDING_RELEASE_JSON, null)
+            ?.takeIf { it.isNotBlank() }?.let { runCatching { JSONObject(it) }.getOrNull() }
         ContextCompat.registerReceiver(
             this, websiteDownloadReceiver,
             android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
@@ -580,6 +583,7 @@ class MainActivity : Activity() {
                 websiteUpdatePrefs.edit()
                     .remove(KEY_PENDING_APK_URI)
                     .remove(KEY_TARGET_VERSION_CODE)
+                    .remove(KEY_PENDING_RELEASE_JSON)
                     .apply()
                 pendingWebsiteInstallUri = null
                 showWebsiteUpdateCompletedDialog()
@@ -1415,6 +1419,11 @@ class MainActivity : Activity() {
     private fun checkForWebsiteRelease() {
         if (websiteUpdateCheckInProgress || websiteUpdateDialogVisible ||
             websiteDownloadId != -1L || isFinishing || isDestroyed) return
+        val savedTargetVersion = websiteUpdatePrefs.getLong(KEY_TARGET_VERSION_CODE, 0L)
+        if (pendingWebsiteInstallUri != null && savedTargetVersion > BuildConfig.VERSION_CODE.toLong()) {
+            showWebsiteInstallReadyDialog(websiteDownloadRelease)
+            return
+        }
         websiteUpdateCheckInProgress = true
         activityScope.launch(Dispatchers.IO) {
             var release: JSONObject? = null
@@ -1648,9 +1657,10 @@ class MainActivity : Activity() {
         if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
         val versionName = release?.optString("version_name", "new version") ?: "new version"
         val mandatory = BuildConfig.VERSION_CODE < (release?.optInt("min_supported_version_code", 1) ?: 1)
-        val content = buildWebsiteUpdateCard(versionName, "Installing update",
-            "Confirm the Android install prompt to finish.", showProgress = false)
+        val content = buildWebsiteUpdateCard(versionName, "Update ready to install",
+            "", showProgress = false)
         val dialog = Dialog(this)
+        websiteUpdateDialogVisible = true
         addWebsiteSheetActions(content, "Install now", if (mandatory) null else "Later",
             onPrimary = { dialog.dismiss(); continueWebsiteInstallIfAllowed() },
             onSecondary = {
@@ -1663,6 +1673,7 @@ class MainActivity : Activity() {
                 dialog.dismiss()
             })
         dialog.setContentView(content)
+        dialog.setOnDismissListener { websiteUpdateDialogVisible = false }
         showWebsiteBottomSheet(dialog, allowSwipeDismiss = !mandatory)
     }
 
@@ -1836,6 +1847,7 @@ class MainActivity : Activity() {
         private const val KEY_PENDING_APK_URI = "pending_apk_uri"
         private const val KEY_TARGET_VERSION_CODE = "target_version_code"
         private const val KEY_INSTALL_PROMPT_ACTIVE = "install_prompt_active"
+        private const val KEY_PENDING_RELEASE_JSON = "pending_release_json"
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_MEDIA = 702
