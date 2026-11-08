@@ -93,6 +93,7 @@ class MainActivity : Activity() {
     private var autoPushRegistrationUserId: String? = null
     private var pendingNativePushSession: NativeSession? = null
     private var pendingNativePushFirebaseConfig: JSONObject? = null
+    private var pendingAutoPushRegistrationSession: NativeSession? = null
     private var waitingForWebsiteInstallPermission = false
     private val websiteUpdatePrefs by lazy { getSharedPreferences("workly_android_update", Context.MODE_PRIVATE) }
     private var websiteDownloadProgressBar: ProgressBar? = null
@@ -689,6 +690,18 @@ class MainActivity : Activity() {
             loadingOverlay.visibility = android.view.View.GONE
             loadingOverlay.alpha = 1f
         }.start()
+    }
+
+    private fun registerSignedInAndroidPush(session: NativeSession) {
+        if (autoPushRegistrationUserId == session.userId) return
+        autoPushRegistrationUserId = session.userId
+        activityScope.launch(Dispatchers.IO) {
+            val registered = NativePushManager.register(this@MainActivity, session)
+            if (!registered) {
+                autoPushRegistrationUserId = null
+                android.util.Log.w("WorklyPush", "Automatic Android push registration failed for signed-in user")
+            }
+        }
     }
 
     private fun syncWebsiteSession() {
@@ -1331,13 +1344,21 @@ class MainActivity : Activity() {
                     // owner-published Android releases can reach existing app users
                     // without requiring them to open the notification settings page.
                     if (hasNotificationPermission() && autoPushRegistrationUserId != saved.userId) {
-                        autoPushRegistrationUserId = saved.userId
-                        activityScope.launch(Dispatchers.IO) {
-                            val registered = NativePushManager.register(this@MainActivity, saved)
-                            if (!registered) {
-                                autoPushRegistrationUserId = null
-                                android.util.Log.w("WorklyPush", "Automatic Android push registration failed for signed-in user")
-                            }
+                        registerSignedInAndroidPush(saved)
+                    } else if (
+                        Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        val promptKey = "notification_permission_prompted_${saved.userId}"
+                        val prefs = getSharedPreferences("workly_android_push", Context.MODE_PRIVATE)
+                        if (!prefs.getBoolean(promptKey, false)) {
+                            prefs.edit().putBoolean(promptKey, true).apply()
+                            pendingAutoPushRegistrationSession = saved
+                            ActivityCompat.requestPermissions(
+                                this@MainActivity,
+                                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                                REQUEST_NOTIFICATIONS
+                            )
                         }
                     }
                 } catch (error: Exception) {
@@ -1372,10 +1393,16 @@ class MainActivity : Activity() {
             if (pendingNativePushSession != null) {
                 completeNativePushPermissionFlow(granted)
             } else {
-                webView.evaluateJavascript(
-                    "window.dispatchEvent(new CustomEvent('workly-native-notification-permission', {detail:{granted:$granted}}));",
-                    null
-                )
+                val autoSession = pendingAutoPushRegistrationSession
+                pendingAutoPushRegistrationSession = null
+                if (granted && autoSession != null) {
+                    registerSignedInAndroidPush(autoSession)
+                } else {
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('workly-native-notification-permission', {detail:{granted:$granted}}));",
+                        null
+                    )
+                }
             }
         }
     }
@@ -1410,6 +1437,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (::webView.isInitialized) syncWebsiteSession()
         if (pendingWebsiteInstallUri != null) {
             val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
             if (targetCode > 0L && getInstalledAppVersionCode() >= targetCode) {
