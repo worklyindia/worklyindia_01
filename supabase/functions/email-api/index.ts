@@ -2376,6 +2376,77 @@ serve(async req => {
     }
 
     // ==========================================
+    // ACTION: send_android_release_push — owner-only broadcast after manual APK publication.
+    if (action === 'send_android_release_push') {
+      if (!isFcmConfigured()) {
+        return new Response(JSON.stringify({ success: false, error: 'Firebase is not configured' }), {
+          status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\\s+/i, '');
+      if (!bearer) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const { data: userData, error: userError } = await supabase.auth.getUser(bearer);
+      if (userError || !userData?.user) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const { data: roleRows, error: roleError } = await supabase.from('user_roles')
+        .select('role').eq('user_id', userData.user.id);
+      if (roleError || !(roleRows ?? []).some((row: { role: string }) => row.role === 'owner' || row.role === 'admin')) {
+        return new Response(JSON.stringify({ success: false, error: 'Only an owner or admin can publish Android updates' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const versionName = typeof body.version_name === 'string' ? body.version_name.trim().slice(0, 40) : '';
+      const versionCode = typeof body.version_code === 'number' ? body.version_code : Number(body.version_code);
+      if (!versionName || !Number.isInteger(versionCode) || versionCode <= 0) {
+        return new Response(JSON.stringify({ success: false, error: 'A valid version name and version code are required' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const { data: template, error: templateError } = await supabase.from('push_lifecycle_templates')
+        .select('*').eq('event_type', 'android_app_update').maybeSingle();
+      if (templateError) throw templateError;
+      if (!template || template.enabled === false || !template.title || !template.body) {
+        return new Response(JSON.stringify({ success: true, sent: 0, skipped: true, reason: 'Android update notification template is disabled or empty' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const { data: deviceRows, error: deviceError } = await supabase.from('push_subscriptions')
+        .select('user_id').eq('platform', 'android').eq('enabled', true).not('fcm_token', 'is', null);
+      if (deviceError) throw deviceError;
+      const userIds = [...new Set((deviceRows ?? []).map((row: { user_id: string | null }) => row.user_id).filter((id): id is string => Boolean(id)))];
+      if (userIds.length === 0) {
+        return new Response(JSON.stringify({ success: true, sent: 0, failed: 0, message: 'No registered Android devices were found' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const replaceVersion = (value: string) => value.replace(/\\{\\{version_name\\}\\}/g, versionName);
+      const targetUrl = absolutePushUrl(template.button_url || '/');
+      const result = await sendToUsers(supabase, userIds, {
+        title: replaceVersion(String(template.title)),
+        body: replaceVersion(String(template.body)),
+        url: targetUrl,
+        icon: template.icon_url || undefined,
+        image: capPushImageUrl(template.image_url),
+        tag: `workly-android-update-${versionCode}`,
+        priority: 'high',
+        data: { type: 'android_app_update', version_code: String(versionCode), url: targetUrl }
+      });
+      return new Response(JSON.stringify({
+        success: result.sent > 0,
+        sent: result.sent,
+        failed: result.failed,
+        recipients: userIds.length,
+        errors: result.errors.slice(0, 5)
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // ACTION: send_lifecycle_push — welcome / goodbye push using the
     // owner-configured template in public.push_lifecycle_templates.
     // Body: { event: 'subscribe' | 'unsubscribe', token: string }
