@@ -98,9 +98,17 @@ class MainActivity : Activity() {
     private val websiteUpdatePrefs by lazy { getSharedPreferences("workly_android_update", Context.MODE_PRIVATE) }
     private var websiteDownloadProgressBar: ProgressBar? = null
     private var websiteDownloadProgressLabel: TextView? = null
-    // Distribution is selected at build time: Play Store builds must never
-    // fall back to the website APK download/install flow.
-    private val isPlayStoreInstall: Boolean = BuildConfig.IS_PLAY_STORE_BUILD
+    private val isPlayStoreInstall: Boolean by lazy {
+        runCatching {
+            val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                packageManager.getInstallSourceInfo(packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getInstallerPackageName(packageName)
+            }
+            installer == "com.android.vending"
+        }.getOrDefault(false)
+    }
     private val websiteDownloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
