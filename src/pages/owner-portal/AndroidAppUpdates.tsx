@@ -18,6 +18,19 @@ const formatSize = (n: number) => n >= 1_000_000
   : (n / 1_000).toFixed(2) + " KB";
 const formatExactBytes = (n: number) => new Intl.NumberFormat("en-IN").format(n) + " bytes";
 
+// R2 release URLs are stored directly in apk_path. Keep the host allowlist
+// narrow so a database value cannot make the Owner Portal open an arbitrary URL.
+const isR2ReleaseUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:"
+      && ["pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev", "downloads.devs.surf"].includes(url.hostname)
+      && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+};
+
 export default function AndroidAppUpdates() {
   const navigate = useNavigate();
   const [releases, setReleases] = useState<Release[]>([]);
@@ -42,7 +55,7 @@ export default function AndroidAppUpdates() {
     // Read the actual APK object so the Owner Portal matches the APK artifact
     // reported by the native Android workflow.
     const sizeCheckIds = new Set(
-      rows.filter((release, index) => index === 0 || release.is_published).map((release) => release.id)
+      rows.filter((release, index) => (index === 0 || release.is_published) && !isR2ReleaseUrl(release.apk_path)).map((release) => release.id)
     );
     rows = await Promise.all(rows.map(async (release) => {
       if (!sizeCheckIds.has(release.id)) return release;
@@ -80,7 +93,7 @@ export default function AndroidAppUpdates() {
     const obsolete = rows.filter((release) => !keepIds.has(release.id));
 
     if (obsolete.length > 0) {
-      const oldPaths = [...new Set(obsolete.map((release) => release.apk_path).filter(Boolean))];
+      const oldPaths = [...new Set(obsolete.map((release) => release.apk_path).filter(Boolean).filter((path) => !isR2ReleaseUrl(path)))];
       const { error: storageError } = oldPaths.length
         ? await supabase.storage.from("android-app-releases").remove(oldPaths)
         : { error: null };
@@ -169,17 +182,30 @@ export default function AndroidAppUpdates() {
     if (downloadingReleaseId) return;
     setDownloadingReleaseId(release.id);
     try {
-      const { data, error } = await supabase.storage.from("android-app-releases").download(release.apk_path);
-      if (error) throw error;
-      if (!data) throw new Error("APK file was not returned by storage.");
-      const objectUrl = URL.createObjectURL(data);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = `Workly-India-${release.version_name}-${release.version_code}.apk`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      const filename = `Workly-India-${release.version_name}-${release.version_code}.apk`;
+      if (isR2ReleaseUrl(release.apk_path)) {
+        // R2 serves the APK with Content-Disposition: attachment.
+        const link = document.createElement("a");
+        link.href = release.apk_path;
+        link.download = filename;
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        // Backward compatibility for older Supabase Storage releases.
+        const { data, error } = await supabase.storage.from("android-app-releases").download(release.apk_path);
+        if (error) throw error;
+        if (!data) throw new Error("APK file was not returned by storage.");
+        const objectUrl = URL.createObjectURL(data);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      }
       toast.success(`Downloading Workly India v${release.version_name} APK.`);
     } catch (error) {
       console.error("Android APK download failed:", error);
@@ -190,12 +216,16 @@ export default function AndroidAppUpdates() {
   };
   const copyReleaseApkLink = async (release: Release) => {
     try {
-      const { data, error } = await supabase.storage
-        .from("android-app-releases")
-        .createSignedUrl(release.apk_path, 60 * 60 * 24 * 365);
-      if (error) throw error;
-      if (!data?.signedUrl) throw new Error("A download link could not be created.");
-      await navigator.clipboard.writeText(data.signedUrl);
+      let downloadUrl = release.apk_path;
+      if (!isR2ReleaseUrl(release.apk_path)) {
+        const { data, error } = await supabase.storage
+          .from("android-app-releases")
+          .createSignedUrl(release.apk_path, 60 * 60 * 24 * 365);
+        if (error) throw error;
+        if (!data?.signedUrl) throw new Error("A download link could not be created.");
+        downloadUrl = data.signedUrl;
+      }
+      await navigator.clipboard.writeText(downloadUrl);
       toast.success("APK download link copied.");
     } catch (error) {
       console.error("APK link copy failed:", error);
