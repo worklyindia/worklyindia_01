@@ -62,7 +62,6 @@ object SecureDocumentVault {
         context: Context, displayName: String, mimeType: String, bytes: ByteArray, cipher: Cipher
     ): String {
         require(bytes.isNotEmpty() && bytes.size <= MAX_DOCUMENT_BYTES) { "Choose a document up to 15 MB." }
-        require(cipher.opmodeForVault() == Cipher.ENCRYPT_MODE) { "Invalid vault encryption operation." }
         val payload = encodePayload(displayName, mimeType, bytes)
         val encrypted = cipher.doFinal(payload)
         val id = java.util.UUID.randomUUID().toString()
@@ -76,7 +75,6 @@ object SecureDocumentVault {
     }
 
     fun readAuthenticated(context: Context, id: String, cipher: Cipher): Triple<String, String, ByteArray> {
-        require(cipher.opmodeForVault() == Cipher.DECRYPT_MODE) { "Invalid vault decryption operation." }
         val raw = documentFile(context, id).readBytes()
         require(raw.size > 20 && java.nio.ByteBuffer.wrap(raw, 0, 4).int == AUTH_FILE_MAGIC) {
             "This document needs the older vault reader."
@@ -174,17 +172,5 @@ object SecureDocumentVault {
             ?: throw IllegalStateException("Biometric-protected vault key unavailable.")
     }
 
-    private fun Cipher.opmodeForVault(): Int {
-        // Cipher does not expose its mode; check it with a harmless algorithm-independent property
-        // via the key-operation intent passed by the caller instead.
-        return if (iv != null && iv.isNotEmpty()) {
-            // GCM encrypt Ciphers expose an IV before doFinal; decrypt Ciphers do too.
-            // The caller-side method validates the expected mode through the dedicated helper below.
-            cipherMode
-        } else cipherMode
-    }
 
-    private val cipherModes = java.util.WeakHashMap<Cipher, Int>()
-    private val Cipher.cipherMode: Int
-        get() = cipherModes[this] ?: throw IllegalArgumentException("Cipher was not prepared by Secure Vault.")
 }
