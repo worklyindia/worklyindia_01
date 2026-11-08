@@ -27,33 +27,28 @@ const OfflineIndicator = () => {
   };
 
   return (
-    <main
-      role="alert"
-      aria-live="assertive"
-      className="fixed inset-0 z-[100000] flex min-h-screen items-center justify-center bg-background px-6 py-10 text-foreground"
+    <aside
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.5rem)] z-[100000] mx-auto flex max-w-xl items-center gap-3 rounded-2xl border border-amber-500/30 bg-card/95 p-3 text-card-foreground shadow-xl backdrop-blur"
     >
-      <section className="w-full max-w-md rounded-[2rem] border border-border/60 bg-card px-7 py-10 text-center shadow-2xl">
-        <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500/10">
-          <WifiOff className="h-11 w-11 text-emerald-600" aria-hidden="true" />
-        </div>
-        <p className="mb-3 text-xs font-bold tracking-[0.18em] text-emerald-600">
-          CONNECTION INTERRUPTED
-        </p>
-        <h1 className="mb-3 text-3xl font-bold tracking-tight">You're offline</h1>
-        <p className="mb-8 text-sm leading-6 text-muted-foreground">{message}</p>
-        <button
-          type="button"
-          onClick={checkConnection}
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-        >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Check connection
-        </button>
-        <p className="mt-6 text-xs text-muted-foreground">
-          Workly India · Your next opportunity awaits
-        </p>
-      </section>
-    </main>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+        <WifiOff className="h-5 w-5 text-amber-600" aria-hidden="true" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">You're offline</p>
+        <p className="text-xs text-muted-foreground">{message}</p>
+      </div>
+      <button
+        type="button"
+        onClick={checkConnection}
+        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
+        aria-label="Check internet connection"
+      >
+        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+        Retry
+      </button>
+    </aside>
   );
 };
 
