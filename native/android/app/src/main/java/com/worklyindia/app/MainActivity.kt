@@ -1629,6 +1629,7 @@ class MainActivity : Activity() {
             if (awaitingInstallPermissionSettings) {
                 awaitingInstallPermissionSettings = false
                 Toast.makeText(this, "Allow Workly India to install unknown apps, then tap Install now again.", Toast.LENGTH_LONG).show()
+                showWebsiteInstallReadyDialog(websiteDownloadRelease)
                 return
             }
             awaitingInstallPermissionSettings = true
