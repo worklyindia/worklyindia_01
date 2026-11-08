@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 type Release = {
   id: string; version_code: number; version_name: string; apk_path: string;
   apk_size_bytes: number; release_notes: string; min_supported_version_code: number;
-  published_at: string | null; is_published: boolean;
+  published_at: string | null; is_published: boolean; created_at: string;
 };
 
 const BUCKET = "android-app-releases";
@@ -168,7 +168,7 @@ export default function AndroidAppUpdates() {
           </CardContent>
         </Card>
 
-        {published && !published.id.includes(latest?.id || "__none__") && (
+        {published && !published.id !== latest?.id && (
           <Card>
             <CardHeader className="p-4 sm:p-6"><CardTitle className="text-base">Currently public release</CardTitle><CardDescription>This version remains available while a newer build is waiting for your approval.</CardDescription></CardHeader>
             <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6"><p className="font-semibold">Workly India v{published.version_name}</p><p className="text-xs text-muted-foreground">Version code {published.version_code}</p></CardContent>
