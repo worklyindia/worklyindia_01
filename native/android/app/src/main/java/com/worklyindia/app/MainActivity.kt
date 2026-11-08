@@ -91,6 +91,8 @@ class MainActivity : Activity() {
     private var websiteInstallDialogVisible = false
     // Avoid repeating native token registration on every WebView navigation.
     private var autoPushRegistrationUserId: String? = null
+    private var pendingNativePushSession: NativeSession? = null
+    private var pendingNativePushFirebaseConfig: JSONObject? = null
     private var waitingForWebsiteInstallPermission = false
     private val websiteUpdatePrefs by lazy { getSharedPreferences("workly_android_update", Context.MODE_PRIVATE) }
     private var websiteDownloadProgressBar: ProgressBar? = null
@@ -1093,6 +1095,60 @@ class MainActivity : Activity() {
         fun isNotificationPermissionGranted(): Boolean = hasNotificationPermission()
 
         @JavascriptInterface
+        fun requestNativeNotifications(rawSession: String, rawFirebaseConfig: String) {
+            runOnUiThread {
+                try {
+                    val sessionJson = JSONObject(rawSession)
+                    val user = sessionJson.getJSONObject("user")
+                    val metadata = user.optJSONObject("user_metadata") ?: JSONObject()
+                    val role = metadata.optString("user_type", metadata.optString("account_type", metadata.optString("role", "jobseeker")))
+                    pendingNativePushSession = NativeAuth.saveWebSession(
+                        this@MainActivity,
+                        sessionJson.getString("access_token"),
+                        sessionJson.getString("refresh_token"),
+                        user.getString("id"),
+                        user.optString("email"),
+                        if (role.equals("employer", true)) "employer" else "jobseeker"
+                    )
+                    pendingNativePushFirebaseConfig = JSONObject(rawFirebaseConfig)
+                    if (Build.VERSION.SDK_INT >= 33 &&
+                        ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+                    } else {
+                        completeNativePushPermissionFlow(hasNotificationPermission())
+                    }
+                } catch (error: Exception) {
+                    android.util.Log.e("WorklyPush", "Could not start native notification setup", error)
+                    completeNativePushPermissionFlow(false)
+                }
+            }
+        }
+
+        private fun completeNativePushPermissionFlow(granted: Boolean) {
+            val session = pendingNativePushSession
+            val firebaseConfig = pendingNativePushFirebaseConfig
+            pendingNativePushSession = null
+            pendingNativePushFirebaseConfig = null
+            if (!granted || session == null || firebaseConfig == null) {
+                webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('workly:native-notification-result', {detail:{granted:" + granted + ",registered:false}}));",
+                    null
+                )
+                return
+            }
+            activityScope.launch(Dispatchers.IO) {
+                val registered = NativePushManager.register(this@MainActivity, session, firebaseConfig)
+                runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('workly:native-notification-result', {detail:{granted:true,registered:" + registered + "}}));",
+                        null
+                    )
+                }
+            }
+        }
+
+        @JavascriptInterface
         fun requestNotificationPermission(): Boolean {
             if (Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -1313,12 +1369,14 @@ class MainActivity : Activity() {
             if (origin != null && callback != null) callback.invoke(origin, granted, true)
         } else if (requestCode == REQUEST_NOTIFICATIONS) {
             val granted = hasNotificationPermission()
-            // The web UI owns the subscribe flow and invokes native registration
-            // once after this callback. Do not register twice here.
-            webView.evaluateJavascript(
-                "window.dispatchEvent(new CustomEvent('workly-native-notification-permission', {detail:{granted:$granted}}));",
-                null
-            )
+            if (pendingNativePushSession != null) {
+                completeNativePushPermissionFlow(granted)
+            } else {
+                webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('workly-native-notification-permission', {detail:{granted:$granted}}));",
+                    null
+                )
+            }
         }
     }
 
