@@ -125,6 +125,7 @@ class MainActivity : Activity() {
                         pendingWebsiteInstallUri = uri
                         persistPendingWebsiteInstall(uri, websiteDownloadRelease)
                         websiteDownloadId = -1L
+                        websiteUpdatePrefs.edit().remove("active_download_id").apply()
                         runOnUiThread {
                             websiteDownloadDialog?.dismiss()
                             websiteDownloadDialog = null
@@ -1490,8 +1491,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun checkForWebsiteRelease() {
-        if (websiteUpdateCheckInProgress || websiteUpdateDialogVisible ||
-            websiteDownloadId != -1L || isFinishing || isDestroyed) return
+        if (websiteUpdateCheckInProgress || websiteUpdateDialogVisible || isFinishing || isDestroyed) return
         websiteUpdateCheckInProgress = true
         activityScope.launch(Dispatchers.IO) {
             var release: JSONObject? = null
@@ -1525,7 +1525,17 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 websiteUpdateCheckInProgress = false
                 val latest = release ?: return@runOnUiThread
                 val latestCode = latest.optInt("version_code", 0)
-                if (latestCode.toLong() > getInstalledAppVersionCode()) showWebsiteUpdateDialog(latest)
+                if (latestCode.toLong() <= getInstalledAppVersionCode()) return@runOnUiThread
+                val pendingCode = websiteDownloadRelease?.optInt("version_code", 0)
+                    ?: websiteUpdatePrefs.getString("pending_release", null)
+                        ?.let { runCatching { JSONObject(it).optInt("version_code", 0) }.getOrDefault(0) }
+                    ?: 0
+                if (pendingCode in 1 until latestCode) {
+                    discardOlderWebsiteUpdate(latestCode)
+                }
+                if (websiteDownloadId == -1L && pendingWebsiteInstallUri == null) {
+                    showWebsiteUpdateDialog(latest)
+                }
             }
         }
     }
@@ -1747,6 +1757,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             websiteDownloadRelease = release
             websiteDownloadId = manager.enqueue(request)
+            websiteUpdatePrefs.edit().putLong("active_download_id", websiteDownloadId).apply()
             showWebsiteDownloadProgress(release)
         } catch (error: Exception) {
             android.util.Log.e("WorklyAppUpdate", "Could not start APK download", error)
@@ -1961,6 +1972,34 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             .apply()
     }
 
+    private fun discardOlderWebsiteUpdate(latestVersionCode: Int) {
+        val pendingRelease = websiteUpdatePrefs.getString("pending_release", null)
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val pendingVersion = pendingRelease?.optInt("version_code", 0) ?: 0
+        val activeVersion = websiteDownloadRelease?.optInt("version_code", 0) ?: 0
+        if (pendingVersion >= latestVersionCode && activeVersion >= latestVersionCode) return
+
+        val savedDownloadId = websiteUpdatePrefs.getLong("active_download_id", -1L)
+        if (savedDownloadId != -1L) {
+            runCatching {
+                (getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).remove(savedDownloadId)
+            }
+        }
+        websiteDownloadId = -1L
+        websiteDownloadRelease = null
+        pendingWebsiteInstallUri = null
+        waitingForWebsiteInstallPermission = false
+        websiteUpdatePrefs.edit()
+            .remove("active_download_id")
+            .remove("pending_apk_uri")
+            .remove("pending_release")
+            .remove("waiting_permission")
+            .apply()
+        websiteDownloadDialog?.dismiss()
+        websiteDownloadDialog = null
+        websiteInstallDialogVisible = false
+    }
+
     private fun restorePendingWebsiteInstall() {
         val uri = websiteUpdatePrefs.getString("pending_apk_uri", null)
         val release = websiteUpdatePrefs.getString("pending_release", null)
@@ -1973,7 +2012,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         pendingWebsiteInstallUri = null
         websiteDownloadRelease = null
         waitingForWebsiteInstallPermission = false
-        websiteUpdatePrefs.edit().clear().apply()
+        websiteUpdatePrefs.edit()
+            .remove("pending_apk_uri")
+            .remove("pending_release")
+            .remove("waiting_permission")
+            .remove("active_download_id")
+            .apply()
         websiteInstallDialogVisible = false
     }
 
