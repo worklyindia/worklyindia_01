@@ -1007,7 +1007,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     private fun showBiometricLockPrompt(isSetup: Boolean) {
         if (biometricPromptShowing || isFinishing || isDestroyed) return
-        val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {\n            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL\n        } else {\n            BiometricManager.Authenticators.BIOMETRIC_STRONG\n        }
+        val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        } else {
+            BiometricManager.Authenticators.BIOMETRIC_STRONG
+        }
         if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
             if (isSetup) biometricPreferences().edit().putBoolean("biometric_lock_enabled", false).apply()
             Toast.makeText(this, "Set up a screen lock or fingerprint/face unlock in Android settings first.", Toast.LENGTH_LONG).show()
@@ -1117,7 +1121,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 val payload = buildString {
                     if (message.isNotBlank()) append(message.trim())
                     if (url.isNotBlank() && !contains(url)) {
-                        if (isNotEmpty()) append("\n\n")
+                        if (isNotEmpty()) append("
+
+")
                         append(url.trim())
                     }
                 }
@@ -1774,7 +1780,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }, LinearLayout.LayoutParams(-1, -2))
         if (notes.isNotBlank() && !showProgress) {
             val whatsNew = TextView(this).apply {
-                text = "WHAT'S NEW\n$notes"
+                text = "WHAT'S NEW
+$notes"
                 textSize = 13f
                 setTextColor(mutedText)
                 setLineSpacing(px(3).toFloat(), 1f)
