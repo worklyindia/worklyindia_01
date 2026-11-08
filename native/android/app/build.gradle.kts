@@ -65,6 +65,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     // Native fingerprint, face and device-credential app lock.
     implementation("androidx.biometric:biometric:1.1.0")
+    // On-device OCR for scanned resume pages; no image upload is required.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
     // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
     implementation("androidx.credentials:credentials:1.6.0-beta02")
