@@ -2418,17 +2418,17 @@ serve(async req => {
         });
       }
       const { data: deviceRows, error: deviceError } = await supabase.from('push_subscriptions')
-        .select('user_id').eq('platform', 'android').eq('enabled', true).not('fcm_token', 'is', null);
+        .select('fcm_token').eq('platform', 'android').eq('enabled', true).not('fcm_token', 'is', null);
       if (deviceError) throw deviceError;
-      const userIds = [...new Set((deviceRows ?? []).map((row: { user_id: string | null }) => row.user_id).filter((id): id is string => Boolean(id)))];
-      if (userIds.length === 0) {
+      const tokens = [...new Set((deviceRows ?? []).map((row: { fcm_token: string | null }) => row.fcm_token).filter((token): token is string => Boolean(token)))];
+      if (tokens.length === 0) {
         return new Response(JSON.stringify({ success: true, sent: 0, failed: 0, message: 'No registered Android devices were found' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
       const replaceVersion = (value: string) => value.replace(/\\{\\{version_name\\}\\}/g, versionName);
       const targetUrl = absolutePushUrl(template.button_url || '/');
-      const result = await sendToUsers(supabase, userIds, {
+      const result = await sendToTokens(tokens, {
         title: replaceVersion(String(template.title)),
         body: replaceVersion(String(template.body)),
         url: targetUrl,
@@ -2442,7 +2442,7 @@ serve(async req => {
         success: result.sent > 0,
         sent: result.sent,
         failed: result.failed,
-        recipients: userIds.length,
+        recipients: tokens.length,
         errors: result.errors.slice(0, 5)
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
