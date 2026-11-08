@@ -36,4 +36,16 @@
             android:targetClass="com.worklyindia.app.MainActivity"
             android:data="https://worklyindia.devs.surf/profile" />
     </shortcut>
+    <shortcut
+        android:shortcutId="workly_secure_vault"
+        android:enabled="true"
+        android:icon="@drawable/ic_workly_launcher"
+        android:shortcutShortLabel="@string/shortcut_secure_vault"
+        android:shortcutLongLabel="@string/shortcut_secure_vault">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.worklyindia.app"
+            android:targetClass="com.worklyindia.app.MainActivity"
+            android:data="worklyindia://open/vault" />
+    </shortcut>
 </shortcuts>
