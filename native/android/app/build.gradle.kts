@@ -1,12 +1,13 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
 val releaseProperties = java.util.Properties().apply {
     val releaseConfig = rootProject.file("../../android-release.properties")
     if (releaseConfig.exists()) releaseConfig.inputStream().use { load(it) }
 }
 
-plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-}
 
 android {
     namespace = "com.worklyindia.app"
