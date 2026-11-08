@@ -583,6 +583,11 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Installation was not completed. Tap Install now to retry.", Toast.LENGTH_LONG).show()
                 showWebsiteInstallReadyDialog(websiteDownloadRelease)
             }
+        } else if (targetVersion > BuildConfig.VERSION_CODE.toLong() &&
+            pendingWebsiteInstallUri != null && !websiteUpdateDialogVisible) {
+            // Restore the install-ready sheet if Android or the app process was
+            // recreated while the user was in system settings.
+            showWebsiteInstallReadyDialog(websiteDownloadRelease)
         }
     }
 
@@ -1649,7 +1654,15 @@ class MainActivity : Activity() {
         val dialog = Dialog(this)
         addWebsiteSheetActions(content, "Install now", if (mandatory) null else "Later",
             onPrimary = { dialog.dismiss(); continueWebsiteInstallIfAllowed() },
-            onSecondary = { pendingWebsiteInstallUri = null; dialog.dismiss() })
+            onSecondary = {
+                pendingWebsiteInstallUri = null
+                websiteUpdatePrefs.edit()
+                    .remove(KEY_PENDING_APK_URI)
+                    .remove(KEY_TARGET_VERSION_CODE)
+                    .putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
+                    .apply()
+                dialog.dismiss()
+            })
         dialog.setContentView(content)
         showWebsiteBottomSheet(dialog, allowSwipeDismiss = !mandatory)
     }
