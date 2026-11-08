@@ -312,6 +312,48 @@ const EmailAutoTriggers = lazyRetry(() => import("./pages/owner-portal/email/Aut
 const CareerTricks = lazyRetry(() => import("./pages/CareerTricks"));
 const InstallApp = lazyRetry(() => import("./pages/InstallApp"));
 
+/** Lightweight native-feeling route placeholder. Never leave the WebView blank
+ * while a lazy page chunk is being fetched or evaluated. */
+const RouteLoadingFallback = () => (
+  <div
+    className="fixed inset-0 z-[60] flex min-h-[100dvh] flex-col bg-background"
+    role="status"
+    aria-live="polite"
+    aria-label="Loading Workly India page"
+  >
+    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border/50 px-4">
+      <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="h-3 w-32 animate-pulse rounded-full bg-muted" />
+        <div className="h-2.5 w-20 animate-pulse rounded-full bg-muted/70" />
+      </div>
+      <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
+    </div>
+    <div className="flex-1 space-y-5 px-4 py-6">
+      <div className="h-7 w-2/5 animate-pulse rounded-lg bg-muted" />
+      <div className="h-3 w-4/5 animate-pulse rounded-full bg-muted/80" />
+      <div className="h-36 animate-pulse rounded-2xl border border-border/50 bg-muted/40" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="h-24 animate-pulse rounded-2xl bg-muted/60" />
+        <div className="h-24 animate-pulse rounded-2xl bg-muted/60" />
+      </div>
+      <div className="space-y-3">
+        <div className="h-16 animate-pulse rounded-xl bg-muted/50" />
+        <div className="h-16 animate-pulse rounded-xl bg-muted/50" />
+      </div>
+    </div>
+    <div className="grid h-[68px] shrink-0 grid-cols-4 border-t border-border/50 bg-background/95 px-2">
+      {["Home", "Jobs", "Activity", "More"].map((item) => (
+        <div key={item} className="flex flex-col items-center justify-center gap-1.5">
+          <div className="h-5 w-5 animate-pulse rounded-md bg-muted" />
+          <div className="h-2 w-10 animate-pulse rounded-full bg-muted/70" />
+        </div>
+      ))}
+    </div>
+    <span className="sr-only">Loading page content…</span>
+  </div>
+);
+
 const AppContent = () => {
   const navigate = useNavigate();
   const { loading: authLoading, profileLoading, user } = useAuth();
@@ -439,7 +481,7 @@ const AppContent = () => {
       
       <RoutePreserver />
       <PendingReferralApplier />
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteLoadingFallback />}>
         <AIOnlyModeGuard>
         <OnboardingGuard>
         <Routes>
