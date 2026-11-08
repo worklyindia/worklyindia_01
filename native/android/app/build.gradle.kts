@@ -19,8 +19,10 @@ android {
         applicationId = "com.worklyindia.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "2.4.1"
+        // Must be greater than the currently installed 2.4.1 (code 7)
+        // and match the published website release record (code 8).
+        versionCode = 8
+        versionName = "2.4.2"
     }
 
     signingConfigs {
@@ -52,7 +54,7 @@ android {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
-    // Official Google Play in-app update flow (flexible updates). 
+    // Official Google Play in-app update flow (flexible updates).
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.15.0")
     // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
