@@ -125,6 +125,7 @@ class MainActivity : Activity() {
                     val uri = manager.getUriForDownloadedFile(completedId)
                     if (uri == null) {
                         websiteDownloadId = -1L
+                        websiteUpdatePrefs.edit().remove(KEY_ACTIVE_DOWNLOAD_ID).apply()
                         runOnUiThread {
                             websiteDownloadDialog?.dismiss()
                             websiteDownloadDialog = null
@@ -133,6 +134,7 @@ class MainActivity : Activity() {
                         return
                     }
                     websiteDownloadId = -1L
+                    websiteUpdatePrefs.edit().remove(KEY_ACTIVE_DOWNLOAD_ID).apply()
                     pendingWebsiteInstallUri = uri
                     websiteUpdatePrefs.edit()
                         .putString(KEY_PENDING_APK_URI, uri.toString())
@@ -151,12 +153,25 @@ class MainActivity : Activity() {
                     }
                 } else {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    android.util.Log.e("WorklyAppUpdate", "Website APK download failed: $reason")
+                    val reasonText = when (reason) {
+                        DownloadManager.ERROR_CANNOT_RESUME -> "Cannot resume the previous download"
+                        DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Download storage is unavailable"
+                        DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "An update file with the same name already exists"
+                        DownloadManager.ERROR_FILE_ERROR -> "Android could not write the update file"
+                        DownloadManager.ERROR_HTTP_DATA_ERROR -> "Network data error while downloading"
+                        DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Not enough storage space"
+                        DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "The update server redirected too many times"
+                        DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "The update server returned an HTTP error"
+                        DownloadManager.ERROR_UNKNOWN -> "Android reported an unknown download error"
+                        else -> "DownloadManager reason=$reason"
+                    }
+                    android.util.Log.e("WorklyAppUpdate", "Website APK download failed: $reasonText")
                     websiteDownloadId = -1L
+                    websiteUpdatePrefs.edit().remove(KEY_ACTIVE_DOWNLOAD_ID).apply()
                     runOnUiThread {
                         websiteDownloadDialog?.dismiss()
                         websiteDownloadDialog = null
-                        Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "Update download failed: $reasonText. Tap Download update to retry.", Toast.LENGTH_LONG).show()
                         checkForWebsiteRelease()
                     }
                 }
@@ -198,6 +213,7 @@ class MainActivity : Activity() {
         appUpdateManager = AppUpdateManagerFactory.create(this)
         appUpdateManager.registerListener(appUpdateListener)
         pendingWebsiteInstallUri = websiteUpdatePrefs.getString(KEY_PENDING_APK_URI, null)?.let(Uri::parse)
+        websiteDownloadId = websiteUpdatePrefs.getLong(KEY_ACTIVE_DOWNLOAD_ID, -1L)
         websiteDownloadRelease = websiteUpdatePrefs.getString(KEY_PENDING_RELEASE_JSON, null)
             ?.takeIf { it.isNotBlank() }?.let { runCatching { JSONObject(it) }.getOrNull() }
         ContextCompat.registerReceiver(
@@ -1695,13 +1711,21 @@ class MainActivity : Activity() {
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setAllowedOverMetered(true)
                 .setAllowedOverRoaming(false)
-                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "workly-india-update.apk")
+                .setDestinationInExternalFilesDir(
+                    this, Environment.DIRECTORY_DOWNLOADS,
+                    "workly-india-update-${release.optInt("version_code", 0)}-${System.currentTimeMillis()}.apk"
+                )
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             websiteDownloadRelease = release
             websiteDownloadId = manager.enqueue(request)
+            websiteUpdatePrefs.edit()
+                .putLong(KEY_ACTIVE_DOWNLOAD_ID, websiteDownloadId)
+                .putString(KEY_PENDING_RELEASE_JSON, release.toString())
+                .apply()
             showWebsiteDownloadProgress(release)
         } catch (error: Exception) {
             websiteDownloadId = -1L
+            websiteUpdatePrefs.edit().remove(KEY_ACTIVE_DOWNLOAD_ID).apply()
             websiteDownloadDialog?.dismiss()
             websiteDownloadDialog = null
             android.util.Log.e("WorklyAppUpdate", "Could not start APK download", error)
@@ -1848,6 +1872,7 @@ class MainActivity : Activity() {
         private const val KEY_TARGET_VERSION_CODE = "target_version_code"
         private const val KEY_INSTALL_PROMPT_ACTIVE = "install_prompt_active"
         private const val KEY_PENDING_RELEASE_JSON = "pending_release_json"
+        private const val KEY_ACTIVE_DOWNLOAD_ID = "active_download_id"
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_MEDIA = 702
