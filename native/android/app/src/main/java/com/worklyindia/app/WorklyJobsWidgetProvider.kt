@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -21,9 +22,11 @@ class WorklyJobsWidgetProvider : AppWidgetProvider() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val jobs = fetchLatestJobs()
+                cacheJobs(context, jobs)
                 ids.forEach { renderWidget(context, manager, it, jobs) }
             } catch (_: Exception) {
-                ids.forEach { renderWidget(context, manager, it, emptyList(), failed = true) }
+                val cached = readCachedJobs(context)
+                ids.forEach { renderWidget(context, manager, it, cached, failed = true) }
             } finally {
                 pendingResult.finish()
             }
@@ -59,10 +62,34 @@ class WorklyJobsWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    private fun cacheJobs(context: Context, jobs: List<JobItem>) {
+        val rows = JSONArray()
+        jobs.forEach { job ->
+            rows.put(JSONObject().put("id", job.id).put("title", job.title)
+                .put("location", job.location).put("salary", job.salary))
+        }
+        context.getSharedPreferences("workly_jobs_widget", Context.MODE_PRIVATE)
+            .edit().putString("latest_jobs", rows.toString()).apply()
+    }
+
+    private fun readCachedJobs(context: Context): List<JobItem> {
+        val raw = context.getSharedPreferences("workly_jobs_widget", Context.MODE_PRIVATE)
+            .getString("latest_jobs", null) ?: return emptyList()
+        return runCatching {
+            val rows = JSONArray(raw)
+            (0 until rows.length()).mapNotNull { index ->
+                val row = rows.optJSONObject(index) ?: return@mapNotNull null
+                val id = row.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                JobItem(id, row.optString("title"), row.optString("location"), row.optString("salary"))
+            }
+        }.getOrDefault(emptyList())
+    }
+
     private fun renderWidget(context: Context, manager: AppWidgetManager, widgetId: Int,
         jobs: List<JobItem>, failed: Boolean = false) {
         val views = RemoteViews(context.packageName, R.layout.workly_jobs_widget)
         views.setTextViewText(R.id.workly_widget_status, when {
+            failed && jobs.isNotEmpty() -> "Offline • Showing saved jobs"
             failed -> "Couldn't refresh jobs • Tap to browse"
             jobs.isEmpty() -> "No public jobs available right now"
             else -> "Latest opportunities • ${jobs.size} shown"
