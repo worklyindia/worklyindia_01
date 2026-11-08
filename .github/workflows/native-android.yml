@@ -256,6 +256,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_ID: ${{ steps.upload-release-artifacts.outputs.artifact-id }}
+          APK_FILE: native/android/app/build/outputs/Workly-India.apk
+          AAB_FILE: native/android/app/build/outputs/Workly-India.aab
         run: |
           {
             echo "## Workly India — Public Android Release"
