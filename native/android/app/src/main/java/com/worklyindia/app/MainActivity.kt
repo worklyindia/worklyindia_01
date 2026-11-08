@@ -590,6 +590,10 @@ class MainActivity : Activity() {
             // recreated while the user was in system settings.
             showWebsiteInstallReadyDialog(websiteDownloadRelease)
         }
+
+        if (pendingWebsiteInstallUri == null && ::appUpdateManager.isInitialized) {
+            if (isPlayStoreInstall) checkForPlayStoreUpdate() else checkForWebsiteRelease()
+        }
     }
 
     private fun createStartupLoadingOverlay(): FrameLayout {
@@ -1400,15 +1404,6 @@ class MainActivity : Activity() {
             )
         } else {
             super.onBackPressed()
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (pendingWebsiteInstallUri != null) {
-            continueWebsiteInstallIfAllowed()
-        } else if (::appUpdateManager.isInitialized) {
-            if (isPlayStoreInstall) checkForPlayStoreUpdate() else checkForWebsiteRelease()
         }
     }
 
