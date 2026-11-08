@@ -2376,6 +2376,7 @@ serve(async req => {
     }
 
     // ==========================================
+    // Owner-controlled Android app release notifications are sent only after manual publication.
     // ACTION: send_android_release_push — owner-only broadcast after manual APK publication.
     if (action === 'send_android_release_push') {
       if (!isFcmConfigured()) {
