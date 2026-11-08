@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Download, Loader2, Package, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -29,6 +29,31 @@ export default function AndroidAppUpdates() {
   const [versionCode, setVersionCode] = useState("");
   const [minVersion, setMinVersion] = useState("1");
   const [notes, setNotes] = useState("");
+  const [metadataLoading, setMetadataLoading] = useState(true);
+  const [buildMetadata, setBuildMetadata] = useState<{ version_name: string; version_code: number } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/android-app-build-info.json", { cache: "no-store" })
+      .then(response => { if (!response.ok) throw new Error("Build metadata not found"); return response.json(); })
+      .then(info => {
+        if (!active) return;
+        setBuildMetadata(info);
+        setVersionName(String(info.version_name || ""));
+        setVersionCode(String(info.version_code || ""));
+        setMinVersion(String(info.min_supported_version_code || 1));
+        setNotes(String(info.release_notes || "Performance improvements and bug fixes."));
+      })
+      .catch(() => { if (active) toast.error("Auto version details load nahi hue. Android build config check karein."); })
+      .finally(() => { if (active) setMetadataLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const copyReleaseDetails = async () => {
+    const details = ["Version name: " + versionName, "Version code: " + versionCode, "Minimum supported version code: " + minVersion, "Release notes: " + notes].join("\n");
+    try { await navigator.clipboard.writeText(details); toast.success("Release details copy ho gaye."); }
+    catch { toast.error("Copy nahi hua. Fields manually copy karein."); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,13 +146,14 @@ export default function AndroidAppUpdates() {
 
     <Card>
       <CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload new APK</CardTitle>
-        <CardDescription>Signed APK upload karein. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
+        <CardDescription>Signed APK upload karein. Version details Android build configuration se automatically aayengi. APK isi build ki honi chahiye. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2"><Label>APK file</Label><Input type="file" accept=".apk,application/vnd.android.package-archive" onChange={e => setApk(e.target.files?.[0] || null)} /></div>
-        <div className="space-y-2"><Label>Version name</Label><Input placeholder="2.0.4" value={versionName} onChange={e => setVersionName(e.target.value)} /></div>
-        <div className="space-y-2"><Label>Version code</Label><Input type="number" min="1" placeholder="6" value={versionCode} onChange={e => setVersionCode(e.target.value)} /></div>
-        <div className="space-y-2"><Label>Minimum supported version code</Label><Input type="number" min="1" value={minVersion} onChange={e => setMinVersion(e.target.value)} /></div>
+        <div className="space-y-2"><Label>Version name</Label><Input placeholder="Auto-filled from Android build" value={versionName} onChange={e => setVersionName(e.target.value)} /><p className="text-xs text-muted-foreground">App ka display version {metadataLoading ? "· Loading..." : buildMetadata ? "· Auto-filled" : "· Manual entry required"}</p></div>
+        <div className="space-y-2"><Label>Version code</Label><Input type="number" min="1" placeholder="Auto-filled from Android build" value={versionCode} onChange={e => setVersionCode(e.target.value)} /><p className="text-xs text-muted-foreground">Har nayi release par previous code se bada hona chahiye.</p></div>
+        <div className="space-y-2"><Label>Minimum supported version code</Label><Input type="number" min="1" value={minVersion} onChange={e => setMinVersion(e.target.value)} /><p className="text-xs text-muted-foreground">Isse purane app versions ko update karna mandatory hoga. Default 1 = sab purane versions allowed.</p></div>
         <div className="space-y-2 md:col-span-2"><Label>Release notes</Label><Textarea rows={3} placeholder="What's new in this version?" value={notes} onChange={e => setNotes(e.target.value)} /></div>
+        <div className="md:col-span-2"><Button type="button" variant="outline" onClick={() => void copyReleaseDetails()} disabled={!versionName || !versionCode}><Copy className="mr-2 h-4 w-4" /> Copy all release details</Button></div>
         <div className="md:col-span-2"><Button onClick={() => void uploadRelease()} disabled={uploading || !apk} className="w-full sm:w-auto">{uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...</> : <><Upload className="mr-2 h-4 w-4" /> Upload APK</>}</Button></div>
       </CardContent>
     </Card>
