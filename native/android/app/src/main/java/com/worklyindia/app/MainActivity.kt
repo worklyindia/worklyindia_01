@@ -39,6 +39,14 @@ import android.widget.TextView
 import android.view.Gravity
 import android.widget.Toast
 import android.app.AlertDialog
+import android.app.Dialog
+import android.content.ClipData
+import android.content.res.ColorStateList
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
@@ -87,7 +95,8 @@ class MainActivity : Activity() {
     private var pendingWebsiteInstallUri: Uri? = null
     private var websiteDownloadId: Long = -1L
     private var websiteDownloadRelease: JSONObject? = null
-    private var websiteDownloadDialog: AlertDialog? = null
+    private var websiteDownloadDialog: Dialog? = null
+    private var awaitingInstallPermissionSettings = false
     private var websiteDownloadProgressBar: ProgressBar? = null
     private var websiteDownloadProgressLabel: TextView? = null
     private val isPlayStoreInstall: Boolean by lazy {
@@ -113,16 +122,15 @@ class MainActivity : Activity() {
                 val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                 if (status == DownloadManager.STATUS_SUCCESSFUL) {
                     val uri = manager.getUriForDownloadedFile(completedId)
-                    if (uri != null) {
-                        pendingWebsiteInstallUri = uri
-                        websiteDownloadId = -1L
-                        runOnUiThread {
-                            websiteDownloadDialog?.dismiss()
-                            websiteDownloadDialog = null
-                            showWebsiteInstallReadyDialog(websiteDownloadRelease)
-                        }
-                    } else {
-                        runOnUiThread { Toast.makeText(this@MainActivity, "Update download could not be opened. Please try again.", Toast.LENGTH_LONG).show() }
+                        ?: android.content.ContentUris.withAppendedId(Uri.parse("content://downloads/my_downloads"), completedId)
+                    websiteDownloadId = -1L
+                    pendingWebsiteInstallUri = uri
+                    runOnUiThread {
+                        websiteDownloadDialog?.dismiss()
+                        websiteDownloadDialog = null
+                        websiteDownloadProgressBar = null
+                        websiteDownloadProgressLabel = null
+                        showWebsiteInstallReadyDialog(websiteDownloadRelease)
                     }
                 } else {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
@@ -1387,22 +1395,14 @@ class MainActivity : Activity() {
         val notes = release.optString("release_notes", "").trim()
         val mandatory = BuildConfig.VERSION_CODE < release.optInt("min_supported_version_code", 1)
         websiteUpdateDialogVisible = true
-        val content = buildWebsiteUpdateCard(
-            versionName,
-            if (mandatory) "Important update required" else "A new version is available",
-            notes,
-            showProgress = false
-        )
-        val builder = AlertDialog.Builder(this)
-            .setView(content)
-            .setCancelable(false)
-            .setPositiveButton("Download update") { dialog, _ ->
-                websiteUpdateDialogVisible = false
-                dialog.dismiss()
-                downloadWebsiteUpdate(release)
-            }
-        if (!mandatory) builder.setNegativeButton("Later", null)
-        builder.show()
+        val content = buildWebsiteUpdateCard(versionName, if (mandatory) "Important update required" else "A new version is available", notes, showProgress = false)
+        val dialog = Dialog(this)
+        addWebsiteSheetActions(content, "Download update", if (mandatory) null else "Later",
+            onPrimary = { websiteUpdateDialogVisible = false; dialog.dismiss(); downloadWebsiteUpdate(release) },
+            onSecondary = { websiteUpdateDialogVisible = false; dialog.dismiss() })
+        dialog.setContentView(content)
+        dialog.setOnDismissListener { websiteUpdateDialogVisible = false }
+        showWebsiteBottomSheet(dialog, allowSwipeDismiss = !mandatory)
     }
 
     private fun buildWebsiteUpdateCard(
@@ -1413,11 +1413,26 @@ class MainActivity : Activity() {
     ): LinearLayout {
         val density = resources.displayMetrics.density
         fun px(value: Int) = (value * density).toInt()
+        val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val primaryText = if (dark) Color.rgb(245, 247, 251) else Color.rgb(25, 35, 48)
+        val secondaryText = if (dark) Color.rgb(183, 193, 207) else Color.rgb(100, 110, 122)
+        val bodyText = if (dark) Color.rgb(207, 215, 226) else Color.rgb(75, 85, 98)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(px(24), px(24), px(24), px(8))
+            setPadding(px(24), px(12), px(24), px(22))
             gravity = Gravity.CENTER_HORIZONTAL
+            background = GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(24, 30, 42) else Color.WHITE)
+                cornerRadii = floatArrayOf(px(24).toFloat(),px(24).toFloat(),px(24).toFloat(),px(24).toFloat(),0f,0f,0f,0f)
+            }
         }
+        val handle = View(this).apply {
+            background = GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(104, 116, 134) else Color.rgb(190, 197, 207))
+                cornerRadius = px(3).toFloat()
+            }
+        }
+        container.addView(handle, LinearLayout.LayoutParams(px(38), px(5)).apply { bottomMargin = px(20) })
         val appIcon = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher)
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -1428,21 +1443,21 @@ class MainActivity : Activity() {
         container.addView(TextView(this).apply {
             text = "Workly India"
             textSize = 21f
-            setTextColor(Color.rgb(25, 35, 48))
+            setTextColor(primaryText)
             gravity = Gravity.CENTER
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(-1, -2))
         container.addView(TextView(this).apply {
             text = "Version $versionName"
             textSize = 13f
-            setTextColor(Color.rgb(100, 110, 122))
+            setTextColor(secondaryText)
             gravity = Gravity.CENTER
             setPadding(0, px(4), 0, px(8))
         }, LinearLayout.LayoutParams(-1, -2))
         container.addView(TextView(this).apply {
             text = subtitle
             textSize = 15f
-            setTextColor(Color.rgb(35, 45, 58))
+            setTextColor(primaryText)
             gravity = Gravity.CENTER
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setPadding(0, px(4), 0, px(8))
@@ -1451,7 +1466,7 @@ class MainActivity : Activity() {
             container.addView(TextView(this).apply {
                 text = "What's new\n$notes"
                 textSize = 14f
-                setTextColor(Color.rgb(75, 85, 98))
+                setTextColor(bodyText)
                 setPadding(0, px(4), 0, px(12))
             }, LinearLayout.LayoutParams(-1, -2))
         }
@@ -1459,6 +1474,8 @@ class MainActivity : Activity() {
             websiteDownloadProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 isIndeterminate = true
                 max = 100
+                progressTintList = ColorStateList.valueOf(Color.rgb(22, 165, 126))
+                progressBackgroundTintList = ColorStateList.valueOf(if (dark) Color.rgb(65, 76, 91) else Color.rgb(225, 231, 237))
             }
             container.addView(websiteDownloadProgressBar, LinearLayout.LayoutParams(-1, px(8)).apply {
                 topMargin = px(8)
@@ -1467,7 +1484,7 @@ class MainActivity : Activity() {
             websiteDownloadProgressLabel = TextView(this).apply {
                 text = "Preparing download…"
                 textSize = 13f
-                setTextColor(Color.rgb(75, 85, 98))
+                setTextColor(bodyText)
                 gravity = Gravity.CENTER
             }
             container.addView(websiteDownloadProgressLabel, LinearLayout.LayoutParams(-1, -2))
@@ -1476,21 +1493,61 @@ class MainActivity : Activity() {
     }
 
     private fun showWebsiteDownloadProgress(release: JSONObject) {
-        val versionName = release.optString("version_name", "latest version")
-        val content = buildWebsiteUpdateCard(
-            versionName, "Downloading update", "Workly India is downloading the update. Keep the app open.",
-            showProgress = true
-        )
-        websiteDownloadDialog = AlertDialog.Builder(this)
-            .setView(content)
-            .setCancelable(false)
-            .create()
-        websiteDownloadDialog?.show()
-        websiteDownloadDialog?.window?.setLayout(
-            (resources.displayMetrics.widthPixels * 0.90f).toInt(),
-            android.view.WindowManager.LayoutParams.WRAP_CONTENT
-        )
+        val content = buildWebsiteUpdateCard(release.optString("version_name", "latest version"),
+            "Downloading update", "Workly India is downloading the update. Keep the app open.", showProgress = true)
+        val dialog = Dialog(this)
+        dialog.setContentView(content)
+        websiteDownloadDialog = dialog
+        showWebsiteBottomSheet(dialog, allowSwipeDismiss = false)
         monitorWebsiteDownloadProgress()
+    }
+
+    private fun showWebsiteBottomSheet(dialog: Dialog, allowSwipeDismiss: Boolean) {
+        dialog.setCancelable(allowSwipeDismiss)
+        dialog.setCanceledOnTouchOutside(allowSwipeDismiss)
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.BOTTOM)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = 0.58f }
+        }
+        val handle = (dialog.findViewById<ViewGroup>(android.R.id.content)?.getChildAt(0) as? ViewGroup)?.getChildAt(0)
+        val density = resources.displayMetrics.density
+        var downY = 0f
+        handle?.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downY = event.rawY; true }
+                MotionEvent.ACTION_UP -> { if (allowSwipeDismiss && event.rawY - downY > 64f * density) dialog.dismiss(); true }
+                else -> true
+            }
+        }
+    }
+
+    private fun addWebsiteSheetActions(
+        container: LinearLayout, primaryLabel: String, secondaryLabel: String?,
+        onPrimary: () -> Unit, onSecondary: () -> Unit
+    ) {
+        val density = resources.displayMetrics.density
+        fun px(value: Int) = (value * density).toInt()
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, px(18), 0, 0) }
+        if (secondaryLabel != null) {
+            val secondary = TextView(this).apply {
+                text = secondaryLabel; textSize = 15f; gravity = Gravity.CENTER
+                setTextColor(Color.rgb(22, 165, 126)); setPadding(px(12), px(14), px(12), px(14))
+                setOnClickListener { onSecondary() }
+            }
+            row.addView(secondary, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        val primary = TextView(this).apply {
+            text = primaryLabel; textSize = 15f; gravity = Gravity.CENTER
+            setTypeface(typeface, android.graphics.Typeface.BOLD); setTextColor(Color.WHITE)
+            background = GradientDrawable().apply { setColor(Color.rgb(22, 165, 126)); cornerRadius = px(14).toFloat() }
+            setPadding(px(18), px(14), px(18), px(14)); setOnClickListener { onPrimary() }
+        }
+        row.addView(primary, LinearLayout.LayoutParams(0, -2, if (secondaryLabel == null) 1f else 1.5f))
+        container.addView(row, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun monitorWebsiteDownloadProgress() {
@@ -1524,19 +1581,14 @@ class MainActivity : Activity() {
         if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
         val versionName = release?.optString("version_name", "new version") ?: "new version"
         val mandatory = BuildConfig.VERSION_CODE < (release?.optInt("min_supported_version_code", 1) ?: 1)
-        val content = buildWebsiteUpdateCard(
-            versionName, "Download complete", "The update is ready. Tap Install now to open Android's secure installer.",
-            showProgress = false
-        )
-        val builder = AlertDialog.Builder(this)
-            .setView(content)
-            .setCancelable(false)
-            .setPositiveButton("Install now") { dialog, _ ->
-                dialog.dismiss()
-                continueWebsiteInstallIfAllowed()
-            }
-        if (!mandatory) builder.setNegativeButton("Later", null)
-        builder.show()
+        val content = buildWebsiteUpdateCard(versionName, "Download complete",
+            "The update is ready. Tap Install now to open Android's secure installer.", showProgress = false)
+        val dialog = Dialog(this)
+        addWebsiteSheetActions(content, "Install now", if (mandatory) null else "Later",
+            onPrimary = { dialog.dismiss(); continueWebsiteInstallIfAllowed() },
+            onSecondary = { pendingWebsiteInstallUri = null; dialog.dismiss() })
+        dialog.setContentView(content)
+        showWebsiteBottomSheet(dialog, allowSwipeDismiss = !mandatory)
     }
 
     private fun downloadWebsiteUpdate(release: JSONObject) {
@@ -1563,6 +1615,9 @@ class MainActivity : Activity() {
             websiteDownloadId = manager.enqueue(request)
             showWebsiteDownloadProgress(release)
         } catch (error: Exception) {
+            websiteDownloadId = -1L
+            websiteDownloadDialog?.dismiss()
+            websiteDownloadDialog = null
             android.util.Log.e("WorklyAppUpdate", "Could not start APK download", error)
             Toast.makeText(this, "Could not download the update. Please try again.", Toast.LENGTH_LONG).show()
         }
@@ -1571,21 +1626,28 @@ class MainActivity : Activity() {
     private fun continueWebsiteInstallIfAllowed() {
         val apkUri = pendingWebsiteInstallUri ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            val settingsIntent = Intent(
-                android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                Uri.parse("package:" + packageName)
-            )
+            if (awaitingInstallPermissionSettings) {
+                awaitingInstallPermissionSettings = false
+                Toast.makeText(this, "Allow Workly India to install unknown apps, then tap Install now again.", Toast.LENGTH_LONG).show()
+                return
+            }
+            awaitingInstallPermissionSettings = true
+            val settingsIntent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + packageName))
             runCatching { startActivity(settingsIntent) }.onFailure {
+                awaitingInstallPermissionSettings = false
                 Toast.makeText(this, "Allow Workly India to install updates in Android settings.", Toast.LENGTH_LONG).show()
             }
             return
         }
+        awaitingInstallPermissionSettings = false
         try {
             val installIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
+                clipData = ClipData.newUri(contentResolver, "Workly India update", apkUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            if (installIntent.resolveActivity(packageManager) == null) throw IllegalStateException("No Android package installer can handle the downloaded APK")
             startActivity(installIntent)
             pendingWebsiteInstallUri = null
             websiteDownloadId = -1L
@@ -1663,6 +1725,8 @@ class MainActivity : Activity() {
         pendingGeoCallback = null
         pendingGeoOrigin = null
         activityScope.cancel()
+        websiteDownloadDialog?.dismiss()
+        websiteDownloadDialog = null
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("WorklyAndroid")
             webView.stopLoading()
