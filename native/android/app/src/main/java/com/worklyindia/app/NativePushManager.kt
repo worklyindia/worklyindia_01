@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.FirebaseOptions
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -90,6 +91,26 @@ object NativePushManager {
             .setGcmSenderId(senderId)
             .build()
         return FirebaseApp.initializeApp(context, options)
+    }
+
+    /**
+     * Initializes Crashlytics off the main thread using the same public Firebase
+     * configuration as native push. No user content, resumes or message bodies
+     * are added to crash reports.
+     */
+    fun initializeCrashReporting(context: Context) {
+        try {
+            val firebaseApp = getFirebaseApp(context) ?: return
+            FirebaseCrashlytics.getInstance(firebaseApp).apply {
+                setCrashlyticsCollectionEnabled(true)
+                setCustomKey("app_package", context.packageName)
+                setCustomKey("app_version", BuildConfig.VERSION_NAME)
+                setCustomKey("native_shell", "android_webview")
+            }
+            android.util.Log.i("WorklyCrash", "Crashlytics initialized")
+        } catch (error: Exception) {
+            android.util.Log.w("WorklyCrash", "Crash reporting initialization skipped", error)
+        }
     }
 
     fun createChannel(context: Context) {
