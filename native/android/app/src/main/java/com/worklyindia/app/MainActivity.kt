@@ -250,6 +250,17 @@ class MainActivity : FragmentActivity() {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.addJavascriptInterface(WorklyWebBridge(), "WorklyAndroid")
         webView.webViewClient = object : WebViewClient() {
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: android.webkit.WebResourceError
+            ) {
+                super.onReceivedError(view, request, error)
+                if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost && !hasInternetConnection()) {
+                    runOnUiThread { showOfflineScreen() }
+                }
+            }
+
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 val uri = Uri.parse(url)
@@ -314,6 +325,8 @@ class MainActivity : FragmentActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 if (Uri.parse(url).host == allowedHost) {
+                    hideOfflineScreen()
+                    if (hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_DEFAULT
                     syncWebsiteSession()
                     dispatchNativeEvent("workly-native-bridge-ready")
                     // In this native shell Android already places the WebView below
@@ -541,9 +554,12 @@ class MainActivity : FragmentActivity() {
         // Do not start WebView navigation while offline. This prevents a browser
         // error page from appearing behind the branded offline screen.
         if (hasInternetConnection()) {
+            webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
             webView.loadUrl(target)
         } else {
-            showOfflineScreen()
+            // Try the last cached app shell first; show fallback only if it is unavailable.
+            webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+            webView.loadUrl(target)
         }
     }
 
@@ -945,7 +961,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     }
                 } else {
                     dispatchNativeEvent("offline")
-                    runOnUiThread { showOfflineScreen() }
+                    runOnUiThread { if (!initialWebsiteLoadCompleted) showOfflineScreen() }
                 }
             }
 
@@ -953,7 +969,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 if (!hasInternetConnection()) {
                     dispatchNativeEvent("workly-native-network-change", "{connected:false}")
                     dispatchNativeEvent("offline")
-                    runOnUiThread { showOfflineScreen() }
+                    runOnUiThread { if (!initialWebsiteLoadCompleted) showOfflineScreen() }
                 }
             }
         }
