@@ -19,8 +19,14 @@ android {
 
     flavorDimensions += "distribution"
     productFlavors {
-        create("playStore") { dimension = "distribution" }
-        create("website") { dimension = "distribution" }
+        create("playStore") {
+            dimension = "distribution"
+            buildConfigField("boolean", "IS_PLAY_STORE_BUILD", "true")
+        }
+        create("website") {
+            dimension = "distribution"
+            buildConfigField("boolean", "IS_PLAY_STORE_BUILD", "false")
+        }
     }
 
     defaultConfig {
