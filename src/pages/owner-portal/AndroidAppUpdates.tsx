@@ -73,12 +73,18 @@ export default function AndroidAppUpdates() {
       });
       if (pushError || pushData?.success !== true) {
         console.error("Android release push failed:", pushError, pushData);
-        toast.warning("The release is public, but the update notification could not be sent. Check the notification template and Edge Function logs.");
+        if (pushData?.skipped) {
+          toast.warning("The release is public, but Android update notifications are disabled or the template is incomplete.");
+        } else if (Number(pushData?.recipients || 0) === 0) {
+          toast.warning("The release is public, but no Android devices are registered yet. Users must open the updated app, sign in, and allow notifications before they can receive this alert.");
+        } else {
+          toast.warning(`The release is public, but push delivery failed. Registered devices: ${Number(pushData?.recipients || 0)}; failed: ${Number(pushData?.failed || 0)}. Check Edge Function logs.`);
+        }
       } else {
         sent = Number(pushData.sent || 0);
-        if (pushData.skipped) toast.warning("The release is public, but Android update notifications are disabled in the template.");
+        const failed = Number(pushData.failed || 0);
+        toast.success(`Workly India v${latest.version_name} is public. FCM accepted ${sent} notification(s)${failed ? `; ${failed} failed` : ""}.`);
       }
-      toast.success(`Workly India v${latest.version_name} is now public. ${sent} push notification(s) accepted.`);
       await load();
     } catch (error) {
       console.error("Android release publish failed:", error);
