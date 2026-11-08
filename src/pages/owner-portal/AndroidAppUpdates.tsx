@@ -166,7 +166,7 @@ export default function AndroidAppUpdates() {
       <CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload new APK</CardTitle>
         <CardDescription>Signed APK upload karein. Version details Android build configuration se automatically aayengi. APK isi build ki honi chahiye. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2"><Label>APK file</Label><Input type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" onChange={e => setApk(e.target.files?.[0] || null)} />
+        <div className="space-y-2"><Label>APK file</Label><Input type="file" accept=".apk" onChange={e => { const selected = e.currentTarget.files?.[0] || null; e.currentTarget.value = ""; setApk(selected); }} />
           {apk && <p className="text-xs text-muted-foreground">Selected: {apk.name} · {formatSize(apk.size)} · {apk.name.toLowerCase().endsWith(".apk") ? "APK file" : "Not an .apk file"}</p>}
           <p className="text-xs text-muted-foreground">Sirf .apk file accepted hai. AAB, ZIP ya source project upload na karein. Maximum bucket limit 200 MB; project ki global Storage limit bhi apply hoti hai.</p></div>
         <div className="space-y-2"><Label>Version name</Label><Input placeholder="Auto-filled from Android build" value={versionName} onChange={e => setVersionName(e.target.value)} /><p className="text-xs text-muted-foreground">App ka display version {metadataLoading ? "· Loading..." : buildMetadata ? "· Auto-filled" : "· Manual entry required"}</p></div>
