@@ -67,16 +67,8 @@ jobs:
           done < /tmp/functions-to-deploy
           echo "Selected functions: $(paste -sd ', ' /tmp/functions-to-deploy)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Check selected edge functions
-        run: |
-          while IFS= read -r function_name; do
-            deno check --no-config --node-modules-dir=none "supabase/functions/$function_name/index.ts"
-          done < /tmp/functions-to-deploy
+      # Supabase CLI's API bundler validates the function graph during deployment.
+      # This avoids a separate Deno binary download, which can fail on transient GitHub release 504s.
 
       - name: Deploy selected edge functions
         run: |
