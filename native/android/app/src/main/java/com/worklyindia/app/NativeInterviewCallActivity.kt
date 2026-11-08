@@ -17,13 +17,13 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import live.videosdk.rtc.android.Mode
 import live.videosdk.rtc.android.Participant
 import live.videosdk.rtc.android.RTCStream
 import live.videosdk.rtc.android.Room
 import live.videosdk.rtc.android.VideoSDK
 import live.videosdk.rtc.android.VideoView
 import live.videosdk.rtc.android.lib.VideoSDKError
+import videosdk.org.webrtc.VideoTrack
 import live.videosdk.rtc.android.listeners.ParticipantEventListener
 import live.videosdk.rtc.android.listeners.RoomEventListener
 import org.webrtc.VideoTrack
@@ -112,8 +112,7 @@ class NativeInterviewCallActivity : FragmentActivity() {
                 token = token,
                 participantName = name,
                 micEnabled = true,
-                camEnabled = true,
-                mode = Mode.SEND_AND_RECV
+                camEnabled = true
             )
             room = createdRoom
             createdRoom.addEventListener(object : RoomEventListener() {
