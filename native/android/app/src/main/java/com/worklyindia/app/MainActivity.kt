@@ -1,5 +1,6 @@
 package com.worklyindia.app
 
+import javax.crypto.Cipher
 import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -1112,7 +1113,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }.getOrNull() ?: "document"
     }
 
-    private fun authenticateVault(cipher: java.security.Cipher, onSuccess: (java.security.Cipher) -> Unit) {
+    private fun authenticateVault(cipher: javax.crypto.Cipher, onSuccess: (javax.crypto.Cipher) -> Unit) {
         val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG
         if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
             Toast.makeText(this, "Set up a strong biometric (fingerprint or supported face unlock) to use Secure Vault.", Toast.LENGTH_LONG).show()
