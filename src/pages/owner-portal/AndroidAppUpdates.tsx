@@ -34,18 +34,40 @@ export default function AndroidAppUpdates() {
 
   useEffect(() => {
     let active = true;
-    fetch("/android-app-build-info.json", { cache: "no-store" })
-      .then(response => { if (!response.ok) throw new Error("Build metadata not found"); return response.json(); })
-      .then(info => {
+    const loadBuildMetadata = async () => {
+      try {
+        const { data, error } = await supabase.from("android_app_releases")
+          .select("version_name,version_code,min_supported_version_code,release_notes")
+          .eq("is_published", true)
+          .order("version_code", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        let info = data;
+        if (!info) {
+          const response = await fetch("/android-app-build-info.json", { cache: "no-store" });
+          if (!response.ok) throw new Error("No published release or build metadata found");
+          info = await response.json();
+        }
         if (!active) return;
-        setBuildMetadata(info);
-        setVersionName(String(info.version_name || ""));
-        setVersionCode(String(info.version_code || ""));
-        setMinVersion(String(info.min_supported_version_code || 1));
-        setNotes(String(info.release_notes || "Performance improvements and bug fixes."));
-      })
-      .catch(() => { if (active) toast.error("Auto version details load nahi hue. Android build config check karein."); })
-      .finally(() => { if (active) setMetadataLoading(false); });
+        const metadata = {
+          ...info,
+          application_id: "com.worklyindia.app",
+          generated_from: data ? "Published Android release feed" : "Android build metadata",
+        };
+        setBuildMetadata(metadata);
+        setVersionName(String(metadata.version_name || ""));
+        setVersionCode(String(metadata.version_code || ""));
+        setMinVersion(String(metadata.min_supported_version_code || 1));
+        setNotes(String(metadata.release_notes || "Performance improvements and bug fixes."));
+      } catch (error) {
+        console.error("Android release metadata load failed:", error);
+        if (active) toast.error("Published Android version details load nahi hue. Release feed check karein.");
+      } finally {
+        if (active) setMetadataLoading(false);
+      }
+    };
+    void loadBuildMetadata();
     return () => { active = false; };
   }, []);
 
