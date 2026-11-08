@@ -63,6 +63,7 @@ dependencies {
     // Official Google Play in-app update flow (flexible updates). 
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
     // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
     implementation("androidx.credentials:credentials:1.6.0-beta02")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0-beta02")
