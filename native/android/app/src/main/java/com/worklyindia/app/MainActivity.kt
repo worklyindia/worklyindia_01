@@ -1449,6 +1449,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 waitingForWebsiteInstallPermission = false
                 websiteUpdatePrefs.edit().putBoolean("waiting_permission", false).apply()
                 continueWebsiteInstallIfAllowed()
+            } else if (waitingForWebsiteInstallPermission) {
+                showWebsiteInstallPermissionDialog()
             } else {
                 showWebsiteInstallReadyDialog(websiteDownloadRelease)
             }
@@ -1587,13 +1589,15 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setPadding(0, px(4), 0, px(8))
         }, LinearLayout.LayoutParams(-1, -2))
-        if (notes.isNotBlank()) {
-            container.addView(TextView(this).apply {
-                text = "What's new\n$notes"
-                textSize = 14f
+        if (notes.isNotBlank() && !showProgress) {
+            val whatsNew = TextView(this).apply {
+                text = "WHAT'S NEW\n$notes"
+                textSize = 13f
                 setTextColor(mutedText)
-                setPadding(0, px(4), 0, px(12))
-            }, LinearLayout.LayoutParams(-1, -2))
+                setLineSpacing(px(3).toFloat(), 1f)
+                setPadding(0, px(8), 0, px(12))
+            }
+            container.addView(whatsNew, LinearLayout.LayoutParams(-1, -2))
         }
         if (showProgress) {
             websiteDownloadProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -1618,7 +1622,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     private fun showWebsiteDownloadProgress(release: JSONObject) {
         val versionName = release.optString("version_name", "latest version")
         val content = buildWebsiteUpdateCard(
-            versionName, "Downloading update", "Workly India is downloading the update. Keep the app open.",
+            versionName, "Downloading update", "Downloading… Keep Workly India open.",
             showProgress = true
         )
         websiteDownloadDialog = AlertDialog.Builder(updateDialogContext())
@@ -1713,6 +1717,30 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
+    private fun showWebsiteInstallPermissionDialog() {
+        if (websiteInstallDialogVisible || isFinishing || isDestroyed) return
+        websiteInstallDialogVisible = true
+        val dialog = AlertDialog.Builder(updateDialogContext())
+            .setTitle("Allow app installation")
+            .setMessage("To install the Workly India update, enable “Allow from this source” in Android settings, then return here.")
+            .setCancelable(true)
+            .setPositiveButton("Open settings") { current, _ ->
+                current.dismiss()
+                val settingsIntent = Intent(
+                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + packageName)
+                )
+                runCatching { startActivity(settingsIntent) }.onFailure {
+                    Toast.makeText(this, "Please allow Workly India to install updates in Android settings.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Not now", null)
+            .create()
+        dialog.setOnDismissListener { websiteInstallDialogVisible = false }
+        dialog.show()
+        styleWebsiteUpdateDialog(dialog)
+    }
+
     private fun continueWebsiteInstallIfAllowed() {
         val apkUri = pendingWebsiteInstallUri ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
@@ -1730,6 +1758,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         try {
             val installIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
+                clipData = android.content.ClipData.newRawUri("Workly India update", apkUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
