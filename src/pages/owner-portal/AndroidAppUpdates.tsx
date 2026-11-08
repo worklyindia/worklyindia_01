@@ -163,7 +163,7 @@ export default function AndroidAppUpdates() {
     </div>
 
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Latest Android build details</CardTitle><CardDescription>Current GitHub Android build configuration se generated release details. APK upload form mein bhi yehi values auto-fill hoti hain.</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Latest Android build details</CardTitle><CardDescription>GitHub Actions build se generated details. Build successful hone par signed APK automatically Supabase release feed mein upload aur publish hogi; eligible Android push users ko update alert bhi milega.</CardDescription></CardHeader>
       <CardContent>
         {metadataLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Build details load ho rahi hain...</div> : buildMetadata ? <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version name</p><p className="text-lg font-semibold">{buildMetadata.version_name}</p></div>
@@ -176,8 +176,8 @@ export default function AndroidAppUpdates() {
     </Card>
 
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload new APK</CardTitle>
-        <CardDescription>Signed APK upload karein. Version details Android build configuration se automatically aayengi. APK isi build ki honi chahiye. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Manual APK upload (fallback)</CardTitle>
+        <CardDescription>Automatic GitHub Actions publishing primary method hai. Sirf emergency/manual fallback ke liye signed APK yahan upload karein. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2"><Label>APK file</Label><Input type="file" accept=".apk" onChange={e => { const selected = e.currentTarget.files?.[0] || null; e.currentTarget.value = ""; setApk(selected); }} />
           {apk && <p className="text-xs text-muted-foreground">Selected: {apk.name} · {formatSize(apk.size)} · {apk.name.toLowerCase().endsWith(".apk") ? "APK file" : "Not an .apk file"}</p>}
