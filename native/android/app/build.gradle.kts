@@ -82,6 +82,7 @@ dependencies {
     // 100ms SDK: room-code authentication is issued by the existing Supabase function.
     implementation("live.100ms:android-sdk:2.9.88")
     implementation("live.100ms:video-view:2.9.88")
+    implementation("live.100ms:room-kit:2.9.88")
 
     // VideoSDK native Android client; tokens/meeting IDs remain server-issued.
     implementation("live.videosdk:rtc-android-sdk:3.0.0")
