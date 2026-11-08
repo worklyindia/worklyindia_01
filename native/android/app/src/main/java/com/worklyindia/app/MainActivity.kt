@@ -1340,10 +1340,11 @@ class MainActivity : Activity() {
 
     // Direct APK installs are updated from the public Workly release feed.
     // Play Store installs are deliberately kept on Google's official Play Core flow.
+    @Suppress("DEPRECATION")
     private fun getInstalledAppVersionCode(): Long {
         return runCatching {
             val info = packageManager.getPackageInfo(packageName, 0)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else info.versionCode.toLong()
         }.getOrDefault(BuildConfig.VERSION_CODE.toLong())
     }
 
