@@ -84,6 +84,8 @@ class MainActivity : FragmentActivity() {
     private var pendingFileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var pendingCameraUri: Uri? = null
     private var pendingCameraFile: File? = null
+    private var pendingVaultImport = false
+    private var pendingVaultOpenId: String? = null
     private var pendingGeoCallback: android.webkit.GeolocationPermissions.Callback? = null
     private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -179,6 +181,36 @@ class MainActivity : FragmentActivity() {
         if (requestCode == REQUEST_APP_UPDATE) {
             if (resultCode != RESULT_OK) {
                 android.util.Log.i("WorklyAppUpdate", "In-app update flow was cancelled or failed: $resultCode")
+            }
+            return
+        }
+        if (requestCode == REQUEST_VAULT_IMPORT) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                val selectedUri = data.data!!
+                authenticateVault {
+                    runCatching {
+                        val bytes = contentResolver.openInputStream(selectedUri)?.use { input ->
+                            val output = java.io.ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            var total = 0
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                require(total <= SecureDocumentVault.MAX_DOCUMENT_BYTES) { "Choose a document up to 15 MB." }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        } ?: throw IllegalStateException("Could not read the selected document.")
+                        val name = queryDisplayName(selectedUri)
+                        val mime = contentResolver.getType(selectedUri) ?: "application/octet-stream"
+                        SecureDocumentVault.save(this, name, mime, bytes)
+                    }.onSuccess {
+                        Toast.makeText(this, "Document encrypted and saved in Secure Vault.", Toast.LENGTH_LONG).show()
+                    }.onFailure {
+                        Toast.makeText(this, it.message ?: "Could not save document.", Toast.LENGTH_LONG).show()
+                    }
+                }
             }
             return
         }
@@ -1066,6 +1098,81 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     private fun biometricPreferences() = getSharedPreferences("workly_app_security", Context.MODE_PRIVATE)
 
+    private fun queryDisplayName(uri: Uri): String {
+        return runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+        }.getOrNull() ?: "document"
+    }
+
+    private fun authenticateVault(onSuccess: () -> Unit) {
+        val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        } else {
+            BiometricManager.Authenticators.BIOMETRIC_STRONG
+        }
+        if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+            Toast.makeText(this, "Set up fingerprint, face unlock, or a device screen lock to use Secure Vault.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                onSuccess()
+            }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                Toast.makeText(this@MainActivity, "Secure Vault remains locked.", Toast.LENGTH_SHORT).show()
+            }
+        })
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock Secure Document Vault")
+            .setSubtitle("Verify your identity to access private documents")
+            .setAllowedAuthenticators(authenticators)
+            .build()
+        prompt.authenticate(info)
+    }
+
+    private fun showSecureDocumentVault() {
+        val entries = SecureDocumentVault.list(this)
+        val labels = entries.mapIndexed { index, _ -> "Secure document ${index + 1}" }.toMutableList()
+        labels.add(0, "＋  Add a document")
+        AlertDialog.Builder(this)
+            .setTitle("Secure Document Vault")
+            .setMessage("Documents are encrypted on this device. Biometric verification is required to import or open them.")
+            .setItems(labels.toTypedArray()) { _, which ->
+                if (which == 0) {
+                    val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                    }
+                    startActivityForResult(picker, REQUEST_VAULT_IMPORT)
+                } else {
+                    val selected = entries[which - 1]
+                    authenticateVault {
+                        runCatching {
+                            val (name, mime, bytes) = SecureDocumentVault.read(this, selected.id)
+                            val safeName = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(120)
+                            val tempDir = File(cacheDir, "secure-vault").apply {
+                                mkdirs()
+                                listFiles()?.forEach { it.delete() }
+                            }
+                            val temp = File(tempDir, safeName)
+                            temp.writeBytes(bytes)
+                            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", temp)
+                            val view = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, mime)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(Intent.createChooser(view, "Open secure document"))
+                        }.onFailure {
+                            Toast.makeText(this, it.message ?: "Could not open document.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun isBiometricLockEnabled(): Boolean = biometricPreferences().getBoolean("biometric_lock_enabled", false)
 
     private fun showBiometricLockPrompt(isSetup: Boolean) {
@@ -1139,6 +1246,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 )
                 false
             }
+        }
+
+        @JavascriptInterface
+        fun openSecureDocumentVault(): Boolean {
+            runOnUiThread { showSecureDocumentVault() }
+            return true
         }
 
         @JavascriptInterface
@@ -2338,6 +2451,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val REQUEST_APP_UPDATE = 4104
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_FILE_CHOOSER = 4103
+        private const val REQUEST_VAULT_IMPORT = 4105
         private const val REQUEST_MEDIA = 702
         private const val REQUEST_LOCATION = 703
     }
