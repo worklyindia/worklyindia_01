@@ -401,9 +401,8 @@ object NativePushManager {
                     val label = action.optString("title").takeIf { it.isNotBlank() }
                         ?: action.optString("text").takeIf { it.isNotBlank() }
                         ?: continue
-                    val actionUrl = action.optString("url").takeIf {
-                        it.startsWith("https://") || it.startsWith("http://")
-                    } ?: notificationUrl ?: "https://worklyindia.devs.surf/"
+                    val actionUrl = trustedNotificationUrl(action.optString("url"))
+                        ?: notificationUrl
                     parsedActions.add(label to actionUrl)
                 }
             }.onFailure {
