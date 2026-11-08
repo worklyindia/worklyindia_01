@@ -2426,7 +2426,7 @@ serve(async req => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      const replaceVersion = (value: string) => value.replace(/\\{\\{version_name\\}\\}/g, versionName);
+      const replaceVersion = (value: string) => value.replace(/\{\{version_name\}\}/g, versionName);
       const targetUrl = absolutePushUrl(template.button_url || '/');
       const result = await sendToTokens(tokens, {
         title: replaceVersion(String(template.title)),
