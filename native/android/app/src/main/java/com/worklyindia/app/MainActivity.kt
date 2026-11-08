@@ -42,6 +42,9 @@ import android.app.AlertDialog
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import android.app.PictureInPictureParams
 import android.util.Rational
 import com.google.android.play.core.appupdate.AppUpdateManager
@@ -1032,6 +1035,45 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun scanResumeImage(dataUrl: String): Boolean {
+            return try {
+                if (!dataUrl.startsWith("data:image/") || dataUrl.length > 16 * 1024 * 1024) {
+                    dispatchNativeEvent("workly-native-resume-ocr", JSONObject().put("error", "Choose an image smaller than 12 MB.").toString())
+                    return false
+                }
+                val encoded = dataUrl.substringAfter(",", "")
+                val bytes = Base64.decode(encoded, Base64.DEFAULT)
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    ?: throw IllegalArgumentException("This image could not be opened.")
+                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                recognizer.process(InputImage.fromBitmap(bitmap, 0))
+                    .addOnSuccessListener { result ->
+                        dispatchNativeEvent(
+                            "workly-native-resume-ocr",
+                            JSONObject().put("text", result.text).toString()
+                        )
+                        bitmap.recycle()
+                        recognizer.close()
+                    }
+                    .addOnFailureListener { error ->
+                        dispatchNativeEvent(
+                            "workly-native-resume-ocr",
+                            JSONObject().put("error", error.message ?: "Could not read text from this image.").toString()
+                        )
+                        bitmap.recycle()
+                        recognizer.close()
+                    }
+                true
+            } catch (error: Exception) {
+                dispatchNativeEvent(
+                    "workly-native-resume-ocr",
+                    JSONObject().put("error", error.message ?: "Could not scan this image.").toString()
+                )
+                false
+            }
+        }
+
         @JavascriptInterface
         fun isBiometricLockEnabled(): Boolean = this@MainActivity.isBiometricLockEnabled()
 
