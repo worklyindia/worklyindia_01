@@ -19,7 +19,7 @@ class WorklyJobsWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.workly_jobs_widget)
             val openJobs = Intent(context, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
-                data = Uri.parse("https://worklyindia.devs.surf/jobs")
+                data = Uri.parse("https://worklyindia.devs.surf/jobs/latest")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val pendingIntent = PendingIntent.getActivity(
