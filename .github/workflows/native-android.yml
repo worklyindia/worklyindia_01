@@ -53,16 +53,16 @@ jobs:
           values["versionCode"] = str(version_code)
           values["minSupportedVersionCode"] = str(min_supported)
           values["releaseNotes"] = release_notes
-          path.write_text("\\n".join(f"{key}={value}" for key, value in values.items()) + "\\n")
+          path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
 
           summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
           with summary.open("a") as out:
-              out.write("## Workly India — Android release metadata\\n\\n")
-              out.write("| Detail | Value |\\n|---|---|\\n")
-              out.write(f"| Version name | {version_name} |\\n")
-              out.write(f"| Version code | {version_code} |\\n")
-              out.write(f"| Minimum supported version code | {min_supported} |\\n")
-              out.write(f"| Release notes | {release_notes} |\\n\\n")
+              out.write("## Workly India — Android release metadata\n\n")
+              out.write("| Detail | Value |\n|---|---|\n")
+              out.write(f"| Version name | {version_name} |\n")
+              out.write(f"| Version code | {version_code} |\n")
+              out.write(f"| Minimum supported version code | {min_supported} |\n")
+              out.write(f"| Release notes | {release_notes} |\n\n")
           print(f"Generated v{version_name} (versionCode {version_code}) for workflow run #{run_number}")
           PY
 
@@ -187,7 +187,7 @@ jobs:
           retention-days: 30
 
       - name: Auto-publish APK to Workly release feed
-        if: success()
+        if: success() && github.event_name != 'pull_request'
         env:
           SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
