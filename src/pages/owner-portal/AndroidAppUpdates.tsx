@@ -194,46 +194,37 @@ export default function AndroidAppUpdates() {
     else { toast.success(`Workly India v${release.version_name} is now unpublished.`); await load(); }
   };
 
+  const getPreferredDownloadRelease = (release: Release) => {
+    if (isExternalReleaseUrl(release.apk_path)) return release;
+    // Prefer the public GitHub asset for legacy records. Old Supabase objects
+    // can return Object not found even while their metadata remains in the table.
+    return releases.find((item) => isGitHubReleaseUrl(item.apk_path)) ?? release;
+  };
+
   const downloadReleaseApk = async (release: Release) => {
     if (downloadingReleaseId) return;
     setDownloadingReleaseId(release.id);
     try {
-      const filename = `Workly-India-${release.version_name}-${release.version_code}.apk`;
-      if (isExternalReleaseUrl(release.apk_path)) {
-        // R2 serves the APK with Content-Disposition: attachment.
-        const link = document.createElement("a");
-        link.href = release.apk_path;
-        link.download = filename;
-        link.rel = "noopener noreferrer";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } else {
-        // Legacy Supabase objects may have stale metadata or be missing from storage.
-        const { data, error } = await supabase.storage.from("android-app-releases").download(release.apk_path);
-        if (!error && data) {
-          const objectUrl = URL.createObjectURL(data);
-          const link = document.createElement("a");
-          link.href = objectUrl;
-          link.download = filename;
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-        } else {
-          const latestGitHubRelease = releases.find((item) => isGitHubReleaseUrl(item.apk_path));
-          if (!latestGitHubRelease) throw error || new Error("APK file was not returned by storage.");
-          const link = document.createElement("a");
-          link.href = latestGitHubRelease.apk_path;
-          link.rel = "noopener noreferrer";
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          toast.warning(`This older APK is no longer available. Opening the latest uploaded APK v${latestGitHubRelease.version_name} instead.`);
-          return;
-        }
+      const target = getPreferredDownloadRelease(release);
+      if (isExternalReleaseUrl(target.apk_path)) {
+        window.open(target.apk_path, "_blank", "noopener,noreferrer");
+        if (target.id !== release.id) toast.warning("Older APK storage is unavailable. Opening latest uploaded APK v" + target.version_name + " instead.");
+        else toast.success("Opening Workly India v" + target.version_name + " APK download.");
+        return;
       }
-      toast.success(`Downloading Workly India v${release.version_name} APK.`);
+      const filename = "Workly-India-" + target.version_name + "-" + target.version_code + ".apk";
+      const { data, error } = await supabase.storage.from("android-app-releases").download(target.apk_path);
+      if (error) throw error;
+      if (!data) throw new Error("APK file was not returned by storage.");
+      const objectUrl = URL.createObjectURL(data);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      toast.success("Downloading Workly India v" + target.version_name + " APK.");
     } catch (error) {
       console.error("Android APK download failed:", error);
       toast.error(error instanceof Error ? error.message : "The APK could not be downloaded.");
@@ -241,32 +232,25 @@ export default function AndroidAppUpdates() {
       setDownloadingReleaseId(null);
     }
   };
+
   const copyReleaseApkLink = async (release: Release) => {
     try {
-      let downloadUrl = release.apk_path;
-      if (!isExternalReleaseUrl(release.apk_path)) {
-        const { data, error } = await supabase.storage
-          .from("android-app-releases")
-          .createSignedUrl(release.apk_path, 60 * 60 * 24 * 365);
-        if (!error && data?.signedUrl) {
-          downloadUrl = data.signedUrl;
-        } else {
-          const latestGitHubRelease = releases.find((item) => isGitHubReleaseUrl(item.apk_path));
-          if (!latestGitHubRelease) throw error || new Error("A download link could not be created.");
-          downloadUrl = latestGitHubRelease.apk_path;
-          await navigator.clipboard.writeText(downloadUrl);
-          toast.warning(`Older APK storage is unavailable. Latest uploaded APK v${latestGitHubRelease.version_name} link copied instead.`);
-          return;
-        }
+      const target = getPreferredDownloadRelease(release);
+      let downloadUrl = target.apk_path;
+      if (!isExternalReleaseUrl(downloadUrl)) {
+        const { data, error } = await supabase.storage.from("android-app-releases").createSignedUrl(downloadUrl, 60 * 60 * 24 * 365);
+        if (error) throw error;
+        if (!data?.signedUrl) throw new Error("A download link could not be created.");
+        downloadUrl = data.signedUrl;
       }
       await navigator.clipboard.writeText(downloadUrl);
-      toast.success("APK download link copied.");
+      if (target.id !== release.id) toast.warning("Older APK is unavailable. Latest uploaded APK v" + target.version_name + " link copied instead.");
+      else toast.success("APK download link copied.");
     } catch (error) {
       console.error("APK link copy failed:", error);
       toast.error(error instanceof Error ? error.message : "Could not copy the APK link.");
     }
   };
-
   const latest = releases[0] ?? null;
 
   return (
