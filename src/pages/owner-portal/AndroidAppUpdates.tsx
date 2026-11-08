@@ -187,7 +187,7 @@ export default function AndroidAppUpdates() {
                 <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">App version</p><p className="break-all text-xl font-semibold">{latest.version_name}</p></div>
                 <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="break-all text-xl font-semibold tabular-nums">{latest.version_code}</p></div>
                 <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">APK size</p><p className="text-base font-semibold">{formatSize(latest.apk_size_bytes)}</p></div>
-                <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Minimum supported code</p><p className="text-base font-semibold tabular-nums">{latest.min_supported_version_code}</p></div>
+                <div className="min-w-0 rounded-lg border p-3 sm:col-span-2"><p className="text-xs text-muted-foreground">What's new</p><p className="break-words whitespace-pre-wrap text-sm font-medium">{latest.release_notes?.trim() || "No release notes provided for this version."}</p></div>
               </div>}
           </CardContent>
         </Card>
