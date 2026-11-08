@@ -41,6 +41,9 @@ import android.widget.Toast
 import android.app.AlertDialog
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.fragment.app.FragmentActivity
+import android.app.PictureInPictureParams
+import android.util.Rational
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
@@ -66,7 +69,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-class MainActivity : Activity() {
+class MainActivity : FragmentActivity() {
     private lateinit var webView: WebView
     private lateinit var rootLayout: FrameLayout
     private lateinit var loadingOverlay: FrameLayout
@@ -1537,7 +1540,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     override fun onPause() {
-        if (isBiometricLockEnabled()) biometricAuthenticatedForForeground = false
         // Stop network-quality tracking immediately when Workly India is no longer visible.
         networkCallback?.let { callback ->
             runCatching {
@@ -2141,6 +2143,31 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 appUpdateManager.completeUpdate()
             }
             .show()
+    }
+
+    override fun onStop() {
+        if (isBiometricLockEnabled()) biometricAuthenticatedForForeground = false
+        super.onStop()
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode && ::webView.isInitialized) {
+            // Enter PiP only while a video element is actively playing (for example, an interview).
+            webView.evaluateJavascript(
+                "Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)",
+            ) { result ->
+                if (result == "true" && !isFinishing && !isDestroyed) {
+                    runCatching {
+                        enterPictureInPictureMode(
+                            PictureInPictureParams.Builder()
+                                .setAspectRatio(Rational(16, 9))
+                                .build()
+                        )
+                    }
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
