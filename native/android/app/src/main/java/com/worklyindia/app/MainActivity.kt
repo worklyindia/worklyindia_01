@@ -87,7 +87,7 @@ class MainActivity : Activity() {
     private var pendingWebsiteInstallUri: Uri? = null
     private var websiteDownloadId: Long = -1L
     private var websiteDownloadRelease: JSONObject? = null
-    private var websiteDownloadDialog: AlertDialog? = null
+    private var websiteDownloadDialog: android.app.Dialog? = null
     private var websiteInstallDialogVisible = false
     // Avoid repeating native token registration on every WebView navigation.
     private var autoPushRegistrationUserId: String? = null
@@ -1669,15 +1669,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             versionName, "Downloading update", "Downloading… Keep Workly India open.",
             showProgress = true
         )
-        websiteDownloadDialog = AlertDialog.Builder(updateDialogContext())
-            .setView(content)
-            .setCancelable(false)
-            .create()
-        websiteDownloadDialog?.show()
-        websiteDownloadDialog?.let { styleWebsiteUpdateDialog(it) }
-        websiteDownloadDialog?.window?.setLayout(
-            (resources.displayMetrics.widthPixels * 0.90f).toInt(),
-            android.view.WindowManager.LayoutParams.WRAP_CONTENT
+        websiteDownloadDialog = showWebsiteUpdateBottomSheet(
+            content = content,
+            primaryLabel = null,
+            secondaryLabel = null,
+            onPrimary = { },
+            onSecondary = { },
+            onDismiss = { }
         )
         monitorWebsiteDownloadProgress()
     }
@@ -1795,12 +1793,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     private fun showWebsiteUpdateBottomSheet(
         content: android.view.View,
-        primaryLabel: String,
+        primaryLabel: String?,
         secondaryLabel: String?,
         onPrimary: () -> Unit,
         onSecondary: () -> Unit,
         onDismiss: () -> Unit = { websiteInstallDialogVisible = false }
-    ) {
+    ): android.app.Dialog {
         val density = resources.displayMetrics.density
         fun px(value: Int) = (value * density).toInt()
         val dark = isNativeDarkTheme()
@@ -1825,17 +1823,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             setTextColor(if (dark) Color.rgb(103, 119, 141) else Color.rgb(177, 187, 199))
             layoutParams = LinearLayout.LayoutParams(0, px(34), 1f)
         }
-        val close = TextView(this).apply {
-            text = "✕"
-            textSize = 19f
-            gravity = Gravity.CENTER
-            setTextColor(if (dark) Color.rgb(190, 202, 219) else Color.rgb(75, 85, 98))
-            contentDescription = "Close update sheet"
-            layoutParams = LinearLayout.LayoutParams(px(44), px(40))
-            setOnClickListener { dialog.dismiss() }
-        }
         topRow.addView(handle)
-        topRow.addView(close)
         sheet.addView(topRow)
         sheet.addView(content, LinearLayout.LayoutParams(-1, -2))
         val actions = LinearLayout(this).apply {
@@ -1845,41 +1833,51 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         if (secondaryLabel != null) {
             actions.addView(TextView(this@MainActivity).apply {
                 text = secondaryLabel
-                textSize = 14f
+                textSize = 15f
                 gravity = Gravity.CENTER
-                setTextColor(if (dark) Color.rgb(190, 202, 219) else Color.rgb(75, 85, 98))
-                setPadding(px(14), 0, px(14), 0)
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(if (dark) Color.rgb(224, 232, 243) else Color.rgb(45, 58, 75))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(if (dark) Color.rgb(37, 51, 72) else Color.rgb(239, 243, 248))
+                    setStroke(px(1), if (dark) Color.rgb(74, 91, 115) else Color.rgb(207, 216, 228))
+                    cornerRadius = px(14).toFloat()
+                }
                 setOnClickListener {
                     dialog.dismiss()
                     onSecondary()
                 }
-            }, LinearLayout.LayoutParams(0, px(50), 1f))
+            }, LinearLayout.LayoutParams(0, px(56), 1f))
         }
-        actions.addView(TextView(this).apply {
-            text = primaryLabel
-            textSize = 15f
-            gravity = Gravity.CENTER
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (dark) Color.rgb(21, 159, 120) else Color.rgb(13, 128, 100))
-                cornerRadius = px(14).toFloat()
-            }
-            setOnClickListener {
-                dialog.dismiss()
-                onPrimary()
-            }
-        }, LinearLayout.LayoutParams(0, px(50), 2f).apply {
-            leftMargin = px(8)
-        })
-        sheet.addView(actions, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = px(8)
-        })
+        if (primaryLabel != null) {
+            actions.addView(TextView(this).apply {
+                text = primaryLabel
+                textSize = 15f
+                gravity = Gravity.CENTER
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(Color.WHITE)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(if (dark) Color.rgb(21, 159, 120) else Color.rgb(13, 128, 100))
+                    cornerRadius = px(14).toFloat()
+                }
+                setOnClickListener {
+                    dialog.dismiss()
+                    onPrimary()
+                }
+            }, LinearLayout.LayoutParams(0, px(56), 1f).apply {
+                if (secondaryLabel != null) leftMargin = px(10)
+            })
+        }
+        if (primaryLabel != null || secondaryLabel != null) {
+            sheet.addView(actions, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = px(12)
+            })
+        }
 
         dialog = android.app.Dialog(this)
         dialog.setContentView(sheet)
-        dialog.setCancelable(true)
-        dialog.setCanceledOnTouchOutside(true)
+        // Keep the update sheet on screen until the user chooses an explicit action.
+        dialog.setCancelable(false)
+        dialog.setCanceledOnTouchOutside(false)
         dialog.setOnDismissListener { onDismiss() }
         dialog.window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
@@ -1894,22 +1892,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 windowAnimations = android.R.style.Animation_InputMethod
             }
         }
-        var downY = 0f
-        val dismissOnSwipeDown = android.view.View.OnTouchListener { _, event ->
-            when (event.action) {
-                android.view.MotionEvent.ACTION_DOWN -> { downY = event.rawY; true }
-                android.view.MotionEvent.ACTION_UP -> {
-                    val draggedDown = event.rawY - downY
-                    if (draggedDown > px(45)) dialog.dismiss()
-                    true
-                }
-                else -> true
-            }
-        }
-        handle.setOnTouchListener(dismissOnSwipeDown)
-        topRow.setOnTouchListener(dismissOnSwipeDown)
         dialog.show()
         dialog.window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
+        return dialog
     }
 
     private fun continueWebsiteInstallIfAllowed() {
