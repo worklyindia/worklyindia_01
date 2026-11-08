@@ -66,7 +66,7 @@ export default function AndroidUpdateNotificationTemplate() {
           <div className="min-w-0"><h1 className="text-xl font-bold sm:text-2xl">Android Update Notification</h1><p className="text-sm text-muted-foreground">Edit the push notification sent when you publish an Android release.</p></div>
         </header>
         <Card>
-          <CardHeader className="p-4 sm:p-6"><CardTitle className="flex items-center gap-2 text-lg"><Bell className="h-5 w-5" />Push notification template</CardTitle><CardDescription>This message is sent only after you manually publish a new APK. Use {{version_name}} to insert the release version.</CardDescription></CardHeader>
+          <CardHeader className="p-4 sm:p-6"><CardTitle className="flex items-center gap-2 text-lg"><Bell className="h-5 w-5" />Push notification template</CardTitle><CardDescription>This message is sent only after you manually publish a new APK. Use {"{{version_name}}"} to insert the release version.</CardDescription></CardHeader>
           <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
             {loading ? <p className="text-sm text-muted-foreground">Loading template...</p> : <>
               <div className="flex items-center justify-between gap-3 rounded-lg border p-3"><div><p className="text-sm font-medium">Enable update notifications</p><p className="text-xs text-muted-foreground">Turn off to publish releases without sending push notifications.</p></div><Switch checked={enabled} onCheckedChange={setEnabled} /></div>
