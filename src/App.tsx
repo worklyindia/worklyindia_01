@@ -376,10 +376,9 @@ const AppContent = () => {
   // Keep splash visible for a minimum duration so it doesn't flash away too quickly
   useEffect(() => {
     if (isAppReady) {
-      // Keep the premium splash visible for a minimum duration so users get
-      // a proper VIP intro instead of a sub-second flash. Capped by the
-      // 5s hard safety timeout in index.html.
-      const MIN_SPLASH_MS = 4000;
+      // Dismiss the startup splash as soon as critical app readiness is met.
+      // Avoid an artificial delay so the app opens as quickly as possible.
+      const MIN_SPLASH_MS = 0;
       const shownAt = (window as any).__splashShownAt || 0;
       const elapsed = shownAt ? performance.now() - shownAt : MIN_SPLASH_MS;
       const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
