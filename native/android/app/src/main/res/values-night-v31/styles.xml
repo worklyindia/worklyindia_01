@@ -4,7 +4,8 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowBackground">@drawable/workly_launch_background</item>
         <item name="android:windowSplashScreenBackground">#050D1D</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_workly_launcher_image</item>
+        <!-- Keep the logo fully inside the splash mask in dark mode as well. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/workly_launcher_foreground</item>
         <item name="android:windowSplashScreenAnimationDuration">500</item>
         <item name="android:colorAccent">#159F78</item>
         <item name="android:statusBarColor">#050D1D</item>
