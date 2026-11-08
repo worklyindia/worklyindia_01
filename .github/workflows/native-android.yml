@@ -151,6 +151,13 @@ jobs:
             echo "## Workly India — Public Android Release"
             echo ""
             printf -- '- **Commit:** `%s`\n\n' "$GITHUB_SHA"
+            echo "### App version details" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Detail | Value |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Version name | 2.4.2 |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Version code | 8 |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Minimum supported version code | 1 |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Release notes | New update with improved app update detection, release metadata, and stability fixes. |" >> "$GITHUB_STEP_SUMMARY"
             APK_FILE="native/android/app/build/outputs/Workly-India.apk"
             AAB_FILE="native/android/app/build/outputs/Workly-India.aab"
             if [ -s "$APK_FILE" ] && [ -s "$AAB_FILE" ]; then
