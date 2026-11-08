@@ -1532,9 +1532,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     private fun showWebsiteUpdateDialog(release: JSONObject) {
         if (websiteUpdateDialogVisible || isFinishing || isDestroyed) return
+        val versionCode = release.optInt("version_code", 0)
         val versionName = release.optString("version_name", "New version")
         val notes = release.optString("release_notes", "").trim()
         val mandatory = getInstalledAppVersionCode() < release.optInt("min_supported_version_code", 1).toLong()
+        val snoozeKey = "update_later_until_$versionCode"
+        val snoozedUntil = websiteUpdatePrefs.getLong(snoozeKey, 0L)
+        if (!mandatory && System.currentTimeMillis() < snoozedUntil) return
         websiteUpdateDialogVisible = true
         val content = buildWebsiteUpdateCard(
             versionName,
@@ -1547,7 +1551,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             primaryLabel = "Download update",
             secondaryLabel = if (mandatory) null else "Later",
             onPrimary = { downloadWebsiteUpdate(release) },
-            onSecondary = { },
+            onSecondary = {
+                websiteUpdatePrefs.edit()
+                    .putLong(snoozeKey, System.currentTimeMillis() + 24L * 60L * 60L * 1000L)
+                    .apply()
+            },
             onDismiss = { websiteUpdateDialogVisible = false }
         )
     }
