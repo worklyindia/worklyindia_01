@@ -1340,6 +1340,13 @@ class MainActivity : Activity() {
 
     // Direct APK installs are updated from the public Workly release feed.
     // Play Store installs are deliberately kept on Google's official Play Core flow.
+    private fun getInstalledAppVersionCode(): Long {
+        return runCatching {
+            val info = packageManager.getPackageInfo(packageName, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+        }.getOrDefault(BuildConfig.VERSION_CODE.toLong())
+    }
+
     private fun checkForWebsiteRelease() {
         if (websiteUpdateCheckInProgress || websiteUpdateDialogVisible ||
             websiteDownloadId != -1L || isFinishing || isDestroyed) return
@@ -1376,7 +1383,7 @@ class MainActivity : Activity() {
                 websiteUpdateCheckInProgress = false
                 val latest = release ?: return@runOnUiThread
                 val latestCode = latest.optInt("version_code", 0)
-                if (latestCode > BuildConfig.VERSION_CODE) showWebsiteUpdateDialog(latest)
+                if (latestCode.toLong() > getInstalledAppVersionCode()) showWebsiteUpdateDialog(latest)
             }
         }
     }
@@ -1385,7 +1392,7 @@ class MainActivity : Activity() {
         if (websiteUpdateDialogVisible || isFinishing || isDestroyed) return
         val versionName = release.optString("version_name", "New version")
         val notes = release.optString("release_notes", "").trim()
-        val mandatory = BuildConfig.VERSION_CODE < release.optInt("min_supported_version_code", 1)
+        val mandatory = getInstalledAppVersionCode() < release.optInt("min_supported_version_code", 1).toLong()
         websiteUpdateDialogVisible = true
         val content = buildWebsiteUpdateCard(
             versionName,
@@ -1523,7 +1530,7 @@ class MainActivity : Activity() {
     private fun showWebsiteInstallReadyDialog(release: JSONObject?) {
         if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
         val versionName = release?.optString("version_name", "new version") ?: "new version"
-        val mandatory = BuildConfig.VERSION_CODE < (release?.optInt("min_supported_version_code", 1) ?: 1)
+        val mandatory = getInstalledAppVersionCode() < (release?.optInt("min_supported_version_code", 1) ?: 1).toLong()
         val content = buildWebsiteUpdateCard(
             versionName, "Download complete", "The update is ready. Tap Install now to open Android's secure installer.",
             showProgress = false
