@@ -111,6 +111,9 @@ class MainActivity : FragmentActivity() {
     private var websiteInstallDialogVisible = false
     private var biometricAuthenticatedForForeground = false
     private var biometricPromptShowing = false
+    // Native call lifecycle bridge: keep the display awake and allow Android PiP while an interview video is active.
+    @Volatile private var interviewCallActive = false
+    @Volatile private var interviewCallVideoEnabled = false
     // Avoid repeating native token registration on every WebView navigation.
     private var autoPushRegistrationUserId: String? = null
     private var pendingNativePushSession: NativeSession? = null
@@ -1254,6 +1257,23 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun setInterviewCallActive(active: Boolean, videoEnabled: Boolean): Boolean {
+            runOnUiThread {
+                interviewCallActive = active
+                interviewCallVideoEnabled = active && videoEnabled
+                if (active) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode) {
+                        runCatching { moveTaskToBack(false) }
+                    }
+                }
+            }
+            return true
+        }
+
         @JavascriptInterface
         fun scanResumeImage(dataUrl: String): Boolean {
             return try {
@@ -2456,25 +2476,28 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode && ::webView.isInitialized) {
-            // Enter PiP only while a video element is actively playing (for example, an interview).
-            webView.evaluateJavascript(
-                "Array.from(document.querySelectorAll('video')).some(v => !v.paused && !v.ended && v.readyState >= 2)",
-            ) { result ->
-                if (result == "true" && !isFinishing && !isDestroyed) {
-                    runCatching {
-                        enterPictureInPictureMode(
-                            PictureInPictureParams.Builder()
-                                .setAspectRatio(Rational(16, 9))
-                                .build()
-                        )
-                    }
-                }
+        // Cross-origin meeting iframes hide their <video> elements from the parent page.
+        // The trusted Workly interview page therefore explicitly reports active call state.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            interviewCallActive && interviewCallVideoEnabled &&
+            !isInPictureInPictureMode && !isFinishing && !isDestroyed
+        ) {
+            runCatching {
+                enterPictureInPictureMode(
+                    PictureInPictureParams.Builder()
+                        .setAspectRatio(Rational(16, 9))
+                        .build()
+                )
+            }.onFailure { error ->
+                android.util.Log.w("WorklyCalls", "Could not enter picture-in-picture", error)
             }
         }
     }
 
     override fun onDestroy() {
+        interviewCallActive = false
+        interviewCallVideoEnabled = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::appUpdateManager.isInitialized) {
             appUpdateManager.unregisterListener(appUpdateListener)
         }
