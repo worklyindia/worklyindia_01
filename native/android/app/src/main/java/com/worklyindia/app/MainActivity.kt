@@ -1161,9 +1161,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 val payload = buildString {
                     if (message.isNotBlank()) append(message.trim())
                     if (url.isNotBlank() && !contains(url)) {
-                        if (isNotEmpty()) append("
-
-")
+                        if (isNotEmpty()) append("\n\n")
                         append(url.trim())
                     }
                 }
@@ -1820,8 +1818,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }, LinearLayout.LayoutParams(-1, -2))
         if (notes.isNotBlank() && !showProgress) {
             val whatsNew = TextView(this).apply {
-                text = "WHAT'S NEW
-$notes"
+                text = "WHAT'S NEW\n$notes"
                 textSize = 13f
                 setTextColor(mutedText)
                 setLineSpacing(px(3).toFloat(), 1f)
