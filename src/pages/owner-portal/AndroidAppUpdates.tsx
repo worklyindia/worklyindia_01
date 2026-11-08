@@ -14,7 +14,7 @@ type Release = {
 };
 
 const formatSize = (n: number) => n >= 1024 * 1024
-  ? (n / 1024 / 1024).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+  ? (n / 1_000_000).toFixed(2) + " MB" : (n / 1_000).toFixed(1) + " KB";
 
 export default function AndroidAppUpdates() {
   const navigate = useNavigate();
@@ -34,7 +34,37 @@ export default function AndroidAppUpdates() {
       return;
     }
 
-    const rows = (data || []) as Release[];
+    let rows = (data || []) as Release[];
+
+    // The database size can be stale or accidentally contain the AAB size.
+    // Read the actual APK object so the Owner Portal matches the APK artifact
+    // reported by the native Android workflow.
+    rows = await Promise.all(rows.map(async (release) => {
+      try {
+        const { data: apkBlob, error: apkError } = await supabase.storage
+          .from("android-app-releases")
+          .download(release.apk_path);
+        if (apkError || !apkBlob) {
+          console.warn("Could not verify stored APK size:", release.apk_path, apkError);
+          return release;
+        }
+        const actualApkBytes = apkBlob.size;
+        if (actualApkBytes !== release.apk_size_bytes) {
+          const { error: sizeUpdateError } = await supabase
+            .from("android_app_releases")
+            .update({ apk_size_bytes: actualApkBytes })
+            .eq("id", release.id);
+          if (sizeUpdateError) {
+            console.warn("Could not save verified APK size:", sizeUpdateError);
+          }
+        }
+        return { ...release, apk_size_bytes: actualApkBytes };
+      } catch (sizeError) {
+        console.warn("APK size verification failed:", release.apk_path, sizeError);
+        return release;
+      }
+    }));
+
     const newest = rows[0] ?? null;
     const currentPublic = rows.find((release) => release.is_published) ?? null;
 
