@@ -31,6 +31,22 @@ const isR2ReleaseUrl = (value: string) => {
   }
 };
 
+// GitHub Release assets are the canonical download source for new APK builds.
+// Keep R2 URLs recognized only for backwards compatibility with existing records.
+const isGitHubReleaseUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:"
+      && url.hostname === "github.com"
+      && url.pathname.startsWith("/worklyindia/worklyindia_01/releases/download/android-v")
+      && url.pathname.endsWith("/Workly-India.apk")
+      && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+};
+const isExternalReleaseUrl = (value: string) => isGitHubReleaseUrl(value) || isR2ReleaseUrl(value);
+
 export default function AndroidAppUpdates() {
   const navigate = useNavigate();
   const [releases, setReleases] = useState<Release[]>([]);
@@ -55,7 +71,7 @@ export default function AndroidAppUpdates() {
     // Read the actual APK object so the Owner Portal matches the APK artifact
     // reported by the native Android workflow.
     const sizeCheckIds = new Set(
-      rows.filter((release, index) => (index === 0 || release.is_published) && !isR2ReleaseUrl(release.apk_path)).map((release) => release.id)
+      rows.filter((release, index) => (index === 0 || release.is_published) && !isExternalReleaseUrl(release.apk_path)).map((release) => release.id)
     );
     rows = await Promise.all(rows.map(async (release) => {
       if (!sizeCheckIds.has(release.id)) return release;
@@ -93,7 +109,7 @@ export default function AndroidAppUpdates() {
     const obsolete = rows.filter((release) => !keepIds.has(release.id));
 
     if (obsolete.length > 0) {
-      const oldPaths = [...new Set(obsolete.map((release) => release.apk_path).filter(Boolean).filter((path) => !isR2ReleaseUrl(path)))];
+      const oldPaths = [...new Set(obsolete.map((release) => release.apk_path).filter(Boolean).filter((path) => !isExternalReleaseUrl(path)))];
       const { error: storageError } = oldPaths.length
         ? await supabase.storage.from("android-app-releases").remove(oldPaths)
         : { error: null };
@@ -183,7 +199,7 @@ export default function AndroidAppUpdates() {
     setDownloadingReleaseId(release.id);
     try {
       const filename = `Workly-India-${release.version_name}-${release.version_code}.apk`;
-      if (isR2ReleaseUrl(release.apk_path)) {
+      if (isExternalReleaseUrl(release.apk_path)) {
         // R2 serves the APK with Content-Disposition: attachment.
         const link = document.createElement("a");
         link.href = release.apk_path;
@@ -217,7 +233,7 @@ export default function AndroidAppUpdates() {
   const copyReleaseApkLink = async (release: Release) => {
     try {
       let downloadUrl = release.apk_path;
-      if (!isR2ReleaseUrl(release.apk_path)) {
+      if (!isExternalReleaseUrl(release.apk_path)) {
         const { data, error } = await supabase.storage
           .from("android-app-releases")
           .createSignedUrl(release.apk_path, 60 * 60 * 24 * 365);
@@ -254,7 +270,7 @@ export default function AndroidAppUpdates() {
               <Package className="h-5 w-5 shrink-0" />Latest uploaded APK
               {latest && <Badge className="ml-auto shrink-0" variant={latest.is_published ? "default" : "secondary"}>{latest.is_published ? "Public" : "Unpublished"}</Badge>}
             </CardTitle>
-            <CardDescription>All uploaded versions are listed below. Use the status control on each app card to publish or unpublish it.</CardDescription>
+            <CardDescription>APK files are hosted as public GitHub Release assets; Supabase stores release metadata and download links.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
             {loading ? <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status"><Loader2 className="h-4 w-4 animate-spin" />Loading Android releases...</div>
@@ -271,7 +287,7 @@ export default function AndroidAppUpdates() {
         <section className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold">Android app releases</h2>
-            <p className="text-sm text-muted-foreground">Publish or unpublish each version from its own card. Only one release can be public at a time.</p>
+            <p className="text-sm text-muted-foreground">Publish or unpublish the latest GitHub-hosted APK. Only one release can be public at a time.</p>
           </div>
           {loading ? null : releases.length === 0 ? <p className="rounded-lg border p-5 text-center text-sm text-muted-foreground">No app releases found.</p>
             : releases.map((release) => {
