@@ -2418,10 +2418,21 @@ serve(async req => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      const { data: deviceRows, error: deviceError } = await supabase.from('push_subscriptions')
-        .select('fcm_token').eq('platform', 'android').eq('enabled', true).not('fcm_token', 'is', null);
-      if (deviceError) throw deviceError;
-      const tokens = [...new Set((deviceRows ?? []).map((row: { fcm_token: string | null }) => row.fcm_token).filter((token): token is string => Boolean(token)))];
+      // PostgREST applies a default row limit (commonly 1,000). Page through
+      // every enabled Android subscription so large app audiences are not silently
+      // truncated to the first page.
+      const deviceRows: { fcm_token: string | null }[] = [];
+      const pageSize = 1000;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data: page, error: deviceError } = await supabase.from('push_subscriptions')
+          .select('fcm_token').eq('platform', 'android').eq('enabled', true)
+          .not('fcm_token', 'is', null).order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (deviceError) throw deviceError;
+        deviceRows.push(...(page ?? []));
+        if (!page || page.length < pageSize) break;
+      }
+      const tokens = [...new Set(deviceRows.map((row) => row.fcm_token).filter((token): token is string => Boolean(token?.trim())))];
       if (tokens.length === 0) {
         return new Response(JSON.stringify({ success: true, sent: 0, failed: 0, message: 'No registered Android devices were found' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
