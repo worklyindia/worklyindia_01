@@ -138,6 +138,25 @@ export const SimpleVideoIframe = ({ iframeUrl, onLeave, isHost = false, intervie
     }
   }, [meetingEnded, exitCountdown, onLeave]);
 
+  // Let the Android shell manage the display and picture-in-picture while the
+  // interview provider iframe is active. On ordinary browsers this is a no-op.
+  useEffect(() => {
+    const nativeBridge = (window as any).WorklyAndroid;
+    const callActive = shouldLoadIframe && iframeLoaded && !meetingEnded;
+    try {
+      nativeBridge?.setInterviewCallActive?.(callActive, callActive);
+    } catch (error) {
+      console.warn('[Workly native calls] Could not sync call state:', error);
+    }
+    return () => {
+      try {
+        nativeBridge?.setInterviewCallActive?.(false, false);
+      } catch {
+        // The website remains fully usable when the native bridge is unavailable.
+      }
+    };
+  }, [shouldLoadIframe, iframeLoaded, meetingEnded]);
+
   // Preview screen - show before permissions are granted
   if (!shouldLoadIframe) {
     return (
