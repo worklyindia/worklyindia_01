@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Package, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -21,6 +21,7 @@ export default function AndroidAppUpdates() {
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingReleaseId, setUpdatingReleaseId] = useState<string | null>(null);
+  const [downloadingReleaseId, setDownloadingReleaseId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +90,29 @@ export default function AndroidAppUpdates() {
     else { toast.success(`Workly India v${release.version_name} is now unpublished.`); await load(); }
   };
 
+  const downloadReleaseApk = async (release: Release) => {
+    if (downloadingReleaseId) return;
+    setDownloadingReleaseId(release.id);
+    try {
+      const { data, error } = await supabase.storage.from("android-app-releases").download(release.apk_path);
+      if (error) throw error;
+      if (!data) throw new Error("APK file was not returned by storage.");
+      const objectUrl = URL.createObjectURL(data);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `Workly-India-${release.version_name}-${release.version_code}.apk`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      toast.success(`Downloading Workly India v${release.version_name} APK.`);
+    } catch (error) {
+      console.error("Android APK download failed:", error);
+      toast.error(error instanceof Error ? error.message : "The APK could not be downloaded.");
+    } finally {
+      setDownloadingReleaseId(null);
+    }
+  };
   const latest = releases[0] ?? null;
 
   return (
@@ -147,14 +171,17 @@ export default function AndroidAppUpdates() {
                       <p className="text-xs text-muted-foreground">Uploaded: {new Date(release.created_at || Date.now()).toLocaleString()}</p>
                       {release.release_notes && <p className="break-words whitespace-pre-wrap pt-1 text-sm text-muted-foreground">{release.release_notes}</p>}
                     </div>
-                    <div className="w-full shrink-0 sm:w-auto">
+                    <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:min-w-40">
                       {release.is_published
-                        ? <Button variant="destructive" className="w-full sm:min-w-36" onClick={() => void unpublishRelease(release)} disabled={!!updatingReleaseId}>
+                        ? <Button variant="destructive" className="w-full" onClick={() => void unpublishRelease(release)} disabled={!!updatingReleaseId}>
                             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{busy ? "Updating..." : "Make Unpublished"}
                           </Button>
-                        : <Button className="w-full sm:min-w-36" onClick={() => void publishRelease(release)} disabled={!!updatingReleaseId}>
+                        : <Button className="w-full" onClick={() => void publishRelease(release)} disabled={!!updatingReleaseId}>
                             {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}{busy ? "Publishing..." : "Make Public"}
                           </Button>}
+                      <Button type="button" variant="outline" className="w-full" onClick={() => void downloadReleaseApk(release)} disabled={!!downloadingReleaseId}>
+                        {downloadingReleaseId === release.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}{downloadingReleaseId === release.id ? "Preparing APK..." : "Download APK"}
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
