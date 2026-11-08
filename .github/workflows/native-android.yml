@@ -185,7 +185,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Auto-publish APK to Workly release feed
+      - name: Upload APK as an unpublished draft
         if: success() && github.event_name != 'pull_request'
         env:
           SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
