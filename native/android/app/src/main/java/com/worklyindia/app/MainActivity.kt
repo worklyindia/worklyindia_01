@@ -557,6 +557,7 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Allow Workly India to install updates, then tap Install now.", Toast.LENGTH_LONG).show()
                 showWebsiteInstallReadyDialog(websiteDownloadRelease)
             }
+            return
         }
 
         val targetVersion = websiteUpdatePrefs.getLong(KEY_TARGET_VERSION_CODE, 0L)
