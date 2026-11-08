@@ -613,10 +613,9 @@ class MainActivity : FragmentActivity() {
         setContentView(rootLayout)
         ViewCompat.requestApplyInsets(rootLayout)
         registerNetworkListener()
-        val target = intent.getStringExtra("notification_url")
-            ?.takeIf { runCatching { Uri.parse(it).let { u -> u.scheme == "https" && u.host == allowedHost } }.getOrDefault(false) }
-            ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
-            ?: website
+        val target = trustedInternalUrl(intent.getStringExtra("notification_url"))
+            ?: trustedInternalUrl(intent.data?.toString())
+            ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else website
         lastLoadedUrl = target
         // Do not start WebView navigation while offline. This prevents a browser
         // error page from appearing behind the branded offline screen.
@@ -1617,11 +1616,23 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
+    private fun trustedInternalUrl(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val candidate = if (raw.startsWith("/")) Uri.parse("https://$allowedHost$raw") else Uri.parse(raw)
+            candidate.takeIf {
+                it.scheme == "https" &&
+                it.host.equals(allowedHost, ignoreCase = true) &&
+                candidate.userInfo == null
+            }?.toString()
+        }.getOrNull()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val target = intent.getStringExtra("notification_url")
-            ?: intent.data?.takeIf { it.scheme == "https" && it.host == allowedHost }?.toString()
+        val target = trustedInternalUrl(intent.getStringExtra("notification_url"))
+            ?: trustedInternalUrl(intent.data?.toString())
         if (!target.isNullOrBlank()) {
             lastLoadedUrl = target
             if (hasInternetConnection()) {
