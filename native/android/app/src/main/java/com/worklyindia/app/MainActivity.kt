@@ -2137,15 +2137,17 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             return
         }
 
-        // New releases store a public Cloudflare R2 HTTPS URL in apk_path.
-        // Older releases still store a Supabase Storage object key.
+        // Current APKs are public GitHub Release assets. Keep legacy R2 URLs
+        // and Supabase object-key support for older release records.
         val apkUrl = if (apkPath.startsWith("https://", ignoreCase = true)) {
             val uri = Uri.parse(apkPath)
-            val allowedHosts = setOf(
+            val isGitHubReleaseAsset = uri.host == "github.com" &&
+                uri.path?.matches(Regex("/worklyindia/worklyindia_01/releases/download/android-v[0-9]+/Workly-India\\.apk")) == true
+            val isLegacyR2Asset = uri.host in setOf(
                 "pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev",
                 "downloads.devs.surf"
             )
-            if (uri.scheme != "https" || uri.host !in allowedHosts || uri.userInfo != null) {
+            if (uri.scheme != "https" || (!isGitHubReleaseAsset && !isLegacyR2Asset) || uri.userInfo != null) {
                 Toast.makeText(this, "Update download URL is not trusted.", Toast.LENGTH_LONG).show()
                 return
             }
