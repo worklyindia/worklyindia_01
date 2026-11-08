@@ -890,7 +890,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun registerNetworkListener() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (networkCallback != null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: android.net.Network) {
@@ -907,6 +907,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
                     capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
                 dispatchNativeEvent("workly-native-network-change", "{connected:$internetReady}")
+                if (internetReady && ::webView.isInitialized) {
+                    WorklyForegroundNetworkAlerts.onBandwidthChanged(
+                        this@MainActivity,
+                        capabilities.linkDownstreamBandwidthKbps,
+                        capabilities.linkUpstreamBandwidthKbps
+                    )
+                }
                 if (internetReady) {
                     dispatchNativeEvent("online")
                     runOnUiThread {
@@ -1439,6 +1446,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
+        registerNetworkListener()
         if (::webView.isInitialized) syncWebsiteSession()
         if (pendingWebsiteInstallUri != null) {
             val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
@@ -1457,6 +1465,18 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         } else if (::appUpdateManager.isInitialized) {
             if (isPlayStoreInstall) checkForPlayStoreUpdate() else checkForWebsiteRelease()
         }
+    }
+
+    override fun onPause() {
+        // Stop network-quality tracking immediately when Workly India is no longer visible.
+        networkCallback?.let { callback ->
+            runCatching {
+                (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                    .unregisterNetworkCallback(callback)
+            }
+        }
+        networkCallback = null
+        super.onPause()
     }
 
     // Direct APK installs are updated from the public Workly release feed.
