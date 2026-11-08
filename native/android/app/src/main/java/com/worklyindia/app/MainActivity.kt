@@ -75,6 +75,9 @@ class MainActivity : Activity() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var offlineOverlay: FrameLayout? = null
     private var reconnectCheckInProgress = false
+    // The branded startup cover is for the first app launch only. Showing it
+    // on every same-origin document navigation makes the app feel like a slow website.
+    private var initialWebsiteLoadCompleted = false
     private var lastLoadedUrl: String = "https://worklyindia.devs.surf/"
     private val activityScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val website = "https://worklyindia.devs.surf/"
@@ -239,7 +242,9 @@ class MainActivity : Activity() {
                 val uri = Uri.parse(url)
                 if (uri.scheme == "https" && uri.host == allowedHost) {
                     lastLoadedUrl = url
-                    runOnUiThread { showStartupLoading() }
+                    if (!initialWebsiteLoadCompleted) {
+                        runOnUiThread { showStartupLoading() }
+                    }
                 }
             }
 
@@ -1133,7 +1138,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
         @JavascriptInterface
         fun onWebsiteReady() {
-            runOnUiThread { hideStartupLoading() }
+            runOnUiThread {
+                initialWebsiteLoadCompleted = true
+                hideStartupLoading()
+            }
         }
 
         @JavascriptInterface
