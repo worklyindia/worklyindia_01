@@ -60,6 +60,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.CoroutineScope
@@ -75,6 +76,7 @@ import java.net.URL
 
 class MainActivity : FragmentActivity() {
     private lateinit var webView: WebView
+    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var rootLayout: FrameLayout
     private lateinit var loadingOverlay: FrameLayout
     private var pendingWebPermission: PermissionRequest? = null
@@ -272,8 +274,11 @@ class MainActivity : FragmentActivity() {
                 error: android.webkit.WebResourceError
             ) {
                 super.onReceivedError(view, request, error)
-                if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost && !hasInternetConnection()) {
-                    runOnUiThread { showOfflineScreen() }
+                if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost) {
+                    runOnUiThread {
+                        if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
+                        if (!hasInternetConnection()) showOfflineScreen()
+                    }
                 }
             }
 
@@ -341,6 +346,7 @@ class MainActivity : FragmentActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 if (Uri.parse(url).host == allowedHost) {
+                    if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
                     hideOfflineScreen()
                     if (hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_DEFAULT
                     syncWebsiteSession()
@@ -573,7 +579,28 @@ class MainActivity : FragmentActivity() {
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             WindowInsetsCompat.CONSUMED
         }
-        rootLayout.addView(webView, FrameLayout.LayoutParams(
+        // Native swipe-to-refresh: only intercept a downward gesture when the
+        // WebView is already at the top, leaving normal page scrolling untouched.
+        swipeRefreshLayout = SwipeRefreshLayout(this).apply {
+            setColorSchemeColors(Color.rgb(39, 190, 177), Color.rgb(56, 112, 210))
+            setProgressBackgroundColorSchemeColor(
+                if (startupDarkMode) Color.rgb(17, 27, 45) else Color.WHITE
+            )
+            setOnChildScrollUpCallback { _, _ -> webView.canScrollVertically(-1) }
+            setOnRefreshListener {
+                if (hasInternetConnection()) {
+                    webView.reload()
+                } else {
+                    isRefreshing = false
+                    showOfflineScreen()
+                }
+            }
+            addView(webView, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ))
+        }
+        rootLayout.addView(swipeRefreshLayout, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
