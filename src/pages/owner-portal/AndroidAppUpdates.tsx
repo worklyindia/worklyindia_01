@@ -89,12 +89,12 @@ export default function AndroidAppUpdates() {
     }
   };
 
-  const unpublishLatest = async () => {
-    if (!latest?.is_published || publishing) return;
-    if (!window.confirm("Unpublish the current Android release? New downloads and update checks will no longer see it.")) return;
+  const unpublishRelease = async (release: Release) => {
+    if (!release.is_published || publishing) return;
+    if (!window.confirm(`Unpublish Workly India v${release.version_name}? New downloads and update checks will no longer see it.`)) return;
     setPublishing(true);
     const { error } = await supabase.from("android_app_releases")
-      .update({ is_published: false, published_at: null }).eq("id", latest.id);
+      .update({ is_published: false, published_at: null }).eq("id", release.id);
     setPublishing(false);
     if (error) toast.error("The release could not be unpublished: " + error.message);
     else { toast.success("Android release unpublished."); await load(); }
@@ -144,7 +144,7 @@ export default function AndroidAppUpdates() {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {!latest.is_published
                     ? <Button className="w-full" onClick={() => void publishLatest()} disabled={publishing}><Send className="mr-2 h-4 w-4" />{publishing ? "Publishing..." : "Publish to All Users"}</Button>
-                    : <Button variant="destructive" className="w-full" onClick={() => void unpublishLatest()} disabled={publishing}>{publishing ? "Updating..." : "Unpublish Release"}</Button>}
+                    : <Button variant="destructive" className="w-full" onClick={() => void unpublishRelease(latest)} disabled={publishing}>{publishing ? "Updating..." : "Unpublish Release"}</Button>}
                   <Button variant="outline" className="w-full" onClick={() => navigate("/owner-portal/android-update-notification")}>
                     <Bell className="mr-2 h-4 w-4" />Edit Update Notification
                   </Button>
@@ -156,7 +156,7 @@ export default function AndroidAppUpdates() {
         {published && !published.id !== latest?.id && (
           <Card>
             <CardHeader className="p-4 sm:p-6"><CardTitle className="text-base">Currently public release</CardTitle><CardDescription>This version remains available while a newer build is waiting for your approval.</CardDescription></CardHeader>
-            <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6"><p className="font-semibold">Workly India v{published.version_name}</p><p className="text-xs text-muted-foreground">Version code {published.version_code}</p></CardContent>
+            <CardContent className="flex flex-col gap-3 px-4 pb-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pb-6"><div><p className="font-semibold">Workly India v{published.version_name}</p><p className="text-xs text-muted-foreground">Version code {published.version_code}</p></div><Button variant="destructive" size="sm" className="w-full sm:w-auto" onClick={() => void unpublishRelease(published)} disabled={publishing}>Unpublish Current Release</Button></CardContent>
           </Card>
         )}
         <p className="px-1 text-xs text-muted-foreground">Only an owner can publish or unpublish an Android release. Publishing sends an update alert to registered Android devices.</p>
