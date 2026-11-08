@@ -31,7 +31,7 @@ declare global {
     WorklyAndroid?: {
       isNativeAndroidApp?: () => boolean;
       getNotificationPermissionStatus?: () => string;
-      requestNativeNotifications?: () => void;
+      requestNativeNotifications?: (rawSession: string, rawFirebaseConfig: string) => void;
       unsubscribeNativeNotifications?: () => void;
       isNotificationPermissionGranted?: () => boolean;
       requestNotificationPermission?: () => boolean;
@@ -72,8 +72,17 @@ export class FirebasePushService {
 
   private static isNativeAndroid(): boolean { return this.isNativeAndroidApp(); }
 
-  private static requestNativeSetup(): Promise<boolean> {
-    if (!window.WorklyAndroid?.requestNativeNotifications) return Promise.resolve(false);
+  private static async requestNativeSetup(): Promise<boolean> {
+    const bridge = window.WorklyAndroid;
+    if (!bridge?.requestNativeNotifications) return false;
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session?.user?.id) return false;
+    const configResponse = await this.fetchConfig();
+    this.configPromise = Promise.resolve(configResponse);
+    if (!configResponse?.configured || !configResponse.config) {
+      console.error('Native Android push setup: Firebase config is unavailable');
+      return false;
+    }
     return new Promise((resolve) => {
       let settled = false;
       const finish = (value: boolean) => {
@@ -85,12 +94,17 @@ export class FirebasePushService {
       };
       const onResult = (event: Event) => {
         const detail = (event as CustomEvent<{ granted?: boolean; registered?: boolean }>).detail;
+        if (detail?.granted && !detail?.registered) console.error('Android FCM registration failed');
         finish(detail?.granted === true && detail?.registered === true);
       };
       const timeout = window.setTimeout(() => finish(false), 90000);
       window.addEventListener('workly:native-notification-result', onResult, { once: true });
-      try { window.WorklyAndroid!.requestNativeNotifications!(); }
-      catch (error) { console.error('Native Android notification request failed:', error); finish(false); }
+      try {
+        bridge.requestNativeNotifications!(JSON.stringify(sessionData.session), JSON.stringify(configResponse.config));
+      } catch (error) {
+        console.error('Native Android notification request failed:', error);
+        finish(false);
+      }
     });
   }
 
