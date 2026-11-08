@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Camera, Copy, Loader2, ScanText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +35,7 @@ const ResumeScannerPanel = () => {
     return () => window.removeEventListener("workly-native-resume-ocr", handleResult);
   }, [toast]);
 
-  const handlePick = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePick = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
