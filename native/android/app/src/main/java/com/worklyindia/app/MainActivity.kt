@@ -1084,7 +1084,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         @JavascriptInterface
         fun setBiometricLockEnabled(enabled: Boolean): Boolean {
             if (enabled) {
-                val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                } else {
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG
+                }
                 if (BiometricManager.from(this@MainActivity).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) return false
                 biometricPreferences().edit().putBoolean("biometric_lock_enabled", true).apply()
                 runOnUiThread { showBiometricLockPrompt(true) }
