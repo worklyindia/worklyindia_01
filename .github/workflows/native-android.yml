@@ -1,5 +1,6 @@
 name: Native Android
 # Rebuild the signed native app whenever Kotlin app/auth sources change.
+# Push/workflow-dispatch runs create an unpublished R2 draft; PR runs only build and attach artifacts.
 # Includes mobile login, password recovery and native 2FA verification.
 
 on:
