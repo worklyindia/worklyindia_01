@@ -568,8 +568,41 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun installedPackageVersionCode(): Long = runCatching {
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) packageInfo.longVersionCode
+        else {
+            @Suppress("DEPRECATION")
+            packageInfo.versionCode.toLong()
+        }
+    }.getOrDefault(BuildConfig.VERSION_CODE.toLong())
+
+    private fun clearPendingWebsiteUpdateState() {
+        websiteUpdatePrefs.edit()
+            .remove(KEY_PENDING_APK_URI)
+            .remove(KEY_TARGET_VERSION_CODE)
+            .remove(KEY_PENDING_RELEASE_JSON)
+            .remove(KEY_ACTIVE_DOWNLOAD_ID)
+            .putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
+            .apply()
+        pendingWebsiteInstallUri = null
+        websiteDownloadId = -1L
+        websiteDownloadRelease = null
+    }
+
     override fun onResume() {
         super.onResume()
+
+        // Reconcile persisted update state with Android's installed package first.
+        // Installer callbacks can be lost when Android recreates or kills the app.
+        val savedTargetVersion = websiteUpdatePrefs.getLong(KEY_TARGET_VERSION_CODE, 0L)
+        val installedVersionNow = installedPackageVersionCode()
+        if (savedTargetVersion > 0L && installedVersionNow >= savedTargetVersion) {
+            val installWasInProgress = websiteUpdatePrefs.getBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
+            clearPendingWebsiteUpdateState()
+            if (installWasInProgress) showWebsiteUpdateCompletedDialog()
+            return
+        }
 
         if (awaitingInstallPermissionSettings) {
             awaitingInstallPermissionSettings = false
@@ -586,24 +619,11 @@ class MainActivity : Activity() {
         val installPromptWasActive = websiteUpdatePrefs.getBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
         if (targetVersion > 0L && installPromptWasActive) {
             websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
-            val installedVersion = runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    packageManager.getPackageInfo(packageName, 0).longVersionCode
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageManager.getPackageInfo(packageName, 0).versionCode.toLong()
-                }
-            }.getOrDefault(0L)
+            val installedVersion = installedPackageVersionCode()
 
             if (installedVersion >= targetVersion) {
-                websiteUpdatePrefs.edit()
-                    .remove(KEY_PENDING_APK_URI)
-                    .remove(KEY_TARGET_VERSION_CODE)
-                    .remove(KEY_PENDING_RELEASE_JSON)
-                    .apply()
-                pendingWebsiteInstallUri = null
-                showWebsiteUpdateCompletedDialog()
-            } else if (pendingWebsiteInstallUri != null) {
+                clearPendingWebsiteUpdateState()
+                showWebsiteUpdateCompletedDialog()            } else if (pendingWebsiteInstallUri != null) {
                 Toast.makeText(this, "Installation was not completed. Tap Install now to retry.", Toast.LENGTH_LONG).show()
                 showWebsiteInstallReadyDialog(websiteDownloadRelease)
             }
@@ -1473,7 +1493,7 @@ class MainActivity : Activity() {
                 websiteUpdateCheckInProgress = false
                 val latest = release ?: return@runOnUiThread
                 val latestCode = latest.optInt("version_code", 0)
-                if (latestCode > BuildConfig.VERSION_CODE) showWebsiteUpdateDialog(latest)
+                if (latestCode > installedPackageVersionCode()) showWebsiteUpdateDialog(latest)
             }
         }
     }
