@@ -143,7 +143,10 @@ class MainActivity : Activity() {
                         websiteDownloadDialog = null
                         websiteDownloadProgressBar = null
                         websiteDownloadProgressLabel = null
-                        showWebsiteInstallReadyDialog(websiteDownloadRelease)
+                        // Start the Android install flow immediately. This opens
+                        // the per-app "Install unknown apps" setting only when needed;
+                        // if already allowed, Android's package installer opens now.
+                        continueWebsiteInstallIfAllowed()
                     }
                 } else {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
@@ -197,7 +200,7 @@ class MainActivity : Activity() {
         ContextCompat.registerReceiver(
             this, websiteDownloadReceiver,
             android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            ContextCompat.RECEIVER_NOT_EXPORTED
+            ContextCompat.RECEIVER_EXPORTED
         )
         // Let Android lay out the app below the real system status bar.
         // Avoid manual inset padding: it can create a second, visible gap above the website.
@@ -1802,6 +1805,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(websiteDownloadReceiver) }
         if (::appUpdateManager.isInitialized) {
             appUpdateManager.unregisterListener(appUpdateListener)
         }
