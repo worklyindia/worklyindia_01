@@ -42,6 +42,7 @@ import android.app.AlertDialog
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
+import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -78,6 +79,8 @@ class MainActivity : FragmentActivity() {
     private lateinit var loadingOverlay: FrameLayout
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingFileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
+    private var pendingCameraUri: Uri? = null
+    private var pendingCameraFile: File? = null
     private var pendingGeoCallback: android.webkit.GeolocationPermissions.Callback? = null
     private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -179,8 +182,18 @@ class MainActivity : FragmentActivity() {
         if (requestCode == REQUEST_FILE_CHOOSER) {
             val callback = pendingFileChooserCallback
             pendingFileChooserCallback = null
-            // parseResult preserves both single-file and multi-select ClipData results.
-            val results = WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            val cameraUri = pendingCameraUri
+            val cameraFile = pendingCameraFile
+            pendingCameraUri = null
+            pendingCameraFile = null
+            val capturedImage = cameraUri?.takeIf {
+                resultCode == RESULT_OK && cameraFile?.exists() == true && cameraFile.length() > 0L
+            }
+            // Camera output is returned directly; document picker results retain
+            // WebView's standard single-file and multi-select parsing.
+            val results = capturedImage?.let { arrayOf(it) }
+                ?: WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+            if (cameraFile != null && capturedImage == null) cameraFile.delete()
             callback?.onReceiveValue(results)
         }
     }
@@ -440,8 +453,31 @@ class MainActivity : FragmentActivity() {
                 pendingFileChooserCallback = filePathCallback
                 // Let WebView construct the picker intent so accept types,
                 // camera capture hints and multiple-selection mode are respected.
-                val intent = fileChooserParams.createIntent().apply {
+                val pickerIntent = fileChooserParams.createIntent().apply {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                val intent = Intent.createChooser(pickerIntent, "Choose a file")
+                val acceptsImages = fileChooserParams.acceptTypes.any { it.startsWith("image/") || it == "*/*" }
+                if (fileChooserParams.isCaptureEnabled && acceptsImages) {
+                    runCatching {
+                        val cameraDirectory = File(cacheDir, "images").apply { mkdirs() }
+                        val imageFile = File.createTempFile("workly-resume-", ".jpg", cameraDirectory)
+                        val imageUri = FileProvider.getUriForFile(this@MainActivity, "$packageName.fileprovider", imageFile)
+                        val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                            putExtra(MediaStore.EXTRA_OUTPUT, imageUri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                        }
+                        if (cameraIntent.resolveActivity(packageManager) != null) {
+                            pendingCameraFile = imageFile
+                            pendingCameraUri = imageUri
+                            intent.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(cameraIntent))
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                        } else {
+                            imageFile.delete()
+                        }
+                    }.onFailure { error ->
+                        android.util.Log.w("WorklyResumeScanner", "Camera capture is unavailable", error)
+                    }
                 }
                 return try {
                     startActivityForResult(intent, REQUEST_FILE_CHOOSER)
