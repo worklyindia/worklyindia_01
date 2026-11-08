@@ -359,6 +359,29 @@ const AppContent = () => {
   const { loading: authLoading, profileLoading, user } = useAuth();
   const isAppReady = useAppReady(authLoading, profileLoading, user);
   useTrackWorklyChatReturn();
+
+  // Warm the three primary destination tabs after the first screen is ready.
+  // This downloads their route chunks in the background so the first user tap
+  // is less likely to wait for JavaScript over a mobile connection.
+  useEffect(() => {
+    if (!isAppReady) return;
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    if (connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void Promise.allSettled([
+        import("./pages/Jobs"),
+        import("./pages/Activity"),
+        import("./pages/More"),
+      ]);
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [isAppReady]);
   // Activate the shared Android bridge so the native shell and website SPA
   // respond to the same navigation, keyboard, connectivity and system-bar state.
   useNativeStatusBar({ color: "#ffffff", style: "dark" });
