@@ -2298,6 +2298,24 @@ serve(async req => {
             }
           });
         }
+        if (userIds.length > 0) {
+          const { data: roleRows, error: roleError } = await supabase
+            .from('user_roles').select('role').eq('user_id', userData.user.id);
+          if (roleError) {
+            console.error('send_push_raw role lookup failed:', roleError.message);
+            return new Response(JSON.stringify({ status: 'error', error: 'Could not verify administrator permissions' }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+          const isPrivileged = (roleRows ?? []).some((row: { role: string }) => row.role === 'owner' || row.role === 'admin');
+          if (!isPrivileged) {
+            return new Response(JSON.stringify({ status: 'error', error: 'Only an owner or admin can send notifications to users' }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+          }
+        }
         if (tokens.length > 0) {
           return new Response(JSON.stringify({
             status: 'error',
