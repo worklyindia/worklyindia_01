@@ -35,6 +35,7 @@ jobs:
         env:
           WORKFLOW_RUN_NUMBER: ${{ github.run_number }}
           RELEASE_NOTES_INPUT: ${{ github.event.inputs.release_notes }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           python - <<'PY'
           import os
@@ -51,7 +52,7 @@ jobs:
           version_name = values.get("versionName", "2.4.3").split("+build.", 1)[0]
           version_code = 100000 + run_number
           min_supported = int(values.get("minSupportedVersionCode", "1"))
-          release_notes = os.environ.get("RELEASE_NOTES_INPUT", "").strip() or values.get("releaseNotes", "Performance improvements and bug fixes.")
+          release_notes = (os.environ.get("RELEASE_NOTES_INPUT", "").strip() or os.environ.get("HEAD_COMMIT_MESSAGE", "").strip() or values.get("releaseNotes", "Performance improvements and bug fixes.")).replace("\\n", " ").strip()
           if not release_notes:
               raise SystemExit("What's new is required for every Android APK release.")
 
