@@ -27,6 +27,7 @@ import { DeleteAccountCountdown } from "@/components/DeleteAccountCountdown";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { isWorklyAndroidApp, getWorklyAndroidBridge } from "@/lib/nativeAppBridge";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { LastLoginInfo } from "@/components/LastLoginInfo";
@@ -38,6 +39,7 @@ const Settings = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [passwordChangedAt, setPasswordChangedAt] = useState<string | null>(null);
+  const [biometricLockEnabled, setBiometricLockEnabled] = useState(false);
   const [dataSaverEnabled, setDataSaverEnabled] = useState(() => {
     try {
       return localStorage.getItem('workly-data-saver') === 'true';
@@ -56,6 +58,20 @@ const Settings = () => {
     window.dispatchEvent(new Event('workly-data-saver-change'));
   };
   
+  useEffect(() => {
+    if (!isWorklyAndroidApp()) return;
+    setBiometricLockEnabled(getWorklyAndroidBridge()?.isBiometricLockEnabled?.() ?? false);
+  }, []);
+
+  const handleBiometricLockChange = (enabled: boolean) => {
+    const bridge = getWorklyAndroidBridge();
+    if (!bridge?.setBiometricLockEnabled || !bridge.setBiometricLockEnabled(enabled)) {
+      toast({ title: "Biometric lock unavailable", description: "Set up a screen lock, fingerprint or face unlock on your Android device first.", variant: "destructive" });
+      return;
+    }
+    setBiometricLockEnabled(enabled);
+  };
+
   // Persist active tab across page refreshes
   const [activeTab, setActiveTab] = useState(() => {
     return sessionStorage.getItem('settings-active-tab') || 'notifications';
@@ -224,6 +240,16 @@ const Settings = () => {
                 ))}
               </div>
             </Card>
+
+            {isWorklyAndroidApp() && <Card className="p-4 sm:p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-foreground">Biometric App Lock</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Protect Workly India with fingerprint, face unlock or your Android screen lock whenever you reopen the app.</p>
+                </div>
+                <Switch checked={biometricLockEnabled} onCheckedChange={handleBiometricLockChange} aria-label="Enable biometric app lock" />
+              </div>
+            </Card>}
 
             <Card className="p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-foreground mb-4">Data Management</h3>
