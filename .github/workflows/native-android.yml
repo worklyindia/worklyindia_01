@@ -24,6 +24,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Generate unique Android release version and metadata
+        id: release-metadata
+        env:
+          WORKFLOW_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path("android-release.properties")
+          values = {}
+          for line in path.read_text().splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key, value = line.split("=", 1)
+                  values[key.strip()] = value.strip()
+
+          run_number = int(os.environ["WORKFLOW_RUN_NUMBER"])
+          base_name = values.get("versionName", "2.4.2").split("+build.", 1)[0]
+          version_code = 100000 + run_number
+          version_name = f"{base_name}+build.{run_number}"
+          min_supported = int(values.get("minSupportedVersionCode", "1"))
+          release_notes = values.get("releaseNotes", "Performance improvements and bug fixes.")
+
+          if version_code <= min_supported:
+              raise SystemExit("Generated versionCode must be greater than minSupportedVersionCode.")
+          values["versionName"] = version_name
+          values["versionCode"] = str(version_code)
+          values["minSupportedVersionCode"] = str(min_supported)
+          values["releaseNotes"] = release_notes
+          path.write_text("\\n".join(f"{key}={value}" for key, value in values.items()) + "\\n")
+
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          with summary.open("a") as out:
+              out.write("## Workly India — Android release metadata\\n\\n")
+              out.write("| Detail | Value |\\n|---|---|\\n")
+              out.write(f"| Version name | {version_name} |\\n")
+              out.write(f"| Version code | {version_code} |\\n")
+              out.write(f"| Minimum supported version code | {min_supported} |\\n")
+              out.write(f"| Release notes | {release_notes} |\\n\\n")
+          print(f"Generated v{version_name} (versionCode {version_code}) for workflow run #{run_number}")
+          PY
+
       - name: Set up Java 17
         uses: actions/setup-java@v5
         with:
@@ -214,13 +256,6 @@ jobs:
             echo "## Workly India — Public Android Release"
             echo ""
             printf -- '- **Commit:** `%s`\n\n' "$GITHUB_SHA"
-            echo "### App version details" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Detail | Value |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Version name | 2.4.2 |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Version code | 8 |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Minimum supported version code | 1 |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Release notes | New update with improved app update detection, release metadata, and stability fixes. |" >> "$GITHUB_STEP_SUMMARY"
             APK_FILE="native/android/app/build/outputs/Workly-India.apk"
             AAB_FILE="native/android/app/build/outputs/Workly-India.aab"
             if [ -s "$APK_FILE" ] && [ -s "$AAB_FILE" ]; then
