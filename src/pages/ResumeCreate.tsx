@@ -27,6 +27,7 @@ import { ScaledA4Preview } from '@/components/resume-create/ScaledA4Preview';
 import { RESUME_TEMPLATES } from '@/components/resume/ResumeTemplates';
 import { Download as DownloadIcon, Eye, X, ArrowLeft as ArrowLeftIcon } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import ResumeScannerPanel from '@/components/resume-create/ResumeScannerPanel';
 
 const STEPS = [
   { icon: User, title: 'Personal Information', desc: 'Basic contact & profile details', optional: false, Comp: Step1Personal },
@@ -218,7 +219,10 @@ const ResumeCreate = () => {
         <div className="max-w-2xl mx-auto pb-4">
           <div key={currentStep} className="animate-in fade-in slide-in-from-right-2 duration-200">
             {!isAIStep && (
-              <StepHeader icon={stepMeta.icon} title={stepMeta.title} description={stepMeta.desc} optional={stepMeta.optional} />
+              <>
+                <StepHeader icon={stepMeta.icon} title={stepMeta.title} description={stepMeta.desc} optional={stepMeta.optional} />
+                {currentStep === 1 && <ResumeScannerPanel />}
+              </>
             )}
             {isAIStep ? (
               <FinalDownloadStep draft={draft} filename={filename()} />
