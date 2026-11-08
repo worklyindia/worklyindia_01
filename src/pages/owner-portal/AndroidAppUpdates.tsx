@@ -36,33 +36,39 @@ export default function AndroidAppUpdates() {
 
     const rows = (data || []) as Release[];
     const newest = rows[0] ?? null;
+    const currentPublic = rows.find((release) => release.is_published) ?? null;
 
-    // Keep the currently published newest APK available while a newer draft is waiting
-    // for approval. Once the newest release is public, remove every older APK + row.
-    if (newest?.is_published && rows.length > 1) {
-      const older = rows.filter((release) => release.id !== newest.id);
-      const oldPaths = [...new Set(older.map((release) => release.apk_path).filter(Boolean))];
+    // Retain only the newest uploaded APK and the currently public APK.
+    // This allows the current app to keep updating users while a new draft is reviewed,
+    // but prevents old drafts and historical releases from accumulating in Supabase.
+    const keepIds = new Set([newest?.id, currentPublic?.id].filter(Boolean));
+    const keep = rows.filter((release) => keepIds.has(release.id));
+    const obsolete = rows.filter((release) => !keepIds.has(release.id));
+
+    if (obsolete.length > 0) {
+      const oldPaths = [...new Set(obsolete.map((release) => release.apk_path).filter(Boolean))];
       const { error: storageError } = oldPaths.length
         ? await supabase.storage.from("android-app-releases").remove(oldPaths)
         : { error: null };
 
       if (storageError) {
         console.error("Old Android APK cleanup failed:", storageError);
-        toast.error("Latest release is public, but older APK files could not be cleaned up: " + storageError.message);
+        toast.error("Old APK cleanup failed: " + storageError.message);
         setReleases(rows);
       } else {
         const { error: rowsError } = await supabase.from("android_app_releases")
-          .delete().neq("id", newest.id);
+          .delete().in("id", obsolete.map((release) => release.id));
         if (rowsError) {
           console.error("Old Android release records cleanup failed:", rowsError);
-          toast.error("Old APK files were removed, but old release records could not be cleaned up: " + rowsError.message);
-          setReleases([newest, ...older]);
+          toast.error("Old release records could not be cleaned up: " + rowsError.message);
+          setReleases(keep);
         } else {
-          setReleases([newest]);
+          setReleases(keep);
+          toast.success(`Cleaned up ${obsolete.length} old Android release(s).`);
         }
       }
     } else {
-      setReleases(rows);
+      setReleases(keep);
     }
     setLoading(false);
   }, []);
