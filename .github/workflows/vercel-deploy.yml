@@ -8,6 +8,7 @@ on:
       - 'native/android/**'
       - 'android-release.properties'
       - '.github/workflows/native-android.yml'
+      - '.github/workflows/vercel-deploy.yml'
       - '**.md'
   pull_request:
     branches: [main]
