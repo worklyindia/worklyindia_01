@@ -23,6 +23,7 @@ import live.videosdk.rtc.android.RTCStream
 import live.videosdk.rtc.android.Room
 import live.videosdk.rtc.android.VideoSDK
 import live.videosdk.rtc.android.VideoView
+import live.videosdk.rtc.android.lib.VideoSDKError
 import live.videosdk.rtc.android.listeners.ParticipantEventListener
 import live.videosdk.rtc.android.listeners.RoomEventListener
 import org.webrtc.VideoTrack
@@ -138,7 +139,7 @@ class NativeInterviewCallActivity : FragmentActivity() {
                     finish()
                 }
 
-                override fun onError(error: live.videosdk.rtc.android.VideoSDKError) {
+                override fun onError(error: live.videosdk.rtc.android.lib.VideoSDKError) {
                     runOnUiThread {
                         status.text = error.message ?: "Call connection error"
                         Toast.makeText(this@NativeInterviewCallActivity, status.text, Toast.LENGTH_LONG).show()
