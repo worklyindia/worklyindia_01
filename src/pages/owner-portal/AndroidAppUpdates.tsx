@@ -61,37 +61,22 @@ export default function AndroidAppUpdates() {
         if (error) throw new Error("The release is published, but older release records could not be removed: " + error.message);
       }
 
-      // Notify registered Android installations only after the owner publishes.
-      const { data: template, error: templateError } = await supabase.from("push_lifecycle_templates")
-        .select("enabled, title, body, button_text, button_url, image_url")
-        .eq("event_type", "android_app_update").maybeSingle();
-      if (templateError) throw new Error("Release is published, but the update notification template could not be loaded: " + templateError.message);
+      // The Edge Function verifies owner access, loads the saved template,
+      // finds registered Android devices and sends the release notification.
       let sent = 0;
-      if (template?.enabled && template.title?.trim() && template.body?.trim()) {
-        const { data: devices, error: devicesError } = await supabase.from("push_subscriptions")
-          .select("user_id").eq("platform", "android").eq("enabled", true);
-        if (devicesError) throw new Error("Release is published, but Android recipients could not be loaded: " + devicesError.message);
-        const userIds = [...new Set((devices || []).map((device) => device.user_id).filter(Boolean))];
-        if (userIds.length) {
-          const { data, error } = await supabase.functions.invoke("email-api", {
-            body: {
-              action: "send_push_raw",
-              userIds,
-              title: template.title.replace(/\{\{version_name\}\}/g, latest.version_name),
-              body: template.body.replace(/\{\{version_name\}\}/g, latest.version_name),
-              url: template.button_url || "https://worklyindia.devs.surf/",
-              tag: `workly-android-update-${latest.version_code}`,
-              image: template.image_url || undefined,
-              data: { type: "android_app_update", version_code: String(latest.version_code) },
-            },
-          });
-          if (error || !data?.success) {
-            console.error("Android release push failed:", error, data);
-            toast.warning("The release is public, but the update push could not be sent. Check notification permissions and function logs.");
-          } else sent = Number(data.sent || 0);
-        }
+      const { data: pushData, error: pushError } = await supabase.functions.invoke("email-api", {
+        body: {
+          action: "send_android_release_push",
+          version_name: latest.version_name,
+          version_code: latest.version_code,
+        },
+      });
+      if (pushError || pushData?.success !== true) {
+        console.error("Android release push failed:", pushError, pushData);
+        toast.warning("The release is public, but the update notification could not be sent. Check the notification template and Edge Function logs.");
       } else {
-        toast.warning("The release is public. The Android update notification template is disabled or empty, so no push was sent.");
+        sent = Number(pushData.sent || 0);
+        if (pushData.skipped) toast.warning("The release is public, but Android update notifications are disabled in the template.");
       }
       toast.success(`Workly India v${latest.version_name} is now public. ${sent} push notification(s) accepted.`);
       await load();
