@@ -116,7 +116,7 @@ const ResumeScannerPanel = () => {
             </Button>
           </div>
           <Textarea value={extractedText} readOnly rows={6} className="text-xs leading-5" aria-label="Extracted resume text" />
-          <p className="text-[11px] text-muted-foreground">OCR may make mistakes. Check names, contact details, dates and skills before adding them to your resume.</p>
+          <p className="text-[11px] text-muted-foreground">OCR may make mistakes. Review names, contact details, dates and skills carefully. Copy the extracted text into the relevant resume fields yourself; it does not auto-fill them.</p>
         </div>
       )}
     </section>
