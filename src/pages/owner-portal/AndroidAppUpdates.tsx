@@ -71,8 +71,16 @@ export default function AndroidAppUpdates() {
       toast.error("APK, version name aur valid version code enter karein.");
       return;
     }
-    if (!apk.name.toLowerCase().endsWith(".apk") || apk.size > 200 * 1024 * 1024) {
-      toast.error("Sirf APK file (maximum 200 MB) upload karein.");
+    if (!apk.name.trim().toLowerCase().endsWith(".apk")) {
+      toast.error("Galat file select hui hai. Android ka .apk file select karein (AAB/ZIP nahi).");
+      return;
+    }
+    if (apk.size === 0) {
+      toast.error("Selected APK file empty hai. APK dobara select karein.");
+      return;
+    }
+    if (apk.size > 200 * 1024 * 1024) {
+      toast.error("APK 200 MB se badi hai. 200 MB ya usse chhoti APK select karein.");
       return;
     }
     setUploading(true);
@@ -97,7 +105,17 @@ export default function AndroidAppUpdates() {
       setApk(null); setVersionName(""); setVersionCode(""); setNotes("");
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "APK upload failed");
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("Android APK upload failed:", e);
+      if (/row-level security|permission denied|unauthorized|403/i.test(message)) {
+        toast.error("Owner upload permission reject hui. Owner account se dobara login karein. Details: " + message);
+      } else if (/payload too large|file size|maximum.*size|entity too large|413/i.test(message)) {
+        toast.error("Supabase project ki global upload limit APK se chhoti hai. Storage Settings mein global file size limit badhani hogi. Details: " + message);
+      } else if (/mime|content.?type|not allowed/i.test(message)) {
+        toast.error("APK file type Storage mein allow nahi hai. APK ko dobara select karein. Details: " + message);
+      } else {
+        toast.error("APK upload fail hua: " + message);
+      }
     } finally { setUploading(false); }
   };
 
@@ -148,7 +166,9 @@ export default function AndroidAppUpdates() {
       <CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload new APK</CardTitle>
         <CardDescription>Signed APK upload karein. Version details Android build configuration se automatically aayengi. APK isi build ki honi chahiye. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2"><Label>APK file</Label><Input type="file" accept=".apk,application/vnd.android.package-archive" onChange={e => setApk(e.target.files?.[0] || null)} /></div>
+        <div className="space-y-2"><Label>APK file</Label><Input type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" onChange={e => setApk(e.target.files?.[0] || null)} />
+          {apk && <p className="text-xs text-muted-foreground">Selected: {apk.name} · {formatSize(apk.size)} · {apk.name.toLowerCase().endsWith(".apk") ? "APK file" : "Not an .apk file"}</p>}
+          <p className="text-xs text-muted-foreground">Sirf .apk file accepted hai. AAB, ZIP ya source project upload na karein. Maximum bucket limit 200 MB; project ki global Storage limit bhi apply hoti hai.</p></div>
         <div className="space-y-2"><Label>Version name</Label><Input placeholder="Auto-filled from Android build" value={versionName} onChange={e => setVersionName(e.target.value)} /><p className="text-xs text-muted-foreground">App ka display version {metadataLoading ? "· Loading..." : buildMetadata ? "· Auto-filled" : "· Manual entry required"}</p></div>
         <div className="space-y-2"><Label>Version code</Label><Input type="number" min="1" placeholder="Auto-filled from Android build" value={versionCode} onChange={e => setVersionCode(e.target.value)} /><p className="text-xs text-muted-foreground">Har nayi release par previous code se bada hona chahiye.</p></div>
         <div className="space-y-2"><Label>Minimum supported version code</Label><Input type="number" min="1" value={minVersion} onChange={e => setMinVersion(e.target.value)} /><p className="text-xs text-muted-foreground">Isse purane app versions ko update karna mandatory hoga. Default 1 = sab purane versions allowed.</p></div>
