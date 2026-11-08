@@ -1,3 +1,8 @@
+val releaseProperties = java.util.Properties().apply {
+    val releaseConfig = rootProject.file("../../android-release.properties")
+    if (releaseConfig.exists()) releaseConfig.inputStream().use { load(it) }
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -19,8 +24,8 @@ android {
         applicationId = "com.worklyindia.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 7
-        versionName = "2.4.1"
+        versionCode = releaseProperties.getProperty("versionCode", "7").toInt()
+        versionName = releaseProperties.getProperty("versionName", "2.4.1")
     }
 
     signingConfigs {
