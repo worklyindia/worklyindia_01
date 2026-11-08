@@ -235,7 +235,20 @@ jobs:
           retired = requests.patch(f"{base}/rest/v1/android_app_releases", headers={**headers,"Content-Type":"application/json"}, params={"is_published":"eq.true","version_code":f"neq.{code}"}, json={"is_published":False}, timeout=30)
           if retired.status_code not in (200, 204):
               raise SystemExit(f"Could not retire previous releases ({retired.status_code}): {retired.text[:800]}")
-          print(f"Published Workly India v{name} (code {code}) to the Android update feed.")
+          # Keep exactly one release in Supabase: the newly published APK.
+          old_result = requests.get(f"{base}/rest/v1/android_app_releases", headers=headers, params={"select":"id,apk_path","version_code":f"neq.{code}"}, timeout=30)
+          old_result.raise_for_status()
+          old_rows = old_result.json()
+          old_paths = list(dict.fromkeys(x.get("apk_path") for x in old_rows if x.get("apk_path")))
+          if old_paths:
+              removed = requests.delete(f"{base}/storage/v1/object/android-app-releases", headers={**headers,"Content-Type":"application/json"}, json={"prefixes":old_paths}, timeout=90)
+              if removed.status_code not in (200, 204):
+                  raise SystemExit(f"Could not remove previous APK files ({removed.status_code}): {removed.text[:800]}")
+          if old_rows:
+              deleted = requests.delete(f"{base}/rest/v1/android_app_releases", headers=headers, params={"version_code":f"neq.{code}"}, timeout=60)
+              if deleted.status_code not in (200, 204):
+                  raise SystemExit(f"Could not remove previous release records ({deleted.status_code}): {deleted.text[:800]}")
+          print(f"Published Workly India v{name} (code {code}); removed {len(old_rows)} older release record(s) and {len(old_paths)} APK file(s).")
           token_result = requests.get(f"{base}/rest/v1/push_subscriptions", headers=headers, params={"select":"fcm_token","platform":"eq.android","enabled":"eq.true","fcm_token":"not.is.null","limit":"5000"}, timeout=30)
           if token_result.ok:
               tokens = list(dict.fromkeys(x.get("fcm_token") for x in token_result.json() if x.get("fcm_token")))
