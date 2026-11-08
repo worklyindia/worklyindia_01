@@ -39,7 +39,11 @@ export default function AndroidAppUpdates() {
     // The database size can be stale or accidentally contain the AAB size.
     // Read the actual APK object so the Owner Portal matches the APK artifact
     // reported by the native Android workflow.
+    const sizeCheckIds = new Set(
+      rows.filter((release, index) => index === 0 || release.is_published).map((release) => release.id)
+    );
     rows = await Promise.all(rows.map(async (release) => {
+      if (!sizeCheckIds.has(release.id)) return release;
       try {
         const { data: apkBlob, error: apkError } = await supabase.storage
           .from("android-app-releases")
@@ -54,9 +58,7 @@ export default function AndroidAppUpdates() {
             .from("android_app_releases")
             .update({ apk_size_bytes: actualApkBytes })
             .eq("id", release.id);
-          if (sizeUpdateError) {
-            console.warn("Could not save verified APK size:", sizeUpdateError);
-          }
+          if (sizeUpdateError) console.warn("Could not save verified APK size:", sizeUpdateError);
         }
         return { ...release, apk_size_bytes: actualApkBytes };
       } catch (sizeError) {
