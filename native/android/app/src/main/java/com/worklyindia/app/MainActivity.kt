@@ -1777,7 +1777,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             return
         }
         try {
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            // Use Android's dedicated package-install action for APK updates.
+            // The source permission is checked above; Android still shows its
+            // secure final confirmation screen (apps cannot silently self-install).
+            val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
                 clipData = android.content.ClipData.newRawUri("Workly India update", apkUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
