@@ -30,7 +30,7 @@ export default function AndroidAppUpdates() {
   const [minVersion, setMinVersion] = useState("1");
   const [notes, setNotes] = useState("");
   const [metadataLoading, setMetadataLoading] = useState(true);
-  const [buildMetadata, setBuildMetadata] = useState<{ version_name: string; version_code: number } | null>(null);
+  const [buildMetadata, setBuildMetadata] = useState<{ version_name: string; version_code: number; min_supported_version_code: number; release_notes: string; application_id?: string; generated_from?: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -163,6 +163,19 @@ export default function AndroidAppUpdates() {
     </div>
 
     <Card>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Latest Android build details</CardTitle><CardDescription>Current GitHub Android build configuration se generated release details. APK upload form mein bhi yehi values auto-fill hoti hain.</CardDescription></CardHeader>
+      <CardContent>
+        {metadataLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Build details load ho rahi hain...</div> : buildMetadata ? <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version name</p><p className="text-lg font-semibold">{buildMetadata.version_name}</p></div>
+          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="text-lg font-semibold tabular-nums">{buildMetadata.version_code}</p></div>
+          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Minimum supported version code</p><p className="text-lg font-semibold tabular-nums">{buildMetadata.min_supported_version_code}</p></div>
+          <div className="rounded-lg border p-3 sm:col-span-2"><p className="text-xs text-muted-foreground">Release notes</p><p className="whitespace-pre-wrap text-sm">{buildMetadata.release_notes || "No release notes provided."}</p></div>
+          {buildMetadata.application_id && <p className="text-xs text-muted-foreground sm:col-span-2">Application ID: {buildMetadata.application_id}</p>}
+        </div> : <p className="text-sm text-destructive">Build details load nahi hui. Website deploy aur android-app-build-info.json check karein.</p>}
+      </CardContent>
+    </Card>
+
+    <Card>
       <CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload new APK</CardTitle>
         <CardDescription>Signed APK upload karein. Version details Android build configuration se automatically aayengi. APK isi build ki honi chahiye. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2">
@@ -184,7 +197,7 @@ export default function AndroidAppUpdates() {
           releases.length === 0 ? <p className="text-sm text-muted-foreground">Abhi koi APK release upload nahi hui.</p> :
           releases.map(release => <div key={release.id} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong>Version {release.version_name}</strong><Badge variant={release.is_published ? "default" : "secondary"}>{release.is_published ? "Published" : "Draft"}</Badge></div>
-              <p className="text-xs text-muted-foreground">Code {release.version_code} · {formatSize(release.apk_size_bytes)} · {new Date(release.created_at).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">Code {release.version_code} · Minimum supported code {release.min_supported_version_code} · {formatSize(release.apk_size_bytes)} · {new Date(release.created_at).toLocaleString()}</p>
               {release.release_notes && <p className="mt-2 whitespace-pre-wrap text-sm">{release.release_notes}</p>}</div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => window.open(downloadUrl(release.apk_path), "_blank", "noopener,noreferrer")}><Download className="mr-2 h-4 w-4" /> APK</Button>
