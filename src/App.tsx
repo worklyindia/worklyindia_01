@@ -282,6 +282,7 @@ const InterviewAnalytics = lazyRetry(() => import("./pages/owner-portal/Intervie
 const SupabaseUsageMonitor = lazyRetry(() => import("./pages/owner-portal/SupabaseUsageMonitor"));
 const StorageManager = lazyRetry(() => import("./pages/owner-portal/StorageManager"));
 const AndroidAppUpdates = lazyRetry(() => import("./pages/owner-portal/AndroidAppUpdates"));
+const AndroidUpdateNotificationTemplate = lazyRetry(() => import("./pages/owner-portal/AndroidUpdateNotificationTemplate"));
 const SecretsManager = lazyRetry(() => import("./pages/owner-portal/SecretsManager"));
 
 const GoogleIntegrations = lazyRetry(() => import("./pages/owner-portal/GoogleIntegrations"));
@@ -1000,6 +1001,11 @@ const AppContent = () => {
         <Route path="/owner-portal/android-app-updates" element={
           <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
             <AndroidAppUpdates />
+          </ProtectedPermissionRoute>
+        } />
+        <Route path="/owner-portal/android-update-notification" element={
+          <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
+            <AndroidUpdateNotificationTemplate />
           </ProtectedPermissionRoute>
         } />
 
