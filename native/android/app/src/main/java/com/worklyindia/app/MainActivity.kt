@@ -89,6 +89,8 @@ class MainActivity : Activity() {
     private var websiteDownloadRelease: JSONObject? = null
     private var websiteDownloadDialog: AlertDialog? = null
     private var websiteInstallDialogVisible = false
+    // Avoid repeating native token registration on every WebView navigation.
+    private var autoPushRegistrationUserId: String? = null
     private var waitingForWebsiteInstallPermission = false
     private val websiteUpdatePrefs by lazy { getSharedPreferences("workly_android_update", Context.MODE_PRIVATE) }
     private var websiteDownloadProgressBar: ProgressBar? = null
@@ -1247,6 +1249,7 @@ class MainActivity : Activity() {
                     NativePushManager.unregister(this@MainActivity, old)
                 }
                 NativeAuth.signOut(this@MainActivity)
+                autoPushRegistrationUserId = null
             }
         }
 
@@ -1267,7 +1270,20 @@ class MainActivity : Activity() {
                         user.optString("email"),
                         if (role.equals("employer", true)) "employer" else "jobseeker"
                     )
-                    // Push registration is explicit opt-in from the website settings UI.
+                    // Permission already granted means this device has opted in.
+                    // Register its native FCM token automatically after login so
+                    // owner-published Android releases can reach existing app users
+                    // without requiring them to open the notification settings page.
+                    if (hasNotificationPermission() && autoPushRegistrationUserId != saved.userId) {
+                        autoPushRegistrationUserId = saved.userId
+                        activityScope.launch(Dispatchers.IO) {
+                            val registered = NativePushManager.register(this@MainActivity, saved)
+                            if (!registered) {
+                                autoPushRegistrationUserId = null
+                                android.util.Log.w("WorklyPush", "Automatic Android push registration failed for signed-in user")
+                            }
+                        }
+                    }
                 } catch (error: Exception) {
                     android.util.Log.w("WorklyWebView", "Website session sync skipped", error)
                 }
