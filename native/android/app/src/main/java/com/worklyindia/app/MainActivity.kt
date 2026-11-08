@@ -88,6 +88,9 @@ class MainActivity : Activity() {
     private var websiteDownloadId: Long = -1L
     private var websiteDownloadRelease: JSONObject? = null
     private var websiteDownloadDialog: AlertDialog? = null
+    private var websiteInstallDialogVisible = false
+    private var waitingForWebsiteInstallPermission = false
+    private val websiteUpdatePrefs by lazy { getSharedPreferences("workly_android_update", Context.MODE_PRIVATE) }
     private var websiteDownloadProgressBar: ProgressBar? = null
     private var websiteDownloadProgressLabel: TextView? = null
     private val isPlayStoreInstall: Boolean by lazy {
@@ -115,6 +118,7 @@ class MainActivity : Activity() {
                     val uri = manager.getUriForDownloadedFile(completedId)
                     if (uri != null) {
                         pendingWebsiteInstallUri = uri
+                        persistPendingWebsiteInstall(uri, websiteDownloadRelease)
                         websiteDownloadId = -1L
                         runOnUiThread {
                             websiteDownloadDialog?.dismiss()
@@ -166,6 +170,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         appUpdateManager = AppUpdateManagerFactory.create(this)
         appUpdateManager.registerListener(appUpdateListener)
+        restorePendingWebsiteInstall()
         ContextCompat.registerReceiver(
             this, websiteDownloadReceiver,
             android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
@@ -1332,7 +1337,17 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (pendingWebsiteInstallUri != null) {
-            continueWebsiteInstallIfAllowed()
+            val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
+            if (targetCode > 0L && getInstalledAppVersionCode() >= targetCode) {
+                clearPendingWebsiteInstall()
+            } else if (waitingForWebsiteInstallPermission &&
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls())) {
+                waitingForWebsiteInstallPermission = false
+                websiteUpdatePrefs.edit().putBoolean("waiting_permission", false).apply()
+                continueWebsiteInstallIfAllowed()
+            } else {
+                showWebsiteInstallReadyDialog(websiteDownloadRelease)
+            }
         } else if (::appUpdateManager.isInitialized) {
             if (isPlayStoreInstall) checkForPlayStoreUpdate() else checkForWebsiteRelease()
         }
@@ -1401,7 +1416,7 @@ class MainActivity : Activity() {
             notes,
             showProgress = false
         )
-        val builder = AlertDialog.Builder(this)
+        val builder = AlertDialog.Builder(updateDialogContext())
             .setView(content)
             .setCancelable(false)
             .setPositiveButton("Download update") { dialog, _ ->
@@ -1410,7 +1425,10 @@ class MainActivity : Activity() {
                 downloadWebsiteUpdate(release)
             }
         if (!mandatory) builder.setNegativeButton("Later", null)
-        builder.show()
+        val dialog = builder.create()
+        dialog.setOnDismissListener { websiteUpdateDialogVisible = false }
+        dialog.show()
+        styleWebsiteUpdateDialog(dialog)
     }
 
     private fun buildWebsiteUpdateCard(
@@ -1421,10 +1439,20 @@ class MainActivity : Activity() {
     ): LinearLayout {
         val density = resources.displayMetrics.density
         fun px(value: Int) = (value * density).toInt()
+        val dark = isNativeDarkTheme()
+        val surface = if (dark) Color.rgb(17, 27, 45) else Color.WHITE
+        val primaryText = if (dark) Color.rgb(244, 247, 252) else Color.rgb(25, 35, 48)
+        val secondaryText = if (dark) Color.rgb(190, 202, 219) else Color.rgb(100, 110, 122)
+        val mutedText = if (dark) Color.rgb(169, 183, 202) else Color.rgb(75, 85, 98)
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(px(24), px(24), px(24), px(8))
+            setPadding(px(24), px(24), px(24), px(16))
             gravity = Gravity.CENTER_HORIZONTAL
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface)
+                cornerRadius = px(24).toFloat()
+                setStroke(px(1), if (dark) Color.rgb(49, 66, 88) else Color.rgb(229, 235, 242))
+            }
         }
         val appIcon = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher)
@@ -1436,21 +1464,21 @@ class MainActivity : Activity() {
         container.addView(TextView(this).apply {
             text = "Workly India"
             textSize = 21f
-            setTextColor(Color.rgb(25, 35, 48))
+            setTextColor(primaryText)
             gravity = Gravity.CENTER
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(-1, -2))
         container.addView(TextView(this).apply {
             text = "Version $versionName"
             textSize = 13f
-            setTextColor(Color.rgb(100, 110, 122))
+            setTextColor(secondaryText)
             gravity = Gravity.CENTER
             setPadding(0, px(4), 0, px(8))
         }, LinearLayout.LayoutParams(-1, -2))
         container.addView(TextView(this).apply {
             text = subtitle
             textSize = 15f
-            setTextColor(Color.rgb(35, 45, 58))
+            setTextColor(primaryText)
             gravity = Gravity.CENTER
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setPadding(0, px(4), 0, px(8))
@@ -1459,7 +1487,7 @@ class MainActivity : Activity() {
             container.addView(TextView(this).apply {
                 text = "What's new\n$notes"
                 textSize = 14f
-                setTextColor(Color.rgb(75, 85, 98))
+                setTextColor(mutedText)
                 setPadding(0, px(4), 0, px(12))
             }, LinearLayout.LayoutParams(-1, -2))
         }
@@ -1475,7 +1503,7 @@ class MainActivity : Activity() {
             websiteDownloadProgressLabel = TextView(this).apply {
                 text = "Preparing download…"
                 textSize = 13f
-                setTextColor(Color.rgb(75, 85, 98))
+                setTextColor(mutedText)
                 gravity = Gravity.CENTER
             }
             container.addView(websiteDownloadProgressLabel, LinearLayout.LayoutParams(-1, -2))
@@ -1489,11 +1517,12 @@ class MainActivity : Activity() {
             versionName, "Downloading update", "Workly India is downloading the update. Keep the app open.",
             showProgress = true
         )
-        websiteDownloadDialog = AlertDialog.Builder(this)
+        websiteDownloadDialog = AlertDialog.Builder(updateDialogContext())
             .setView(content)
             .setCancelable(false)
             .create()
         websiteDownloadDialog?.show()
+        websiteDownloadDialog?.let { styleWebsiteUpdateDialog(it) }
         websiteDownloadDialog?.window?.setLayout(
             (resources.displayMetrics.widthPixels * 0.90f).toInt(),
             android.view.WindowManager.LayoutParams.WRAP_CONTENT
@@ -1529,14 +1558,15 @@ class MainActivity : Activity() {
     }
 
     private fun showWebsiteInstallReadyDialog(release: JSONObject?) {
-        if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
+        if (pendingWebsiteInstallUri == null || websiteInstallDialogVisible || isFinishing || isDestroyed) return
+        websiteInstallDialogVisible = true
         val versionName = release?.optString("version_name", "new version") ?: "new version"
         val mandatory = getInstalledAppVersionCode() < (release?.optInt("min_supported_version_code", 1) ?: 1).toLong()
         val content = buildWebsiteUpdateCard(
             versionName, "Download complete", "The update is ready. Tap Install now to open Android's secure installer.",
             showProgress = false
         )
-        val builder = AlertDialog.Builder(this)
+        val builder = AlertDialog.Builder(updateDialogContext())
             .setView(content)
             .setCancelable(false)
             .setPositiveButton("Install now") { dialog, _ ->
@@ -1544,7 +1574,10 @@ class MainActivity : Activity() {
                 continueWebsiteInstallIfAllowed()
             }
         if (!mandatory) builder.setNegativeButton("Later", null)
-        builder.show()
+        val dialog = builder.create()
+        dialog.setOnDismissListener { websiteInstallDialogVisible = false }
+        dialog.show()
+        styleWebsiteUpdateDialog(dialog)
     }
 
     private fun downloadWebsiteUpdate(release: JSONObject) {
@@ -1579,6 +1612,8 @@ class MainActivity : Activity() {
     private fun continueWebsiteInstallIfAllowed() {
         val apkUri = pendingWebsiteInstallUri ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            waitingForWebsiteInstallPermission = true
+            websiteUpdatePrefs.edit().putBoolean("waiting_permission", true).apply()
             val settingsIntent = Intent(
                 android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:" + packageName)
@@ -1595,12 +1630,59 @@ class MainActivity : Activity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(installIntent)
-            pendingWebsiteInstallUri = null
             websiteDownloadId = -1L
         } catch (error: Exception) {
             android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
             Toast.makeText(this, "Could not open the installer. Please try again.", Toast.LENGTH_LONG).show()
         }
+    }
+
+
+    private fun isNativeDarkTheme(): Boolean =
+        (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    private fun updateDialogContext(): Context {
+        val theme = if (isNativeDarkTheme()) android.R.style.Theme_Material_NoActionBar
+            else android.R.style.Theme_Material_Light_NoActionBar
+        return android.view.ContextThemeWrapper(this, theme)
+    }
+
+    private fun styleWebsiteUpdateDialog(dialog: AlertDialog) {
+        val dark = isNativeDarkTheme()
+        dialog.window?.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(if (dark) Color.rgb(17, 27, 45) else Color.WHITE)
+        )
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.90f).toInt(),
+            android.view.WindowManager.LayoutParams.WRAP_CONTENT
+        )
+        val buttonColor = if (dark) Color.rgb(76, 220, 190) else Color.rgb(21, 159, 120)
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(buttonColor)
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(if (dark) Color.rgb(190, 202, 219) else Color.rgb(80, 92, 108))
+    }
+
+    private fun persistPendingWebsiteInstall(uri: Uri, release: JSONObject?) {
+        websiteUpdatePrefs.edit()
+            .putString("pending_apk_uri", uri.toString())
+            .putString("pending_release", release?.toString())
+            .apply()
+    }
+
+    private fun restorePendingWebsiteInstall() {
+        val uri = websiteUpdatePrefs.getString("pending_apk_uri", null)
+        val release = websiteUpdatePrefs.getString("pending_release", null)
+        pendingWebsiteInstallUri = uri?.let { runCatching { Uri.parse(it) }.getOrNull() }
+        websiteDownloadRelease = release?.let { runCatching { JSONObject(it) }.getOrNull() }
+        waitingForWebsiteInstallPermission = websiteUpdatePrefs.getBoolean("waiting_permission", false)
+    }
+
+    private fun clearPendingWebsiteInstall() {
+        pendingWebsiteInstallUri = null
+        websiteDownloadRelease = null
+        waitingForWebsiteInstallPermission = false
+        websiteUpdatePrefs.edit().clear().apply()
+        websiteInstallDialogVisible = false
     }
 
     private fun checkForPlayStoreUpdate() {
