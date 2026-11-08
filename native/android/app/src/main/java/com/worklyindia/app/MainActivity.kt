@@ -1696,12 +1696,9 @@ class MainActivity : Activity() {
         addWebsiteSheetActions(content, "Install now", if (mandatory) null else "Later",
             onPrimary = { dialog.dismiss(); continueWebsiteInstallIfAllowed() },
             onSecondary = {
-                pendingWebsiteInstallUri = null
-                websiteUpdatePrefs.edit()
-                    .remove(KEY_PENDING_APK_URI)
-                    .remove(KEY_TARGET_VERSION_CODE)
-                    .putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
-                    .apply()
+                // "Later" only dismisses this sheet. Keep the downloaded APK,
+                // target version and release metadata so reopening the app shows
+                // "Install now" instead of downloading the same APK again.
                 dialog.dismiss()
             })
         dialog.setContentView(content)
