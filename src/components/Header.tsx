@@ -126,8 +126,6 @@ const Header = ({ hideSearch = false }: HeaderProps) => {
         ? 'shadow-md border-b border-border' 
         : 'shadow-sm'
     }`}>
-      {/* Gradient top accent bar */}
-      <div className="gradient-header-bar" />
       <div className={`container mx-auto px-3 xs:px-4 sm:px-6 lg:px-8 transition-all duration-300 max-w-full ${
         isScrolled 
           ? 'py-2' 
