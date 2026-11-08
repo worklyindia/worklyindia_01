@@ -2,232 +2,84 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Package, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
   id: string; version_code: number; version_name: string; apk_path: string;
-  apk_size_bytes: number; release_notes: string; is_published: boolean;
-  min_supported_version_code: number; created_at: string; published_at: string | null;
+  apk_size_bytes: number; release_notes: string; min_supported_version_code: number;
+  published_at: string | null;
 };
 
 const BUCKET = "android-app-releases";
-const formatSize = (n: number) => n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+const formatSize = (n: number) => n >= 1024 * 1024
+  ? (n / 1024 / 1024).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
 
 export default function AndroidAppUpdates() {
   const navigate = useNavigate();
-  const [releases, setReleases] = useState<Release[]>([]);
+  const [release, setRelease] = useState<Release | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [apk, setApk] = useState<File | null>(null);
-  const [versionName, setVersionName] = useState("");
-  const [versionCode, setVersionCode] = useState("");
-  const [minVersion, setMinVersion] = useState("1");
-  const [notes, setNotes] = useState("");
-  const [metadataLoading, setMetadataLoading] = useState(true);
-  const [buildMetadata, setBuildMetadata] = useState<{ version_name: string; version_code: number; min_supported_version_code: number; release_notes: string; application_id?: string; generated_from?: string } | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    const loadBuildMetadata = async () => {
-      try {
-        const { data, error } = await supabase.from("android_app_releases")
-          .select("version_name,version_code,min_supported_version_code,release_notes")
-          .eq("is_published", true)
-          .order("version_code", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (error) throw error;
-        let info = data;
-        if (!info) {
-          const response = await fetch("/android-app-build-info.json", { cache: "no-store" });
-          if (!response.ok) throw new Error("No published release or build metadata found");
-          info = await response.json();
-        }
-        if (!active) return;
-        const metadata = {
-          ...info,
-          application_id: "com.worklyindia.app",
-          generated_from: data ? "Published Android release feed" : "Android build metadata",
-        };
-        setBuildMetadata(metadata);
-        setVersionName(String(metadata.version_name || ""));
-        setVersionCode(String(metadata.version_code || ""));
-        setMinVersion(String(metadata.min_supported_version_code || 1));
-        setNotes(String(metadata.release_notes || "Performance improvements and bug fixes."));
-      } catch (error) {
-        console.error("Android release metadata load failed:", error);
-        if (active) toast.error("Published Android version details load nahi hue. Release feed check karein.");
-      } finally {
-        if (active) setMetadataLoading(false);
-      }
-    };
-    void loadBuildMetadata();
-    return () => { active = false; };
-  }, []);
-
-  const copyReleaseDetails = async () => {
-    const details = ["Version name: " + versionName, "Version code: " + versionCode, "Minimum supported version code: " + minVersion, "Release notes: " + notes].join("\n");
-    try { await navigator.clipboard.writeText(details); toast.success("Release details copy ho gaye."); }
-    catch { toast.error("Copy nahi hua. Fields manually copy karein."); }
-  };
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("android_app_releases")
-      .select("*").order("version_code", { ascending: false });
-    if (error) toast.error(error.message);
-    else setReleases((data || []) as Release[]);
+    const { data, error } = await supabase.from("android_app_releases").select("*")
+      .eq("is_published", true).order("version_code", { ascending: false })
+      .limit(1).maybeSingle();
+    if (error) { toast.error("Latest Android release load nahi hui: " + error.message); setRelease(null); }
+    else setRelease(data as Release | null);
     setLoading(false);
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-
-  const uploadRelease = async () => {
-    if (!apk || !versionName.trim() || !/^\d+$/.test(versionCode) || Number(versionCode) <= 0) {
-      toast.error("APK, version name aur valid version code enter karein.");
-      return;
-    }
-    if (!apk.name.trim().toLowerCase().endsWith(".apk")) {
-      toast.error("Galat file select hui hai. Android ka .apk file select karein (AAB/ZIP nahi).");
-      return;
-    }
-    if (apk.size === 0) {
-      toast.error("Selected APK file empty hai. APK dobara select karein.");
-      return;
-    }
-    if (apk.size > 200 * 1024 * 1024) {
-      toast.error("APK 200 MB se badi hai. 200 MB ya usse chhoti APK select karein.");
-      return;
-    }
-    setUploading(true);
-    try {
-      const path = `releases/${versionCode}-${Date.now()}.apk`;
-      const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, apk, {
-        contentType: "application/vnd.android.package-archive", upsert: false,
-      });
-      if (uploadError) throw uploadError;
-      const { data: userData } = await supabase.auth.getUser();
-      const { error: insertError } = await supabase.from("android_app_releases").insert({
-        version_code: Number(versionCode), version_name: versionName.trim(), apk_path: path,
-        apk_size_bytes: apk.size, release_notes: notes.trim(),
-        min_supported_version_code: Number(minVersion) || 1, created_by: userData.user?.id,
-        is_published: false,
-      });
-      if (insertError) {
-        await supabase.storage.from(BUCKET).remove([path]);
-        throw insertError;
-      }
-      toast.success("APK upload ho gaya. Publish karne ke baad app users ko update milega.");
-      setApk(null); setVersionName(""); setVersionCode(""); setNotes("");
-      await load();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.error("Android APK upload failed:", e);
-      if (/row-level security|permission denied|unauthorized|403/i.test(message)) {
-        toast.error("Owner upload permission reject hui. Owner account se dobara login karein. Details: " + message);
-      } else if (/payload too large|file size|maximum.*size|entity too large|413/i.test(message)) {
-        toast.error("Supabase project ki global upload limit APK se chhoti hai. Storage Settings mein global file size limit badhani hogi. Details: " + message);
-      } else if (/mime|content.?type|not allowed/i.test(message)) {
-        toast.error("APK file type Storage mein allow nahi hai. APK ko dobara select karein. Details: " + message);
-      } else {
-        toast.error("APK upload fail hua: " + message);
-      }
-    } finally { setUploading(false); }
-  };
-
-  const publish = async (release: Release) => {
-    const { error: unpublishError } = await supabase.from("android_app_releases")
-      .update({ is_published: false }).eq("is_published", true);
-    if (unpublishError) return toast.error(unpublishError.message);
-    const { error } = await supabase.from("android_app_releases")
-      .update({ is_published: true, published_at: new Date().toISOString() }).eq("id", release.id);
-    if (error) toast.error(error.message);
-    else { toast.success(`Version ${release.version_name} publish ho gaya`); await load(); }
-  };
-
-  const unpublish = async (release: Release) => {
-    const { error } = await supabase.from("android_app_releases")
-      .update({ is_published: false }).eq("id", release.id);
-    if (error) toast.error(error.message);
-    else { toast.success("Release unpublish ho gaya"); await load(); }
-  };
-
-  const deleteRelease = async (release: Release) => {
-    const confirmed = window.confirm(`Version ${release.version_name} (code ${release.version_code}) permanently delete karein? Published release delete karne se direct APK users ko update feed nahi milega.`);
-    if (!confirmed) return;
-    const { error: rowError } = await supabase.from("android_app_releases").delete().eq("id", release.id);
-    if (rowError) {
-      toast.error(rowError.message);
-      return;
-    }
-    const { error: fileError } = await supabase.storage.from(BUCKET).remove([release.apk_path]);
-    if (fileError) {
-      toast.error("Release record delete ho gaya, lekin APK storage cleanup fail hua: " + fileError.message);
-    } else {
-      toast.success(`Version ${release.version_name} delete ho gaya`);
-    }
-    await load();
-  };
-
   const downloadUrl = (path: string) => supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 
-  return <div className="container mx-auto max-w-5xl space-y-6 p-4 md:p-6">
-    <div className="flex items-center gap-3">
-      <Button variant="ghost" size="icon" onClick={() => navigate("/owner-portal")}><ArrowLeft className="h-5 w-5" /></Button>
-      <div className="min-w-0 flex-1"><h1 className="text-2xl font-bold">Android App Updates</h1><p className="text-sm text-muted-foreground">Play Store aur direct APK releases manage karein</p></div>
-      <Button variant="outline" size="icon" onClick={() => void load()} disabled={loading}><RefreshCw className="h-4 w-4" /></Button>
-    </div>
-
-    <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Latest Android build details</CardTitle><CardDescription>GitHub Actions build se generated details. Build successful hone par signed APK automatically Supabase release feed mein upload aur publish hogi; eligible Android push users ko update alert bhi milega.</CardDescription></CardHeader>
-      <CardContent>
-        {metadataLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Build details load ho rahi hain...</div> : buildMetadata ? <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version name</p><p className="text-lg font-semibold">{buildMetadata.version_name}</p></div>
-          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="text-lg font-semibold tabular-nums">{buildMetadata.version_code}</p></div>
-          <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Minimum supported version code</p><p className="text-lg font-semibold tabular-nums">{buildMetadata.min_supported_version_code}</p></div>
-          <div className="rounded-lg border p-3 sm:col-span-2"><p className="text-xs text-muted-foreground">Release notes</p><p className="whitespace-pre-wrap text-sm">{buildMetadata.release_notes || "No release notes provided."}</p></div>
-          {buildMetadata.application_id && <p className="text-xs text-muted-foreground sm:col-span-2">Application ID: {buildMetadata.application_id}</p>}
-        </div> : <p className="text-sm text-destructive">Build details load nahi hui. Website deploy aur android-app-build-info.json check karein.</p>}
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Manual APK upload (fallback)</CardTitle>
-        <CardDescription>Automatic GitHub Actions publishing primary method hai. Sirf emergency/manual fallback ke liye signed APK yahan upload karein. Same application ID aur same signing key required hai. Maximum 200 MB.</CardDescription></CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2"><Label>APK file</Label><Input type="file" accept=".apk" onChange={e => { const selected = e.currentTarget.files?.[0] || null; e.currentTarget.value = ""; setApk(selected); }} />
-          {apk && <p className="text-xs text-muted-foreground">Selected: {apk.name} · {formatSize(apk.size)} · {apk.name.toLowerCase().endsWith(".apk") ? "APK file" : "Not an .apk file"}</p>}
-          <p className="text-xs text-muted-foreground">Sirf .apk file accepted hai. AAB, ZIP ya source project upload na karein. Maximum bucket limit 200 MB; project ki global Storage limit bhi apply hoti hai.</p></div>
-        <div className="space-y-2"><Label>Version name</Label><Input placeholder="Auto-filled from Android build" value={versionName} onChange={e => setVersionName(e.target.value)} /><p className="text-xs text-muted-foreground">App ka display version {metadataLoading ? "· Loading..." : buildMetadata ? "· Auto-filled" : "· Manual entry required"}</p></div>
-        <div className="space-y-2"><Label>Version code</Label><Input type="number" min="1" placeholder="Auto-filled from Android build" value={versionCode} onChange={e => setVersionCode(e.target.value)} /><p className="text-xs text-muted-foreground">Har nayi release par previous code se bada hona chahiye.</p></div>
-        <div className="space-y-2"><Label>Minimum supported version code</Label><Input type="number" min="1" value={minVersion} onChange={e => setMinVersion(e.target.value)} /><p className="text-xs text-muted-foreground">Isse purane app versions ko update karna mandatory hoga. Default 1 = sab purane versions allowed.</p></div>
-        <div className="space-y-2 md:col-span-2"><Label>Release notes</Label><Textarea rows={3} placeholder="What's new in this version?" value={notes} onChange={e => setNotes(e.target.value)} /></div>
-        <div className="md:col-span-2"><Button type="button" variant="outline" onClick={() => void copyReleaseDetails()} disabled={!versionName || !versionCode}><Copy className="mr-2 h-4 w-4" /> Copy all release details</Button></div>
-        <div className="md:col-span-2"><Button onClick={() => void uploadRelease()} disabled={uploading || !apk} className="w-full sm:w-auto">{uploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...</> : <><Upload className="mr-2 h-4 w-4" /> Upload APK</>}</Button></div>
-      </CardContent>
-    </Card>
-
-    <Card><CardHeader><CardTitle className="flex items-center gap-2"><Package className="h-5 w-5" /> Release history</CardTitle><CardDescription>Ek waqt mein ek hi direct APK release published rakhein.</CardDescription></CardHeader>
-      <CardContent className="space-y-3">
-        {loading ? <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading releases...</div> :
-          releases.length === 0 ? <p className="text-sm text-muted-foreground">Abhi koi APK release upload nahi hui.</p> :
-          releases.map(release => <div key={release.id} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong>Version {release.version_name}</strong><Badge variant={release.is_published ? "default" : "secondary"}>{release.is_published ? "Published" : "Draft"}</Badge></div>
-              <p className="text-xs text-muted-foreground">Code {release.version_code} · Minimum supported code {release.min_supported_version_code} · {formatSize(release.apk_size_bytes)} · {new Date(release.created_at).toLocaleString()}</p>
-              {release.release_notes && <p className="mt-2 whitespace-pre-wrap text-sm">{release.release_notes}</p>}</div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => window.open(downloadUrl(release.apk_path), "_blank", "noopener,noreferrer")}><Download className="mr-2 h-4 w-4" /> APK</Button>
-              {release.is_published ? <Button size="sm" variant="secondary" onClick={() => void unpublish(release)}>Unpublish</Button> : <Button size="sm" onClick={() => void publish(release)}>Publish</Button>}
-              <Button size="sm" variant="destructive" onClick={() => void deleteRelease(release)} aria-label={`Delete version ${release.version_name}`}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>
-            </div>
-          </div>)}
-      </CardContent></Card>
-    <p className="text-xs text-muted-foreground">Play Store installs use Google Play updates. Direct APK installs use the Workly release feed. Android will always ask the user to approve installation from this source when required.</p>
-  </div>;
+  return (
+    <main className="w-full min-w-0 max-w-none overflow-x-hidden px-3 py-4 sm:px-6 sm:py-6">
+      <div className="mx-auto w-full max-w-5xl space-y-4 sm:space-y-6">
+        <header className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to Owner Portal" onClick={() => navigate("/owner-portal")}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="break-words text-xl font-bold sm:text-2xl">Android Release History</h1>
+            <p className="text-sm text-muted-foreground">Latest published Workly India Android app</p>
+          </div>
+          <Button variant="outline" size="icon" className="shrink-0" aria-label="Refresh release" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          </Button>
+        </header>
+        <Card className="w-full min-w-0 overflow-hidden">
+          <CardHeader className="space-y-1 p-4 sm:p-6">
+            <CardTitle className="flex min-w-0 items-center gap-2 text-lg sm:text-xl">
+              <Package className="h-5 w-5 shrink-0" /><span className="break-words">Current app release</span>
+              <Badge className="ml-auto shrink-0">Latest</Badge>
+            </CardTitle>
+            <CardDescription>Yahan sirf latest published APK dikhayi jayegi. Nayi successful release publish hone par purani APK aur uska record automatically clean ho jayega.</CardDescription>
+          </CardHeader>
+          <CardContent className="min-w-0 space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+            {loading ? <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status"><Loader2 className="h-4 w-4 animate-spin" />Latest release load ho rahi hai...</div>
+              : !release ? <p className="py-8 text-center text-sm text-muted-foreground">Abhi koi published Android release available nahi hai.</p>
+              : <>
+                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">App version</p><p className="break-all text-xl font-semibold">{release.version_name}</p></div>
+                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="break-all text-xl font-semibold tabular-nums">{release.version_code}</p></div>
+                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">APK size</p><p className="text-base font-semibold">{formatSize(release.apk_size_bytes)}</p></div>
+                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Minimum supported code</p><p className="text-base font-semibold tabular-nums">{release.min_supported_version_code}</p></div>
+                </div>
+                {release.release_notes && <section className="min-w-0 rounded-lg border p-3 sm:p-4"><h2 className="mb-2 text-sm font-semibold">What's new</h2><p className="break-words whitespace-pre-wrap text-sm text-muted-foreground">{release.release_notes}</p></section>}
+                <div className="flex min-w-0 flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="min-w-0 text-xs text-muted-foreground">Published: {release.published_at ? new Date(release.published_at).toLocaleString() : "—"}</p>
+                  <Button className="w-full shrink-0 sm:w-auto" onClick={() => window.open(downloadUrl(release.apk_path), "_blank", "noopener,noreferrer")}>
+                    <Download className="mr-2 h-4 w-4" />Download latest APK
+                  </Button>
+                </div>
+              </>}
+          </CardContent>
+        </Card>
+        <p className="px-1 text-xs text-muted-foreground">Android installation ke waqt device par zaroori permission aur user approval maangega.</p>
+      </div>
+    </main>
+  );
 }
