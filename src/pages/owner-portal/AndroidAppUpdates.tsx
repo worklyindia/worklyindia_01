@@ -26,9 +26,44 @@ export default function AndroidAppUpdates() {
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.from("android_app_releases").select("*")
-      .order("version_code", { ascending: false }).limit(20);
-    if (error) { toast.error("Android releases could not be loaded: " + error.message); setReleases([]); }
-    else setReleases((data || []) as Release[]);
+      .order("version_code", { ascending: false }).limit(100);
+    if (error) {
+      toast.error("Android releases could not be loaded: " + error.message);
+      setReleases([]);
+      setLoading(false);
+      return;
+    }
+
+    const rows = (data || []) as Release[];
+    const newest = rows[0] ?? null;
+
+    // Keep the currently published newest APK available while a newer draft is waiting
+    // for approval. Once the newest release is public, remove every older APK + row.
+    if (newest?.is_published && rows.length > 1) {
+      const older = rows.filter((release) => release.id !== newest.id);
+      const oldPaths = [...new Set(older.map((release) => release.apk_path).filter(Boolean))];
+      const { error: storageError } = oldPaths.length
+        ? await supabase.storage.from("android-app-releases").remove(oldPaths)
+        : { error: null };
+
+      if (storageError) {
+        console.error("Old Android APK cleanup failed:", storageError);
+        toast.error("Latest release is public, but older APK files could not be cleaned up: " + storageError.message);
+        setReleases(rows);
+      } else {
+        const { error: rowsError } = await supabase.from("android_app_releases")
+          .delete().neq("id", newest.id);
+        if (rowsError) {
+          console.error("Old Android release records cleanup failed:", rowsError);
+          toast.error("Old APK files were removed, but old release records could not be cleaned up: " + rowsError.message);
+          setReleases([newest, ...older]);
+        } else {
+          setReleases([newest]);
+        }
+      }
+    } else {
+      setReleases(rows);
+    }
     setLoading(false);
   }, []);
 
