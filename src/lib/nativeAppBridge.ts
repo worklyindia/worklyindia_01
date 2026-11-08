@@ -17,6 +17,7 @@ export interface WorklyAndroidBridge {
   exitApp(): void;
   isBiometricLockEnabled?(): boolean;
   setBiometricLockEnabled?(enabled: boolean): boolean;
+  scanResumeImage?(dataUrl: string): boolean;
 }
 
 type WorklyWindow = Window & { WorklyAndroid?: WorklyAndroidBridge };
