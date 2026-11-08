@@ -1498,7 +1498,7 @@ class MainActivity : Activity() {
         val dialog = Dialog(this)
         dialog.setContentView(content)
         websiteDownloadDialog = dialog
-        showWebsiteBottomSheet(dialog, allowSwipeDismiss = false)
+        showWebsiteBottomSheet(dialog, allowSwipeDismiss = true)
         monitorWebsiteDownloadProgress()
     }
 
