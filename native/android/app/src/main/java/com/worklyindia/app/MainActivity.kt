@@ -645,6 +645,7 @@ class MainActivity : FragmentActivity() {
         setContentView(rootLayout)
         ViewCompat.requestApplyInsets(rootLayout)
         registerNetworkListener()
+        val openVaultShortcut = intent.data?.scheme == "worklyindia" && intent.data?.host == "open" && intent.data?.path == "/vault"
         val target = trustedInternalUrl(intent.getStringExtra("notification_url"))
             ?: trustedInternalUrl(intent.data?.toString())
             ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else website
@@ -659,6 +660,7 @@ class MainActivity : FragmentActivity() {
             webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
             webView.loadUrl(target)
         }
+        if (openVaultShortcut) webView.post { showSecureDocumentVault() }
     }
 
     private fun createStartupLoadingOverlay(): FrameLayout {
@@ -1744,6 +1746,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        val openVaultShortcut = intent.data?.scheme == "worklyindia" && intent.data?.host == "open" && intent.data?.path == "/vault"
+        if (openVaultShortcut) {
+            webView.post { showSecureDocumentVault() }
+            return
+        }
         val target = trustedInternalUrl(intent.getStringExtra("notification_url"))
             ?: trustedInternalUrl(intent.data?.toString())
         if (!target.isNullOrBlank()) {
