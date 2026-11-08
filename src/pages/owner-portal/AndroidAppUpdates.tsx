@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -188,20 +188,32 @@ export default function AndroidAppUpdates() {
       setDownloadingReleaseId(null);
     }
   };
+  const copyReleaseApkLink = async (release: Release) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("android-app-releases")
+        .createSignedUrl(release.apk_path, 60 * 60 * 24 * 365);
+      if (error) throw error;
+      if (!data?.signedUrl) throw new Error("A download link could not be created.");
+      await navigator.clipboard.writeText(data.signedUrl);
+      toast.success("APK download link copied.");
+    } catch (error) {
+      console.error("APK link copy failed:", error);
+      toast.error(error instanceof Error ? error.message : "Could not copy the APK link.");
+    }
+  };
+
   const latest = releases[0] ?? null;
 
   return (
     <main className="w-full min-w-0 max-w-none overflow-x-hidden px-3 py-4 sm:px-6 sm:py-6">
       <div className="mx-auto w-full max-w-5xl space-y-4 sm:space-y-6">
         <header className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to Owner Portal" onClick={() => navigate("/owner-portal")}>
+          <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="Back to Owner Portal" onClick={() => navigate("/owner-portal")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="min-w-0 flex-1">
-            <h1 className="break-words text-xl font-bold sm:text-2xl">Android Release Management</h1>
-            <p className="text-sm text-muted-foreground">Manage public status directly from each app release below</p>
-          </div>
-          <Button variant="outline" size="icon" className="shrink-0" aria-label="Refresh releases" onClick={() => void load()} disabled={loading}>
+          <h1 className="min-w-0 flex-1 truncate text-base font-bold sm:text-xl">Android Release Management</h1>
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" aria-label="Refresh releases" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           </Button>
         </header>
@@ -257,13 +269,15 @@ export default function AndroidAppUpdates() {
                       <Button type="button" variant="outline" className="w-full" onClick={() => void downloadReleaseApk(release)} disabled={!!downloadingReleaseId}>
                         {downloadingReleaseId === release.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}{downloadingReleaseId === release.id ? "Preparing APK..." : "Download APK"}
                       </Button>
+                      <Button type="button" variant="secondary" className="w-full" onClick={() => void copyReleaseApkLink(release)}>
+                        <Copy className="mr-2 h-4 w-4" />Copy Link
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
               );
             })}
         </section>
-        <p className="px-1 text-xs text-muted-foreground">Only an owner can change release visibility. Publishing sends an update alert to registered Android devices.</p>
       </div>
     </main>
   );
