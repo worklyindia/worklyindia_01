@@ -1715,18 +1715,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             versionName, "Download complete", "The update is ready. Tap Install now to open Android's secure installer.",
             showProgress = false
         )
-        val builder = AlertDialog.Builder(updateDialogContext())
-            .setView(content)
-            .setCancelable(false)
-            .setPositiveButton("Install now") { dialog, _ ->
-                dialog.dismiss()
-                continueWebsiteInstallIfAllowed()
-            }
-        if (!mandatory) builder.setNegativeButton("Later", null)
-        val dialog = builder.create()
-        dialog.setOnDismissListener { websiteInstallDialogVisible = false }
-        dialog.show()
-        styleWebsiteUpdateDialog(dialog)
+        showWebsiteUpdateBottomSheet(
+            content = content,
+            primaryLabel = "Install now",
+            secondaryLabel = if (mandatory) null else "Later",
+            onPrimary = { continueWebsiteInstallIfAllowed() },
+            onSecondary = { }
+        )
     }
 
     private fun downloadWebsiteUpdate(release: JSONObject) {
@@ -1761,12 +1756,28 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     private fun showWebsiteInstallPermissionDialog() {
         if (websiteInstallDialogVisible || isFinishing || isDestroyed) return
         websiteInstallDialogVisible = true
-        val dialog = AlertDialog.Builder(updateDialogContext())
-            .setTitle("Allow app installation")
-            .setMessage("To install the Workly India update, enable “Allow from this source” in Android settings, then return here.")
-            .setCancelable(true)
-            .setPositiveButton("Open settings") { current, _ ->
-                current.dismiss()
+        val density = resources.displayMetrics.density
+        val message = TextView(this).apply {
+            text = "To install the Workly India update, enable “Allow from this source” in Android settings, then return here."
+            textSize = 14f
+            setTextColor(if (isNativeDarkTheme()) Color.rgb(190, 202, 219) else Color.rgb(75, 85, 98))
+            setPadding((20 * density).toInt(), (8 * density).toInt(), (20 * density).toInt(), (18 * density).toInt())
+        }
+        showWebsiteUpdateBottomSheet(
+            content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(this@MainActivity).apply {
+                    text = "Allow app installation"
+                    textSize = 19f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setTextColor(if (isNativeDarkTheme()) Color.rgb(244, 247, 252) else Color.rgb(25, 35, 48))
+                    setPadding((20 * density).toInt(), (12 * density).toInt(), (20 * density).toInt(), 0)
+                })
+                addView(message)
+            },
+            primaryLabel = "Open settings",
+            secondaryLabel = "Not now",
+            onPrimary = {
                 val settingsIntent = Intent(
                     android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                     Uri.parse("package:" + packageName)
@@ -1774,12 +1785,123 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 runCatching { startActivity(settingsIntent) }.onFailure {
                     Toast.makeText(this, "Please allow Workly India to install updates in Android settings.", Toast.LENGTH_LONG).show()
                 }
+            },
+            onSecondary = { }
+        )
+    }
+
+    private fun showWebsiteUpdateBottomSheet(
+        content: android.view.View,
+        primaryLabel: String,
+        secondaryLabel: String?,
+        onPrimary: () -> Unit,
+        onSecondary: () -> Unit
+    ) {
+        val density = resources.displayMetrics.density
+        fun px(value: Int) = (value * density).toInt()
+        val dark = isNativeDarkTheme()
+        val surface = if (dark) Color.rgb(17, 27, 45) else Color.WHITE
+        val sheet = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(16), px(8), px(16), px(18))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface)
+                cornerRadii = floatArrayOf(px(26).toFloat(), px(26).toFloat(), px(26).toFloat(), px(26).toFloat(), 0f, 0f, 0f, 0f)
             }
-            .setNegativeButton("Not now", null)
-            .create()
+        }
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val handle = TextView(this).apply {
+            text = "━━━━━━"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) Color.rgb(103, 119, 141) else Color.rgb(177, 187, 199))
+            layoutParams = LinearLayout.LayoutParams(0, px(34), 1f)
+        }
+        val close = TextView(this).apply {
+            text = "✕"
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) Color.rgb(190, 202, 219) else Color.rgb(75, 85, 98))
+            contentDescription = "Close update sheet"
+            layoutParams = LinearLayout.LayoutParams(px(44), px(40))
+            setOnClickListener { dialog.dismiss() }
+        }
+        topRow.addView(handle)
+        topRow.addView(close)
+        sheet.addView(topRow)
+        sheet.addView(content, LinearLayout.LayoutParams(-1, -2))
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        if (secondaryLabel != null) {
+            actions.addView(TextView(this@MainActivity).apply {
+                text = secondaryLabel
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(if (dark) Color.rgb(190, 202, 219) else Color.rgb(75, 85, 98))
+                setPadding(px(14), 0, px(14), 0)
+                setOnClickListener {
+                    dialog.dismiss()
+                    onSecondary()
+                }
+            }, LinearLayout.LayoutParams(0, px(50), 1f))
+        }
+        actions.addView(TextView(this).apply {
+            text = primaryLabel
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(21, 159, 120) else Color.rgb(13, 128, 100))
+                cornerRadius = px(14).toFloat()
+            }
+            setOnClickListener {
+                dialog.dismiss()
+                onPrimary()
+            }
+        }, LinearLayout.LayoutParams(0, px(50), 2f).apply {
+            leftMargin = px(8)
+        })
+        sheet.addView(actions, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = px(8)
+        })
+
+        val dialog = android.app.Dialog(this)
+        dialog.setContentView(sheet)
+        dialog.setCancelable(true)
+        dialog.setCanceledOnTouchOutside(true)
         dialog.setOnDismissListener { websiteInstallDialogVisible = false }
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setDimAmount(0.58f)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.BOTTOM)
+            attributes = attributes.apply {
+                width = WindowManager.LayoutParams.MATCH_PARENT
+                height = WindowManager.LayoutParams.WRAP_CONTENT
+                gravity = Gravity.BOTTOM
+                windowAnimations = android.R.style.Animation_InputMethod
+            }
+        }
+        var downY = 0f
+        handle.setOnTouchListener { _, event ->
+            when (event.action) {
+                android.view.MotionEvent.ACTION_DOWN -> { downY = event.rawY; true }
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (event.rawY - downY > px(45)) dialog.dismiss()
+                    true
+                }
+                else -> true
+            }
+        }
         dialog.show()
-        styleWebsiteUpdateDialog(dialog)
+        dialog.window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
     }
 
     private fun continueWebsiteInstallIfAllowed() {
