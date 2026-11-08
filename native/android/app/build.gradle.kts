@@ -77,6 +77,7 @@ dependencies {
     // Render the exact user-supplied WiFi Connecting.json Lottie animation on the offline screen.
     implementation("com.airbnb.android:lottie:6.6.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
 
     // Native interview calling providers. Website iframe calls remain unchanged.
     // 100ms SDK: room-code authentication is issued by the existing Supabase function.
