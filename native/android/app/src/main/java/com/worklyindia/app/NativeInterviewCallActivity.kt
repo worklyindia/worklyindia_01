@@ -26,8 +26,6 @@ import live.videosdk.rtc.android.lib.VideoSDKError
 import videosdk.org.webrtc.VideoTrack
 import live.videosdk.rtc.android.listeners.ParticipantEventListener
 import live.videosdk.rtc.android.listeners.RoomEventListener
-import org.webrtc.VideoTrack
-
 class NativeInterviewCallActivity : FragmentActivity() {
     private var room: Room? = null
     private lateinit var status: TextView
