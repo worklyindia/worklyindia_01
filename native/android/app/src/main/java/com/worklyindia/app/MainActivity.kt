@@ -129,6 +129,8 @@ class MainActivity : Activity() {
                     android.util.Log.e("WorklyAppUpdate", "Website APK download failed: $reason")
                     websiteDownloadId = -1L
                     runOnUiThread {
+                        websiteDownloadDialog?.dismiss()
+                        websiteDownloadDialog = null
                         Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show()
                         checkForWebsiteRelease()
                     }
