@@ -110,7 +110,7 @@ export const Step1Personal: React.FC<{ draft: ResumeDraft; update: any }> = ({ d
             )}
           </div>
         </div>
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFilePick} />
+        <input ref={fileInputRef} type="file" accept="image/*" capture="user" className="hidden" onChange={handleFilePick} />
       </div>
       <ImageCropDialog
         open={cropOpen}
