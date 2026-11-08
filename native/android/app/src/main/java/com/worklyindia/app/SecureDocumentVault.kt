@@ -45,7 +45,7 @@ object SecureDocumentVault {
         val file = documentFile(context, id)
         val raw = file.readBytes()
         require(raw.size > 20) { "Encrypted document is damaged." }
-        val header = java.nio.ByteBuffer.wrap(raw, 0, 4).int
+        val header = java.nio.ByteBuffer.wrap(raw, 0, 4).getInt()
         if (header != AUTH_FILE_MAGIC) return null
         val ivLength = raw[4].toInt() and 0xff
         require(ivLength in 12..16 && raw.size > 5 + ivLength) { "Encrypted document is damaged." }
