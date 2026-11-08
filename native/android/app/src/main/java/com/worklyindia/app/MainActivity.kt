@@ -187,30 +187,35 @@ class MainActivity : FragmentActivity() {
         if (requestCode == REQUEST_VAULT_IMPORT) {
             if (resultCode == RESULT_OK && data?.data != null) {
                 val selectedUri = data.data!!
-                authenticateVault {
-                    runCatching {
-                        val bytes = contentResolver.openInputStream(selectedUri)?.use { input ->
-                            val output = java.io.ByteArrayOutputStream()
-                            val buffer = ByteArray(8192)
-                            var total = 0
-                            while (true) {
-                                val count = input.read(buffer)
-                                if (count < 0) break
-                                total += count
-                                require(total <= SecureDocumentVault.MAX_DOCUMENT_BYTES) { "Choose a document up to 15 MB." }
-                                output.write(buffer, 0, count)
+                runCatching { SecureDocumentVault.newEncryptionCipher() }
+                    .onSuccess { encryptionCipher ->
+                        authenticateVault(encryptionCipher) { authenticatedCipher ->
+                            runCatching {
+                                val bytes = contentResolver.openInputStream(selectedUri)?.use { input ->
+                                    val output = java.io.ByteArrayOutputStream()
+                                    val buffer = ByteArray(8192)
+                                    var total = 0
+                                    while (true) {
+                                        val count = input.read(buffer)
+                                        if (count < 0) break
+                                        total += count
+                                        require(total <= SecureDocumentVault.MAX_DOCUMENT_BYTES) { "Choose a document up to 15 MB." }
+                                        output.write(buffer, 0, count)
+                                    }
+                                    output.toByteArray()
+                                } ?: throw IllegalStateException("Could not read the selected document.")
+                                val name = queryDisplayName(selectedUri)
+                                val mime = contentResolver.getType(selectedUri) ?: "application/octet-stream"
+                                SecureDocumentVault.saveAuthenticated(this, name, mime, bytes, authenticatedCipher)
+                            }.onSuccess {
+                                Toast.makeText(this, "Biometric-protected document saved in Secure Vault.", Toast.LENGTH_LONG).show()
+                            }.onFailure {
+                                Toast.makeText(this, it.message ?: "Could not save document.", Toast.LENGTH_LONG).show()
                             }
-                            output.toByteArray()
-                        } ?: throw IllegalStateException("Could not read the selected document.")
-                        val name = queryDisplayName(selectedUri)
-                        val mime = contentResolver.getType(selectedUri) ?: "application/octet-stream"
-                        SecureDocumentVault.save(this, name, mime, bytes)
-                    }.onSuccess {
-                        Toast.makeText(this, "Document encrypted and saved in Secure Vault.", Toast.LENGTH_LONG).show()
+                        }
                     }.onFailure {
-                        Toast.makeText(this, it.message ?: "Could not save document.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, it.message ?: "Secure Vault key is unavailable.", Toast.LENGTH_LONG).show()
                     }
-                }
             }
             return
         }
@@ -1107,19 +1112,17 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }.getOrNull() ?: "document"
     }
 
-    private fun authenticateVault(onSuccess: () -> Unit) {
-        val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        } else {
-            BiometricManager.Authenticators.BIOMETRIC_STRONG
-        }
+    private fun authenticateVault(cipher: java.security.Cipher, onSuccess: (java.security.Cipher) -> Unit) {
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG
         if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
-            Toast.makeText(this, "Set up fingerprint, face unlock, or a device screen lock to use Secure Vault.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Set up a strong biometric (fingerprint or supported face unlock) to use Secure Vault.", Toast.LENGTH_LONG).show()
             return
         }
         val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                onSuccess()
+                val authenticatedCipher = result.cryptoObject?.cipher
+                if (authenticatedCipher != null) onSuccess(authenticatedCipher)
+                else Toast.makeText(this@MainActivity, "Biometric key authorization failed. Vault remains locked.", Toast.LENGTH_LONG).show()
             }
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 Toast.makeText(this@MainActivity, "Secure Vault remains locked.", Toast.LENGTH_SHORT).show()
@@ -1127,7 +1130,28 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         })
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Secure Document Vault")
-            .setSubtitle("Verify your identity to access private documents")
+            .setSubtitle("Biometric verification unlocks the encryption key")
+            .setAllowedAuthenticators(authenticators)
+            .build()
+        prompt.authenticate(info, BiometricPrompt.CryptoObject(cipher))
+    }
+
+    /** Compatibility path for documents encrypted by the original, non-auth-bound vault key. */
+    private fun authenticateLegacyVault(onSuccess: () -> Unit) {
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG
+        if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+            Toast.makeText(this, "A strong biometric is required to open this older vault document.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { onSuccess() }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                Toast.makeText(this@MainActivity, "Secure Vault remains locked.", Toast.LENGTH_SHORT).show()
+            }
+        })
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock older vault document")
+            .setSubtitle("Verify your identity to access this previously saved document")
             .setAllowedAuthenticators(authenticators)
             .build()
         prompt.authenticate(info)
@@ -1149,9 +1173,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     startActivityForResult(picker, REQUEST_VAULT_IMPORT)
                 } else {
                     val selected = entries[which - 1]
-                    authenticateVault {
+                    fun openDecryptedDocument(document: Triple<String, String, ByteArray>) {
                         runCatching {
-                            val (name, mime, bytes) = SecureDocumentVault.read(this, selected.id)
+                            val (name, mime, bytes) = document
                             val safeName = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(120)
                             val tempDir = File(cacheDir, "secure-vault").apply {
                                 mkdirs()
@@ -1169,6 +1193,24 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             Toast.makeText(this, it.message ?: "Could not open document.", Toast.LENGTH_LONG).show()
                         }
                     }
+                    runCatching { SecureDocumentVault.newDecryptionCipher(this, selected.id) }
+                        .onSuccess { cipher ->
+                            if (cipher == null) {
+                                authenticateLegacyVault {
+                                    runCatching { SecureDocumentVault.read(this, selected.id) }
+                                        .onSuccess(::openDecryptedDocument)
+                                        .onFailure { Toast.makeText(this, it.message ?: "Could not open older document.", Toast.LENGTH_LONG).show() }
+                                }
+                            } else {
+                                authenticateVault(cipher) { authenticatedCipher ->
+                                    runCatching { SecureDocumentVault.readAuthenticated(this, selected.id, authenticatedCipher) }
+                                        .onSuccess(::openDecryptedDocument)
+                                        .onFailure { Toast.makeText(this, it.message ?: "Could not open document.", Toast.LENGTH_LONG).show() }
+                                }
+                            }
+                        }.onFailure {
+                            Toast.makeText(this, it.message ?: "Could not prepare vault decryption.", Toast.LENGTH_LONG).show()
+                        }
                 }
             }
             .setNegativeButton("Close", null)
