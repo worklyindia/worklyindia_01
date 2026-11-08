@@ -619,11 +619,7 @@ class MainActivity : Activity() {
         val installPromptWasActive = websiteUpdatePrefs.getBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
         if (targetVersion > 0L && installPromptWasActive) {
             websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
-            val installedVersion = installedPackageVersionCode()
-
-            if (installedVersion >= targetVersion) {
-                clearPendingWebsiteUpdateState()
-                showWebsiteUpdateCompletedDialog()            } else if (pendingWebsiteInstallUri != null) {
+            if (pendingWebsiteInstallUri != null) {
                 Toast.makeText(this, "Installation was not completed. Tap Install now to retry.", Toast.LENGTH_LONG).show()
                 showWebsiteInstallReadyDialog(websiteDownloadRelease)
             }
