@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, Loader2, Package, RefreshCw, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -13,7 +13,6 @@ type Release = {
   published_at: string | null; is_published: boolean; created_at: string;
 };
 
-const BUCKET = "android-app-releases";
 const formatSize = (n: number) => n >= 1024 * 1024
   ? (n / 1024 / 1024).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
 
@@ -21,12 +20,12 @@ export default function AndroidAppUpdates() {
   const navigate = useNavigate();
   const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
-  const [publishing, setPublishing] = useState(false);
+  const [updatingReleaseId, setUpdatingReleaseId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase.from("android_app_releases").select("*")
-      .order("version_code", { ascending: false }).limit(10);
+      .order("version_code", { ascending: false }).limit(20);
     if (error) { toast.error("Android releases could not be loaded: " + error.message); setReleases([]); }
     else setReleases((data || []) as Release[]);
     setLoading(false);
@@ -34,41 +33,25 @@ export default function AndroidAppUpdates() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const downloadUrl = (path: string) => supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  const latest = releases[0] ?? null;
-  const published = releases.find((release) => release.is_published) ?? null;
-
-  const publishLatest = async () => {
-    if (!latest || latest.is_published || publishing) return;
-    if (!window.confirm(`Publish Workly India v${latest.version_name} to all users? This will make it the public update and send an Android update notification.`)) return;
-    setPublishing(true);
+  const publishRelease = async (release: Release) => {
+    if (release.is_published || updatingReleaseId) return;
+    if (!window.confirm(`Publish Workly India v${release.version_name} to all users? This will make it the public update and send an Android update notification.`)) return;
+    setUpdatingReleaseId(release.id);
     try {
+      // Keep the release history. Ensure only the selected version is public.
+      const { error: unpublishError } = await supabase.from("android_app_releases")
+        .update({ is_published: false, published_at: null }).eq("is_published", true);
+      if (unpublishError) throw unpublishError;
+
       const { error: publishError } = await supabase.from("android_app_releases")
-        .update({ is_published: true, published_at: new Date().toISOString() }).eq("id", latest.id);
+        .update({ is_published: true, published_at: new Date().toISOString() }).eq("id", release.id);
       if (publishError) throw publishError;
 
-      // Keep only the newly published APK and release record.
-      const { data: oldRows, error: oldError } = await supabase.from("android_app_releases")
-        .select("id, apk_path").neq("id", latest.id);
-      if (oldError) throw oldError;
-      const oldPaths = [...new Set((oldRows || []).map((row) => row.apk_path).filter(Boolean))];
-      if (oldPaths.length) {
-        const { error } = await supabase.storage.from(BUCKET).remove(oldPaths);
-        if (error) throw new Error("The release is published, but older APK files could not be removed: " + error.message);
-      }
-      if (oldRows?.length) {
-        const { error } = await supabase.from("android_app_releases").delete().neq("id", latest.id);
-        if (error) throw new Error("The release is published, but older release records could not be removed: " + error.message);
-      }
-
-      // The Edge Function verifies owner access, loads the saved template,
-      // finds registered Android devices and sends the release notification.
-      let sent = 0;
       const { data: pushData, error: pushError } = await supabase.functions.invoke("email-api", {
         body: {
           action: "send_android_release_push",
-          version_name: latest.version_name,
-          version_code: latest.version_code,
+          version_name: release.version_name,
+          version_code: release.version_code,
         },
       });
       if (pushError || pushData?.success !== true) {
@@ -81,9 +64,9 @@ export default function AndroidAppUpdates() {
           toast.warning(`The release is public, but push delivery failed. Registered devices: ${Number(pushData?.recipients || 0)}; failed: ${Number(pushData?.failed || 0)}. Check Edge Function logs.`);
         }
       } else {
-        sent = Number(pushData.sent || 0);
+        const sent = Number(pushData.sent || 0);
         const failed = Number(pushData.failed || 0);
-        toast.success(`Workly India v${latest.version_name} is public. FCM accepted ${sent} notification(s)${failed ? `; ${failed} failed` : ""}.`);
+        toast.success(`Workly India v${release.version_name} is public. FCM accepted ${sent} notification(s)${failed ? `; ${failed} failed` : ""}.`);
       }
       await load();
     } catch (error) {
@@ -91,20 +74,22 @@ export default function AndroidAppUpdates() {
       toast.error(error instanceof Error ? error.message : "The Android release could not be published.");
       await load();
     } finally {
-      setPublishing(false);
+      setUpdatingReleaseId(null);
     }
   };
 
   const unpublishRelease = async (release: Release) => {
-    if (!release.is_published || publishing) return;
+    if (!release.is_published || updatingReleaseId) return;
     if (!window.confirm(`Unpublish Workly India v${release.version_name}? New downloads and update checks will no longer see it.`)) return;
-    setPublishing(true);
+    setUpdatingReleaseId(release.id);
     const { error } = await supabase.from("android_app_releases")
       .update({ is_published: false, published_at: null }).eq("id", release.id);
-    setPublishing(false);
+    setUpdatingReleaseId(null);
     if (error) toast.error("The release could not be unpublished: " + error.message);
-    else { toast.success("Android release unpublished."); await load(); }
+    else { toast.success(`Workly India v${release.version_name} is now unpublished.`); await load(); }
   };
+
+  const latest = releases[0] ?? null;
 
   return (
     <main className="w-full min-w-0 max-w-none overflow-x-hidden px-3 py-4 sm:px-6 sm:py-6">
@@ -115,7 +100,7 @@ export default function AndroidAppUpdates() {
           </Button>
           <div className="min-w-0 flex-1">
             <h1 className="break-words text-xl font-bold sm:text-2xl">Android Release Management</h1>
-            <p className="text-sm text-muted-foreground">Review, publish, or unpublish the latest Android APK</p>
+            <p className="text-sm text-muted-foreground">Manage public status directly from each app release below</p>
           </div>
           <Button variant="outline" size="icon" className="shrink-0" aria-label="Refresh releases" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
@@ -128,41 +113,55 @@ export default function AndroidAppUpdates() {
               <Package className="h-5 w-5 shrink-0" />Latest uploaded APK
               {latest && <Badge className="ml-auto shrink-0" variant={latest.is_published ? "default" : "secondary"}>{latest.is_published ? "Public" : "Unpublished"}</Badge>}
             </CardTitle>
-            <CardDescription>New Android builds are uploaded as unpublished drafts. Nothing becomes public until you select Publish.</CardDescription>
+            <CardDescription>All uploaded versions are listed below. Use the status control on each app card to publish or unpublish it.</CardDescription>
           </CardHeader>
-          <CardContent className="min-w-0 space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+          <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
             {loading ? <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status"><Loader2 className="h-4 w-4 animate-spin" />Loading Android releases...</div>
               : !latest ? <p className="py-8 text-center text-sm text-muted-foreground">No Android APK has been uploaded yet.</p>
-              : <>
-                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">App version</p><p className="break-all text-xl font-semibold">{latest.version_name}</p></div>
-                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="break-all text-xl font-semibold tabular-nums">{latest.version_code}</p></div>
-                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">APK size</p><p className="text-base font-semibold">{formatSize(latest.apk_size_bytes)}</p></div>
-                  <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Minimum supported code</p><p className="text-base font-semibold tabular-nums">{latest.min_supported_version_code}</p></div>
-                </div>
-                {latest.release_notes && <section className="min-w-0 rounded-lg border p-3 sm:p-4"><h2 className="mb-2 text-sm font-semibold">Release notes</h2><p className="break-words whitespace-pre-wrap text-sm text-muted-foreground">{latest.release_notes}</p></section>}
-                <div className="flex min-w-0 flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="min-w-0 text-xs text-muted-foreground">Uploaded: {new Date(latest.created_at || Date.now()).toLocaleString()}</p>
-                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => window.open(downloadUrl(latest.apk_path), "_blank", "noopener,noreferrer")}>
-                    <Download className="mr-2 h-4 w-4" />Download APK
-                  </Button>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {!latest.is_published
-                    ? <Button className="w-full" onClick={() => void publishLatest()} disabled={publishing}><Send className="mr-2 h-4 w-4" />{publishing ? "Publishing..." : "Publish to All Users"}</Button>
-                    : <Button variant="destructive" className="w-full" onClick={() => void unpublishRelease(latest)} disabled={publishing}>{publishing ? "Updating..." : "Unpublish Release"}</Button>}
-                </div>
-              </>}
+              : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">App version</p><p className="break-all text-xl font-semibold">{latest.version_name}</p></div>
+                <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="break-all text-xl font-semibold tabular-nums">{latest.version_code}</p></div>
+                <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">APK size</p><p className="text-base font-semibold">{formatSize(latest.apk_size_bytes)}</p></div>
+                <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Minimum supported code</p><p className="text-base font-semibold tabular-nums">{latest.min_supported_version_code}</p></div>
+              </div>}
           </CardContent>
         </Card>
 
-        {published && !published.id !== latest?.id && (
-          <Card>
-            <CardHeader className="p-4 sm:p-6"><CardTitle className="text-base">Currently public release</CardTitle><CardDescription>This version remains available while a newer build is waiting for your approval.</CardDescription></CardHeader>
-            <CardContent className="flex flex-col gap-3 px-4 pb-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pb-6"><div><p className="font-semibold">Workly India v{published.version_name}</p><p className="text-xs text-muted-foreground">Version code {published.version_code}</p></div><Button variant="destructive" size="sm" className="w-full sm:w-auto" onClick={() => void unpublishRelease(published)} disabled={publishing}>Unpublish Current Release</Button></CardContent>
-          </Card>
-        )}
-        <p className="px-1 text-xs text-muted-foreground">Only an owner can publish or unpublish an Android release. Publishing sends an update alert to registered Android devices.</p>
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Android app releases</h2>
+            <p className="text-sm text-muted-foreground">Publish or unpublish each version from its own card. Only one release can be public at a time.</p>
+          </div>
+          {loading ? null : releases.length === 0 ? <p className="rounded-lg border p-5 text-center text-sm text-muted-foreground">No app releases found.</p>
+            : releases.map((release) => {
+              const busy = updatingReleaseId === release.id;
+              return (
+                <Card key={release.id} className="min-w-0 overflow-hidden">
+                  <CardContent className="flex min-w-0 flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">Workly India v{release.version_name}</p>
+                        <Badge variant={release.is_published ? "default" : "secondary"}>{release.is_published ? "Public" : "Unpublished"}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Version code {release.version_code} · {formatSize(release.apk_size_bytes)}</p>
+                      <p className="text-xs text-muted-foreground">Uploaded: {new Date(release.created_at || Date.now()).toLocaleString()}</p>
+                      {release.release_notes && <p className="break-words whitespace-pre-wrap pt-1 text-sm text-muted-foreground">{release.release_notes}</p>}
+                    </div>
+                    <div className="w-full shrink-0 sm:w-auto">
+                      {release.is_published
+                        ? <Button variant="destructive" className="w-full sm:min-w-36" onClick={() => void unpublishRelease(release)} disabled={!!updatingReleaseId}>
+                            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}{busy ? "Updating..." : "Make Unpublished"}
+                          </Button>
+                        : <Button className="w-full sm:min-w-36" onClick={() => void publishRelease(release)} disabled={!!updatingReleaseId}>
+                            {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}{busy ? "Publishing..." : "Make Public"}
+                          </Button>}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+        </section>
+        <p className="px-1 text-xs text-muted-foreground">Only an owner can change release visibility. Publishing sends an update alert to registered Android devices.</p>
       </div>
     </main>
   );
