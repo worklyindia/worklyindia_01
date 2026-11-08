@@ -1466,6 +1466,26 @@ export const PUSH_TEMPLATE_GROUPS: PushTemplateGroup[] = [
       },
     ],
   },
+  {
+    id: 'android-app',
+    label: 'Android app updates',
+    events: [
+      {
+        key: 'android_app_update',
+        audience: 'both',
+        noEmail: true,
+        label: 'Android app update',
+        description: 'Sent to registered Android app installations only when an owner manually publishes a new APK.',
+        variables: [{ key: 'version_name', label: 'App version', sample: '2.5.0' }],
+        defaults: {
+          title: 'Workly India update v{{version_name}}',
+          body: 'A new version of the Workly India app is available. Update now to get the latest improvements and fixes.',
+          button_text: 'View Update',
+          button_url: 'https://worklyindia.devs.surf/',
+        },
+      },
+    ],
+  },
 ];
 
 
