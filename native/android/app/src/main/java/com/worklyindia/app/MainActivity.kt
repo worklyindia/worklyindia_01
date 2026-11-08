@@ -2132,14 +2132,34 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     private fun downloadWebsiteUpdate(release: JSONObject) {
         val apkPath = release.optString("apk_path", "").trim()
-        if (apkPath.isBlank() || apkPath.startsWith("/") || apkPath.contains("..")) {
+        if (apkPath.isBlank()) {
             Toast.makeText(this, "Update file is not configured correctly.", Toast.LENGTH_LONG).show()
             return
         }
-        val encodedPath = apkPath.split("/").joinToString("/") {
-            java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+
+        // New releases store a public Cloudflare R2 HTTPS URL in apk_path.
+        // Older releases still store a Supabase Storage object key.
+        val apkUrl = if (apkPath.startsWith("https://", ignoreCase = true)) {
+            val uri = Uri.parse(apkPath)
+            val allowedHosts = setOf(
+                "pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev",
+                "downloads.devs.surf"
+            )
+            if (uri.scheme != "https" || uri.host !in allowedHosts || uri.userInfo != null) {
+                Toast.makeText(this, "Update download URL is not trusted.", Toast.LENGTH_LONG).show()
+                return
+            }
+            apkPath
+        } else {
+            if (apkPath.startsWith("/") || apkPath.contains("..")) {
+                Toast.makeText(this, "Update file is not configured correctly.", Toast.LENGTH_LONG).show()
+                return
+            }
+            val encodedPath = apkPath.split("/").joinToString("/") {
+                java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+            }
+            "https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/android-app-releases/" + encodedPath
         }
-        val apkUrl = "https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/android-app-releases/" + encodedPath
         try {
             val request = DownloadManager.Request(Uri.parse(apkUrl))
                 .setTitle("Workly India update")
