@@ -58,6 +58,9 @@
             android:launchMode="singleTop"
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true">
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/workly_app_shortcuts" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
