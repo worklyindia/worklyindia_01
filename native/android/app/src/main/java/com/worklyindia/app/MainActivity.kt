@@ -1560,9 +1560,30 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 setStroke(px(1), if (dark) Color.rgb(49, 66, 88) else Color.rgb(229, 235, 242))
             }
         }
+        val updateBadge = TextView(this).apply {
+            text = "✦  WORKLY INDIA UPDATE"
+            textSize = 10f
+            letterSpacing = 0.08f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(if (dark) Color.rgb(111, 239, 205) else Color.rgb(13, 128, 100))
+            gravity = Gravity.CENTER
+            setPadding(px(12), px(7), px(12), px(7))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(25, 66, 66) else Color.rgb(226, 248, 241))
+                cornerRadius = px(30).toFloat()
+            }
+        }
+        container.addView(updateBadge, LinearLayout.LayoutParams(-2, -2).apply {
+            bottomMargin = px(14)
+        })
         val appIcon = ImageView(this).apply {
             setImageResource(R.mipmap.ic_launcher)
             scaleType = ImageView.ScaleType.FIT_CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(30, 44, 63) else Color.rgb(241, 247, 250))
+                cornerRadius = px(20).toFloat()
+            }
+            setPadding(px(7), px(7), px(7), px(7))
         }
         container.addView(appIcon, LinearLayout.LayoutParams(px(68), px(68)).apply {
             bottomMargin = px(14)
