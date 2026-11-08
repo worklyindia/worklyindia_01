@@ -8,6 +8,8 @@
         <package android:name="com.dreamplug.androidapp" />
     </queries>
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required for the website-distributed APK updater to request Android's installer flow. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
