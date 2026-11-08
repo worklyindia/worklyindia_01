@@ -169,11 +169,9 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_WEBSITE_INSTALL) {
-            // The package installer may return RESULT_CANCELED when the user
-            // backs out. Keep the APK URI so the user can safely retry.
-            if (resultCode != RESULT_OK) {
-                websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
-            }
+            // Leave the pending-install marker intact. onResume compares the
+            // installed version with the requested version and shows either
+            // "Update completed" or a retry prompt after the installer closes.
             return
         }
         if (requestCode == REQUEST_APP_UPDATE) {
