@@ -179,7 +179,7 @@ class MainActivity : Activity() {
         ContextCompat.registerReceiver(
             this, websiteDownloadReceiver,
             android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            ContextCompat.RECEIVER_NOT_EXPORTED
+            ContextCompat.RECEIVER_EXPORTED
         )
         // Let Android lay out the app below the real system status bar.
         // Avoid manual inset padding: it can create a second, visible gap above the website.
