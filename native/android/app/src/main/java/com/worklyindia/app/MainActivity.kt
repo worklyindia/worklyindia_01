@@ -87,6 +87,9 @@ class MainActivity : Activity() {
     private var pendingWebsiteInstallUri: Uri? = null
     private var websiteDownloadId: Long = -1L
     private var websiteDownloadRelease: JSONObject? = null
+    private var websiteDownloadDialog: AlertDialog? = null
+    private var websiteDownloadProgressBar: ProgressBar? = null
+    private var websiteDownloadProgressLabel: TextView? = null
     private val isPlayStoreInstall: Boolean by lazy {
         runCatching {
             val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -112,7 +115,12 @@ class MainActivity : Activity() {
                     val uri = manager.getUriForDownloadedFile(completedId)
                     if (uri != null) {
                         pendingWebsiteInstallUri = uri
-                        runOnUiThread { continueWebsiteInstallIfAllowed() }
+                        websiteDownloadId = -1L
+                        runOnUiThread {
+                            websiteDownloadDialog?.dismiss()
+                            websiteDownloadDialog = null
+                            showWebsiteInstallReadyDialog(websiteDownloadRelease)
+                        }
                     } else {
                         runOnUiThread { Toast.makeText(this@MainActivity, "Update download could not be opened. Please try again.", Toast.LENGTH_LONG).show() }
                     }
@@ -1375,24 +1383,157 @@ class MainActivity : Activity() {
         if (websiteUpdateDialogVisible || isFinishing || isDestroyed) return
         val versionName = release.optString("version_name", "New version")
         val notes = release.optString("release_notes", "").trim()
-        val minimumCode = release.optInt("min_supported_version_code", 1)
-        val mandatory = BuildConfig.VERSION_CODE < minimumCode
-        val message = buildString {
-            append("A new Workly India version is available: ")
-            append(versionName)
-            if (notes.isNotBlank()) append("\n\nWhat's new:\n").append(notes)
-            if (mandatory) append("\n\nPlease update to continue using Workly India.")
-        }
+        val mandatory = BuildConfig.VERSION_CODE < release.optInt("min_supported_version_code", 1)
         websiteUpdateDialogVisible = true
+        val content = buildWebsiteUpdateCard(
+            versionName,
+            if (mandatory) "Important update required" else "A new version is available",
+            notes,
+            showProgress = false
+        )
         val builder = AlertDialog.Builder(this)
-            .setTitle("Update Workly India")
-            .setMessage(message)
+            .setView(content)
             .setCancelable(false)
-            .setPositiveButton("Update now") { dialog, _ ->
+            .setPositiveButton("Download update") { dialog, _ ->
                 websiteUpdateDialogVisible = false
                 dialog.dismiss()
                 downloadWebsiteUpdate(release)
             }
+        if (!mandatory) builder.setNegativeButton("Later", null)
+        builder.show()
+    }
+
+    private fun buildWebsiteUpdateCard(
+        versionName: String,
+        subtitle: String,
+        notes: String,
+        showProgress: Boolean
+    ): LinearLayout {
+        val density = resources.displayMetrics.density
+        fun px(value: Int) = (value * density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(24), px(24), px(24), px(8))
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        val appIcon = ImageView(this).apply {
+            setImageResource(R.mipmap.ic_launcher)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        container.addView(appIcon, LinearLayout.LayoutParams(px(68), px(68)).apply {
+            bottomMargin = px(14)
+        })
+        container.addView(TextView(this).apply {
+            text = "Workly India"
+            textSize = 21f
+            setTextColor(Color.rgb(25, 35, 48))
+            gravity = Gravity.CENTER
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }, LinearLayout.LayoutParams(-1, -2))
+        container.addView(TextView(this).apply {
+            text = "Version $versionName"
+            textSize = 13f
+            setTextColor(Color.rgb(100, 110, 122))
+            gravity = Gravity.CENTER
+            setPadding(0, px(4), 0, px(8))
+        }, LinearLayout.LayoutParams(-1, -2))
+        container.addView(TextView(this).apply {
+            text = subtitle
+            textSize = 15f
+            setTextColor(Color.rgb(35, 45, 58))
+            gravity = Gravity.CENTER
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, px(4), 0, px(8))
+        }, LinearLayout.LayoutParams(-1, -2))
+        if (notes.isNotBlank()) {
+            container.addView(TextView(this).apply {
+                text = "What's new\n$notes"
+                textSize = 14f
+                setTextColor(Color.rgb(75, 85, 98))
+                setPadding(0, px(4), 0, px(12))
+            }, LinearLayout.LayoutParams(-1, -2))
+        }
+        if (showProgress) {
+            websiteDownloadProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                isIndeterminate = true
+                max = 100
+            }
+            container.addView(websiteDownloadProgressBar, LinearLayout.LayoutParams(-1, px(8)).apply {
+                topMargin = px(8)
+                bottomMargin = px(8)
+            })
+            websiteDownloadProgressLabel = TextView(this).apply {
+                text = "Preparing download…"
+                textSize = 13f
+                setTextColor(Color.rgb(75, 85, 98))
+                gravity = Gravity.CENTER
+            }
+            container.addView(websiteDownloadProgressLabel, LinearLayout.LayoutParams(-1, -2))
+        }
+        return container
+    }
+
+    private fun showWebsiteDownloadProgress(release: JSONObject) {
+        val versionName = release.optString("version_name", "latest version")
+        val content = buildWebsiteUpdateCard(
+            versionName, "Downloading update", "Workly India is downloading the update. Keep the app open.",
+            showProgress = true
+        )
+        websiteDownloadDialog = AlertDialog.Builder(this)
+            .setView(content)
+            .setCancelable(false)
+            .create()
+        websiteDownloadDialog?.show()
+        websiteDownloadDialog?.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.90f).toInt(),
+            android.view.WindowManager.LayoutParams.WRAP_CONTENT
+        )
+        monitorWebsiteDownloadProgress()
+    }
+
+    private fun monitorWebsiteDownloadProgress() {
+        activityScope.launch {
+            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            while (websiteDownloadId != -1L && websiteDownloadDialog?.isShowing == true) {
+                try {
+                    manager.query(DownloadManager.Query().setFilterById(websiteDownloadId)).use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                            val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                            if (total > 0L) {
+                                val percent = ((downloaded * 100L) / total).toInt().coerceIn(0, 100)
+                                websiteDownloadProgressBar?.isIndeterminate = false
+                                websiteDownloadProgressBar?.progress = percent
+                                websiteDownloadProgressLabel?.text = "$percent% downloaded  •  ${android.text.format.Formatter.formatShortFileSize(this@MainActivity, downloaded)} / ${android.text.format.Formatter.formatShortFileSize(this@MainActivity, total)}"
+                            } else {
+                                websiteDownloadProgressLabel?.text = "Downloading… ${android.text.format.Formatter.formatShortFileSize(this@MainActivity, downloaded)}"
+                            }
+                        }
+                    }
+                } catch (error: Exception) {
+                    android.util.Log.w("WorklyAppUpdate", "Could not read APK download progress", error)
+                }
+                delay(500)
+            }
+        }
+    }
+
+    private fun showWebsiteInstallReadyDialog(release: JSONObject?) {
+        if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
+        val versionName = release?.optString("version_name", "new version") ?: "new version"
+        val mandatory = BuildConfig.VERSION_CODE < (release?.optInt("min_supported_version_code", 1) ?: 1)
+        val content = buildWebsiteUpdateCard(
+            versionName, "Download complete", "The update is ready. Tap Install now to open Android's secure installer.",
+            showProgress = false
+        )
+        val builder = AlertDialog.Builder(this)
+            .setView(content)
+            .setCancelable(false)
+            .setPositiveButton("Install now") { dialog, _ ->
+                dialog.dismiss()
+                continueWebsiteInstallIfAllowed()
+            }
+        if (!mandatory) builder.setNegativeButton("Later", null)
         builder.show()
     }
 
@@ -1418,7 +1559,7 @@ class MainActivity : Activity() {
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             websiteDownloadRelease = release
             websiteDownloadId = manager.enqueue(request)
-            Toast.makeText(this, "Update download started.", Toast.LENGTH_SHORT).show()
+            showWebsiteDownloadProgress(release)
         } catch (error: Exception) {
             android.util.Log.e("WorklyAppUpdate", "Could not start APK download", error)
             Toast.makeText(this, "Could not download the update. Please try again.", Toast.LENGTH_LONG).show()
