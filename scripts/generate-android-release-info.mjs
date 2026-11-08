@@ -11,7 +11,7 @@ let generatedFrom = "checked-in-fallback";
 
 try {
   const properties = await readFile(propertiesPath, "utf8");
-  const values = Object.fromEntries(properties.split(/\\r?\\n/).map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => {
+  const values = Object.fromEntries(properties.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => {
     const index = line.indexOf("=");
     return index < 0 ? [line, ""] : [line.slice(0, index).trim(), line.slice(index + 1).trim()];
   }));
@@ -27,8 +27,8 @@ try {
   if (error?.code !== "ENOENT") throw error;
   try {
     const gradle = await readFile(gradlePath, "utf8");
-    const parsedCode = Number(gradle.match(/versionCode\\s*=\\s*(\\d+)/)?.[1]);
-    const parsedName = gradle.match(/versionName\\s*=\\s*"([^"]+)"/)?.[1];
+    const parsedCode = Number(gradle.match(/versionCode\s*=\s*(\d+)/)?.[1]);
+    const parsedName = gradle.match(/versionName\s*=\s*"([^"]+)"/)?.[1];
     if (Number.isInteger(parsedCode) && parsedCode > 0 && parsedName) {
       versionCode = parsedCode;
       versionName = parsedName;
@@ -50,5 +50,5 @@ const metadata = {
 };
 
 await mkdir(resolve("public"), { recursive: true });
-await writeFile(resolve("public/android-app-build-info.json"), JSON.stringify(metadata, null, 2) + "\\n");
+await writeFile(resolve("public/android-app-build-info.json"), JSON.stringify(metadata, null, 2) + "\n");
 console.log("Generated Android release metadata:", versionName, "(" + versionCode + ")");
