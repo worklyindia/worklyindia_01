@@ -2383,7 +2383,7 @@ serve(async req => {
           status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\\s+/i, '');
+      const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
       if (!bearer) {
         return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
           status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
