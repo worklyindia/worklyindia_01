@@ -9,4 +9,8 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
+    <style name="WorklyBottomSheetAnimation" parent="@android:style/Animation.Dialog">
+        <item name="android:windowEnterAnimation">@anim/workly_sheet_enter</item>
+        <item name="android:windowExitAnimation">@anim/workly_sheet_exit</item>
+    </style>
 </resources>
