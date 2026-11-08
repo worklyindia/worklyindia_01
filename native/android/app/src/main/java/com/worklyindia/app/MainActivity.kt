@@ -188,9 +188,20 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_WEBSITE_INSTALL) {
-            // Leave the pending-install marker intact. onResume compares the
-            // installed version with the requested version and shows either
-            // "Update completed" or a retry prompt after the installer closes.
+            val targetVersion = websiteUpdatePrefs.getLong(KEY_TARGET_VERSION_CODE, 0L)
+            if (targetVersion > 0L && installedPackageVersionCode() >= targetVersion) {
+                clearPendingWebsiteUpdateState()
+                showWebsiteUpdateCompletedDialog()
+            } else if (resultCode == RESULT_CANCELED) {
+                // Only report a failed/cancelled install when Android explicitly
+                // returns cancellation. Merely resuming the Activity is not proof
+                // that installation failed (OEM installers can recreate/resume it).
+                websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
+                if (pendingWebsiteInstallUri != null) {
+                    Toast.makeText(this, "Update was cancelled. Tap Install now to retry.", Toast.LENGTH_LONG).show()
+                    showWebsiteInstallReadyDialog(websiteDownloadRelease)
+                }
+            }
             return
         }
         if (requestCode == REQUEST_APP_UPDATE) {
@@ -618,9 +629,11 @@ class MainActivity : Activity() {
         val targetVersion = websiteUpdatePrefs.getLong(KEY_TARGET_VERSION_CODE, 0L)
         val installPromptWasActive = websiteUpdatePrefs.getBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
         if (targetVersion > 0L && installPromptWasActive) {
+            // Recover the pending APK without claiming that installation failed.
+            // The installer result callback above handles an explicit cancellation;
+            // this path also covers OEM installer/activity recreation.
             websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
-            if (pendingWebsiteInstallUri != null) {
-                Toast.makeText(this, "Installation was not completed. Tap Install now to retry.", Toast.LENGTH_LONG).show()
+            if (pendingWebsiteInstallUri != null && !websiteUpdateDialogVisible) {
                 showWebsiteInstallReadyDialog(websiteDownloadRelease)
             }
         } else if (targetVersion > BuildConfig.VERSION_CODE.toLong() &&
