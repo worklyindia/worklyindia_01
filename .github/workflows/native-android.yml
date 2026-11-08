@@ -3,6 +3,12 @@ name: Native Android
 # Includes mobile login, password recovery and native 2FA verification.
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "What's new in this APK (one update-specific changelog)"
+        required: true
+        type: string
   push:
     paths:
       - "native/android/**"
@@ -28,6 +34,7 @@ jobs:
         id: release-metadata
         env:
           WORKFLOW_RUN_NUMBER: ${{ github.run_number }}
+          RELEASE_NOTES_INPUT: ${{ github.event.inputs.release_notes }}
         run: |
           python - <<'PY'
           import os
@@ -44,7 +51,9 @@ jobs:
           version_name = values.get("versionName", "2.4.3").split("+build.", 1)[0]
           version_code = 100000 + run_number
           min_supported = int(values.get("minSupportedVersionCode", "1"))
-          release_notes = values.get("releaseNotes", "Performance improvements and bug fixes.")
+          release_notes = os.environ.get("RELEASE_NOTES_INPUT", "").strip() or values.get("releaseNotes", "Performance improvements and bug fixes.")
+          if not release_notes:
+              raise SystemExit("What's new is required for every Android APK release.")
 
           if version_code <= min_supported:
               raise SystemExit("Generated versionCode must be greater than minSupportedVersionCode.")
