@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Bell, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -145,9 +145,6 @@ export default function AndroidAppUpdates() {
                   {!latest.is_published
                     ? <Button className="w-full" onClick={() => void publishLatest()} disabled={publishing}><Send className="mr-2 h-4 w-4" />{publishing ? "Publishing..." : "Publish to All Users"}</Button>
                     : <Button variant="destructive" className="w-full" onClick={() => void unpublishRelease(latest)} disabled={publishing}>{publishing ? "Updating..." : "Unpublish Release"}</Button>}
-                  <Button variant="outline" className="w-full" onClick={() => navigate("/owner-portal/android-update-notification")}>
-                    <Bell className="mr-2 h-4 w-4" />Edit Update Notification
-                  </Button>
                 </div>
               </>}
           </CardContent>
