@@ -88,10 +88,11 @@ const OwnerPortal = () => {
           .select('role')
           .eq('user_id', user.id)
           .maybeSingle();
-        
-        if (!error && data && ['admin', 'owner'].includes(data.role)) {
-          setAdminRole(data.role || '');
-        }
+
+        if (error) throw error;
+        // The signed-in user's database role is the source of truth.
+        // Always clear stale roles when the account has no valid admin row.
+        setAdminRole(data && ['admin', 'owner'].includes(data.role) ? data.role : '');
       } catch (error) {
         console.error('Error checking admin status:', error);
         setAdminRole('');
@@ -576,7 +577,9 @@ const OwnerPortal = () => {
                  <div className="space-y-1">
                   {section.items.map((item, itemIndex) => {
                     if (!isPaymentEventsMenuVisible(item.path, isOwner && adminRole === "owner")) return null;
-                    const hasPermission = menuPermissions[item.path] ?? false;
+                    // Platform owners receive access to every Owner Portal menu item,
+                    // including newer routes that have not yet been added to ROUTE_PERMISSIONS.
+                    const hasPermission = adminRole === 'owner' || menuPermissions[item.path] === true;
                     const isLocked = !hasPermission;
                     
                     return (
