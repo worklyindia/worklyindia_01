@@ -39,6 +39,8 @@ import android.widget.TextView
 import android.view.Gravity
 import android.widget.Toast
 import android.app.AlertDialog
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
@@ -92,6 +94,8 @@ class MainActivity : Activity() {
     private var websiteDownloadRelease: JSONObject? = null
     private var websiteDownloadDialog: android.app.Dialog? = null
     private var websiteInstallDialogVisible = false
+    private var biometricAuthenticatedForForeground = false
+    private var biometricPromptShowing = false
     // Avoid repeating native token registration on every WebView navigation.
     private var autoPushRegistrationUserId: String? = null
     private var pendingNativePushSession: NativeSession? = null
@@ -975,7 +979,56 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         return runtimeGranted && NotificationManagerCompat.from(this).areNotificationsEnabled()
     }
 
+    private fun biometricPreferences() = getSharedPreferences("workly_app_security", Context.MODE_PRIVATE)
+
+    private fun isBiometricLockEnabled(): Boolean = biometricPreferences().getBoolean("biometric_lock_enabled", false)
+
+    private fun showBiometricLockPrompt(isSetup: Boolean) {
+        if (biometricPromptShowing || isFinishing || isDestroyed) return
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+            if (isSetup) biometricPreferences().edit().putBoolean("biometric_lock_enabled", false).apply()
+            Toast.makeText(this, "Set up a screen lock or fingerprint/face unlock in Android settings first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                biometricPromptShowing = false
+                biometricAuthenticatedForForeground = true
+                if (isSetup) Toast.makeText(this@MainActivity, "App lock enabled.", Toast.LENGTH_SHORT).show()
+            }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                biometricPromptShowing = false
+                if (isSetup) biometricPreferences().edit().putBoolean("biometric_lock_enabled", false).apply()
+                else finish()
+            }
+        })
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock Workly India")
+            .setSubtitle("Confirm your identity to continue")
+            .setAllowedAuthenticators(authenticators)
+            .build()
+        biometricPromptShowing = true
+        prompt.authenticate(promptInfo)
+    }
+
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun isBiometricLockEnabled(): Boolean = this@MainActivity.isBiometricLockEnabled()
+
+        @JavascriptInterface
+        fun setBiometricLockEnabled(enabled: Boolean): Boolean {
+            if (enabled) {
+                val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                if (BiometricManager.from(this@MainActivity).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) return false
+                biometricPreferences().edit().putBoolean("biometric_lock_enabled", true).apply()
+                runOnUiThread { showBiometricLockPrompt(true) }
+            } else {
+                biometricPreferences().edit().putBoolean("biometric_lock_enabled", false).apply()
+                biometricAuthenticatedForForeground = true
+            }
+            return true
+        }
         @JavascriptInterface
         fun openExternalUrl(rawUrl: String): Boolean {
             return try {
@@ -1462,6 +1515,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     override fun onResume() {
         super.onResume()
         registerNetworkListener()
+        if (isBiometricLockEnabled() && !biometricAuthenticatedForForeground) showBiometricLockPrompt(false)
         if (::webView.isInitialized) syncWebsiteSession()
         if (pendingWebsiteInstallUri != null) {
             val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
@@ -1483,6 +1537,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     override fun onPause() {
+        if (isBiometricLockEnabled()) biometricAuthenticatedForForeground = false
         // Stop network-quality tracking immediately when Workly India is no longer visible.
         networkCallback?.let { callback ->
             runCatching {
