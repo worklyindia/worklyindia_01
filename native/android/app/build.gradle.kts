@@ -63,6 +63,8 @@ dependencies {
     // Official Google Play in-app update flow (flexible updates). 
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.15.0")
+    // Native pull-to-refresh gesture for the embedded Workly WebView.
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     // Native fingerprint, face and device-credential app lock.
     implementation("androidx.biometric:biometric:1.1.0")
     // On-device OCR for scanned resume pages; no image upload is required.
