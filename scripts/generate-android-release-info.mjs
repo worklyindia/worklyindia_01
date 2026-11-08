@@ -8,8 +8,8 @@ let generatedFrom = "web-build-fallback";
 
 try {
   const gradle = await readFile(gradlePath, "utf8");
-  const parsedCode = Number(gradle.match(/versionCode\\s*=\\s*(\\d+)/)?.[1]);
-  const parsedName = gradle.match(/versionName\\s*=\\s*"([^"]+)"/)?.[1];
+  const parsedCode = Number(gradle.match(/versionCode\s*=\s*(\d+)/)?.[1]);
+  const parsedName = gradle.match(/versionName\s*=\s*"([^"]+)"/)?.[1];
   if (Number.isInteger(parsedCode) && parsedCode > 0 && parsedName) {
     versionCode = parsedCode;
     versionName = parsedName;
