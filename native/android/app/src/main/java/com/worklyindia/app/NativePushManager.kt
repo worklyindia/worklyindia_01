@@ -212,7 +212,27 @@ object NativePushManager {
         createChannel(context)
         val title = data["title"]?.takeIf { it.isNotBlank() } ?: "Workly India"
         val body = data["body"]?.takeIf { it.isNotBlank() } ?: "You have a new update."
-        val notificationUrl = data["url"]?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
+        // Resolve only Workly-owned destinations. Push payloads can contain an
+        // absolute URL, a relative route, or entity IDs; never allow an external
+        // URL to be opened inside the authenticated app WebView.
+        fun trustedNotificationUrl(raw: String?): String? {
+            if (raw.isNullOrBlank()) return null
+            val parsed = runCatching {
+                val candidate = if (raw.startsWith("/")) Uri.parse("https://worklyindia.devs.surf$raw") else Uri.parse(raw)
+                candidate.takeIf {
+                    it.scheme == "https" &&
+                    it.host.equals("worklyindia.devs.surf", ignoreCase = true) &&
+                    candidate.userInfo == null
+                }?.toString()
+            }.getOrNull()
+            return parsed
+        }
+        val notificationUrl = sequenceOf("url", "action_url", "actionUrl", "deep_link", "deepLink", "link")
+            .mapNotNull { key -> trustedNotificationUrl(data[key]) }
+            .firstOrNull()
+            ?: data["job_id"]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) }
+                ?.let { "https://worklyindia.devs.surf/job/${Uri.encode(it)}" }
+            ?: "https://worklyindia.devs.surf/notifications"
         val tag = data["tag"]?.takeIf { it.isNotBlank() } ?: "workly-${System.currentTimeMillis()}"
 
         fun activityPendingIntent(url: String?, requestCode: Int): PendingIntent {
