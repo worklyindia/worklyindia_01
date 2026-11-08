@@ -1542,19 +1542,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             notes,
             showProgress = false
         )
-        val builder = AlertDialog.Builder(updateDialogContext())
-            .setView(content)
-            .setCancelable(false)
-            .setPositiveButton("Download update") { dialog, _ ->
-                websiteUpdateDialogVisible = false
-                dialog.dismiss()
-                downloadWebsiteUpdate(release)
-            }
-        if (!mandatory) builder.setNegativeButton("Later", null)
-        val dialog = builder.create()
-        dialog.setOnDismissListener { websiteUpdateDialogVisible = false }
-        dialog.show()
-        styleWebsiteUpdateDialog(dialog)
+        showWebsiteUpdateBottomSheet(
+            content = content,
+            primaryLabel = "Download update",
+            secondaryLabel = if (mandatory) null else "Later",
+            onPrimary = { downloadWebsiteUpdate(release) },
+            onSecondary = { },
+            onDismiss = { websiteUpdateDialogVisible = false }
+        )
     }
 
     private fun buildWebsiteUpdateCard(
@@ -1795,7 +1790,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         primaryLabel: String,
         secondaryLabel: String?,
         onPrimary: () -> Unit,
-        onSecondary: () -> Unit
+        onSecondary: () -> Unit,
+        onDismiss: () -> Unit = { websiteInstallDialogVisible = false }
     ) {
         val density = resources.displayMetrics.density
         fun px(value: Int) = (value * density).toInt()
@@ -1876,7 +1872,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         dialog.setContentView(sheet)
         dialog.setCancelable(true)
         dialog.setCanceledOnTouchOutside(true)
-        dialog.setOnDismissListener { websiteInstallDialogVisible = false }
+        dialog.setOnDismissListener { onDismiss() }
         dialog.window?.apply {
             setBackgroundDrawableResource(android.R.color.transparent)
             setDimAmount(0.58f)
@@ -1891,16 +1887,19 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             }
         }
         var downY = 0f
-        handle.setOnTouchListener { _, event ->
+        val dismissOnSwipeDown = android.view.View.OnTouchListener { _, event ->
             when (event.action) {
                 android.view.MotionEvent.ACTION_DOWN -> { downY = event.rawY; true }
                 android.view.MotionEvent.ACTION_UP -> {
-                    if (event.rawY - downY > px(45)) dialog.dismiss()
+                    val draggedDown = event.rawY - downY
+                    if (draggedDown > px(45)) dialog.dismiss()
                     true
                 }
                 else -> true
             }
         }
+        handle.setOnTouchListener(dismissOnSwipeDown)
+        topRow.setOnTouchListener(dismissOnSwipeDown)
         dialog.show()
         dialog.window?.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT)
     }
