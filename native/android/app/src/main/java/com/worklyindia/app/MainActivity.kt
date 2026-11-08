@@ -207,6 +207,12 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT
         )
         webView.setBackgroundColor(android.graphics.Color.WHITE)
+        // Keep the visible WebView renderer at foreground importance to reduce
+        // renderer eviction while users navigate the app. Allow Android to
+        // lower its priority when the WebView is not visible.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, true)
+        }
         // Enable WebAuthn in the embedded WebView so Supabase's browser passkey
         // ceremonies can invoke Android Credential Manager / Google Password Manager.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_AUTHENTICATION)) {
