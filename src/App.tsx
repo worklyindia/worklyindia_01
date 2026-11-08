@@ -1,7 +1,7 @@
 import { ConfirmDialogHost } from '@/lib/confirmDialog';
 import { useTrackWorklyChatReturn } from "@/lib/worklyChatReturn";
 
-import React, { useEffect, Suspense } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { lazyRetry } from "@/lib/chunkErrorRecovery";
 import { Routes, Route, useNavigate, Navigate, useLocation } from "react-router-dom";
 import { navigationMiddleware } from "@/utils/navigationMiddleware";
@@ -356,6 +356,25 @@ const RouteLoadingFallback = () => (
 
 const AppContent = () => {
   const navigate = useNavigate();
+  const [dataSaverEnabled, setDataSaverEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('workly-data-saver') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const syncDataSaver = () => {
+      try {
+        setDataSaverEnabled(localStorage.getItem('workly-data-saver') === 'true');
+      } catch {
+        setDataSaverEnabled(false);
+      }
+    };
+    window.addEventListener('workly-data-saver-change', syncDataSaver);
+    return () => window.removeEventListener('workly-data-saver-change', syncDataSaver);
+  }, []);
   const { loading: authLoading, profileLoading, user } = useAuth();
   const isAppReady = useAppReady(authLoading, profileLoading, user);
   useTrackWorklyChatReturn();
@@ -368,7 +387,7 @@ const AppContent = () => {
     const connection = (navigator as Navigator & {
       connection?: { saveData?: boolean; effectiveType?: string };
     }).connection;
-    if (connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") {
+    if (dataSaverEnabled || connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") {
       return;
     }
 
@@ -381,7 +400,7 @@ const AppContent = () => {
     }, 1200);
 
     return () => window.clearTimeout(timer);
-  }, [isAppReady]);
+  }, [isAppReady, dataSaverEnabled]);
   // Activate the shared Android bridge so the native shell and website SPA
   // respond to the same navigation, keyboard, connectivity and system-bar state.
   useNativeStatusBar({ color: "#ffffff", style: "dark" });
