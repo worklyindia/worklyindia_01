@@ -1813,6 +1813,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        lateinit var dialog: android.app.Dialog
         val handle = TextView(this).apply {
             text = "━━━━━━"
             textSize = 13f
@@ -1871,7 +1872,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             topMargin = px(8)
         })
 
-        val dialog = android.app.Dialog(this)
+        dialog = android.app.Dialog(this)
         dialog.setContentView(sheet)
         dialog.setCancelable(true)
         dialog.setCanceledOnTouchOutside(true)
