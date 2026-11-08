@@ -692,6 +692,30 @@ class MainActivity : Activity() {
         }.start()
     }
 
+private fun completeNativePushPermissionFlow(granted: Boolean) {
+    val session = pendingNativePushSession
+    val firebaseConfig = pendingNativePushFirebaseConfig
+    pendingNativePushSession = null
+    pendingNativePushFirebaseConfig = null
+    if (!granted || session == null || firebaseConfig == null) {
+        webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('workly:native-notification-result', {detail:{granted:" + granted + ",registered:false}}));",
+            null
+        )
+        return
+    }
+    activityScope.launch(Dispatchers.IO) {
+        val registered = NativePushManager.register(this@MainActivity, session, firebaseConfig)
+        runOnUiThread {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('workly:native-notification-result', {detail:{granted:true,registered:" + registered + "}}));",
+                null
+            )
+        }
+    }
+}
+
+
     private fun registerSignedInAndroidPush(session: NativeSession) {
         if (autoPushRegistrationUserId == session.userId) return
         autoPushRegistrationUserId = session.userId
@@ -1138,28 +1162,6 @@ class MainActivity : Activity() {
             }
         }
 
-        private fun completeNativePushPermissionFlow(granted: Boolean) {
-            val session = pendingNativePushSession
-            val firebaseConfig = pendingNativePushFirebaseConfig
-            pendingNativePushSession = null
-            pendingNativePushFirebaseConfig = null
-            if (!granted || session == null || firebaseConfig == null) {
-                webView.evaluateJavascript(
-                    "window.dispatchEvent(new CustomEvent('workly:native-notification-result', {detail:{granted:" + granted + ",registered:false}}));",
-                    null
-                )
-                return
-            }
-            activityScope.launch(Dispatchers.IO) {
-                val registered = NativePushManager.register(this@MainActivity, session, firebaseConfig)
-                runOnUiThread {
-                    webView.evaluateJavascript(
-                        "window.dispatchEvent(new CustomEvent('workly:native-notification-result', {detail:{granted:true,registered:" + registered + "}}));",
-                        null
-                    )
-                }
-            }
-        }
 
         @JavascriptInterface
         fun requestNotificationPermission(): Boolean {
