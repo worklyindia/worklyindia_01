@@ -13,8 +13,10 @@ type Release = {
   published_at: string | null; is_published: boolean; created_at: string;
 };
 
-const formatSize = (n: number) => n >= 1024 * 1024
-  ? (n / 1_000_000).toFixed(2) + " MB" : (n / 1_000).toFixed(1) + " KB";
+const formatSize = (n: number) => n >= 1_000_000
+  ? (n / 1_000_000).toFixed(2) + " MB"
+  : (n / 1_000).toFixed(2) + " KB";
+const formatExactBytes = (n: number) => new Intl.NumberFormat("en-IN").format(n) + " bytes";
 
 export default function AndroidAppUpdates() {
   const navigate = useNavigate();
@@ -218,7 +220,7 @@ export default function AndroidAppUpdates() {
               : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">App version</p><p className="break-all text-xl font-semibold">{latest.version_name}</p></div>
                 <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="break-all text-xl font-semibold tabular-nums">{latest.version_code}</p></div>
-                <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">APK size</p><p className="text-base font-semibold">{formatSize(latest.apk_size_bytes)}</p></div>
+                <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">APK size (same APK as workflow)</p><p className="text-base font-semibold tabular-nums">{formatSize(latest.apk_size_bytes)}</p><p className="mt-1 text-xs text-muted-foreground tabular-nums">{formatExactBytes(latest.apk_size_bytes)}</p></div>
                 <div className="min-w-0 rounded-lg border p-3 sm:col-span-2"><p className="text-xs text-muted-foreground">What's new</p><p className="break-words whitespace-pre-wrap text-sm font-medium">{latest.release_notes?.trim() || "No release notes provided for this version."}</p></div>
               </div>}
           </CardContent>
@@ -240,7 +242,7 @@ export default function AndroidAppUpdates() {
                         <p className="font-semibold">Workly India v{release.version_name}</p>
                         <Badge variant={release.is_published ? "default" : "secondary"}>{release.is_published ? "Public" : "Unpublished"}</Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground">Version code {release.version_code} · {formatSize(release.apk_size_bytes)}</p>
+                      <p className="text-xs text-muted-foreground">Version code {release.version_code} · {formatSize(release.apk_size_bytes)}</p><p className="text-xs text-muted-foreground tabular-nums">{formatExactBytes(release.apk_size_bytes)}</p>
                       <p className="text-xs text-muted-foreground">Uploaded: {new Date(release.created_at || Date.now()).toLocaleString()}</p>
                       {release.release_notes && <p className="break-words whitespace-pre-wrap pt-1 text-sm text-muted-foreground">{release.release_notes}</p>}
                     </div>
