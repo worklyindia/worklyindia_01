@@ -15,6 +15,8 @@ export interface WorklyAndroidBridge {
   hideKeyboard(): void;
   vibrate(milliseconds: number): void;
   exitApp(): void;
+  isBiometricLockEnabled?(): boolean;
+  setBiometricLockEnabled?(enabled: boolean): boolean;
 }
 
 type WorklyWindow = Window & { WorklyAndroid?: WorklyAndroidBridge };
