@@ -21,7 +21,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="Find your next opportunity"
+        android:text="Latest jobs at your fingertips"
         android:textColor="#172B4D"
         android:textSize="16sp"
         android:textStyle="bold"
@@ -31,7 +31,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="3dp"
-        android:text="Explore jobs across India"
+        android:text="Tap below to browse new opportunities"
         android:textColor="#64748B"
         android:textSize="12sp" />
 
@@ -45,7 +45,7 @@
         android:paddingTop="7dp"
         android:paddingBottom="7dp"
         android:background="@drawable/workly_widget_button"
-        android:text="Explore Jobs  →"
+        android:text="View Latest Jobs  →"
         android:textColor="#FFFFFF"
         android:textSize="12sp"
         android:textStyle="bold" />
