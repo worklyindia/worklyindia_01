@@ -4,7 +4,9 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:windowBackground">@drawable/workly_launch_background</item>
         <item name="android:windowSplashScreenBackground">#F4F9FF</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_workly_launcher_image</item>
+        <!-- Use the inset, circular launcher foreground instead of the raw square artwork.
+             Android's system splash scales/crops this icon inside its fixed splash mask. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/workly_launcher_foreground</item>
         <item name="android:windowSplashScreenAnimationDuration">500</item>
         <item name="android:colorAccent">#159F78</item>
         <item name="android:statusBarColor">#F4F9FF</item>
