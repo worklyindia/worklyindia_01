@@ -20,7 +20,7 @@ on:
       - ".github/workflows/native-android.yml"
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -200,45 +200,33 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload APK to Cloudflare R2 and save an unpublished draft
-        if: success() && github.event_name != 'pull_request'
+      - name: Publish APK as a GitHub Release asset and save an unpublished Supabase draft
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-          R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
-          APK_FILE: native/android/app/build/outputs/Workly-India.apk
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
+          APK_FILE: native/android/app/build/outputs/Workly-India.apk
         run: |
-          python -m pip install --quiet boto3 requests
+          set -euo pipefail
+          python -m pip install --quiet requests
           python - <<'PY'
-          import os, pathlib
+          import os, pathlib, requests, subprocess
           from urllib.parse import quote
-          import boto3
-          import requests
-          from botocore.config import Config
 
           base = os.environ["SUPABASE_URL"].rstrip("/")
           service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-          account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
-          access_key = os.environ.get("R2_ACCESS_KEY_ID", "")
-          secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "")
-          bucket = os.environ.get("R2_BUCKET_NAME", "")
-          public_base = os.environ["R2_PUBLIC_BASE_URL"].rstrip("/")
+          token = os.environ.get("GH_TOKEN", "")
+          repo = os.environ["GITHUB_REPOSITORY"]
           missing = [name for name, value in {
               "SUPABASE_SERVICE_ROLE_KEY": service_key,
-              "CLOUDFLARE_ACCOUNT_ID": account_id,
-              "R2_ACCESS_KEY_ID": access_key,
-              "R2_SECRET_ACCESS_KEY": secret_key,
-              "R2_BUCKET_NAME": bucket,
+              "GITHUB_TOKEN": token,
           }.items() if not value]
           if missing:
               raise SystemExit("Missing GitHub Actions secret(s): " + ", ".join(missing))
 
-          headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
           values = {}
           for line in pathlib.Path("android-release.properties").read_text().splitlines():
               if "=" in line and not line.lstrip().startswith("#"):
@@ -250,33 +238,35 @@ jobs:
           notes = values.get("releaseNotes", "")
           apk = pathlib.Path(os.environ["APK_FILE"])
           if not apk.is_file() or apk.stat().st_size == 0:
-              raise SystemExit("Signed APK is missing or empty; refusing to upload.")
-          object_path = f"releases/{code}-{os.environ['GITHUB_SHA'][:12]}.apk"
-          endpoint = f"https://{account_id}.r2.cloudflarestorage.com"
-          client = boto3.client(
-              "s3",
-              endpoint_url=endpoint,
-              aws_access_key_id=access_key,
-              aws_secret_access_key=secret_key,
-              region_name="auto",
-              config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
-          )
-          with apk.open("rb") as stream:
-              client.put_object(
-                  Bucket=bucket,
-                  Key=object_path,
-                  Body=stream,
-                  ContentLength=apk.stat().st_size,
-                  ContentType="application/vnd.android.package-archive",
-                  ContentDisposition='attachment; filename="Workly-India.apk"',
-                  CacheControl="public, max-age=31536000, immutable",
-              )
-          public_url = f"{public_base}/{quote(object_path, safe='/')}"
-          check = requests.head(public_url, timeout=30, allow_redirects=True)
-          if check.status_code not in (200, 206):
-              raise SystemExit(f"R2 object upload completed but public URL check failed ({check.status_code}). Check bucket public access.")
-          # Store the absolute public URL. Supabase remains the release metadata database;
-          # APK bytes are served from Cloudflare R2, not Supabase Storage.
+              raise SystemExit("Signed APK is missing or empty; refusing to publish.")
+          tag = f"android-v{code}"
+          asset_name = "Workly-India.apk"
+
+          # GitHub Releases provide a stable public asset URL; Actions artifacts are
+          # intentionally not used because they expire and may require authentication.
+          subprocess.run([
+              "gh", "release", "create", tag, f"{apk}#{asset_name}",
+              "--repo", repo, "--title", f"Workly India v{name} (build {code})",
+              "--notes", notes or f"Workly India Android release v{name}",
+          ], check=True, env={**os.environ, "GH_TOKEN": token})
+
+          api = f"https://api.github.com/repos/{repo}"
+          gh_headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          release_response = requests.get(f"{api}/releases/tags/{tag}", headers=gh_headers, timeout=30)
+          release_response.raise_for_status()
+          release = release_response.json()
+          asset = next((item for item in release.get("assets", []) if item.get("name") == asset_name), None)
+          if not asset or asset.get("state") != "uploaded":
+              raise SystemExit("GitHub Release asset was not uploaded successfully.")
+          public_url = asset.get("browser_download_url")
+          if not public_url or not public_url.startswith("https://github.com/"):
+              raise SystemExit("GitHub did not return a valid public APK download URL.")
+
+          headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
           row = {
               "version_code": code,
               "version_name": name,
@@ -300,20 +290,55 @@ jobs:
                   f"{base}/rest/v1/android_app_releases",
                   headers={**headers, "Content-Type": "application/json"},
                   params={"id": f"eq.{rows[0]['id']}"},
-                  json=row,
-                  timeout=30,
+                  json=row, timeout=30,
               )
           else:
               saved = requests.post(
                   f"{base}/rest/v1/android_app_releases",
                   headers={**headers, "Content-Type": "application/json", "Prefer": "return=representation"},
-                  json=row,
-                  timeout=30,
+                  json=row, timeout=30,
               )
           if saved.status_code not in (200, 201, 204):
-              raise SystemExit(f"Draft release save failed ({saved.status_code}): {saved.text[:800]}")
-          print(f"Uploaded Workly India v{name} (code {code}) to Cloudflare R2 as an UNPUBLISHED draft.")
-          print(f"APK size: {apk.stat().st_size:,} bytes · Public URL verified · Owner approval required before publishing.")
+              raise SystemExit(f"Supabase release metadata save failed ({saved.status_code}): {saved.text[:800]}")
+
+          # Retain the newest draft and the currently public release. Remove older
+          # metadata and their GitHub Release assets; legacy R2 objects are left untouched.
+          listing = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "id,version_code,apk_path,is_published", "order": "version_code.desc", "limit": "200"},
+              timeout=30,
+          )
+          listing.raise_for_status()
+          releases = listing.json()
+          newest = releases[0] if releases else None
+          public = next((item for item in releases if item.get("is_published")), None)
+          keep_ids = {item["id"] for item in (newest, public) if item}
+          obsolete = [item for item in releases if item["id"] not in keep_ids]
+          for old in obsolete:
+              deleted = requests.delete(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"id": f"eq.{old['id']}"},
+                  timeout=30,
+              )
+              if deleted.status_code not in (200, 204):
+                  raise SystemExit(f"Could not remove obsolete release metadata: {deleted.status_code} {deleted.text[:400]}")
+              old_url = old.get("apk_path", "")
+              prefix = f"https://github.com/{repo}/releases/download/"
+              if old_url.startswith(prefix):
+                  old_tag = old_url[len(prefix):].split("/", 1)[0]
+                  if old_tag.startswith("android-v") and old_tag != tag:
+                      old_release = requests.get(f"{api}/releases/tags/{quote(old_tag, safe='')}", headers=gh_headers, timeout=30)
+                      if old_release.status_code == 200:
+                          release_id = old_release.json()["id"]
+                          remove = requests.delete(f"{api}/releases/{release_id}", headers=gh_headers, timeout=30)
+                          if remove.status_code not in (204, 404):
+                              raise SystemExit(f"Could not delete obsolete GitHub Release {old_tag}: {remove.status_code}")
+                          requests.delete(f"{api}/git/refs/tags/{quote(old_tag, safe='')}", headers=gh_headers, timeout=30)
+          print(f"Published GitHub Release asset: {public_url}")
+          print(f"Saved unpublished Supabase draft v{name} (code {code}); APK bytes stored only in GitHub Releases.")
+          print(f"Verified APK size: {apk.stat().st_size:,} bytes. Removed {len(obsolete)} obsolete release record(s).")
           PY
 
       - name: Add public release summary
