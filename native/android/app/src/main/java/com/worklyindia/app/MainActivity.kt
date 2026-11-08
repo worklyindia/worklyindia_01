@@ -99,6 +99,7 @@ class MainActivity : Activity() {
     private var awaitingInstallPermissionSettings = false
     private var websiteDownloadProgressBar: ProgressBar? = null
     private var websiteDownloadProgressLabel: TextView? = null
+    private val websiteUpdatePrefs by lazy { getSharedPreferences("website_update_state", MODE_PRIVATE) }
     private val isPlayStoreInstall: Boolean by lazy {
         runCatching {
             val installer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -122,9 +123,21 @@ class MainActivity : Activity() {
                 val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                 if (status == DownloadManager.STATUS_SUCCESSFUL) {
                     val uri = manager.getUriForDownloadedFile(completedId)
-                        ?: android.content.ContentUris.withAppendedId(Uri.parse("content://downloads/my_downloads"), completedId)
+                    if (uri == null) {
+                        websiteDownloadId = -1L
+                        runOnUiThread {
+                            websiteDownloadDialog?.dismiss()
+                            websiteDownloadDialog = null
+                            Toast.makeText(this@MainActivity, "Downloaded update could not be opened. Please download it again.", Toast.LENGTH_LONG).show()
+                        }
+                        return
+                    }
                     websiteDownloadId = -1L
                     pendingWebsiteInstallUri = uri
+                    websiteUpdatePrefs.edit()
+                        .putString(KEY_PENDING_APK_URI, uri.toString())
+                        .putLong(KEY_TARGET_VERSION_CODE, websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L)
+                        .apply()
                     runOnUiThread {
                         websiteDownloadDialog?.dismiss()
                         websiteDownloadDialog = null
@@ -155,6 +168,14 @@ class MainActivity : Activity() {
     @Deprecated("Android WebView file chooser result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_WEBSITE_INSTALL) {
+            // The package installer may return RESULT_CANCELED when the user
+            // backs out. Keep the APK URI so the user can safely retry.
+            if (resultCode != RESULT_OK) {
+                websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
+            }
+            return
+        }
         if (requestCode == REQUEST_APP_UPDATE) {
             if (resultCode != RESULT_OK) {
                 android.util.Log.i("WorklyAppUpdate", "In-app update flow was cancelled or failed: $resultCode")
@@ -174,6 +195,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         appUpdateManager = AppUpdateManagerFactory.create(this)
         appUpdateManager.registerListener(appUpdateListener)
+        pendingWebsiteInstallUri = websiteUpdatePrefs.getString(KEY_PENDING_APK_URI, null)?.let(Uri::parse)
         ContextCompat.registerReceiver(
             this, websiteDownloadReceiver,
             android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
@@ -523,6 +545,46 @@ class MainActivity : Activity() {
             webView.loadUrl(target)
         } else {
             showOfflineScreen()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (awaitingInstallPermissionSettings) {
+            awaitingInstallPermissionSettings = false
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+                continueWebsiteInstallIfAllowed()
+            } else if (pendingWebsiteInstallUri != null) {
+                Toast.makeText(this, "Allow Workly India to install updates, then tap Install now.", Toast.LENGTH_LONG).show()
+                showWebsiteInstallReadyDialog(websiteDownloadRelease)
+            }
+        }
+
+        val targetVersion = websiteUpdatePrefs.getLong(KEY_TARGET_VERSION_CODE, 0L)
+        val installPromptWasActive = websiteUpdatePrefs.getBoolean(KEY_INSTALL_PROMPT_ACTIVE, false)
+        if (targetVersion > 0L && installPromptWasActive) {
+            websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
+            val installedVersion = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    packageManager.getPackageInfo(packageName, 0).longVersionCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageManager.getPackageInfo(packageName, 0).versionCode.toLong()
+                }
+            }.getOrDefault(0L)
+
+            if (installedVersion >= targetVersion) {
+                websiteUpdatePrefs.edit()
+                    .remove(KEY_PENDING_APK_URI)
+                    .remove(KEY_TARGET_VERSION_CODE)
+                    .apply()
+                pendingWebsiteInstallUri = null
+                showWebsiteUpdateCompletedDialog()
+            } else if (pendingWebsiteInstallUri != null) {
+                Toast.makeText(this, "Installation was not completed. Tap Install now to retry.", Toast.LENGTH_LONG).show()
+                showWebsiteInstallReadyDialog(websiteDownloadRelease)
+            }
         }
     }
 
@@ -1462,7 +1524,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setPadding(0, px(4), 0, px(8))
         }, LinearLayout.LayoutParams(-1, -2))
-        if (notes.isNotBlank()) {
+        if (notes.isNotBlank() && !showProgress) {
             container.addView(TextView(this).apply {
                 text = "What's new\n$notes"
                 textSize = 14f
@@ -1482,10 +1544,12 @@ class MainActivity : Activity() {
                 bottomMargin = px(8)
             })
             websiteDownloadProgressLabel = TextView(this).apply {
-                text = "Preparing download…"
+                text = "Keep app open during download."
                 textSize = 13f
                 setTextColor(bodyText)
                 gravity = Gravity.CENTER
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
             }
             container.addView(websiteDownloadProgressLabel, LinearLayout.LayoutParams(-1, -2))
         }
@@ -1494,7 +1558,7 @@ class MainActivity : Activity() {
 
     private fun showWebsiteDownloadProgress(release: JSONObject) {
         val content = buildWebsiteUpdateCard(release.optString("version_name", "latest version"),
-            "Downloading update", "Workly India is downloading the update. Keep the app open.", showProgress = true)
+            "Downloading update", "Keep app open during download.", showProgress = true)
         val dialog = Dialog(this)
         dialog.setContentView(content)
         websiteDownloadDialog = dialog
@@ -1582,8 +1646,8 @@ class MainActivity : Activity() {
         if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
         val versionName = release?.optString("version_name", "new version") ?: "new version"
         val mandatory = BuildConfig.VERSION_CODE < (release?.optInt("min_supported_version_code", 1) ?: 1)
-        val content = buildWebsiteUpdateCard(versionName, "Download complete",
-            "The update is ready. Tap Install now to open Android's secure installer.", showProgress = false)
+        val content = buildWebsiteUpdateCard(versionName, "Installing update",
+            "Confirm the Android install prompt to finish.", showProgress = false)
         val dialog = Dialog(this)
         addWebsiteSheetActions(content, "Install now", if (mandatory) null else "Later",
             onPrimary = { dialog.dismiss(); continueWebsiteInstallIfAllowed() },
@@ -1624,6 +1688,18 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun showWebsiteUpdateCompletedDialog() {
+        if (isFinishing || isDestroyed) return
+        val content = buildWebsiteUpdateCard(BuildConfig.VERSION_NAME, "Update completed",
+            "Workly India is now up to date.", showProgress = false)
+        val dialog = Dialog(this)
+        addWebsiteSheetActions(content, "Continue", null,
+            onPrimary = { dialog.dismiss() },
+            onSecondary = { })
+        dialog.setContentView(content)
+        showWebsiteBottomSheet(dialog, allowSwipeDismiss = true)
+    }
+
     private fun continueWebsiteInstallIfAllowed() {
         val apkUri = pendingWebsiteInstallUri ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
@@ -1643,17 +1719,23 @@ class MainActivity : Activity() {
         }
         awaitingInstallPermissionSettings = false
         try {
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            val targetVersion = websiteUpdatePrefs.getLong(KEY_TARGET_VERSION_CODE, 0L)
+            if (targetVersion <= BuildConfig.VERSION_CODE.toLong()) {
+                throw IllegalStateException("The downloaded update has an invalid or older version code")
+            }
+            websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, true).apply()
+            val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
+                putExtra(Intent.EXTRA_RETURN_RESULT, true)
                 clipData = ClipData.newUri(contentResolver, "Workly India update", apkUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            if (installIntent.resolveActivity(packageManager) == null) throw IllegalStateException("No Android package installer can handle the downloaded APK")
-            startActivity(installIntent)
-            pendingWebsiteInstallUri = null
+            // Do not use resolveActivity(): package-visibility filtering can hide
+            // the system package installer even when Android can handle the intent.
+            startActivityForResult(installIntent, REQUEST_WEBSITE_INSTALL)
             websiteDownloadId = -1L
         } catch (error: Exception) {
+            websiteUpdatePrefs.edit().putBoolean(KEY_INSTALL_PROMPT_ACTIVE, false).apply()
             android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
             Toast.makeText(this, "Could not open the installer. Please try again.", Toast.LENGTH_LONG).show()
         }
@@ -1739,6 +1821,10 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_APP_UPDATE = 4104
+        private const val REQUEST_WEBSITE_INSTALL = 4105
+        private const val KEY_PENDING_APK_URI = "pending_apk_uri"
+        private const val KEY_TARGET_VERSION_CODE = "target_version_code"
+        private const val KEY_INSTALL_PROMPT_ACTIVE = "install_prompt_active"
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_MEDIA = 702
