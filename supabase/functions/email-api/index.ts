@@ -2434,6 +2434,7 @@ serve(async req => {
         url: targetUrl,
         icon: template.icon_url || undefined,
         image: capPushImageUrl(template.image_url),
+        actions: template.button_text ? [{ action: 'open', title: String(template.button_text).slice(0, 50), url: targetUrl }] : undefined,
         tag: `workly-android-update-${versionCode}`,
         priority: 'high',
         data: { type: 'android_app_update', version_code: String(versionCode), url: targetUrl }
