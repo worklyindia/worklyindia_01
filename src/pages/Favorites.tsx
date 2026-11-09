@@ -17,6 +17,7 @@ const Favorites = () => {
   const [favoriteJobs, setFavoriteJobs] = useState<any[]>([]);
   const [externalFavoriteJobs, setExternalFavoriteJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isShowingOfflineCache, setIsShowingOfflineCache] = useState(false);
 
   // Show restricted message for banned users (only if logged in)
   if (user && isBanned()) {
@@ -33,6 +34,24 @@ const Favorites = () => {
 
   useEffect(() => {
     const fetchFavoriteJobs = async () => {
+      // Restore public saved-job details immediately so the list remains readable offline.
+      const cacheKey = 'workly-saved-jobs-v1:' + (user?.id || 'guest');
+      let cachedJobs: any[] = [];
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            cachedJobs = parsed;
+            setFavoriteJobs(parsed);
+            setLoading(false);
+            setIsShowingOfflineCache(true);
+          }
+        }
+      } catch {
+        // Ignore unavailable or malformed local cache and continue with the live request.
+      }
+
       // Split favorites into internal (uuid) and external (ext-*)
       const externalIds = favorites.filter((id: string) => id.startsWith('ext-'));
       const internalIds = favorites.filter((id: string) => !id.startsWith('ext-'));
@@ -45,6 +64,8 @@ const Favorites = () => {
 
       if (internalIds.length === 0) {
         setFavoriteJobs([]);
+        try { localStorage.setItem(cacheKey, JSON.stringify([])); } catch { /* Storage is optional. */ }
+        setIsShowingOfflineCache(false);
         setLoading(false);
         return;
       }
@@ -139,9 +160,17 @@ const Favorites = () => {
         })) || [];
 
         setFavoriteJobs(transformedJobs);
+        try { localStorage.setItem(cacheKey, JSON.stringify(transformedJobs)); } catch { /* Keep the live list usable if storage is full. */ }
+        setIsShowingOfflineCache(false);
       } catch (error) {
         console.error('Error fetching favorite jobs:', error);
-        setFavoriteJobs([]);
+        if (cachedJobs.length > 0) {
+          setFavoriteJobs(cachedJobs);
+          setIsShowingOfflineCache(true);
+        } else {
+          setFavoriteJobs([]);
+          setIsShowingOfflineCache(false);
+        }
       } finally {
         setLoading(false);
       }
@@ -150,7 +179,7 @@ const Favorites = () => {
     if (!favoritesLoading) {
       fetchFavoriteJobs();
     }
-  }, [favorites, favoritesLoading]);
+  }, [favorites, favoritesLoading, user?.id]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -216,6 +245,11 @@ const Favorites = () => {
 
         {/* Content Area */}
         <main className="px-3 py-4 pb-24 md:pb-8">
+        {isShowingOfflineCache && (
+          <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-foreground" role="status">
+            Offline mode · Showing your last saved job details. Reconnect to refresh job status.
+          </div>
+        )}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
             <div className="relative">
