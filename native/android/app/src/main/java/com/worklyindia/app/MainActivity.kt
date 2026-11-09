@@ -1851,6 +1851,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
+        // Decrypted files are exported to a short-lived app-private cache only
+        // so Android's document viewer can open them. Remove leftovers as soon
+        // as the user returns to Workly India (and on the next app launch).
+        runCatching {
+            File(cacheDir, "secure-vault").listFiles()?.forEach { it.delete() }
+        }
         registerNetworkListener()
         if (isBiometricLockEnabled() && !biometricAuthenticatedForForeground) showBiometricLockPrompt(false)
         if (::webView.isInitialized) syncWebsiteSession()
