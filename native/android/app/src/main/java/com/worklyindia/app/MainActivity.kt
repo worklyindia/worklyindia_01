@@ -621,40 +621,12 @@ class MainActivity : FragmentActivity() {
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             WindowInsetsCompat.CONSUMED
         }
-        // Native swipe-to-refresh: only intercept a downward gesture when the
-        // WebView is already at the top, leaving normal page scrolling untouched.
+        // Keep the WebView scroll gestures native-refresh-free. The website has
+        // long pages and embedded interview rooms; SwipeRefreshLayout can mistake
+        // an upward/mid-page scroll for a pull gesture and reload the whole app.
+        // Users can still navigate and scroll normally without triggering a reload.
         swipeRefreshLayout = SwipeRefreshLayout(this).apply {
-            setColorSchemeColors(Color.rgb(39, 190, 177), Color.rgb(56, 112, 210))
-            setProgressBackgroundColorSchemeColor(
-                if (startupDarkMode) Color.rgb(17, 27, 45) else Color.WHITE
-            )
-            // Only allow pull-to-refresh when a new gesture begins at the
-            // absolute top of the web page. If the user starts scrolling in
-            // the middle of a long page, never convert that gesture into a
-            // refresh—even if the page reaches the top during the same drag.
-            setOnChildScrollUpCallback { _, _ ->
-                webView.canScrollVertically(-1) || webView.scrollY > 0
-            }
-            webView.setOnTouchListener { _, event ->
-                when (event.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        isEnabled = !webView.canScrollVertically(-1) && webView.scrollY <= 0
-                    }
-                    android.view.MotionEvent.ACTION_UP,
-                    android.view.MotionEvent.ACTION_CANCEL -> {
-                        post { isEnabled = true }
-                    }
-                }
-                false
-            }
-            setOnRefreshListener {
-                if (hasInternetConnection()) {
-                    webView.reload()
-                } else {
-                    isRefreshing = false
-                    showOfflineScreen()
-                }
-            }
+            isEnabled = false
             addView(webView, ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
