@@ -294,21 +294,6 @@ jobs:
           if probe.status_code != 200:
               raise SystemExit(f"Cloudflare public APK URL check failed ({probe.status_code}): {public_url}")
 
-          # Maintain a short-cache latest alias for generic download entry points.
-          with apk.open("rb") as body:
-              s3.put_object(
-                  Bucket=bucket,
-                  Key="android/latest/Workly-India.apk",
-                  Body=body,
-                  ContentLength=apk.stat().st_size,
-                  ContentType="application/vnd.android.package-archive",
-                  CacheControl="public, max-age=300",
-                  Metadata={"version-code": str(code), "version-name": name},
-              )
-          latest_head = s3.head_object(Bucket=bucket, Key="android/latest/Workly-India.apk")
-          if int(latest_head.get("ContentLength", -1)) != apk.stat().st_size:
-              raise SystemExit("Cloudflare latest APK alias verification failed.")
-
           headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
           row = {
               "version_code": code,
@@ -345,7 +330,7 @@ jobs:
               raise SystemExit(f"Supabase release metadata save failed ({saved.status_code}): {saved.text[:800]}")
 
           print(f"Cloudflare R2 APK: {public_url}")
-          print(f"Verified Cloudflare R2 object and latest alias: {apk.stat().st_size:,} bytes.")
+          print(f"Verified single Cloudflare R2 release object: {apk.stat().st_size:,} bytes.")
           print("GitHub Release retained as a private archival copy; prior R2 releases are never deleted.")
           print(f"Verified APK size: {apk.stat().st_size:,} bytes. Supabase draft saved; prior releases were retained.")
           PY
