@@ -33,7 +33,7 @@ import java.net.URLEncoder
 object NativePushManager {
     private const val SUPABASE_URL = "https://jubwzelupbntbetpajqb.supabase.co"
     private const val SUPABASE_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
-    private const val CHANNEL_ID = "workly_updates_v2"
+    private const val CHANNEL_ID = "workly_updates_v3"
 
     /**
      * Native Firebase config is loaded from the same public push-config action
