@@ -282,6 +282,13 @@ export default function AndroidAppUpdates() {
                 <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">Version code</p><p className="break-all text-xl font-semibold tabular-nums">{latest.version_code}</p></div>
                 <div className="min-w-0 rounded-lg border p-3"><p className="text-xs text-muted-foreground">APK size (same APK as workflow)</p><p className="text-base font-semibold tabular-nums">{formatSize(latest.apk_size_bytes)}</p><p className="mt-1 text-xs text-muted-foreground tabular-nums">{formatExactBytes(latest.apk_size_bytes)}</p></div>
                 <div className="min-w-0 rounded-lg border p-3 sm:col-span-2"><p className="text-xs text-muted-foreground">What's new</p><p className="break-words whitespace-pre-wrap text-sm font-medium">{latest.release_notes?.trim() || "No release notes provided for this version."}</p></div>
+                <div className="min-w-0 rounded-lg border p-3 sm:col-span-2">
+                  <p className="text-xs font-medium">Release availability</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{latest.is_published
+                    ? "This verified APK is public. Android update checks can now offer it to users."
+                    : "This APK is uploaded and verified, but it is still an unpublished draft. Users will not receive this update until you select Make Public."}</p>
+                  {isExternalReleaseUrl(latest.apk_path) && <a className="mt-2 inline-flex break-all text-sm font-medium text-primary underline underline-offset-4" href={latest.apk_path} target="_blank" rel="noopener noreferrer">Download latest APK directly</a>}
+                </div>
               </div>}
           </CardContent>
         </Card>
@@ -305,6 +312,7 @@ export default function AndroidAppUpdates() {
                       <p className="text-xs text-muted-foreground">Version code {release.version_code} · {formatSize(release.apk_size_bytes)}</p><p className="text-xs text-muted-foreground tabular-nums">{formatExactBytes(release.apk_size_bytes)}</p>
                       <p className="text-xs text-muted-foreground">Uploaded: {new Date(release.created_at || Date.now()).toLocaleString()}</p>
                       {release.release_notes && <p className="break-words whitespace-pre-wrap pt-1 text-sm text-muted-foreground">{release.release_notes}</p>}
+                      {isExternalReleaseUrl(release.apk_path) && <a className="inline-flex break-all pt-1 text-xs font-medium text-primary underline underline-offset-4" href={release.apk_path} target="_blank" rel="noopener noreferrer">Direct APK download link</a>}
                     </div>
                     <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:min-w-40">
                       {release.is_published
