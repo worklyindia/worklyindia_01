@@ -628,7 +628,25 @@ class MainActivity : FragmentActivity() {
             setProgressBackgroundColorSchemeColor(
                 if (startupDarkMode) Color.rgb(17, 27, 45) else Color.WHITE
             )
-            setOnChildScrollUpCallback { _, _ -> webView.canScrollVertically(-1) }
+            // Only allow pull-to-refresh when a new gesture begins at the
+            // absolute top of the web page. If the user starts scrolling in
+            // the middle of a long page, never convert that gesture into a
+            // refresh—even if the page reaches the top during the same drag.
+            setOnChildScrollUpCallback { _, _ ->
+                webView.canScrollVertically(-1) || webView.scrollY > 0
+            }
+            webView.setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        isEnabled = !webView.canScrollVertically(-1) && webView.scrollY <= 0
+                    }
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> {
+                        post { isEnabled = true }
+                    }
+                }
+                false
+            }
             setOnRefreshListener {
                 if (hasInternetConnection()) {
                     webView.reload()
