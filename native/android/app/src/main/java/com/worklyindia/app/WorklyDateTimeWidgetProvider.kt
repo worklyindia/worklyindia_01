@@ -32,7 +32,7 @@ class WorklyDateTimeWidgetProvider : AppWidgetProvider() {
   val chosen=if(todayEvents.isNotEmpty()) todayEvents else events.takeWhile{it.first==events.firstOrNull()?.first}
   val eventName=chosen.take(2).joinToString(" • "){it.second}.ifBlank{"Festival calendar"}
   val eventDate=chosen.firstOrNull()?.first
-  val label=if(todayEvents.isNotEmpty()) "TODAY'S FESTIVALS" else if(eventDate!=null) "UPCOMING FESTIVAL" else "FESTIVALS"
+  val label=if(todayEvents.isNotEmpty()) "TODAY'S FESTIVAL" else if(eventDate!=null) "COMING SOON" else "FESTIVALS"
   val dateLabel=eventDate?.let{d->runCatching{SimpleDateFormat("yyyy-MM-dd",Locale.US).apply{timeZone=tz}.parse(d)?.let{SimpleDateFormat("EEE, dd MMM",Locale.ENGLISH).apply{timeZone=tz}.format(it)}}.getOrNull()}?:"Offline • Sync when online"
   ids.forEach{id->
    val v=RemoteViews(context.packageName,R.layout.workly_datetime_widget)
@@ -42,7 +42,7 @@ class WorklyDateTimeWidgetProvider : AppWidgetProvider() {
    v.setString(R.id.workly_datetime_date,"setTimeZone","Asia/Kolkata")
    v.setTextViewText(R.id.workly_festival_label,label)
    v.setTextViewText(R.id.workly_festival_name,eventName)
-   v.setTextViewText(R.id.workly_festival_date,dateLabel)
+   v.setTextViewText(R.id.workly_festival_badge, if(todayEvents.isNotEmpty()) "Today" else if(eventDate != null) "Coming Soon" else "View All")
    val intent=Intent(Intent.ACTION_VIEW,Uri.parse("https://worklyindia.devs.surf/festivals")).apply{setPackage(context.packageName);flags=Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP}
    val pending=PendingIntent.getActivity(context,id+7100,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
    v.setOnClickPendingIntent(R.id.workly_festival_open,pending)
