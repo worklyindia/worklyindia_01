@@ -31,13 +31,13 @@ class WorklyDateTimeWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_MINUTE_TICK) {
+        if (intent.action == ACTION_MINUTE_TICK || intent.action in SYSTEM_REFRESH_ACTIONS) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(
                 android.content.ComponentName(context, WorklyDateTimeWidgetProvider::class.java)
             )
             updateWidgets(context, manager, ids)
-            scheduleNextMinute(context)
+            if (intent.action == ACTION_MINUTE_TICK) scheduleNextMinute(context)
         }
     }
 
@@ -217,6 +217,12 @@ class WorklyDateTimeWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val TAG = "WorklyFestivalWidget"
         private const val ACTION_MINUTE_TICK = "com.worklyindia.app.ACTION_DATETIME_WIDGET_TICK"
+        private val SYSTEM_REFRESH_ACTIONS = setOf(
+            Intent.ACTION_CONFIGURATION_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_DATE_CHANGED
+        )
         private const val PREFS = "workly_home_widget"
         private const val KEY_FESTIVAL_NAME = "festival_name"
         private const val KEY_FESTIVAL_DATE = "festival_date"
