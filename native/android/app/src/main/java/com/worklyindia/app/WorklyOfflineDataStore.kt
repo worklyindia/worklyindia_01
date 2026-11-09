@@ -4,7 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Device-local snapshot of public job listings. Never stores private account data. */
+/** Device-local, read-only snapshot of public job data. No applicant/employer account data is stored. */
 object WorklyOfflineDataStore {
     private const val PREFS = "workly_offline_data_v1"
     private const val KEY_JOBS = "public_jobs_json"
@@ -16,22 +16,30 @@ object WorklyOfflineDataStore {
         val company: String,
         val location: String,
         val salary: String,
-        val employmentType: String
+        val jobType: String,
+        val experience: String,
+        val category: String,
+        val description: String,
+        val requirements: String
     )
 
     fun savePublicJobs(context: Context, rows: JSONArray): Boolean {
         if (rows.length() == 0) return false
         val safeRows = JSONArray()
-        for (index in 0 until rows.length().coerceAtMost(30)) {
+        for (index in 0 until rows.length().coerceAtMost(20)) {
             val row = rows.optJSONObject(index) ?: continue
             val id = row.optString("id").takeIf { it.isNotBlank() } ?: continue
             safeRows.put(JSONObject()
                 .put("id", id.take(100))
                 .put("title", row.optString("title").take(120))
-                .put("company", row.optString("company_name").take(100))
+                .put("company", row.optString("api_company_name").take(100))
                 .put("location", row.optString("location").take(100))
                 .put("salary", row.optString("salary_range").take(80))
-                .put("employment_type", row.optString("employment_type").take(50)))
+                .put("job_type", row.optString("job_type").take(60))
+                .put("experience", row.optString("experience_level").take(60))
+                .put("category", row.optString("category").take(80))
+                .put("description", row.optString("description").take(5000))
+                .put("requirements", row.optString("requirements").take(2500)))
         }
         if (safeRows.length() == 0) return false
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -50,7 +58,9 @@ object WorklyOfflineDataStore {
                 val id = row.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
                 Job(id, row.optString("title"), row.optString("company"),
                     row.optString("location"), row.optString("salary"),
-                    row.optString("employment_type"))
+                    row.optString("job_type"), row.optString("experience"),
+                    row.optString("category"), row.optString("description"),
+                    row.optString("requirements"))
             }
         }.getOrDefault(emptyList())
     }
