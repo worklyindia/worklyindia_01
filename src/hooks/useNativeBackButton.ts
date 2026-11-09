@@ -39,7 +39,7 @@ export const useNativeBackButton = () => {
         if (Number((window.history.state as any)?.idx) > 0) {
           navigate(-1);
         } else {
-          navigate('/employer-portal', { replace: true });
+          navigate('/', { replace: true });
         }
         return;
       }
