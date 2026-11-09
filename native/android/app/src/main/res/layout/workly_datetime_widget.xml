@@ -13,38 +13,96 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Good Morning"
-        android:textColor="#16A99A"
-        android:textSize="13sp"
+        android:textColor="@color/workly_widget_accent"
+        android:textSize="15sp"
         android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/workly_datetime_time"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="5dp"
-        android:contentDescription="Current India time"
-        android:text="--:--:-- --"
-        android:textColor="#172B4D"
-        android:textSize="30sp"
-        android:textStyle="bold"
-        android:fontFamily="sans" />
+        android:layout_marginTop="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <Chronometer
+            android:id="@+id/workly_datetime_time"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:contentDescription="Live current India time"
+            android:format="%s"
+            android:text="12:00:00"
+            android:textColor="@color/workly_widget_text"
+            android:textSize="42sp"
+            android:textStyle="bold"
+            android:fontFamily="sans" />
+        <TextView
+            android:id="@+id/workly_datetime_ampm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="PM"
+            android:textColor="@color/workly_widget_muted"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/workly_datetime_date"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="5dp"
         android:text="Loading date…"
-        android:textColor="#64748B"
-        android:textSize="13sp" />
+        android:textColor="@color/workly_widget_muted"
+        android:textSize="14sp" />
 
-    <TextView
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="WORKLY INDIA  •  IST"
-        android:textColor="#16A99A"
-        android:textSize="10sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.08" />
+        android:gravity="center"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/workly_datetime_jobs"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="5dp"
+            android:background="@drawable/workly_widget_button"
+            android:gravity="center"
+            android:padding="12dp"
+            android:text="Find jobs"
+            android:textColor="@color/workly_widget_button_text"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/workly_datetime_activity"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginHorizontal="5dp"
+            android:background="@drawable/workly_widget_chip"
+            android:gravity="center"
+            android:padding="12dp"
+            android:text="Activity"
+            android:textColor="@color/workly_widget_accent"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/workly_datetime_alerts"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="5dp"
+            android:background="@drawable/workly_widget_chip"
+            android:gravity="center"
+            android:padding="12dp"
+            android:text="Job alerts"
+            android:textColor="@color/workly_widget_accent"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 </LinearLayout>
