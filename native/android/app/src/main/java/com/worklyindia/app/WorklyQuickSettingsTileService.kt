@@ -34,6 +34,7 @@ class WorklyQuickSettingsTileService : TileService() {
             action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_LAUNCHER)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra("workly_open_home", true)
         }
 
         try {
