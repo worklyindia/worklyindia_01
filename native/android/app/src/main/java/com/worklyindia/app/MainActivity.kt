@@ -646,9 +646,14 @@ class MainActivity : FragmentActivity() {
         ViewCompat.requestApplyInsets(rootLayout)
         registerNetworkListener()
         val openVaultShortcut = intent.data?.scheme == "worklyindia" && intent.data?.host == "open" && intent.data?.path == "/vault"
-        val target = trustedInternalUrl(intent.getStringExtra("notification_url"))
-            ?: trustedInternalUrl(intent.data?.toString())
-            ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else website
+        val openHomeFromQuickTile = intent.getBooleanExtra("workly_open_home", false)
+        val target = if (openHomeFromQuickTile) {
+            website
+        } else {
+            trustedInternalUrl(intent.getStringExtra("notification_url"))
+                ?: trustedInternalUrl(intent.data?.toString())
+                ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else website
+        }
         lastLoadedUrl = target
         // Do not start WebView navigation while offline. This prevents a browser
         // error page from appearing behind the branded offline screen.
@@ -661,6 +666,17 @@ class MainActivity : FragmentActivity() {
             webView.loadUrl(target)
         }
         if (openVaultShortcut) webView.post { showSecureDocumentVault() }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("workly_open_home", false) && ::webView.isInitialized) {
+            lastLoadedUrl = website
+            webView.post {
+                webView.loadUrl(website)
+            }
+        }
     }
 
     private fun createStartupLoadingOverlay(): FrameLayout {
