@@ -15,6 +15,7 @@ export interface WorklyAndroidBridge {
   hideKeyboard(): void;
   vibrate(milliseconds: number): void;
   exitApp(): void;
+  showExitHint?(): void;
   isBiometricLockEnabled?(): boolean;
   setBiometricLockEnabled?(enabled: boolean): boolean;
   scanResumeImage?(dataUrl: string): boolean;
