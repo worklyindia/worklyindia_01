@@ -23,6 +23,11 @@ permissions:
   contents: write
   actions: read
 
+# Serialize builds so production version generation and Supabase draft creation cannot race.
+concurrency:
+  group: workly-native-android-release
+  cancel-in-progress: false
+
 jobs:
   public-release:
     runs-on: ubuntu-24.04
@@ -36,47 +41,86 @@ jobs:
           WORKFLOW_RUN_NUMBER: ${{ github.run_number }}
           RELEASE_NOTES_INPUT: ${{ github.event.inputs.release_notes }}
           HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GITHUB_REF: ${{ github.ref }}
+          SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
+          python -m pip install --quiet requests
           python - <<'PY'
           import os
+          import re
           from pathlib import Path
+          import requests
 
           path = Path("android-release.properties")
           values = {}
-          for line in path.read_text().splitlines():
-              if "=" in line and not line.lstrip().startswith("#"):
-                  key, value = line.split("=", 1)
-                  values[key.strip()] = value.strip()
+          if path.exists():
+              for line in path.read_text().splitlines():
+                  if "=" in line and not line.lstrip().startswith("#"):
+                      key, value = line.split("=", 1)
+                      values[key.strip()] = value.strip()
 
           run_number = int(os.environ["WORKFLOW_RUN_NUMBER"])
-          version_name = values.get("versionName", "2.4.3").split("+build.", 1)[0]
-          version_code = 100000 + run_number
-          min_supported = int(values.get("minSupportedVersionCode", "1"))
+          base = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+          latest_code = 0
+          latest_minimum = 1
+          latest_name = values.get("versionName", "2.4.3")
+
+          # Production builds use the newest Supabase release row as the single source
+          # of truth. Draft releases count too, so an unpublished build cannot be reused.
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              if not service_key:
+                  raise SystemExit("SUPABASE_SERVICE_ROLE_KEY is required to generate a production release version.")
+              headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+              response = requests.get(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"select": "version_code,version_name,min_supported_version_code", "order": "version_code.desc", "limit": "1"},
+                  timeout=30,
+              )
+              response.raise_for_status()
+              rows = response.json()
+              if rows:
+                  latest_code = int(rows[0]["version_code"])
+                  latest_name = str(rows[0]["version_name"])
+                  latest_minimum = int(rows[0].get("min_supported_version_code") or 1)
+
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?", latest_name)
+          if not match:
+              raise SystemExit(f"Cannot safely increment Android version name: {latest_name!r}")
+          major, minor, patch = map(int, match.groups())
+          version_name = f"{major}.{minor}.{patch + 1}"
+
+          # The workflow run number is globally increasing for this workflow; also
+          # guard against a database versionCode that is already ahead of it.
+          version_code = max(100000 + run_number, latest_code + 1)
+          if version_code > 2100000000:
+              raise SystemExit("Generated versionCode exceeds Android's supported maximum.")
+
           release_notes = os.environ.get("RELEASE_NOTES_INPUT", "").strip()
           if not release_notes:
               commit_message = os.environ.get("HEAD_COMMIT_MESSAGE", "").splitlines()
-              release_notes = (commit_message[0].strip() if commit_message else "") or values.get("releaseNotes", "Performance improvements and bug fixes.")
+              release_notes = (commit_message[0].strip() if commit_message else "") or values.get(
+                  "releaseNotes", "Performance improvements and bug fixes."
+              )
 
-          if not release_notes:
-              raise SystemExit("What's new is required for every Android APK release.")
-
-          if version_code <= min_supported:
-              raise SystemExit("Generated versionCode must be greater than minSupportedVersionCode.")
-          values["versionName"] = version_name
-          values["versionCode"] = str(version_code)
-          values["minSupportedVersionCode"] = str(min_supported)
-          values["releaseNotes"] = release_notes
+          values.update({
+              "versionName": version_name,
+              "versionCode": str(version_code),
+              "minSupportedVersionCode": values.get("minSupportedVersionCode", str(latest_minimum)),
+              "releaseNotes": release_notes,
+          })
           path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
 
-          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
-          with summary.open("a") as out:
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as out:
               out.write("## Workly India — Android release metadata\n\n")
               out.write("| Detail | Value |\n|---|---|\n")
               out.write(f"| Version name | {version_name} |\n")
               out.write(f"| Version code | {version_code} |\n")
-              out.write(f"| Minimum supported version code | {min_supported} |\n")
+              out.write(f"| Previous version code | {latest_code or 'not available for PR build'} |\n")
               out.write(f"| Release notes | {release_notes} |\n\n")
-          print(f"Generated v{version_name} (versionCode {version_code}) for workflow run #{run_number}")
+          print(f"Generated v{version_name} (versionCode {version_code})")
           PY
 
       - name: Set up Java 17
@@ -173,6 +217,37 @@ jobs:
         run: |
           gradle assembleWebsiteRelease bundlePlayStoreRelease --stacktrace
 
+      - name: Verify APK embedded version matches release metadata
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import subprocess
+          props = {}
+          for line in pathlib.Path("android-release.properties").read_text().splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key, value = line.split("=", 1)
+                  props[key.strip()] = value.strip()
+          apk_files = list(pathlib.Path("native/android/app/build/outputs/apk/website/release").glob("*.apk"))
+          if len(apk_files) != 1 or apk_files[0].stat().st_size == 0:
+              raise SystemExit(f"Expected exactly one non-empty website APK, found {len(apk_files)}")
+          sdk = pathlib.Path(os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", "/usr/local/lib/android/sdk")))
+          aapt = sdk / "build-tools/35.0.0/aapt"
+          if not aapt.exists():
+              raise SystemExit(f"Android aapt tool not found: {aapt}")
+          output = subprocess.check_output([str(aapt), "dump", "badging", str(apk_files[0])], text=True)
+          package = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", output, re.M)
+          if not package:
+              raise SystemExit("Could not read package/version metadata from the built APK.")
+          actual = package.groups()
+          expected = ("com.worklyindia.app", props["versionCode"], props["versionName"])
+          if actual != expected:
+              raise SystemExit(f"APK metadata mismatch: expected {expected}, got {actual}")
+          print(f"Verified APK package={actual[0]}, versionName={actual[2]}, versionCode={actual[1]}")
+          PY
+
       - name: Rename release files for users
         run: |
           set -euo pipefail
@@ -200,7 +275,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish APK as a GitHub Release asset and save an unpublished Supabase draft
+      - name: Upload APK to Cloudflare R2 and save a verified unpublished Supabase draft (GitHub archive optional)
         if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
@@ -247,12 +322,8 @@ jobs:
           tag = f"android-v{code}"
           asset_name = "Workly-India.apk"
 
-          # Keep a private GitHub Release as an archival copy, but serve all user downloads from Cloudflare R2.
-          subprocess.run([
-              "gh", "release", "create", tag, f"{apk}#{asset_name}",
-              "--repo", repo, "--title", f"Workly India v{name} (build {code})",
-              "--notes", notes or f"Workly India Android release v{name}",
-          ], check=True, env={**os.environ, "GH_TOKEN": token})
+          # Cloudflare R2 + Supabase are the production source of truth.
+          # GitHub Releases are only an optional archive and must never block owner-page updates.
 
           account_id = os.environ.get("R2_ACCOUNT_ID", "")
           access_key = os.environ.get("R2_ACCESS_KEY_ID", "")
@@ -329,33 +400,53 @@ jobs:
           if saved.status_code not in (200, 201, 204):
               raise SystemExit(f"Supabase release metadata save failed ({saved.status_code}): {saved.text[:800]}")
 
-          # Keep exactly one APK in the R2 releases prefix: the newly verified build.
-          # Do not touch GitHub Release archival assets or Supabase release history.
-          paginator = s3.get_paginator("list_objects_v2")
-          stale_keys = []
-          for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
-              for item in page.get("Contents", []):
-                  if item["Key"] != object_key:
-                      stale_keys.append({"Key": item["Key"]})
-          for offset in range(0, len(stale_keys), 1000):
-              batch = stale_keys[offset:offset + 1000]
-              result = s3.delete_objects(
-                  Bucket=bucket,
-                  Delete={"Objects": batch, "Quiet": False},
-              )
-              errors = result.get("Errors", [])
-              if errors:
-                  raise SystemExit("Cloudflare R2 old APK cleanup failed: " + str(errors[:5]))
-          remaining = []
-          for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
-              remaining.extend(item["Key"] for item in page.get("Contents", []))
-          if remaining != [object_key]:
-              raise SystemExit("Cloudflare R2 cleanup verification failed; remaining objects: " + str(remaining))
+          print(f"Supabase owner release metadata saved: v{name} (versionCode {code})")
 
-          print(f"Cloudflare R2 APK: {public_url}")
-          print(f"Verified single Cloudflare R2 release object: {apk.stat().st_size:,} bytes.")
-          print("Old R2 APKs deleted; GitHub Release archival assets and Supabase release history retained.")
-          print(f"Verified APK size: {apk.stat().st_size:,} bytes. Supabase draft saved; only this APK remains in R2.")
+          # Idempotently maintain the GitHub archival copy after the Cloudflare upload
+          # and Supabase row are already verified. A duplicate tag on a workflow retry
+          # must not prevent the APK from appearing in Owner Release Management.
+          try:
+              gh_env = {**os.environ, "GH_TOKEN": token}
+              existing_release = subprocess.run(
+                  ["gh", "release", "view", tag, "--repo", repo],
+                  check=False, capture_output=True, text=True, env=gh_env,
+              )
+              if existing_release.returncode != 0:
+                  subprocess.run([
+                      "gh", "release", "create", tag,
+                      "--repo", repo, "--title", f"Workly India v{name} (build {code})",
+                      "--notes", notes or f"Workly India Android release v{name}",
+                  ], check=True, env=gh_env)
+              subprocess.run([
+                  "gh", "release", "upload", tag, f"{apk}#{asset_name}",
+                  "--repo", repo, "--clobber",
+              ], check=True, env=gh_env)
+              print(f"GitHub archival release verified: {tag}")
+          except (subprocess.CalledProcessError, OSError) as error:
+              print(f"::warning::GitHub archive upload failed; Cloudflare R2 and Supabase release are already saved: {error}")
+
+          # Preserve prior R2 APKs: the currently public release may still be needed by
+          # installed apps until the owner publishes this newly uploaded draft.
+          final_object = s3.head_object(Bucket=bucket, Key=object_key)
+          if int(final_object.get("ContentLength", -1)) != apk.stat().st_size:
+              raise SystemExit("Final Cloudflare R2 object verification failed.")
+          verify = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "version_code,version_name,apk_path,apk_size_bytes,is_published", "version_code": f"eq.{code}", "limit": "1"},
+              timeout=30,
+          )
+          verify.raise_for_status()
+          verified_rows = verify.json()
+          if len(verified_rows) != 1:
+              raise SystemExit("Supabase read-back verification failed: expected exactly one release row.")
+          verified = verified_rows[0]
+          if (int(verified["version_code"]) != code or verified["version_name"] != name
+              or verified["apk_path"] != public_url or int(verified["apk_size_bytes"]) != apk.stat().st_size
+              or verified["is_published"] is not False):
+              raise SystemExit("Supabase read-back verification failed: saved release metadata does not match the uploaded APK.")
+          print(f"Cloudflare R2 APK verified: {public_url}")
+          print(f"Supabase Owner Release row verified: v{name} (versionCode {code}), unpublished draft.")
           PY
 
       - name: Add public release summary

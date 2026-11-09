@@ -272,7 +272,7 @@ export default function AndroidAppUpdates() {
               <Package className="h-5 w-5 shrink-0" />Latest uploaded APK
               {latest && <Badge className="ml-auto shrink-0" variant={latest.is_published ? "default" : "secondary"}>{latest.is_published ? "Public" : "Unpublished"}</Badge>}
             </CardTitle>
-            <CardDescription>APK files are hosted as public GitHub Release assets; Supabase stores release metadata and download links.</CardDescription>
+            <CardDescription>APK files are hosted on Cloudflare R2; Supabase stores release metadata and the public download link.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
             {loading ? <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status"><Loader2 className="h-4 w-4 animate-spin" />Loading Android releases...</div>
@@ -289,7 +289,7 @@ export default function AndroidAppUpdates() {
         <section className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold">Android app releases</h2>
-            <p className="text-sm text-muted-foreground">Publish or unpublish the latest GitHub-hosted APK. Only one release can be public at a time.</p>
+            <p className="text-sm text-muted-foreground">Publish or unpublish the latest Cloudflare-hosted APK. Only one release can be public at a time.</p>
           </div>
           {loading ? null : releases.length === 0 ? <p className="rounded-lg border p-5 text-center text-sm text-muted-foreground">No app releases found.</p>
             : releases.map((release) => {
