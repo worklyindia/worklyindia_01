@@ -72,6 +72,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import org.json.JSONObject
+import live.hms.roomkit.ui.HMSPrebuiltOptions
+import live.hms.roomkit.ui.HMSRoomKit
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -1257,6 +1259,52 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun launchNativeInterviewCall(provider: String, roomCode: String, meetingId: String, token: String, participantName: String): Boolean {
+            return try {
+                val currentUri = Uri.parse(webView.url ?: lastLoadedUrl)
+                if (currentUri.scheme != "https" || currentUri.host != allowedHost) return false
+                val safeName = participantName.trim().take(80).ifBlank { "Workly User" }
+                when (provider.trim().lowercase()) {
+                    "100ms" -> {
+                        val safeRoomCode = roomCode.trim()
+                        if (safeRoomCode.isBlank() || safeRoomCode.length > 512) return false
+                        runOnUiThread {
+                            try {
+                                HMSRoomKit.launchPrebuilt(safeRoomCode, this@MainActivity, HMSPrebuiltOptions(safeName))
+                            } catch (error: Exception) {
+                                android.util.Log.e("WorklyInterview", "Could not launch 100ms native room", error)
+                                dispatchNativeEvent("workly-native-interview-error", JSONObject().put("message", error.message ?: "Could not open the interview").toString())
+                            }
+                        }
+                        true
+                    }
+                    "videosdk" -> {
+                        val safeMeetingId = meetingId.trim()
+                        val safeToken = token.trim()
+                        if (safeMeetingId.isBlank() || safeToken.isBlank() || safeMeetingId.length > 256 || safeToken.length > 8192) return false
+                        runOnUiThread {
+                            try {
+                                startActivity(Intent(this@MainActivity, NativeInterviewCallActivity::class.java).apply {
+                                    putExtra(NativeInterviewCallActivity.EXTRA_MEETING_ID, safeMeetingId)
+                                    putExtra(NativeInterviewCallActivity.EXTRA_TOKEN, safeToken)
+                                    putExtra(NativeInterviewCallActivity.EXTRA_NAME, safeName)
+                                })
+                            } catch (error: Exception) {
+                                android.util.Log.e("WorklyInterview", "Could not launch VideoSDK native room", error)
+                                dispatchNativeEvent("workly-native-interview-error", JSONObject().put("message", error.message ?: "Could not open the interview").toString())
+                            }
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            } catch (error: Exception) {
+                android.util.Log.e("WorklyInterview", "Rejected native interview launch", error)
+                false
+            }
+        }
+
         @JavascriptInterface
         fun setInterviewCallActive(active: Boolean, videoEnabled: Boolean): Boolean {
             runOnUiThread {

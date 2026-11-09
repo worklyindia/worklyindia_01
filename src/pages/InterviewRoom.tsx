@@ -431,6 +431,41 @@ export default function InterviewRoom() {
     };
   }, [interviewId, canJoin]);
 
+  const handleNativeInterviewJoin = async () => {
+    try {
+      if (!interviewId || !user) {
+        toast.error('Please sign in again before joining the interview.');
+        return;
+      }
+      const bridge = (window as any).WorklyAndroid;
+      if (!bridge?.launchNativeInterviewCall) {
+        toast.error('Native calling is not available in this app version.');
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke('create-100ms-room', {
+        body: { action: 'get-access', interviewId },
+      });
+      if (error || !data?.success) {
+        throw new Error(data?.error || error?.message || 'Could not get interview access.');
+      }
+      const launched = bridge.launchNativeInterviewCall(
+        data.provider,
+        data.roomCode || '',
+        data.meetingId || '',
+        data.token || '',
+        userName || 'Workly User'
+      );
+      if (!launched) throw new Error('The native interview could not be opened. Please update Workly India and try again.');
+    } catch (error: any) {
+      console.error('[Workly native interview]', error);
+      toast.error(error?.message || 'Could not start native interview.');
+    }
+  };
+
+  const isNativeAndroid = typeof document !== 'undefined' &&
+    document.documentElement.dataset.worklyNative === 'android' &&
+    !!(window as any).WorklyAndroid?.launchNativeInterviewCall;
+
   const handleLeaveCall = () => {
     // Navigate based on role - Guest goes to Activity, Host goes to Interviews
     if (joinAsGuest) {
@@ -586,13 +621,24 @@ export default function InterviewRoom() {
     }
     
     return (
-      <SimpleVideoIframe
-        iframeUrl={videosdkIframeUrl}
-        onLeave={handleLeaveCall}
-        isHost={isHost}
-        interviewId={interviewId}
-        scheduledEndAt={interview.scheduled_end_at}
-      />
+      <div className="h-full w-full flex flex-col">
+        {isNativeAndroid && (
+          <div className="p-3">
+            <Button className="w-full" onClick={handleNativeInterviewJoin}>
+              Join with Workly native calling
+            </Button>
+          </div>
+        )}
+        <div className="min-h-0 flex-1">
+          <SimpleVideoIframe
+            iframeUrl={videosdkIframeUrl}
+            onLeave={handleLeaveCall}
+            isHost={isHost}
+            interviewId={interviewId}
+            scheduledEndAt={interview.scheduled_end_at}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -654,13 +700,24 @@ export default function InterviewRoom() {
     const finalHmsUrl = hmsIframeUrl;
     
     return (
-      <SimpleVideoIframe
-        iframeUrl={finalHmsUrl}
-        onLeave={handleLeaveCall}
-        isHost={isHost}
-        interviewId={interviewId}
-        scheduledEndAt={interview.scheduled_end_at}
-      />
+      <div className="h-full w-full flex flex-col">
+        {isNativeAndroid && (
+          <div className="p-3">
+            <Button className="w-full" onClick={handleNativeInterviewJoin}>
+              Join with Workly native calling
+            </Button>
+          </div>
+        )}
+        <div className="min-h-0 flex-1">
+          <SimpleVideoIframe
+            iframeUrl={finalHmsUrl}
+            onLeave={handleLeaveCall}
+            isHost={isHost}
+            interviewId={interviewId}
+            scheduledEndAt={interview.scheduled_end_at}
+          />
+        </div>
+      </div>
     );
   }
 
