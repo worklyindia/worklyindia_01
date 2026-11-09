@@ -1533,6 +1533,39 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             runOnUiThread {
                 initialWebsiteLoadCompleted = true
                 hideStartupLoading()
+                // Keep the WebView alive and warm its HTTP cache with a small
+                // set of same-origin app routes after the first screen is ready.
+                // This prefetches the app shell only; authenticated/API data
+                // continues to use normal Supabase session and cache rules.
+                if (::webView.isInitialized && hasInternetConnection()) {
+                    webView.evaluateJavascript("""
+                        (function() {
+                          if (window.__worklyNativeRouteWarmupStarted) return;
+                          window.__worklyNativeRouteWarmupStarted = true;
+                          var excluded = /\\/(auth|login|signup|employer-auth|employer-signup|checkout|payment)(\\/|$)/i;
+                          var links = Array.from(document.querySelectorAll('a[href]'))
+                            .map(function(a) { try { return new URL(a.href, location.href); } catch (_) { return null; } })
+                            .filter(function(u) {
+                              return u && u.origin === location.origin &&
+                                !excluded.test(u.pathname) &&
+                                u.pathname !== location.pathname &&
+                                !u.pathname.match(/\\.(pdf|zip|apk|png|jpe?g|webp|mp4)$/i);
+                            });
+                          var unique = Array.from(new Map(links.map(function(u) { return [u.pathname + u.search, u]; })).values()).slice(0, 8);
+                          var warm = function() {
+                            unique.forEach(function(u) {
+                              var hint = document.createElement('link');
+                              hint.rel = 'prefetch';
+                              hint.as = 'document';
+                              hint.href = u.href;
+                              document.head.appendChild(hint);
+                            });
+                          };
+                          if ('requestIdleCallback' in window) requestIdleCallback(warm, { timeout: 2500 });
+                          else setTimeout(warm, 1200);
+                        })();
+                    """.trimIndent(), null)
+                }
             }
         }
 
