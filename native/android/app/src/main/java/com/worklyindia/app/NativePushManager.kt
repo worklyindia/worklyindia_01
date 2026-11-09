@@ -12,6 +12,11 @@ import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
+import androidx.core.app.NotificationCompat.BubbleMetadata
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.FirebaseApp
@@ -102,6 +107,7 @@ object NativePushManager {
                 description = "Jobs, applications, messages and account updates"
                 setShowBadge(true)
                 enableVibration(true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) setAllowBubbles(true)
             }
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -362,6 +368,28 @@ object NativePushManager {
 
         if (isSocialInboxNotification) {
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
+                val shortcutId = "workly-chat-$conversationKey"
+                val bubbleIntent = Intent(context, ChatBubbleActivity::class.java).apply {
+                    action = Intent.ACTION_VIEW
+                    data = Uri.parse(chatUrl)
+                    putExtra("chat_url", chatUrl)
+                    putExtra("chat_title", title)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
+                    .setShortLabel(title.take(25).ifBlank { "Workly chat" })
+                    .setLongLabel(title.take(100).ifBlank { "Workly India conversation" })
+                    .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
+                    .setIntent(bubbleIntent)
+                    .setPerson(Person.Builder().setName(title).build())
+                    .setLongLived(true)
+                    .build()
+                runCatching { ShortcutManagerCompat.pushDynamicShortcut(context, shortcut) }
+                    .onFailure { android.util.Log.w("WorklyPush", "Could not publish chat bubble shortcut", it) }
+                builder.setShortcutId(shortcutId).setBubbleMetadata(BubbleMetadata.Builder(shortcutId).setDesiredHeight(640).build())
+            }
             // Re-apply BigTextStyle after optional image handling so the expanded
             // notification has a consistent readable body and visible action row.
             builder.setStyle(
