@@ -2120,66 +2120,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         super.onPause()
     }
 
-    private fun showForegroundStatusNotification() {
-        if (!hasNotificationPermission()) return
-
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                FOREGROUND_STATUS_CHANNEL,
-                "Workly app status",
-                android.app.NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "A quiet status indicator while Workly India is open"
-                setShowBadge(false)
-                setSound(null, null)
-                enableVibration(false)
-                enableLights(false)
-            }
-            manager.createNotificationChannel(channel)
-        }
-
-        val openAppIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentIntent = android.app.PendingIntent.getActivity(
-            this,
-            FOREGROUND_STATUS_NOTIFICATION_ID,
-            openAppIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0)
-        )
-        val notification = androidx.core.app.NotificationCompat.Builder(this, FOREGROUND_STATUS_CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_workly)
-            .setContentTitle("Workly India")
-            .setContentText("Ready • Your workspace is open")
-            .setContentIntent(contentIntent)
-            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MIN)
-            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setShowWhen(false)
-            .build()
-
-        runCatching {
-            androidx.core.app.NotificationManagerCompat.from(this)
-                .notify(FOREGROUND_STATUS_NOTIFICATION_ID, notification)
-        }.onFailure { error ->
-            android.util.Log.w("WorklyStatus", "Could not show foreground status indicator", error)
-        }
-    }
-
-    private fun dismissForegroundStatusNotification() {
-        runCatching {
-            androidx.core.app.NotificationManagerCompat.from(this)
-                .cancel(FOREGROUND_STATUS_NOTIFICATION_ID)
-        }.onFailure { error ->
-            android.util.Log.w("WorklyStatus", "Could not dismiss foreground status indicator", error)
-        }
-    }
-
     // Direct APK installs are updated from the public Workly release feed.
     // Play Store installs are deliberately kept on Google's official Play Core flow.
     @Suppress("DEPRECATION")
