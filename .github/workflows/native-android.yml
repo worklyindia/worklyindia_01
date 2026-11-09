@@ -114,9 +114,9 @@ jobs:
           })
           path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
           with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
-              output.write(f"version_name={version_name}\\n")
-              output.write(f"version_code={version_code}\\n")
-              output.write(f"release_notes={release_notes}\\n")
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
+              output.write(f"release_notes={release_notes}\n")
 
           with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as out:
               out.write("## Workly India — Android release metadata\n\n")
@@ -378,8 +378,8 @@ jobs:
           if probe.status_code != 200:
               raise SystemExit(f"Cloudflare public APK URL check failed ({probe.status_code}): {public_url}")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"cloudflare_status=Verified\\n")
-              output.write(f"apk_url={public_url}\\n")
+              output.write(f"cloudflare_status=Verified\n")
+              output.write(f"apk_url={public_url}\n")
 
           headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
           row = {
@@ -464,7 +464,7 @@ jobs:
           print(f"Cloudflare R2 APK verified: {public_url}")
           print(f"Supabase Owner Release row verified: v{name} (versionCode {code}), unpublished draft.")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write("supabase_status=Saved and read-back verified (unpublished draft)\\n")
+              output.write("supabase_status=Saved and read-back verified (unpublished draft)\n")
           PY
 
       - name: Add public release summary
@@ -612,5 +612,5 @@ jobs:
               lines.append("- No skipped steps were reported.")
           lines += ["", f"Workflow run: [#{e['RUN_ID']}](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}) · Attempt {e['RUN_ATTEMPT']}", ""]
           with summary.open("a") as out:
-              out.write("\\n".join(lines))
+              out.write("\n".join(lines))
           PY
