@@ -4,7 +4,6 @@
 
 - **Website:** https://worklyindia.devs.surf
 - **GitHub:** https://github.com/worklyindia/worklyindia_01
-- **Lovable workspace:** https://lovable.dev/projects/0ce14714-2158-4b09-9c65-adb5cf975ed8
 
 This repository contains the application source code. Production services such as Supabase, Firebase, Vercel and Cloudflare are configured separately and may require access to their respective dashboards.
 
@@ -36,7 +35,7 @@ Feature availability can depend on account permissions, provider approval, envir
 | DNS, CDN and object storage integrations | Cloudflare |
 | Android application | Native Android project (Kotlin) |
 
-Lovable is used as a development workspace connected to this GitHub repository. The application remains a source-controlled project and can be edited through Lovable or a local development environment.
+The application is maintained as a source-controlled project and can be edited through a local development environment.
 
 ## Getting started
 
@@ -77,14 +76,11 @@ npm run build:dev
 - preview serves the locally generated production build.
 - build:dev creates a development-mode build.
 
-## Working with Lovable
+## Development workflow
 
-Open the [Workly India Lovable project](https://lovable.dev/projects/0ce14714-2158-4b09-9c65-adb5cf975ed8) to continue editing with prompts.
-
-- Lovable changes are synchronized with the connected GitHub repository.
-- Changes pushed to the connected repository can be reflected in Lovable.
-- Avoid editing the same files simultaneously in Lovable and another Git branch; sync or pull the latest changes first.
-- Review the diff and run the build before merging or deploying substantial changes.
+- Make changes in a dedicated branch when practical.
+- Review the diff before merging changes into the production branch.
+- Run the lint and production build checks before deploying.
 
 ## Backend and integrations
 
@@ -173,9 +169,7 @@ The repository may contain additional configuration, documentation and service-s
 ## Help and links
 
 - **Website:** https://worklyindia.devs.surf
-- **Lovable:** https://lovable.dev/projects/0ce14714-2158-4b09-9c65-adb5cf975ed8
 - **Repository:** https://github.com/worklyindia/worklyindia_01
-- **Lovable docs:** https://docs.lovable.dev/
 - **Vite docs:** https://vite.dev/guide/
 - **Supabase docs:** https://supabase.com/docs
 - **Vercel docs:** https://vercel.com/docs
