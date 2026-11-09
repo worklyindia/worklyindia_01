@@ -3,7 +3,7 @@
     <shortcut
         android:shortcutId="workly_jobs"
         android:enabled="true"
-        android:icon="@drawable/ic_workly_launcher"
+        android:icon="@drawable/ic_shortcut_jobs"
         android:shortcutShortLabel="@string/shortcut_jobs"
         android:shortcutLongLabel="@string/shortcut_jobs">
         <intent
@@ -15,7 +15,7 @@
     <shortcut
         android:shortcutId="workly_activity"
         android:enabled="true"
-        android:icon="@drawable/ic_workly_launcher"
+        android:icon="@drawable/ic_shortcut_activity"
         android:shortcutShortLabel="@string/shortcut_activity"
         android:shortcutLongLabel="@string/shortcut_activity">
         <intent
@@ -27,7 +27,7 @@
     <shortcut
         android:shortcutId="workly_profile"
         android:enabled="true"
-        android:icon="@drawable/ic_workly_launcher"
+        android:icon="@drawable/ic_shortcut_profile"
         android:shortcutShortLabel="@string/shortcut_profile"
         android:shortcutLongLabel="@string/shortcut_profile">
         <intent
@@ -35,17 +35,5 @@
             android:targetPackage="com.worklyindia.app"
             android:targetClass="com.worklyindia.app.MainActivity"
             android:data="https://worklyindia.devs.surf/profile" />
-    </shortcut>
-    <shortcut
-        android:shortcutId="workly_job_alerts"
-        android:enabled="true"
-        android:icon="@drawable/ic_workly_launcher"
-        android:shortcutShortLabel="@string/shortcut_job_alerts"
-        android:shortcutLongLabel="@string/shortcut_job_alerts">
-        <intent
-            android:action="android.intent.action.VIEW"
-            android:targetPackage="com.worklyindia.app"
-            android:targetClass="com.worklyindia.app.MainActivity"
-            android:data="https://worklyindia.devs.surf/free-job-alerts" />
     </shortcut>
 </shortcuts>
