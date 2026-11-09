@@ -11,11 +11,36 @@ export const useNativeBackButton = () => {
     if (!isWorklyAndroidApp()) return;
 
     const handleBackButton = () => {
-      const isHome = location.pathname === '/' || location.pathname === '/welcome';
+      const path = location.pathname;
+      const isHome = path === '/' || path === '/welcome';
+
       if (!isHome) {
         lastRootBackAt.current = 0;
-        if (Number((window.history.state as any)?.idx) > 0) navigate(-1);
-        else navigate('/', { replace: true });
+
+        // The schedule form is a full-height drawer. Always close it back to
+        // the interviews list instead of relying on WebView/SPA history state,
+        // which can be missing when the app is opened from a deep link.
+        if (path === '/employer/schedule-interview') {
+          navigate('/employer/interviews', { replace: true });
+          return;
+        }
+
+        // Interview rooms should return to the interview list, not the app
+        // landing page, when opened directly without a usable history entry.
+        if (path.startsWith('/interview/')) {
+          if (Number((window.history.state as any)?.idx) > 0) {
+            navigate(-1);
+          } else {
+            navigate('/employer/interviews', { replace: true });
+          }
+          return;
+        }
+
+        if (Number((window.history.state as any)?.idx) > 0) {
+          navigate(-1);
+        } else {
+          navigate('/employer-portal', { replace: true });
+        }
         return;
       }
 
