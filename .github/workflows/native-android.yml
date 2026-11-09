@@ -400,7 +400,7 @@ jobs:
           if saved.status_code not in (200, 201, 204):
               raise SystemExit(f"Supabase release metadata save failed ({saved.status_code}): {saved.text[:800]}")
 
-                    print(f"Supabase owner release metadata saved: v{name} (versionCode {code})")
+          print(f"Supabase owner release metadata saved: v{name} (versionCode {code})")
 
           # Idempotently maintain the GitHub archival copy after the Cloudflare upload
           # and Supabase row are already verified. A duplicate tag on a workflow retry
@@ -425,33 +425,28 @@ jobs:
           except (subprocess.CalledProcessError, OSError) as error:
               print(f"::warning::GitHub archive upload failed; Cloudflare R2 and Supabase release are already saved: {error}")
 
-          # Keep exactly one APK in the R2 releases prefix: the newly verified build.
-          # Do not touch GitHub Release archival assets or Supabase release history.
-          paginator = s3.get_paginator("list_objects_v2")
-          stale_keys = []
-          for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
-              for item in page.get("Contents", []):
-                  if item["Key"] != object_key:
-                      stale_keys.append({"Key": item["Key"]})
-          for offset in range(0, len(stale_keys), 1000):
-              batch = stale_keys[offset:offset + 1000]
-              result = s3.delete_objects(
-                  Bucket=bucket,
-                  Delete={"Objects": batch, "Quiet": False},
-              )
-              errors = result.get("Errors", [])
-              if errors:
-                  raise SystemExit("Cloudflare R2 old APK cleanup failed: " + str(errors[:5]))
-          remaining = []
-          for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
-              remaining.extend(item["Key"] for item in page.get("Contents", []))
-          if remaining != [object_key]:
-              raise SystemExit("Cloudflare R2 cleanup verification failed; remaining objects: " + str(remaining))
-
-          print(f"Cloudflare R2 APK: {public_url}")
-          print(f"Verified single Cloudflare R2 release object: {apk.stat().st_size:,} bytes.")
-          print("Old R2 APKs deleted; GitHub Release archival assets and Supabase release history retained.")
-          print(f"Verified APK size: {apk.stat().st_size:,} bytes. Supabase draft saved; only this APK remains in R2.")
+          # Preserve prior R2 APKs: the currently public release may still be needed by
+          # installed apps until the owner publishes this newly uploaded draft.
+          final_object = s3.head_object(Bucket=bucket, Key=object_key)
+          if int(final_object.get("ContentLength", -1)) != apk.stat().st_size:
+              raise SystemExit("Final Cloudflare R2 object verification failed.")
+          verify = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "version_code,version_name,apk_path,apk_size_bytes,is_published", "version_code": f"eq.{code}", "limit": "1"},
+              timeout=30,
+          )
+          verify.raise_for_status()
+          verified_rows = verify.json()
+          if len(verified_rows) != 1:
+              raise SystemExit("Supabase read-back verification failed: expected exactly one release row.")
+          verified = verified_rows[0]
+          if (int(verified["version_code"]) != code or verified["version_name"] != name
+              or verified["apk_path"] != public_url or int(verified["apk_size_bytes"]) != apk.stat().st_size
+              or verified["is_published"] is not False):
+              raise SystemExit("Supabase read-back verification failed: saved release metadata does not match the uploaded APK.")
+          print(f"Cloudflare R2 APK verified: {public_url}")
+          print(f"Supabase Owner Release row verified: v{name} (versionCode {code}), unpublished draft.")
           PY
 
       - name: Add public release summary
