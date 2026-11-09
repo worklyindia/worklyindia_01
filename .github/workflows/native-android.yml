@@ -275,7 +275,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish APK as a GitHub Release asset and save an unpublished Supabase draft
+      - name: Upload APK to Cloudflare R2 and save a verified unpublished Supabase draft (GitHub archive optional)
         if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
