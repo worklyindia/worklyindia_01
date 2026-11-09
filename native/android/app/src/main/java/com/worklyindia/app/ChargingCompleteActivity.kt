@@ -114,7 +114,7 @@ class ChargingCompleteActivity : Activity() {
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             alarm = RingtoneManager.getRingtone(this, uri)?.apply {
-                isLooping = true
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) isLooping = true
                 play()
             }
         }
