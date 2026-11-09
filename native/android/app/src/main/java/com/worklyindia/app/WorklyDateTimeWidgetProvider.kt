@@ -40,7 +40,7 @@ class WorklyDateTimeWidgetProvider : AppWidgetProvider() {
         val now = Date()
         val calendar = Calendar.getInstance(zone).apply { time = now }
         val hour24 = calendar.get(Calendar.HOUR_OF_DAY)
-        val hour12 = (calendar.get(Calendar.HOUR) + 1).let { if (it == 12) 12 else it }
+        val hour12 = calendar.get(Calendar.HOUR).let { if (it == 0) 12 else it }
         val minute = calendar.get(Calendar.MINUTE)
         val second = calendar.get(Calendar.SECOND)
         val greeting = when (hour24) {
