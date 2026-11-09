@@ -160,7 +160,7 @@ export const SimpleVideoIframe = ({ iframeUrl, onLeave, isHost = false, intervie
   // Preview screen - show before permissions are granted
   if (!shouldLoadIframe) {
     return (
-      <div className="h-screen w-screen bg-background flex flex-col">
+      <div className="h-[100dvh] min-h-0 w-full overflow-hidden bg-background flex flex-col">
         {/* Header */}
         <div className="bg-card border-b border-border px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ export const SimpleVideoIframe = ({ iframeUrl, onLeave, isHost = false, intervie
         </div>
 
         {/* Preview Content */}
-        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-background to-muted p-6">
+        <div className="min-h-0 flex-1 flex items-center justify-center overflow-y-auto bg-gradient-to-br from-background to-muted p-6">
           <div className="max-w-md w-full space-y-6 text-center">
             {/* HTTPS Warning */}
             {window.location.protocol !== 'https:' && !iframeError && (
@@ -282,7 +282,7 @@ export const SimpleVideoIframe = ({ iframeUrl, onLeave, isHost = false, intervie
   }
 
   return (
-    <div className="h-screen w-screen bg-black flex flex-col relative">
+    <div className="relative flex h-[100dvh] min-h-0 max-h-[100dvh] w-full flex-col overflow-hidden bg-black">
       {/* Meeting Ended Screen */}
       {meetingEnded && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-50 p-6">
@@ -351,9 +351,9 @@ export const SimpleVideoIframe = ({ iframeUrl, onLeave, isHost = false, intervie
         allow="camera; microphone; fullscreen; display-capture; autoplay; clipboard-read; clipboard-write; picture-in-picture; encrypted-media; screen-wake-lock"
         referrerPolicy="no-referrer-when-downgrade"
         allowFullScreen
-        className="flex-1 w-full border-0 bg-black"
+        className="min-h-0 min-w-0 flex-1 w-full border-0 bg-black"
         title="Video Interview"
-        style={{ height: '100vh' }}
+        style={{ height: '100%', minHeight: 0 }}
         onLoad={() => {
           console.log('✅ Iframe loaded successfully:', {
             url: iframeUrl,
