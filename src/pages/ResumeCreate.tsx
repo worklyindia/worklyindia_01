@@ -32,7 +32,7 @@ import ResumeScannerPanel from '@/components/resume-create/ResumeScannerPanel';
 const STEPS = [
   { icon: User, title: 'Personal Information', desc: 'Basic contact & profile details', optional: false, Comp: Step1Personal },
   { icon: FileText, title: 'Career Summary', desc: 'A short professional overview (50–200 words)', optional: false, Comp: Step2Summary },
-  { icon: Briefcase, title: 'Work Experience', desc: 'Roles you have held', optional: false, Comp: Step3Experience },
+  { icon: Briefcase, title: 'Work Experience', desc: 'Add roles you have held; freshers can continue without experience', optional: true, Comp: Step3Experience },
   { icon: GraduationCap, title: 'Education', desc: 'Your academic background', optional: false, Comp: Step4Education },
   { icon: Code, title: 'Skills', desc: 'Technical & soft skills with proficiency', optional: false, Comp: Step5Skills },
   { icon: BadgeCheck, title: 'Certifications', desc: 'Courses and credentials', optional: true, Comp: Step6Certifications },
@@ -140,8 +140,9 @@ const ResumeCreate = () => {
         if (!draft.summary.trim() || draft.summary.trim().length < 30) return 'Please write a summary (at least 30 characters)';
         return null;
       case 3:
-        if (!draft.experiences.length) return 'Add at least one work experience';
-        if (draft.experiences.some((e) => !e.company.trim() || !e.jobTitle.trim())) return 'Every experience needs company and job title';
+        // Work experience is optional for freshers. If the user starts an entry,
+        // require its company and job title so incomplete records are not saved.
+        if (draft.experiences.some((e) => !e.company.trim() || !e.jobTitle.trim())) return 'Complete the company name and job title for each experience, or remove the empty entry';
         return null;
       case 4:
         if (!draft.education.length) return 'Add at least one education entry';
