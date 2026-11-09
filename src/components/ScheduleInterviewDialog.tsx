@@ -348,8 +348,9 @@ export const ScheduleInterviewDialog = ({
     setShowPaymentConfirmation(false);
     onOpenChange(false);
     
-    // Navigate to interviews page to see scheduled interviews
-    window.location.href = '/employer/interviews';
+    // The parent closes the drawer and navigates to the interviews list.
+    // Avoid a full-page reload here so the Android WebView keeps its current
+    // session and does not flash the native startup/loading screen.
   };
 
   return (
