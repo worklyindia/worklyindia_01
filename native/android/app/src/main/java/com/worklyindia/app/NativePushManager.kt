@@ -373,7 +373,7 @@ object NativePushManager {
                 val shortcutId = "workly-chat-$conversationKey"
                 val bubbleIntent = Intent(context, ChatBubbleActivity::class.java).apply {
                     action = Intent.ACTION_VIEW
-                    data = Uri.parse(chatUrl)
+                    this.data = Uri.parse(chatUrl)
                     putExtra("chat_url", chatUrl)
                     putExtra("chat_title", title)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
