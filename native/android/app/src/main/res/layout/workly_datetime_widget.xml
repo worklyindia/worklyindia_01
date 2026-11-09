@@ -38,7 +38,6 @@
                 android:textColor="@color/workly_widget_accent"
                 android:textSize="16sp"
                 android:textStyle="bold"
-                android:fontFamily="serif"
                 android:fontFamily="serif" />
 
             <View
@@ -87,7 +86,8 @@
                 android:text="37"
                 android:textColor="@color/workly_widget_muted"
                 android:textSize="19sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:fontFamily="serif" />
 
             <TextView
                 android:id="@+id/workly_datetime_ampm"
@@ -171,7 +171,8 @@
                 android:text="Festival name"
                 android:textColor="@color/workly_widget_text"
                 android:textSize="17sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:fontFamily="serif" />
         </LinearLayout>
 
         <TextView
