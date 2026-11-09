@@ -8,6 +8,7 @@
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/workly_datetime_widget"
     android:previewLayout="@layout/workly_datetime_widget"
+    android:previewImage="@drawable/workly_datetime_widget_preview"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/workly_datetime_widget_description" />
