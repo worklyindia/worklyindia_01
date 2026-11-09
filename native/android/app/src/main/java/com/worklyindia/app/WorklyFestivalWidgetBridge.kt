@@ -13,6 +13,7 @@ class WorklyFestivalWidgetBridge(private val context: Context) {
         const val PREFS = "workly_festival_widget_cache"
         const val KEY_FESTIVALS = "festivals_json"
         const val KEY_SYNCED_AT = "synced_at"
+        const val KEY_SYNC_YEAR = "sync_year"
 
         fun saveFestivals(context: Context, rawJson: String): Boolean = try {
             if (rawJson.length > 262144) return false
