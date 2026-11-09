@@ -297,6 +297,45 @@ const ResumeCreate = () => {
   );
 };
 
+
+const ResumeATSScoreCard: React.FC<{ draft: ReturnType<typeof useResumeDraft>['draft'] }> = ({ draft }) => {
+  const textContent = [draft.personal.professionalTitle, draft.summary,
+    ...draft.experiences.flatMap((item) => [item.jobTitle, item.company, item.responsibilities, item.achievements]),
+    ...draft.education.flatMap((item) => [item.course, item.school, item.board]),
+    ...draft.skills.map((item) => item.name),
+    ...draft.projects.flatMap((item) => [item.name, item.description, ...item.technologies]),
+    ...draft.certifications.map((item) => item.name),
+    ...draft.internships.flatMap((item) => [item.role, item.company, item.description]),
+  ].join(' ').toLowerCase();
+  const roleWords = draft.jobPreferences.preferredRole.toLowerCase().split(/[^a-z0-9+#.]+/).filter((word) => word.length >= 3 && !['the', 'and', 'for', 'with', 'senior', 'junior'].includes(word));
+  const matchedKeywords = [...new Set(roleWords)].filter((word) => textContent.includes(word));
+  const checks = [
+    { label: 'Contact details', points: 15, done: !!(draft.personal.fullName.trim() && draft.personal.email.trim() && draft.personal.mobile.trim() && draft.personal.location.trim()), tip: 'Add your full name, professional email, phone number and location.' },
+    { label: 'Professional summary', points: 15, done: draft.summary.trim().length >= 60, tip: 'Write a focused 2–4 sentence summary describing your strengths and target role.' },
+    { label: 'Relevant experience', points: 20, done: draft.experiences.length > 0 || draft.internships.length > 0 || draft.projects.length > 0, tip: 'Add work experience, internships or practical projects. Freshers can use projects and internships.' },
+    { label: 'Skills section', points: 20, done: draft.skills.length >= 5, tip: 'Add at least 5 relevant skills you can demonstrate.' },
+    { label: 'Education', points: 15, done: draft.education.length > 0, tip: 'Include your qualification, institution and completion year.' },
+    { label: 'Role keywords', points: 10, done: roleWords.length > 0 && matchedKeywords.length >= Math.min(2, new Set(roleWords).size), tip: 'Include relevant job-title terms and skills where they truthfully match your experience.' },
+    { label: 'Achievements and impact', points: 5, done: draft.experiences.some((item) => /\d/.test(item.achievements || item.responsibilities)) || !!draft.achievements.trim() || draft.projects.some((item) => /\d/.test(item.description)), tip: 'Add genuine results, numbers or outcomes to show your impact.' },
+  ];
+  const score = checks.reduce((total, check) => total + (check.done ? check.points : 0), 0);
+  const suggestions = checks.filter((check) => !check.done).map((check) => check.tip);
+  const grade = score >= 85 ? 'Strong ATS readiness' : score >= 65 ? 'Good start' : score >= 40 ? 'Needs improvement' : 'Build your resume';
+  return (
+    <section className="rounded-2xl border bg-card p-4 space-y-4" aria-labelledby="ats-score-title">
+      <div className="flex items-center justify-between gap-3">
+        <div><h2 id="ats-score-title" className="text-base font-semibold">ATS Resume Readiness</h2><p className="text-xs text-muted-foreground mt-1">Estimate based on completeness and role relevance</p></div>
+        <div className="text-right shrink-0"><div className="text-3xl font-bold tabular-nums text-primary">{score}<span className="text-sm text-muted-foreground">/100</span></div><p className="text-xs font-medium">{grade}</p></div>
+      </div>
+      <div className="h-2 rounded-full bg-muted overflow-hidden" role="progressbar" aria-label="Estimated ATS readiness score" aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}><div className="h-full rounded-full bg-primary transition-all" style={{ width: score + '%' }} /></div>
+      <div className="space-y-2">{checks.map((check) => <div key={check.label} className="flex items-center justify-between gap-3 text-sm"><span>{check.label}</span><span className={check.done ? 'text-green-600 font-medium' : 'text-muted-foreground'}>{check.done ? 'Complete' : 'Improve'} · {check.done ? check.points : 0}/{check.points}</span></div>)}</div>
+      {suggestions.length ? <div className="rounded-xl bg-muted/60 p-3 space-y-2"><h3 className="text-sm font-semibold">Recommended improvements</h3><ul className="list-disc pl-5 space-y-1 text-xs leading-5 text-muted-foreground">{suggestions.map((tip) => <li key={tip}>{tip}</li>)}</ul></div> : <p className="text-sm text-green-600">Great work! Your resume meets all checks in this review.</p>}
+      {roleWords.length > 0 && <p className="text-xs text-muted-foreground">Target-role keywords found: {matchedKeywords.length} of {new Set(roleWords).size}. Include only skills that accurately describe you.</p>}
+      <p className="text-[11px] leading-4 text-muted-foreground">Guidance score only—not a guarantee of passing an employer's ATS. Different systems use different rules. Check all details before applying.</p>
+    </section>
+  );
+};
+
 const FinalDownloadStep: React.FC<{ draft: ReturnType<typeof useResumeDraft>['draft']; filename: string }> = ({ draft, filename }) => {
   const [viewOpen, setViewOpen] = useState(false);
   const template = draft.template || 'Professional';
@@ -305,6 +344,7 @@ const FinalDownloadStep: React.FC<{ draft: ReturnType<typeof useResumeDraft>['dr
 
   return (
     <div className="space-y-4">
+      <ResumeATSScoreCard draft={draft} />
       <div className="p-2 rounded-xl border-2 border-primary bg-primary/5 shadow-md">
         <div className="pointer-events-none">
           <ScaledA4Preview fit="contain">
