@@ -5,6 +5,5 @@
     <string name="shortcut_jobs">Find jobs</string>
     <string name="shortcut_activity">My activity</string>
     <string name="shortcut_profile">My profile</string>
-    <string name="shortcut_job_alerts">Job alerts</string>
     <string name="shortcut_secure_vault">Secure vault</string>
 </resources>
