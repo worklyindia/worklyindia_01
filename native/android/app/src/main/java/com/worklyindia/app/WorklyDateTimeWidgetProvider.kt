@@ -13,6 +13,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
+// Website-matched card: today's event is marked Today; the next event is marked Coming Soon.
 class WorklyDateTimeWidgetProvider : AppWidgetProvider() {
  override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
   val tz=TimeZone.getTimeZone("Asia/Kolkata")
