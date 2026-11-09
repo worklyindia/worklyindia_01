@@ -5,40 +5,21 @@
  android:layout_height="match_parent"
  android:orientation="vertical"
  android:paddingStart="14dp"
- android:paddingTop="12dp"
+ android:paddingTop="10dp"
  android:paddingEnd="14dp"
- android:paddingBottom="8dp">
- <LinearLayout
-  android:layout_width="match_parent"
+ android:paddingBottom="6dp">
+ <TextView
+  android:id="@+id/workly_datetime_greeting"
+  android:layout_width="wrap_content"
   android:layout_height="wrap_content"
-  android:gravity="center_vertical"
-  android:orientation="horizontal">
-  <TextView
-   android:id="@+id/workly_datetime_greeting"
-   android:layout_width="wrap_content"
-   android:layout_height="wrap_content"
-   android:paddingStart="14dp"
-   android:paddingTop="7dp"
-   android:paddingEnd="16dp"
-   android:paddingBottom="7dp"
-   android:text="☀  Good Afternoon"
-   android:textColor="@color/workly_widget_accent"
-   android:textSize="16sp"
-   android:textStyle="bold" />
-  <TextView
-   android:layout_width="0dp"
-   android:layout_height="1dp"
-   android:layout_weight="1" 
-  android:text="" />
-  <TextView
-   android:id="@+id/workly_widget_calendar_icon"
-   android:layout_width="54dp"
-   android:layout_height="54dp"
-   android:gravity="center"
-   android:text="▦"
-   android:textColor="@color/workly_widget_accent"
-   android:textSize="34sp" />
- </LinearLayout>
+  android:text="☀  Good Afternoon"
+  android:textColor="#FFFFFFFF"
+  android:shadowColor="#CC000000"
+  android:shadowRadius="3"
+  android:shadowDx="1"
+  android:shadowDy="1"
+  android:textSize="16sp"
+  android:textStyle="bold" />
  <LinearLayout
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
@@ -52,8 +33,8 @@
    android:format12Hour="hh:mm"
    android:format24Hour="HH:mm"
    android:includeFontPadding="false"
-   android:textColor="@color/workly_widget_primary_text"
-   android:shadowColor="#99000000"
+   android:textColor="#FFFFFFFF"
+   android:shadowColor="#CC000000"
    android:shadowRadius="3"
    android:shadowDx="1"
    android:shadowDy="2"
@@ -64,117 +45,137 @@
    android:id="@+id/workly_datetime_seconds"
    android:layout_width="wrap_content"
    android:layout_height="wrap_content"
-   android:layout_marginStart="8dp"
+   android:layout_marginStart="7dp"
    android:format12Hour="ss"
    android:format24Hour="ss"
    android:includeFontPadding="false"
-   android:textColor="@color/workly_widget_secondary_text"
-   android:shadowColor="#99000000"
+   android:textColor="#FFFFFFFF"
+   android:shadowColor="#CC000000"
    android:shadowRadius="2"
    android:shadowDx="1"
    android:shadowDy="1"
-   android:textSize="22sp"
+   android:textSize="20sp"
    android:timeZone="Asia/Kolkata" />
  </LinearLayout>
  <TextClock
   android:id="@+id/workly_datetime_date"
   android:layout_width="match_parent"
   android:layout_height="wrap_content"
-  android:layout_marginTop="8dp"
+  android:layout_marginTop="5dp"
   android:format12Hour="EEEE, dd MMMM yyyy"
   android:format24Hour="EEEE, dd MMMM yyyy"
   android:includeFontPadding="false"
-  android:textColor="@color/workly_widget_secondary_text"
-  android:shadowColor="#99000000"
+  android:textColor="#FFFFFFFF"
+  android:shadowColor="#CC000000"
   android:shadowRadius="2"
   android:shadowDx="1"
   android:shadowDy="1"
-  android:textSize="15sp"
+  android:textSize="14sp"
   android:timeZone="Asia/Kolkata" />
- <TextView
-  android:layout_width="match_parent"
-  android:layout_height="0dp"
-  android:layout_weight="1" 
-  android:text="" />
- <TextView
-  android:layout_width="match_parent"
-  android:layout_height="1dp"
-  android:background="@color/workly_widget_border"
-  android:text="" />
  <LinearLayout
   android:id="@+id/workly_festival_open"
   android:layout_width="match_parent"
-  android:layout_height="wrap_content"
+  android:layout_height="0dp"
+  android:layout_marginTop="10dp"
+  android:layout_weight="1"
   android:gravity="center_vertical"
-  android:minHeight="86dp"
-  android:orientation="horizontal"
-  android:paddingTop="10dp"
-  android:paddingBottom="4dp">
-  <TextView
-   android:id="@+id/workly_festival_icon"
-   android:layout_width="54dp"
-   android:layout_height="54dp"
-   android:gravity="center"
-   android:text="🎉"
-   android:textColor="@color/workly_widget_festival_icon_text"
-   android:textSize="27sp" />
+  android:orientation="vertical">
   <LinearLayout
-   android:layout_width="0dp"
+   android:id="@+id/workly_festival_row_1"
+   android:layout_width="match_parent"
    android:layout_height="wrap_content"
-   android:layout_marginStart="12dp"
-   android:layout_weight="1"
-   android:orientation="vertical">
+   android:gravity="center_vertical"
+   android:minHeight="44dp"
+   android:orientation="horizontal">
    <TextView
-    android:id="@+id/workly_festival_label"
-    android:layout_width="wrap_content"
+    android:id="@+id/workly_festival_icon"
+    android:layout_width="34dp"
     android:layout_height="wrap_content"
-    android:text="TODAY'S FESTIVAL"
-    android:textColor="@color/workly_widget_secondary_text"
-    android:shadowColor="#99000000"
-    android:shadowRadius="2"
-    android:shadowDx="1"
-    android:shadowDy="1"
-    android:textSize="12sp"
-    android:textStyle="bold" />
-   <TextView
-    android:id="@+id/workly_festival_name"
-    android:layout_width="match_parent"
+    android:gravity="center"
+    android:text="🎉"
+    android:textColor="#FFFFFFFF"
+    android:textSize="23sp" />
+   <LinearLayout
+    android:layout_width="0dp"
     android:layout_height="wrap_content"
-    android:layout_marginTop="3dp"
-    android:ellipsize="end"
-    android:maxLines="1"
-    android:text="Festival calendar"
-    android:textColor="@color/workly_widget_primary_text"
-    android:shadowColor="#99000000"
-    android:shadowRadius="3"
-    android:shadowDx="1"
-    android:shadowDy="2"
-    android:textSize="18sp"
-    android:textStyle="bold" />
+    android:layout_marginStart="7dp"
+    android:layout_weight="1"
+    android:orientation="vertical">
+    <TextView
+     android:id="@+id/workly_festival_name"
+     android:layout_width="match_parent"
+     android:layout_height="wrap_content"
+     android:ellipsize="end"
+     android:maxLines="2"
+     android:text="Festival"
+     android:textColor="#FFFFFFFF"
+     android:shadowColor="#CC000000"
+     android:shadowRadius="3"
+     android:shadowDx="1"
+     android:shadowDy="1"
+     android:textSize="19sp"
+     android:textStyle="bold" />
+    <TextView
+     android:id="@+id/workly_festival_date"
+     android:layout_width="match_parent"
+     android:layout_height="wrap_content"
+     android:layout_marginTop="1dp"
+     android:text="10 Nov"
+     android:textColor="#FFFFFFFF"
+     android:shadowColor="#CC000000"
+     android:shadowRadius="2"
+     android:shadowDx="1"
+     android:shadowDy="1"
+     android:textSize="12sp" />
+   </LinearLayout>
   </LinearLayout>
-  <TextView
-   android:id="@+id/workly_festival_badge"
-   android:layout_width="wrap_content"
+  <LinearLayout
+   android:id="@+id/workly_festival_row_2"
+   android:layout_width="match_parent"
    android:layout_height="wrap_content"
-   android:layout_marginStart="6dp"
-   android:paddingStart="12dp"
-   android:paddingTop="7dp"
-   android:paddingEnd="12dp"
-   android:paddingBottom="7dp"
-   android:text="Today"
-   android:textColor="@color/workly_widget_accent"
-   android:shadowColor="#99000000"
-   android:shadowRadius="2"
-   android:shadowDx="1"
-   android:shadowDy="1"
-   android:textSize="14sp"
-   android:textStyle="bold" />
-  <TextView
-   android:layout_width="wrap_content"
-   android:layout_height="wrap_content"
-   android:layout_marginStart="8dp"
-   android:text="›"
-   android:textColor="@color/workly_widget_secondary_text"
-   android:textSize="30sp" />
+   android:layout_marginTop="3dp"
+   android:gravity="center_vertical"
+   android:minHeight="40dp"
+   android:orientation="horizontal"
+   android:visibility="gone">
+   <TextView
+    android:layout_width="34dp"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:text="🎉"
+    android:textColor="#FFFFFFFF"
+    android:textSize="23sp" />
+   <LinearLayout
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_marginStart="7dp"
+    android:layout_weight="1"
+    android:orientation="vertical">
+    <TextView
+     android:id="@+id/workly_festival_name_2"
+     android:layout_width="match_parent"
+     android:layout_height="wrap_content"
+     android:ellipsize="end"
+     android:maxLines="2"
+     android:textColor="#FFFFFFFF"
+     android:shadowColor="#CC000000"
+     android:shadowRadius="3"
+     android:shadowDx="1"
+     android:shadowDy="1"
+     android:textSize="19sp"
+     android:textStyle="bold" />
+    <TextView
+     android:id="@+id/workly_festival_date_2"
+     android:layout_width="match_parent"
+     android:layout_height="wrap_content"
+     android:layout_marginTop="1dp"
+     android:textColor="#FFFFFFFF"
+     android:shadowColor="#CC000000"
+     android:shadowRadius="2"
+     android:shadowDx="1"
+     android:shadowDy="1"
+     android:textSize="12sp" />
+   </LinearLayout>
+  </LinearLayout>
  </LinearLayout>
 </LinearLayout>
