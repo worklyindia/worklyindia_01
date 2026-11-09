@@ -543,7 +543,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           VERSION_NAME: ${{ steps.release-metadata.outputs.version_name }}
           VERSION_CODE: ${{ steps.release-metadata.outputs.version_code }}
-          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
+          RELEASE_NOTES: ${{ steps.release-metadata.outputs.release_notes }}
           CHECKOUT_STATUS: ${{ steps.checkout.outcome }}
           JAVA_STATUS: ${{ steps.setup-java.outcome }}
           ANDROID_STATUS: ${{ steps.setup-android.outcome }}
