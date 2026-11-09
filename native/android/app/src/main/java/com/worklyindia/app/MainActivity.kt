@@ -1031,16 +1031,26 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 setPadding(0, 0, 0, dp(8))
             })
             cachedJobs.forEach { job ->
-                val details = listOf(job.company, job.location, job.salary)
+                val details = listOf(job.company, job.location, job.salary, job.jobType, job.experience)
                     .filter { it.isNotBlank() }.joinToString("  •  ")
                 card.addView(TextView(this).apply {
                     text = if (details.isBlank()) job.title else "${job.title}\n$details"
                     textSize = 12f
                     setTextColor(textColor)
                     gravity = Gravity.CENTER
-                    maxLines = 2
-                    setPadding(dp(8), dp(5), dp(8), dp(5))
+                    maxLines = 3
+                    setPadding(dp(8), dp(5), dp(8), dp(3))
                 })
+                if (job.description.isNotBlank()) {
+                    card.addView(TextView(this).apply {
+                        text = job.description.take(220) + if (job.description.length > 220) "…" else ""
+                        textSize = 11f
+                        setTextColor(mutedColor)
+                        gravity = Gravity.CENTER
+                        maxLines = 3
+                        setPadding(dp(10), 0, dp(10), dp(5))
+                    })
+                }
             }
         } else {
             card.addView(TextView(this).apply {
