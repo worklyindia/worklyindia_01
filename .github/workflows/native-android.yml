@@ -322,12 +322,8 @@ jobs:
           tag = f"android-v{code}"
           asset_name = "Workly-India.apk"
 
-          # Keep a private GitHub Release as an archival copy, but serve all user downloads from Cloudflare R2.
-          subprocess.run([
-              "gh", "release", "create", tag, f"{apk}#{asset_name}",
-              "--repo", repo, "--title", f"Workly India v{name} (build {code})",
-              "--notes", notes or f"Workly India Android release v{name}",
-          ], check=True, env={**os.environ, "GH_TOKEN": token})
+          # Cloudflare R2 + Supabase are the production source of truth.
+          # GitHub Releases are only an optional archive and must never block owner-page updates.
 
           account_id = os.environ.get("R2_ACCOUNT_ID", "")
           access_key = os.environ.get("R2_ACCESS_KEY_ID", "")
@@ -403,6 +399,31 @@ jobs:
               )
           if saved.status_code not in (200, 201, 204):
               raise SystemExit(f"Supabase release metadata save failed ({saved.status_code}): {saved.text[:800]}")
+
+                    print(f"Supabase owner release metadata saved: v{name} (versionCode {code})")
+
+          # Idempotently maintain the GitHub archival copy after the Cloudflare upload
+          # and Supabase row are already verified. A duplicate tag on a workflow retry
+          # must not prevent the APK from appearing in Owner Release Management.
+          try:
+              gh_env = {**os.environ, "GH_TOKEN": token}
+              existing_release = subprocess.run(
+                  ["gh", "release", "view", tag, "--repo", repo],
+                  check=False, capture_output=True, text=True, env=gh_env,
+              )
+              if existing_release.returncode != 0:
+                  subprocess.run([
+                      "gh", "release", "create", tag,
+                      "--repo", repo, "--title", f"Workly India v{name} (build {code})",
+                      "--notes", notes or f"Workly India Android release v{name}",
+                  ], check=True, env=gh_env)
+              subprocess.run([
+                  "gh", "release", "upload", tag, f"{apk}#{asset_name}",
+                  "--repo", repo, "--clobber",
+              ], check=True, env=gh_env)
+              print(f"GitHub archival release verified: {tag}")
+          except (subprocess.CalledProcessError, OSError) as error:
+              print(f"::warning::GitHub archive upload failed; Cloudflare R2 and Supabase release are already saved: {error}")
 
           # Keep exactly one APK in the R2 releases prefix: the newly verified build.
           # Do not touch GitHub Release archival assets or Supabase release history.
