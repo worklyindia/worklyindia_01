@@ -113,6 +113,10 @@ jobs:
               "releaseNotes": release_notes,
           })
           path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write(f"version_name={version_name}\\n")
+              output.write(f"version_code={version_code}\\n")
+              output.write(f"release_notes={release_notes}\\n")
 
           with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as out:
               out.write("## Workly India — Android release metadata\n\n")
