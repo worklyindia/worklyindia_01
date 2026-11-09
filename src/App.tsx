@@ -379,6 +379,35 @@ const AppContent = () => {
   const isAppReady = useAppReady(authLoading, profileLoading, user);
   useTrackWorklyChatReturn();
 
+  // Keep the Android home-screen festival widget in sync automatically.
+  // Fetch once after the app is ready; native code stores the result locally
+  // so the widget never needs a website load or an internet connection.
+  useEffect(() => {
+    if (!isAppReady || !isWorklyAndroidApp()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ supabase }, { expandFestivalDays }] = await Promise.all([
+          import("@/integrations/supabase/client"),
+          import("@/lib/festivals"),
+        ]);
+        const { data, error } = await supabase
+          .from("google_calendar_api")
+          .select("data")
+          .eq("name", "Google Calendar API JSON")
+          .maybeSingle();
+        if (cancelled || error) return;
+        const list = (data?.data as any)?.festivals;
+        if (!Array.isArray(list) || list.length === 0) return;
+        const expanded = expandFestivalDays(list);
+        (window as any).WorklyFestivalWidget?.cacheFestivals?.(JSON.stringify(expanded));
+      } catch (error) {
+        console.warn("[Festival widget] Automatic calendar sync failed", error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAppReady]);
+
   // Warm the three primary destination tabs after the first screen is ready.
   // This downloads their route chunks in the background so the first user tap
   // is less likely to wait for JavaScript over a mobile connection.
