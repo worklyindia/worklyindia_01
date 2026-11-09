@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/workly_datetime_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/workly_widget_background"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <TextView
+        android:id="@+id/workly_datetime_greeting"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Good Morning"
+        android:textColor="#16A99A"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/workly_datetime_time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:contentDescription="Current India time"
+        android:text="--:--:-- --"
+        android:textColor="#172B4D"
+        android:textSize="30sp"
+        android:textStyle="bold"
+        android:fontFamily="sans" />
+
+    <TextView
+        android:id="@+id/workly_datetime_date"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Loading date…"
+        android:textColor="#64748B"
+        android:textSize="13sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="WORKLY INDIA  •  IST"
+        android:textColor="#16A99A"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.08" />
+</LinearLayout>
