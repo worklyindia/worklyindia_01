@@ -3,10 +3,11 @@
     android:label="@string/workly_datetime_widget_label"
     android:minWidth="300dp"
     android:minHeight="190dp"
-    android:targetCellWidth="5"
+    android:targetCellWidth="4"
     android:targetCellHeight="3"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/workly_datetime_widget"
+    android:previewLayout="@layout/workly_datetime_widget"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/workly_datetime_widget_description" />
