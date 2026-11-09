@@ -1249,6 +1249,31 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     inner class WorklyWebBridge {
         @JavascriptInterface
+        fun canDisplayOverOtherApps(): Boolean {
+            return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || android.provider.Settings.canDrawOverlays(this@MainActivity)
+        }
+
+        @JavascriptInterface
+        fun openDisplayOverOtherAppsSettings(): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || android.provider.Settings.canDrawOverlays(this@MainActivity)) {
+                return true
+            }
+            runOnUiThread {
+                try {
+                    val intent = Intent(
+                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + packageName)
+                    )
+                    startActivity(intent)
+                } catch (error: Exception) {
+                    android.util.Log.w("WorklyOverlay", "Could not open overlay permission settings", error)
+                    Toast.makeText(this@MainActivity, "Open Android Settings > Apps > Special app access > Display over other apps.", Toast.LENGTH_LONG).show()
+                }
+            }
+            return false
+        }
+
+        @JavascriptInterface
         fun setInterviewCallActive(active: Boolean, videoEnabled: Boolean): Boolean {
             runOnUiThread {
                 interviewCallActive = active
