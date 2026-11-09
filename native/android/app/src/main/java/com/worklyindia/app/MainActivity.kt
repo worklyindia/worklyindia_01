@@ -668,17 +668,6 @@ class MainActivity : FragmentActivity() {
         if (openVaultShortcut) webView.post { showSecureDocumentVault() }
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        if (intent.getBooleanExtra("workly_open_home", false) && ::webView.isInitialized) {
-            lastLoadedUrl = website
-            webView.post {
-                webView.loadUrl(website)
-            }
-        }
-    }
-
     private fun createStartupLoadingOverlay(): FrameLayout {
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
@@ -2047,6 +2036,17 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.getBooleanExtra("workly_open_home", false)) {
+            lastLoadedUrl = website
+            if (hasInternetConnection()) {
+                hideOfflineScreen()
+                webView.loadUrl(website)
+            } else {
+                webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                webView.loadUrl(website)
+            }
+            return
+        }
         val openVaultShortcut = intent.data?.scheme == "worklyindia" && intent.data?.host == "open" && intent.data?.path == "/vault"
         if (openVaultShortcut) {
             webView.post { showSecureDocumentVault() }
