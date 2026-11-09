@@ -1034,7 +1034,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 val details = listOf(job.company, job.location, job.salary)
                     .filter { it.isNotBlank() }.joinToString("  •  ")
                 card.addView(TextView(this).apply {
-                    text = if (details.isBlank()) job.title else "${job.title}\\n$details"
+                    text = if (details.isBlank()) job.title else "${job.title}\n$details"
                     textSize = 12f
                     setTextColor(textColor)
                     gravity = Gravity.CENTER
