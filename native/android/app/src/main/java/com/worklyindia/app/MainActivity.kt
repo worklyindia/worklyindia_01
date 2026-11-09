@@ -1506,6 +1506,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
 
         @JavascriptInterface
+        fun showExitHint() {
+            runOnUiThread {
+                Toast.makeText(this@MainActivity, "Press back again to exit Workly India", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        @JavascriptInterface
         fun onWebsiteReady() {
             runOnUiThread {
                 initialWebsiteLoadCompleted = true
@@ -1827,26 +1834,19 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
-    private var lastBackPressedAt = 0L
-
     @Deprecated("Deprecated in Android API")
     override fun onBackPressed() {
-        // Keep normal in-app navigation. At the home page, require two Back
-        // presses to exit, without showing the website's exit-confirmation screen.
-        if (::webView.isInitialized && webView.canGoBack()) {
-            webView.goBack()
-            lastBackPressedAt = 0L
-            return
+        // Let React Router handle in-app navigation and the two-press home exit.
+        // Never show a confirmation dialog and never use WebView history here:
+        // WebView history also contains SPA route entries.
+        if (::webView.isInitialized) {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new Event('workly-native-back'));",
+                null
+            )
+        } else {
+            super.onBackPressed()
         }
-
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastBackPressedAt < 2000L) {
-            finish()
-            return
-        }
-
-        lastBackPressedAt = now
-        Toast.makeText(this, "Press back again to exit Workly India", Toast.LENGTH_SHORT).show()
     }
 
     override fun onResume() {
