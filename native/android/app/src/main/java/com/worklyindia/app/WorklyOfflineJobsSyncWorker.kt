@@ -20,13 +20,13 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
         var connection: HttpURLConnection? = null
         return try {
             val endpoint = "$SUPABASE_URL/rest/v1/jobs" +
-                "?select=id,title,location,salary_range" +
+                "?select=id,title,api_company_name,location,salary_range,job_type,experience_level,category,description,requirements" +
                 "&status=eq.active&visibility=eq.public" +
-                "&order=published_at.desc.nullslast,created_at.desc&limit=30"
+                "&order=published_at.desc.nullslast,created_at.desc&limit=20"
             connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 10_000
-                readTimeout = 15_000
+                readTimeout = 20_000
                 setRequestProperty("apikey", SUPABASE_PUBLISHABLE_KEY)
                 setRequestProperty("Authorization", "Bearer $SUPABASE_PUBLISHABLE_KEY")
                 setRequestProperty("Accept", "application/json")
@@ -37,10 +37,7 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
                 return if (status == 429 || status >= 500) Result.retry() else Result.success()
             }
             val rows = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
-            if (rows.length() == 0) {
-                // Keep the last known good snapshot instead of erasing it on an empty response.
-                return Result.success()
-            }
+            if (rows.length() == 0) return Result.success()
             if (WorklyOfflineDataStore.savePublicJobs(applicationContext, rows)) Result.success()
             else Result.retry()
         } catch (error: Exception) {
@@ -67,7 +64,6 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request
             )
-            // Also request an immediate first snapshot; network constraints defer it safely.
             val initial = androidx.work.OneTimeWorkRequestBuilder<WorklyOfflineJobsSyncWorker>()
                 .setConstraints(constraints)
                 .build()
