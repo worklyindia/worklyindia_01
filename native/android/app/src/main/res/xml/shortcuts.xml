@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="find_jobs"
+        android:enabled="true"
+        android:icon="@drawable/ic_workly_launcher_image"
+        android:shortcutShortLabel="@string/shortcut_find_jobs_short"
+        android:shortcutLongLabel="@string/shortcut_find_jobs_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.worklyindia.app"
+            android:targetClass="com.worklyindia.app.MainActivity"
+            android:data="https://worklyindia.devs.surf/jobs" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="my_activity"
+        android:enabled="true"
+        android:icon="@drawable/ic_workly_launcher_image"
+        android:shortcutShortLabel="@string/shortcut_my_activity_short"
+        android:shortcutLongLabel="@string/shortcut_my_activity_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.worklyindia.app"
+            android:targetClass="com.worklyindia.app.MainActivity"
+            android:data="https://worklyindia.devs.surf/activity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="my_profile"
+        android:enabled="true"
+        android:icon="@drawable/ic_workly_launcher_image"
+        android:shortcutShortLabel="@string/shortcut_my_profile_short"
+        android:shortcutLongLabel="@string/shortcut_my_profile_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.worklyindia.app"
+            android:targetClass="com.worklyindia.app.MainActivity"
+            android:data="https://worklyindia.devs.surf/profile" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="job_alerts"
+        android:enabled="true"
+        android:icon="@drawable/ic_workly_launcher_image"
+        android:shortcutShortLabel="@string/shortcut_job_alerts_short"
+        android:shortcutLongLabel="@string/shortcut_job_alerts_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.worklyindia.app"
+            android:targetClass="com.worklyindia.app.MainActivity"
+            android:data="https://worklyindia.devs.surf/job-alerts" />
+    </shortcut>
+</shortcuts>
