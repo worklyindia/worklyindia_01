@@ -9,7 +9,10 @@ on:
         description: "What's new in this APK (one update-specific changelog)"
         required: true
         type: string
+  # Production builds run only from main. Feature branches are built by
+  # pull_request, avoiding duplicate push + PR builds for every commit.
   push:
+    branches: [main]
     paths:
       - "native/android/**"
       - "android-release.properties"
