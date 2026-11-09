@@ -55,7 +55,7 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-        <receiver android:name=".WorklyDateTimeWidgetProvider" android:exported="false">
+        <receiver android:name=".WorklyDateTimeWidgetProvider" android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.worklyindia.app.ACTION_DATETIME_WIDGET_TICK" />
