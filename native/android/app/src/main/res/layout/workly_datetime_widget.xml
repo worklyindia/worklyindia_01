@@ -9,19 +9,19 @@
     android:padding="18dp">
 
     <TextView
-        android:id="@+id/workly_datetime_greeting"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Good Morning"
+        android:text="INDIA STANDARD TIME"
         android:textColor="@color/workly_widget_accent"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.08" />
 
     <TextClock
         android:id="@+id/workly_datetime_time"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="5dp"
         android:contentDescription="Live India time"
         android:format12Hour="hh:mm:ss a"
         android:format24Hour="HH:mm:ss"
@@ -31,12 +31,14 @@
         android:fontFamily="sans"
         android:includeFontPadding="false" />
 
-    <TextView
+    <TextClock
         android:id="@+id/workly_datetime_date"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Monday, 09 November 2026"
+        android:format12Hour="EEEE, dd MMMM yyyy"
+        android:format24Hour="EEEE, dd MMMM yyyy"
+        android:timeZone="Asia/Kolkata"
         android:textColor="@color/workly_widget_secondary_text"
         android:textSize="13sp" />
 
