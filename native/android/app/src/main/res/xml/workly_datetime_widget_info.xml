@@ -3,6 +3,8 @@
     android:label="@string/workly_datetime_widget_label"
     android:minWidth="300dp"
     android:minHeight="190dp"
+    android:minResizeWidth="250dp"
+    android:minResizeHeight="150dp"
     android:targetCellWidth="5"
     android:targetCellHeight="3"
     android:updatePeriodMillis="1800000"
