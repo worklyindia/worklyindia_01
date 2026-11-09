@@ -711,7 +711,7 @@ async function resolveSenderName(platform: Platform, senderId: string, token: st
 
 async function notifySocialPush(supabase: SupabaseClient, ev: {
   platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; eventId: string; imageUrl?: string;
-}, account: any) {
+}, account: any, recipientUserId: string) {
   try {
     const isIg = ev.platform === 'instagram';
     const platformLabel = isIg ? 'Instagram' : 'Facebook';
@@ -732,16 +732,26 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, apikey: key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'send_push_raw', userIds: [account.user_id], title, body, url, icon, image: ev.imageUrl,
+        action: 'send_push_raw',
+        // Customer Service accounts use a synthetic, isolated account ID.
+        // FCM tokens belong to the real signed-in owner, not that synthetic ID.
+        userIds: [recipientUserId],
+        title, body, url, icon, image: ev.imageUrl,
         actions: [
           { action: 'reply', title: 'Reply', url },
           { action: 'mark-read', title: 'Mark as read', url },
         ],
         tag: `${ev.platform}-${ev.eventId}`,
-        data: { type: `${ev.platform}_${ev.kind}`, platform: ev.platform, sender_id: ev.senderId },
+        data: {
+          type: `${ev.platform}_${ev.kind}`, source: ev.platform, platform: ev.platform,
+          sender_id: ev.senderId, sender_name: name, conversation_id: ev.senderId, event_id: ev.eventId,
+        },
       }),
     });
-    if (!res.ok) console.error('[social-push] hub failed', res.status, await res.text());
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok || result?.sent === false || result?.status === 'error') {
+      console.error('[social-push] hub delivery failed', res.status, result);
+    }
   } catch (e) {
     console.error('[social-push] error', e);
   }
@@ -776,8 +786,12 @@ async function processEvent(supabase: SupabaseClient, ev: {
     if (owner) { account = candidate; supportUserId = owner; break; }
   }
   if (!account) return;
-  // Push notify the account owner (WhatsApp-style) for inbox messages only; icon from Email settings uploads.
-  if (ev.kind === 'message') await notifySocialPush(supabase, ev, account);
+  // Resolve the real signed-in owner before pushing. Customer Service Meta
+  // accounts are stored under a synthetic supportOwnerId, while FCM tokens
+  // are registered against the owner's actual auth user ID.
+  const pushRecipientId = supportUserId || account.user_id;
+  // Notify the owner for every new inbox message, independent of AI reply settings.
+  if (ev.kind === 'message') await notifySocialPush(supabase, ev, account, pushRecipientId);
   // Developer webhooks: instagram.message.received, facebook.comment.received, etc.
   await forwardToCustomerWebhooks(supabase, account.user_id, `${ev.platform}.${ev.kind}.received`, {
     account_id: account.id, page_id: account.page_id, ig_user_id: account.ig_user_id,
