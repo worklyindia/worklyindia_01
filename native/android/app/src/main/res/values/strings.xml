@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="workly_datetime_widget_label">Date &amp; Time</string>
+    <string name="workly_datetime_widget_label"> </string>
     <string name="workly_datetime_widget_description">Live India date and time.</string>
     <string name="shortcut_jobs">Find jobs</string>
     <string name="shortcut_activity">My activity</string>
