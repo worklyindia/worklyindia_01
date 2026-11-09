@@ -12,7 +12,7 @@ export const useAppReady = (authLoading: boolean, profileLoading: boolean, user:
 
   useEffect(() => {
     const isNativeAndroid = typeof navigator !== 'undefined' &&
-      /WorklyIndiaApp\\/1\\.0/i.test(navigator.userAgent);
+      /WorklyIndiaApp\/1\.0/i.test(navigator.userAgent);
     const maxWait = isNativeAndroid ? 15000 : 5000;
     const timer = setTimeout(() => setTimedOut(true), maxWait);
     return () => clearTimeout(timer);
