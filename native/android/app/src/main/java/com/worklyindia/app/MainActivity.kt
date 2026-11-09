@@ -2066,6 +2066,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
+        showAppOpenLiveUpdate()
         // Decrypted files are exported to a short-lived app-private cache only
         // so Android's document viewer can open them. Remove leftovers as soon
         // as the user returns to Workly India (and on the next app launch).
@@ -2109,6 +2110,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     override fun onPause() {
+        dismissAppOpenLiveUpdate()
         // Stop network-quality tracking immediately when Workly India is no longer visible.
         networkCallback?.let { callback ->
             runCatching {
@@ -2118,6 +2120,65 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
         networkCallback = null
         super.onPause()
+    }
+
+    // Request Android 16 Live Update promotion while the user has Workly open.
+    // OEM capsule surfaces decide independently whether to display this notification.
+    private fun showAppOpenLiveUpdate() {
+        if (!hasNotificationPermission()) return
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.createNotificationChannel(
+                android.app.NotificationChannel(
+                    APP_OPEN_LIVE_CHANNEL,
+                    "Workly app open status",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Live status while Workly India is open"
+                    setShowBadge(false)
+                    setSound(null, null)
+                    enableVibration(false)
+                    enableLights(false)
+                }
+            )
+        }
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val contentIntent = android.app.PendingIntent.getActivity(
+            this,
+            APP_OPEN_LIVE_NOTIFICATION_ID,
+            openIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+        val notification = androidx.core.app.NotificationCompat.Builder(this, APP_OPEN_LIVE_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_workly)
+            .setContentTitle("Workly India")
+            .setContentText("Workspace active")
+            .setContentIntent(contentIntent)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
+            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setRequestPromotedOngoing(true)
+            .build()
+        runCatching {
+            androidx.core.app.NotificationManagerCompat.from(this).notify(APP_OPEN_LIVE_NOTIFICATION_ID, notification)
+        }.onFailure { error ->
+            android.util.Log.w("WorklyLiveUpdate", "Could not show app-open Live Update", error)
+        }
+    }
+
+    private fun dismissAppOpenLiveUpdate() {
+        runCatching {
+            androidx.core.app.NotificationManagerCompat.from(this).cancel(APP_OPEN_LIVE_NOTIFICATION_ID)
+        }.onFailure { error ->
+            android.util.Log.w("WorklyLiveUpdate", "Could not dismiss app-open Live Update", error)
+        }
     }
 
     // Direct APK installs are updated from the public Workly release feed.
@@ -2809,6 +2870,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     companion object {
+        private const val APP_OPEN_LIVE_CHANNEL = "workly_app_open_live"
+        private const val APP_OPEN_LIVE_NOTIFICATION_ID = 4108
         private const val INTERVIEW_LIVE_CHANNEL = "workly_interview_live"
         private const val INTERVIEW_LIVE_NOTIFICATION_ID = 4107
         private const val REQUEST_APP_UPDATE = 4104
