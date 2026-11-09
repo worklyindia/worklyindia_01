@@ -229,32 +229,57 @@ jobs:
 
           root = Path(".")
           resources = root / "res"
-          defined = {"id": set(), "layout": set(), "drawable": set(), "color": set(), "string": set(), "xml": set()}
-          for file in resources.rglob("*.xml"):
-              try:
-                  tree = ET.parse(file)
-              except ET.ParseError as error:
-                  raise SystemExit(f"Invalid Android XML: {file}: {error}")
-              for node in tree.iter():
-                  for attr, value in node.attrib.items():
-                      if attr.endswith("}id") and value.startswith("@+id/"):
-                          defined["id"].add(value.split("/", 1)[1])
+          defined = {"id": set(), "layout": set(), "drawable": set(), "mipmap": set(),
+                     "color": set(), "string": set(), "xml": set(), "raw": set(),
+                     "anim": set(), "animator": set(), "menu": set(), "font": set(),
+                     "navigation": set(), "integer": set(), "bool": set(), "dimen": set(),
+                     "style": set(), "array": set(), "plurals": set(), "attr": set()}
+          failures = []
+
+          # Index every resource file, including PNG/WebP/JPG assets (the launcher
+          # splash image is a PNG, not XML). Android qualifier folders are normalized.
+          for file in resources.rglob("*"):
+              if not file.is_file():
+                  continue
               folder = file.parent.name.split("-", 1)[0]
               if folder in defined:
                   defined[folder].add(file.stem)
+              if file.suffix.lower() == ".xml":
+                  try:
+                      tree = ET.parse(file)
+                  except ET.ParseError as error:
+                      failures.append(f"Invalid Android XML: {file}: {error}")
+                      continue
+                  for node in tree.iter():
+                      for attr, value in node.attrib.items():
+                          if attr.endswith("}id") and value.startswith("@+id/"):
+                              defined["id"].add(value.split("/", 1)[1])
+                      if node.tag == "color" and node.attrib.get("name"):
+                          defined["color"].add(node.attrib["name"])
+                      if node.tag in {"string", "item", "style", "declare-styleable", "attr",
+                                      "dimen", "integer", "bool", "array", "string-array",
+                                      "integer-array", "plurals"}:
+                          name = node.attrib.get("name")
+                          if name:
+                              kind = "string" if node.tag in {"string", "string-array"} else node.tag
+                              if kind in defined:
+                                  defined[kind].add(name)
 
-          failures = []
+          # Scan app-owned Kotlin R references only. android.R belongs to the
+          # Android framework and must never be reported as an app resource.
           java_root = root / "java"
+          pattern = re.compile(r"(?<![\w.])R\.(id|layout|drawable|mipmap|string|color|xml|raw|menu|font|anim|animator|navigation|integer|bool|dimen|style|array|plurals)\.([A-Za-z0-9_]+)")
           for source in java_root.rglob("*.kt"):
               content = source.read_text(encoding="utf-8")
-              for kind, name in re.findall(r"\bR\.(id|layout|drawable|string|color)\.([A-Za-z0-9_]+)", content):
+              for kind, name in pattern.findall(content):
                   if name not in defined[kind]:
-                      failures.append(f"{source}: R.{kind}.{name} is not defined in res/")
+                      failures.append(f"{source}: app R.{kind}.{name} is not defined in res/")
+
           if failures:
               print("Android resource preflight failed:")
               print("\n".join(f"- {item}" for item in failures))
               sys.exit(1)
-          print("Android resource preflight passed: Kotlin R references resolve to XML resources.")
+          print("Android resource preflight passed: app resources (including raster assets) and XML are indexed; android.R references are excluded.")
           PY
 
       - name: Build signed public release APK and Play Store bundle
