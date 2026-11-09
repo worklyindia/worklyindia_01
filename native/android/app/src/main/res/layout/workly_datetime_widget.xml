@@ -37,7 +37,9 @@
                 android:text="Good Afternoon"
                 android:textColor="@color/workly_widget_accent"
                 android:textSize="16sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:fontFamily="serif"
+                android:fontFamily="serif" />
 
             <View
                 android:layout_width="0dp"
@@ -71,7 +73,8 @@
                 android:text="12:30"
                 android:textColor="@color/workly_widget_text"
                 android:textSize="50sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:fontFamily="serif" />
 
             <TextClock
                 android:id="@+id/workly_datetime_seconds"
@@ -94,7 +97,8 @@
                 android:text="PM"
                 android:textColor="@color/workly_widget_muted"
                 android:textSize="17sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:fontFamily="serif" />
         </LinearLayout>
 
         <TextView
@@ -104,7 +108,8 @@
             android:layout_marginTop="10dp"
             android:text="Monday, 09 November 2026"
             android:textColor="@color/workly_widget_text"
-            android:textSize="19sp" />
+            android:textSize="19sp"
+            android:fontFamily="serif" />
     </LinearLayout>
 
     <View
@@ -153,7 +158,8 @@
                 android:text="TODAY'S FESTIVAL"
                 android:textColor="@color/workly_widget_muted"
                 android:textSize="14sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:fontFamily="serif" />
 
             <TextView
                 android:id="@+id/workly_datetime_festival_name"
@@ -183,7 +189,8 @@
             android:text="Today"
             android:textColor="@color/workly_widget_accent"
             android:textSize="15sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:fontFamily="serif" />
 
         <ImageView
             android:layout_width="22dp"
