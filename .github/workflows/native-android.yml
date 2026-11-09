@@ -10,11 +10,15 @@ on:
         required: true
         type: string
   push:
+    branches:
+      - main
     paths:
       - "native/android/**"
       - "android-release.properties"
       - ".github/workflows/native-android.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "native/android/**"
       - ".github/workflows/native-android.yml"
@@ -23,9 +27,11 @@ permissions:
   contents: write
   actions: read
 
-# Serialize builds so production version generation and Supabase draft creation cannot race.
+# Keep production-main releases serialized, while isolating PRs by PR number.
+# PR builds never queue behind or cancel a production release. Branch pushes are
+# limited to main above, preventing duplicate push + pull_request builds.
 concurrency:
-  group: workly-native-android-release
+  group: workly-native-android-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -33,6 +39,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v5
 
       - name: Generate unique Android release version and metadata
@@ -112,6 +119,10 @@ jobs:
               "releaseNotes": release_notes,
           })
           path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
+              output.write(f"release_notes={release_notes}\n")
 
           with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as out:
               out.write("## Workly India — Android release metadata\n\n")
@@ -124,23 +135,27 @@ jobs:
           PY
 
       - name: Set up Java 17
+        id: setup-java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK command-line tools
+        id: setup-android
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
           packages: ''
 
       - name: Install required Android SDK packages
+        id: sdk-packages
         run: |
           sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
           sdkmanager --list_installed
 
       - name: Set up Gradle 9.7.0 and publish a public Build Scan
+        id: setup-gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.7.0'
@@ -208,6 +223,7 @@ jobs:
           PY
 
       - name: Build signed public release APK and Play Store bundle
+        id: build-release
         working-directory: native/android
         env:
           WORKLY_UPLOAD_STORE_FILE: ${{ runner.temp }}/workly-signing/upload-key.jks
@@ -218,6 +234,7 @@ jobs:
           gradle assembleWebsiteRelease bundlePlayStoreRelease --stacktrace
 
       - name: Verify APK embedded version matches release metadata
+        id: verify-apk
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -249,6 +266,7 @@ jobs:
           PY
 
       - name: Rename release files for users
+        id: rename-release
         run: |
           set -euo pipefail
           APK_FILE=$(find native/android/app/build/outputs/apk/website/release -maxdepth 1 -type f -name '*.apk' -print -quit)
@@ -276,6 +294,7 @@ jobs:
           retention-days: 30
 
       - name: Upload APK to Cloudflare R2 and save a verified unpublished Supabase draft (GitHub archive optional)
+        id: cloudflare-supabase-publish
         if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
@@ -364,6 +383,9 @@ jobs:
           probe = requests.head(public_url, allow_redirects=True, timeout=45)
           if probe.status_code != 200:
               raise SystemExit(f"Cloudflare public APK URL check failed ({probe.status_code}): {public_url}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"cloudflare_status=Verified\n")
+              output.write(f"apk_url={public_url}\n")
 
           headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
           row = {
@@ -447,6 +469,8 @@ jobs:
               raise SystemExit("Supabase read-back verification failed: saved release metadata does not match the uploaded APK.")
           print(f"Cloudflare R2 APK verified: {public_url}")
           print(f"Supabase Owner Release row verified: v{name} (versionCode {code}), unpublished draft.")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("supabase_status=Saved and read-back verified (unpublished draft)\n")
           PY
 
       - name: Add public release summary
@@ -454,6 +478,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_ID: ${{ steps.upload-release-artifacts.outputs.artifact-id }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
           APK_FILE: native/android/app/build/outputs/Workly-India.apk
           AAB_FILE: native/android/app/build/outputs/Workly-India.aab
         run: |
@@ -495,4 +522,101 @@ jobs:
               echo "::warning::Release files are not available; inspect the earlier build or rename step."
               find native/android/app/build/outputs -maxdepth 5 -type f -print 2>/dev/null || true
             fi
+            if [ "$GITHUB_REF" = "refs/heads/main" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ -s "$APK_FILE" ]; then
+              VERSION_CODE=$(sed -n 's/^versionCode=//p' android-release.properties | head -n 1)
+              APK_URL="${R2_PUBLIC_BASE_URL%/}/android/releases/android-v${VERSION_CODE}/Workly-India.apk"
+              {
+                echo ""
+                echo "### Verified production APK"
+                echo "- **Cloudflare R2 download:** [Download Workly India APK](${APK_URL})"
+                echo "- **Owner Portal:** Release saved to Supabase as an unpublished draft. Select **Make Public** to enable app updates."
+              } >> "$GITHUB_STEP_SUMMARY"
+            elif [ -n "${ARTIFACT_ID:-}" ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "### PR / branch verification APK (not a production update)" >> "$GITHUB_STEP_SUMMARY"
+              echo "- **Download build artifact:** [Workly-India APK + AAB](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/${ARTIFACT_ID})" >> "$GITHUB_STEP_SUMMARY"
+              echo "- Cloudflare upload and Supabase production release creation are intentionally skipped for PR builds." >> "$GITHUB_STEP_SUMMARY"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write complete release, error and skip diagnostics
+        if: always()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION_NAME: ${{ steps.release-metadata.outputs.version_name }}
+          VERSION_CODE: ${{ steps.release-metadata.outputs.version_code }}
+          RELEASE_NOTES: ${{ steps.release-metadata.outputs.release_notes }}
+          CHECKOUT_STATUS: ${{ steps.checkout.outcome }}
+          JAVA_STATUS: ${{ steps.setup-java.outcome }}
+          ANDROID_STATUS: ${{ steps.setup-android.outcome }}
+          SDK_STATUS: ${{ steps.sdk-packages.outcome }}
+          GRADLE_STATUS: ${{ steps.setup-gradle.outcome }}
+          SIGNING_STATUS: ${{ steps.release-signing.outcome }}
+          BUILD_STATUS: ${{ steps.build-release.outcome }}
+          APK_VERIFY_STATUS: ${{ steps.verify-apk.outcome }}
+          RENAME_STATUS: ${{ steps.rename-release.outcome }}
+          ARTIFACT_STATUS: ${{ steps.upload-release-artifacts.outcome }}
+          PUBLISH_STATUS: ${{ steps.cloudflare-supabase-publish.outcome }}
+          CLOUDFLARE_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.cloudflare_status }}
+          APK_URL: ${{ steps.cloudflare-supabase-publish.outputs.apk_url }}
+          SUPABASE_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.supabase_status }}
+          ARTIFACT_ID: ${{ steps.upload-release-artifacts.outputs.artifact-id }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          e = os.environ
+          summary = Path(e["GITHUB_STEP_SUMMARY"])
+          def val(key):
+              return e.get(key, "").strip() or "Not produced"
+          steps = [
+              ("Checkout", "CHECKOUT_STATUS"), ("Java setup", "JAVA_STATUS"),
+              ("Android SDK setup", "ANDROID_STATUS"), ("SDK packages", "SDK_STATUS"),
+              ("Gradle setup", "GRADLE_STATUS"), ("Release signing", "SIGNING_STATUS"),
+              ("APK/AAB build", "BUILD_STATUS"), ("APK metadata verification", "APK_VERIFY_STATUS"),
+              ("Rename APK/AAB", "RENAME_STATUS"), ("GitHub artifact upload", "ARTIFACT_STATUS"),
+              ("Cloudflare + Supabase publishing", "PUBLISH_STATUS"),
+          ]
+          failed = [(name, val(key)) for name, key in steps if val(key) == "failure"]
+          skipped = [(name, val(key)) for name, key in steps if val(key) == "skipped"]
+          production = e["REF_NAME"] == "main" and e["EVENT_NAME"] != "pull_request"
+          lines = [
+              "", "## Android Release — complete diagnostics",
+              "", "| Field | Result |", "|---|---|",
+              f"| Version name | {val('VERSION_NAME')} |",
+              f"| Version code | {val('VERSION_CODE')} |",
+              f"| Release notes | {val('RELEASE_NOTES')} |",
+              f"| Build type | {'Production main build' if production else 'PR / branch verification only'} |",
+              f"| APK/AAB artifact | {'Uploaded — ' + val('ARTIFACT_ID') if val('ARTIFACT_STATUS') == 'success' else val('ARTIFACT_STATUS')} |",
+              f"| Cloudflare APK URL | {('[Download Workly India APK](' + val('APK_URL') + ')') if val('APK_URL') != 'Not produced' else 'Not uploaded / URL not produced'} |",
+              f"| Cloudflare status | {val('CLOUDFLARE_STATUS') if val('CLOUDFLARE_STATUS') != 'Not produced' else ('Skipped — PR/branch builds do not publish production APKs' if not production else 'Failed or not reached; see Error Details')} |",
+              f"| Supabase Owner status | {val('SUPABASE_STATUS') if val('SUPABASE_STATUS') != 'Not produced' else ('Skipped — PR/branch builds do not create production release rows' if not production else 'Failed or not reached; see Error Details')} |",
+              "", "### Step-by-step status", "",
+              "| Step | Status |", "|---|---|",
+          ]
+          lines += [f"| {name} | {val(key)} |" for name, key in steps]
+          lines += ["", "### Error Details", ""]
+          if failed:
+              lines += [f"- **{name}:** failed. Open [this workflow run's logs](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}/attempts/{e['RUN_ATTEMPT']}) and expand the named step for the exact error output." for name, _ in failed]
+          elif val("PUBLISH_STATUS") == "failure":
+              lines.append(f"- Publishing failed. See [workflow logs](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}/attempts/{e['RUN_ATTEMPT']}) for the exact Cloudflare/Supabase response.")
+          else:
+              lines.append("- No failed steps were reported by GitHub Actions.")
+          lines += ["", "### Skip Details", ""]
+          if skipped:
+              lines += [f"- **{name}:** skipped by workflow conditions or because an earlier step failed." for name, _ in skipped]
+          if not production:
+              lines.append("- **Cloudflare production upload:** intentionally skipped because this is not a main-branch production run.")
+              lines.append("- **Supabase production release row:** intentionally skipped because this is not a main-branch production run.")
+          elif val("PUBLISH_STATUS") == "skipped":
+              lines.append("- Production publishing did not run; inspect the earlier failed step and its logs.")
+          if not skipped and production and val("PUBLISH_STATUS") != "skipped":
+              lines.append("- No skipped steps were reported.")
+          lines += ["", f"Workflow run: [#{e['RUN_ID']}](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}) · Attempt {e['RUN_ATTEMPT']}", ""]
+          with summary.open("a") as out:
+              out.write("\n".join(lines))
+          PY
