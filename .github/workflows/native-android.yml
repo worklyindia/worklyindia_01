@@ -217,6 +217,46 @@ jobs:
           print(f"Android launcher icon synced from saved Primary Logo: {source.size} -> {icon}")
           PY
 
+      - name: Preflight Android resource references
+        working-directory: native/android/app/src/main
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          root = Path(".")
+          resources = root / "res"
+          defined = {"id": set(), "layout": set(), "drawable": set(), "color": set(), "string": set(), "xml": set()}
+          for file in resources.rglob("*.xml"):
+              try:
+                  tree = ET.parse(file)
+              except ET.ParseError as error:
+                  raise SystemExit(f"Invalid Android XML: {file}: {error}")
+              for node in tree.iter():
+                  for attr, value in node.attrib.items():
+                      if attr.endswith("}id") and value.startswith("@+id/"):
+                          defined["id"].add(value.split("/", 1)[1])
+              folder = file.parent.name.split("-", 1)[0]
+              if folder in defined:
+                  defined[folder].add(file.stem)
+
+          failures = []
+          java_root = Path("../../java")
+          for source in java_root.rglob("*.kt"):
+              content = source.read_text(encoding="utf-8")
+              for kind, name in re.findall(r"\bR\.(id|layout|drawable|string|color)\.([A-Za-z0-9_]+)", content):
+                  if name not in defined[kind]:
+                      failures.append(f"{source}: R.{kind}.{name} is not defined in res/")
+          if failures:
+              print("Android resource preflight failed:")
+              print("\n".join(f"- {item}" for item in failures))
+              sys.exit(1)
+          print("Android resource preflight passed: Kotlin R references resolve to XML resources.")
+          PY
+
       - name: Build signed public release APK and Play Store bundle
         working-directory: native/android
         env:
