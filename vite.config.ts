@@ -1,10 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
-import { devServerBridgePlugin } from "@lovable.dev/vite-plugin-dev-server-bridge";
-import { hmrGatePlugin } from "@lovable.dev/vite-plugin-hmr-gate";
-import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/supabase/vite";
 import { documentPagesPlugin } from "./scripts/document-pages.mjs";
 import { autoWebpPlugin } from "./scripts/auto-webp.mjs";
 import { routePagesPlugin } from "./scripts/route-pages.mjs";
@@ -19,10 +15,6 @@ export default defineConfig(({ mode }) => ({
     autoWebpPlugin(),
     documentPagesPlugin(),
     routePagesPlugin(),
-    mcpPlugin(),
-    mode === "development" && componentTagger(),
-    mode === "development" && hmrGatePlugin(),
-    mode === "development" && devServerBridgePlugin(),
   ].filter(Boolean),
   resolve: {
     alias: {
