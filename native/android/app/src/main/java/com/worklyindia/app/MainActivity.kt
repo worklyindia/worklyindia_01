@@ -2150,11 +2150,32 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         if (pendingWebsiteInstallUri == null || websiteInstallDialogVisible || isFinishing || isDestroyed) return
         websiteInstallDialogVisible = true
         val versionName = release?.optString("version_name", "new version") ?: "new version"
+        val releaseNotes = release?.optString("release_notes", "")?.trim().orEmpty()
         val mandatory = getInstalledAppVersionCode() < (release?.optInt("min_supported_version_code", 1) ?: 1).toLong()
         val content = buildWebsiteUpdateCard(
-            versionName, "Download complete", "The update is ready. Tap Install now to open Android's secure installer.",
+            versionName, "Download complete", releaseNotes,
             showProgress = false
         )
+
+        // Show the Supabase release notes first, then installation guidance separately.
+        val density = resources.displayMetrics.density
+        fun px(value: Int) = (value * density).toInt()
+        val dark = isNativeDarkTheme()
+        content.addView(TextView(this).apply {
+            text = "READY TO INSTALL"
+            textSize = 12f
+            letterSpacing = 0.08f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(if (dark) Color.rgb(76, 220, 190) else Color.rgb(13, 128, 100))
+            setPadding(0, px(12), 0, px(5))
+        }, LinearLayout.LayoutParams(-1, -2))
+        content.addView(TextView(this).apply {
+            text = "Your update has been downloaded successfully. Tap Install now to continue to Android's secure installation screen."
+            textSize = 14f
+            setTextColor(if (dark) Color.rgb(190, 202, 219) else Color.rgb(75, 85, 98))
+            setLineSpacing(px(3).toFloat(), 1f)
+        }, LinearLayout.LayoutParams(-1, -2))
+
         showWebsiteUpdateBottomSheet(
             content = content,
             primaryLabel = "Install now",
