@@ -258,6 +258,22 @@ const More = () => {
           </div>
         </Card>
 
+        {/* Android home-screen widget guide */}
+        <Card className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-foreground">Workly Date &amp; Time Widget</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Add the live India clock and date to your Android home screen.</p>
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl bg-card/80 p-3 text-sm text-muted-foreground">
+            On your phone, long-press an empty area of the Home screen → Widgets → Workly India → Date &amp; Time, then drag it onto the screen.
+          </div>
+        </Card>
+
         {/* Stats Dashboard */}
         <div className="mb-8 grid grid-cols-3 gap-3">
           {statsData.map((stat) => (
