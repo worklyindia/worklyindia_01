@@ -15,8 +15,8 @@ class WorklyQuickSettingsTileService : TileService() {
         super.onStartListening()
         qsTile?.apply {
             label = "Workly India"
-            subtitle = "Open Workly India"
-            icon = Icon.createWithResource(this@WorklyQuickSettingsTileService, R.drawable.ic_workly_launcher)
+            subtitle = "Open app"
+            icon = Icon.createWithResource(this@WorklyQuickSettingsTileService, R.drawable.ic_workly_quick_settings)
             state = Tile.STATE_INACTIVE
             updateTile()
         }
