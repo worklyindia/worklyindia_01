@@ -1005,6 +1005,52 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         card.addView(eyebrow)
         card.addView(heading)
         card.addView(message)
+
+        // Show a small, read-only snapshot of public jobs saved on this device.
+        val cachedJobs = WorklyOfflineDataStore.getPublicJobs(this).take(4)
+        if (cachedJobs.isNotEmpty()) {
+            val savedAt = WorklyOfflineDataStore.lastSyncedAt(this)
+            val syncedLabel = if (savedAt > 0L) {
+                "Saved on this device • " + java.text.SimpleDateFormat("dd MMM, hh:mm a", java.util.Locale.getDefault())
+                    .format(java.util.Date(savedAt))
+            } else "Saved on this device"
+            card.addView(TextView(this).apply {
+                text = "OFFLINE JOBS  ·  ${cachedJobs.size} SAVED"
+                textSize = 11f
+                letterSpacing = 0.08f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setTextColor(if (dark) Color.rgb(100, 220, 190) else Color.rgb(13, 128, 100))
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4), 0, dp(5))
+            })
+            card.addView(TextView(this).apply {
+                text = syncedLabel
+                textSize = 11f
+                setTextColor(mutedColor)
+                gravity = Gravity.CENTER
+                setPadding(0, 0, 0, dp(8))
+            })
+            cachedJobs.forEach { job ->
+                val details = listOf(job.company, job.location, job.salary)
+                    .filter { it.isNotBlank() }.joinToString("  •  ")
+                card.addView(TextView(this).apply {
+                    text = if (details.isBlank()) job.title else "${job.title}\\n$details"
+                    textSize = 12f
+                    setTextColor(textColor)
+                    gravity = Gravity.CENTER
+                    maxLines = 2
+                    setPadding(dp(8), dp(5), dp(8), dp(5))
+                })
+            }
+        } else {
+            card.addView(TextView(this).apply {
+                text = "Your saved job snapshot will appear here after the first successful sync."
+                textSize = 12f
+                setTextColor(mutedColor)
+                gravity = Gravity.CENTER
+                setPadding(dp(8), dp(4), dp(8), dp(8))
+            })
+        }
         card.addView(footer)
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
