@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="workly_widget_card">#17212B</color>
-    <color name="workly_widget_border">#334454</color>
-    <color name="workly_widget_primary_text">#F1F5F9</color>
-    <color name="workly_widget_secondary_text">#B7C4D1</color>
-    <color name="workly_widget_accent">#5ED6C4</color>
-    <color name="workly_widget_pill">#202B4D</color>
-    <color name="workly_widget_festival_icon">#8294FF</color>
-    <color name="workly_widget_festival_icon_text">#101827</color>
+    <color name="workly_widget_card">#171923</color>
+    <color name="workly_widget_border">#303747</color>
+    <color name="workly_widget_primary_text">#F4F6FB</color>
+    <color name="workly_widget_secondary_text">#A8B2C3</color>
+    <color name="workly_widget_accent">#65D6C4</color>
+    <color name="workly_widget_pill">#263A45</color>
+    <color name="workly_widget_festival_icon">#4057E8</color>
+    <color name="workly_widget_festival_icon_text">#FFFFFF</color>
 </resources>
