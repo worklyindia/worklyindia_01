@@ -37,15 +37,15 @@
             android:data="https://worklyindia.devs.surf/profile" />
     </shortcut>
     <shortcut
-        android:shortcutId="workly_secure_vault"
+        android:shortcutId="workly_job_alerts"
         android:enabled="true"
         android:icon="@drawable/ic_workly_launcher"
-        android:shortcutShortLabel="@string/shortcut_secure_vault"
-        android:shortcutLongLabel="@string/shortcut_secure_vault">
+        android:shortcutShortLabel="@string/shortcut_job_alerts"
+        android:shortcutLongLabel="@string/shortcut_job_alerts">
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.worklyindia.app"
             android:targetClass="com.worklyindia.app.MainActivity"
-            android:data="worklyindia://open/vault" />
+            android:data="https://worklyindia.devs.surf/free-job-alerts" />
     </shortcut>
 </shortcuts>
