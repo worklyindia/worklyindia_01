@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="workly_jobs_widget_description">Quick access to jobs on Workly India.</string>
     <string name="workly_datetime_widget_description">Live India date and time on your home screen.</string>
     <string name="shortcut_jobs">Find jobs</string>
     <string name="shortcut_activity">My activity</string>
