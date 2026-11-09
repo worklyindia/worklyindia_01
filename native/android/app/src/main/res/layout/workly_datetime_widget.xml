@@ -108,7 +108,7 @@
             android:layout_marginTop="10dp"
             android:text="Monday, 09 November 2026"
             android:textColor="@color/workly_widget_text"
-            android:textSize="22sp"
+            android:textSize="19sp"
             android:fontFamily="serif" />
     </LinearLayout>
 
@@ -118,28 +118,34 @@
         android:background="@color/workly_widget_divider" />
 
     <LinearLayout
-        android:id="@+id/workly_datetime_festival"
+        android:id="@+id/workly_datetime_festival_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
+        android:minHeight="82dp"
         android:orientation="horizontal"
         android:paddingStart="18dp"
-        android:paddingTop="13dp"
+        android:paddingTop="12dp"
         android:paddingEnd="18dp"
-        android:paddingBottom="13dp">
+        android:paddingBottom="12dp">
 
-        <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@drawable/workly_widget_festival_icon_bg"
-            android:padding="12dp"
-            android:src="@drawable/ic_workly_widget_celebration"
-            android:contentDescription="Festival" />
+        <FrameLayout
+            android:layout_width="50dp"
+            android:layout_height="50dp"
+            android:background="@drawable/workly_widget_festival_icon_bg">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_workly_widget_celebration" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
+            android:layout_marginStart="13dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -147,9 +153,11 @@
                 android:id="@+id/workly_datetime_festival_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="TODAY'S FESTIVAL"
                 android:textColor="@color/workly_widget_muted"
-                android:textSize="15sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
                 android:fontFamily="serif" />
 
@@ -158,23 +166,27 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:text="Festival name"
                 android:textColor="@color/workly_widget_text"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold"
-                android:fontFamily="serif"
-                android:maxLines="1" />
+                android:fontFamily="serif" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/workly_datetime_festival_when"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:background="@drawable/workly_widget_today_pill"
-            android:paddingStart="12dp"
-            android:paddingTop="6dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="6dp"
+            android:gravity="center"
+            android:minWidth="64dp"
+            android:paddingStart="11dp"
+            android:paddingTop="7dp"
+            android:paddingEnd="11dp"
+            android:paddingBottom="7dp"
             android:text="Today"
             android:textColor="@color/workly_widget_accent"
             android:textSize="15sp"
@@ -184,8 +196,9 @@
         <ImageView
             android:layout_width="22dp"
             android:layout_height="22dp"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="10dp"
+            android:contentDescription="@null"
             android:src="@drawable/ic_workly_widget_chevron"
-            android:contentDescription="Open festival calendar" />
+            android:tint="@color/workly_widget_muted" />
     </LinearLayout>
 </LinearLayout>
