@@ -20,7 +20,7 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
         var connection: HttpURLConnection? = null
         return try {
             val endpoint = "$SUPABASE_URL/rest/v1/jobs" +
-                "?select=id,title,company_name,location,salary_range,employment_type" +
+                "?select=id,title,location,salary_range" +
                 "&status=eq.active&visibility=eq.public" +
                 "&order=published_at.desc.nullslast,created_at.desc&limit=30"
             connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
