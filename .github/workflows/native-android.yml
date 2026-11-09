@@ -23,6 +23,11 @@ permissions:
   contents: write
   actions: read
 
+# Serialize builds so production version generation and Supabase draft creation cannot race.
+concurrency:
+  group: workly-native-android-release
+  cancel-in-progress: false
+
 jobs:
   public-release:
     runs-on: ubuntu-24.04
@@ -36,47 +41,84 @@ jobs:
           WORKFLOW_RUN_NUMBER: ${{ github.run_number }}
           RELEASE_NOTES_INPUT: ${{ github.event.inputs.release_notes }}
           HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GITHUB_REF: ${{ github.ref }}
+          SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
+          python -m pip install --quiet requests
           python - <<'PY'
           import os
+          import re
           from pathlib import Path
+          import requests
 
           path = Path("android-release.properties")
           values = {}
-          for line in path.read_text().splitlines():
-              if "=" in line and not line.lstrip().startswith("#"):
-                  key, value = line.split("=", 1)
-                  values[key.strip()] = value.strip()
+          if path.exists():
+              for line in path.read_text().splitlines():
+                  if "=" in line and not line.lstrip().startswith("#"):
+                      key, value = line.split("=", 1)
+                      values[key.strip()] = value.strip()
 
           run_number = int(os.environ["WORKFLOW_RUN_NUMBER"])
-          version_name = values.get("versionName", "2.4.3").split("+build.", 1)[0]
-          version_code = 100000 + run_number
-          min_supported = int(values.get("minSupportedVersionCode", "1"))
+          base = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+          latest_code = 0
+          latest_name = values.get("versionName", "2.4.3")
+
+          # Production builds use the newest Supabase release row as the single source
+          # of truth. Draft releases count too, so an unpublished build cannot be reused.
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              if not service_key:
+                  raise SystemExit("SUPABASE_SERVICE_ROLE_KEY is required to generate a production release version.")
+              headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+              response = requests.get(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"select": "version_code,version_name", "order": "version_code.desc", "limit": "1"},
+                  timeout=30,
+              )
+              response.raise_for_status()
+              rows = response.json()
+              if rows:
+                  latest_code = int(rows[0]["version_code"])
+                  latest_name = str(rows[0]["version_name"])
+
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?", latest_name)
+          if not match:
+              raise SystemExit(f"Cannot safely increment Android version name: {latest_name!r}")
+          major, minor, patch = map(int, match.groups())
+          version_name = f"{major}.{minor}.{patch + 1}"
+
+          # The workflow run number is globally increasing for this workflow; also
+          # guard against a database versionCode that is already ahead of it.
+          version_code = max(100000 + run_number, latest_code + 1)
+          if version_code > 2100000000:
+              raise SystemExit("Generated versionCode exceeds Android's supported maximum.")
+
           release_notes = os.environ.get("RELEASE_NOTES_INPUT", "").strip()
           if not release_notes:
               commit_message = os.environ.get("HEAD_COMMIT_MESSAGE", "").splitlines()
-              release_notes = (commit_message[0].strip() if commit_message else "") or values.get("releaseNotes", "Performance improvements and bug fixes.")
+              release_notes = (commit_message[0].strip() if commit_message else "") or values.get(
+                  "releaseNotes", "Performance improvements and bug fixes."
+              )
 
-          if not release_notes:
-              raise SystemExit("What's new is required for every Android APK release.")
-
-          if version_code <= min_supported:
-              raise SystemExit("Generated versionCode must be greater than minSupportedVersionCode.")
-          values["versionName"] = version_name
-          values["versionCode"] = str(version_code)
-          values["minSupportedVersionCode"] = str(min_supported)
-          values["releaseNotes"] = release_notes
+          values.update({
+              "versionName": version_name,
+              "versionCode": str(version_code),
+              "minSupportedVersionCode": values.get("minSupportedVersionCode", "1"),
+              "releaseNotes": release_notes,
+          })
           path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
 
-          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
-          with summary.open("a") as out:
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as out:
               out.write("## Workly India — Android release metadata\n\n")
               out.write("| Detail | Value |\n|---|---|\n")
               out.write(f"| Version name | {version_name} |\n")
               out.write(f"| Version code | {version_code} |\n")
-              out.write(f"| Minimum supported version code | {min_supported} |\n")
+              out.write(f"| Previous version code | {latest_code or 'not available for PR build'} |\n")
               out.write(f"| Release notes | {release_notes} |\n\n")
-          print(f"Generated v{version_name} (versionCode {version_code}) for workflow run #{run_number}")
+          print(f"Generated v{version_name} (versionCode {version_code})")
           PY
 
       - name: Set up Java 17
@@ -172,6 +214,37 @@ jobs:
           WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
         run: |
           gradle assembleWebsiteRelease bundlePlayStoreRelease --stacktrace
+
+      - name: Verify APK embedded version matches release metadata
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import subprocess
+          props = {}
+          for line in pathlib.Path("android-release.properties").read_text().splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key, value = line.split("=", 1)
+                  props[key.strip()] = value.strip()
+          apk_files = list(pathlib.Path("native/android/app/build/outputs/apk/website/release").glob("*.apk"))
+          if len(apk_files) != 1 or apk_files[0].stat().st_size == 0:
+              raise SystemExit(f"Expected exactly one non-empty website APK, found {len(apk_files)}")
+          sdk = pathlib.Path(os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", "/usr/local/lib/android/sdk")))
+          aapt = sdk / "build-tools/35.0.0/aapt"
+          if not aapt.exists():
+              raise SystemExit(f"Android aapt tool not found: {aapt}")
+          output = subprocess.check_output([str(aapt), "dump", "badging", str(apk_files[0])], text=True)
+          package = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", output, re.M)
+          if not package:
+              raise SystemExit("Could not read package/version metadata from the built APK.")
+          actual = package.groups()
+          expected = ("com.worklyindia.app", props["versionCode"], props["versionName"])
+          if actual != expected:
+              raise SystemExit(f"APK metadata mismatch: expected {expected}, got {actual}")
+          print(f"Verified APK package={actual[0]}, versionName={actual[2]}, versionCode={actual[1]}")
+          PY
 
       - name: Rename release files for users
         run: |
