@@ -309,6 +309,7 @@ class MainActivity : FragmentActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false)
         webView.addJavascriptInterface(WorklyWebBridge(), "WorklyAndroid")
+        webView.addJavascriptInterface(WorklyFestivalWidgetBridge(this), "WorklyFestivalWidget")
         webView.webViewClient = object : WebViewClient() {
             override fun onReceivedError(
                 view: WebView,
