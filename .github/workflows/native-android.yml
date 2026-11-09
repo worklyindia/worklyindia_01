@@ -64,6 +64,7 @@ jobs:
           base = os.environ["SUPABASE_URL"].rstrip("/")
           service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
           latest_code = 0
+          latest_minimum = 1
           latest_name = values.get("versionName", "2.4.3")
 
           # Production builds use the newest Supabase release row as the single source
@@ -75,7 +76,7 @@ jobs:
               response = requests.get(
                   f"{base}/rest/v1/android_app_releases",
                   headers=headers,
-                  params={"select": "version_code,version_name", "order": "version_code.desc", "limit": "1"},
+                  params={"select": "version_code,version_name,min_supported_version_code", "order": "version_code.desc", "limit": "1"},
                   timeout=30,
               )
               response.raise_for_status()
@@ -83,6 +84,7 @@ jobs:
               if rows:
                   latest_code = int(rows[0]["version_code"])
                   latest_name = str(rows[0]["version_name"])
+                  latest_minimum = int(rows[0].get("min_supported_version_code") or 1)
 
           match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?", latest_name)
           if not match:
@@ -106,7 +108,7 @@ jobs:
           values.update({
               "versionName": version_name,
               "versionCode": str(version_code),
-              "minSupportedVersionCode": values.get("minSupportedVersionCode", "1"),
+              "minSupportedVersionCode": values.get("minSupportedVersionCode", str(latest_minimum)),
               "releaseNotes": release_notes,
           })
           path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
