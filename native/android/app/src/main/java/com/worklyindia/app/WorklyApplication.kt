@@ -8,5 +8,7 @@ class WorklyApplication : Application() {
         // Activate the existing lightweight, network-constrained quality monitor
         // on app startup. WorkManager keeps a single periodic instance across launches.
         WorklyNetworkMonitorWorker.schedule(this)
+        // Keep the home-screen festival card fresh without opening the website.
+        WorklyFestivalSyncWorker.schedule(this)
     }
 }
