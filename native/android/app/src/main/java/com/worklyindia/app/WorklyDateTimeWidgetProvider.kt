@@ -188,14 +188,17 @@ class WorklyDateTimeWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    private fun formatFestivalDate(isoDate: String): String = try {
-        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-            isLenient = false
-            timeZone = indiaTimeZone()
-        }.parse(isoDate) ?: return isoDate
-        SimpleDateFormat("dd MMM", Locale.ENGLISH).apply { timeZone = indiaTimeZone() }.format(parsed)
-    } catch (_: Exception) {
-        isoDate
+    private fun formatFestivalDate(isoDate: String): String {
+        return try {
+            val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                isLenient = false
+                timeZone = indiaTimeZone()
+            }.parse(isoDate)
+            if (parsed == null) isoDate
+            else SimpleDateFormat("dd MMM", Locale.ENGLISH).apply { timeZone = indiaTimeZone() }.format(parsed)
+        } catch (_: Exception) {
+            isoDate
+        }
     }
 
     private fun scheduleNextMinute(context: Context) {
