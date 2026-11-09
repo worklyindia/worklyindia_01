@@ -53,7 +53,14 @@ const Festivals = () => {
         if (cancelled) return;
         const list = (data?.data as any)?.festivals;
         if (Array.isArray(list)) {
-          setAllFestivals(expandFestivalDays(list));
+          const expanded = expandFestivalDays(list);
+          setAllFestivals(expanded);
+          // Send the same Supabase-backed calendar to Android's offline widget cache.
+          try {
+            (window as any).WorklyFestivalWidget?.cacheFestivals?.(JSON.stringify(expanded));
+          } catch (error) {
+            console.warn("[Festival widget] Native cache sync failed", error);
+          }
         } else {
           setAllFestivals([]);
         }
