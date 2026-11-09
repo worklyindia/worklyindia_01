@@ -27,10 +27,11 @@
    android:textColor="@color/workly_widget_accent"
    android:textSize="16sp"
    android:textStyle="bold" />
-  <Space
+  <TextView
    android:layout_width="0dp"
    android:layout_height="1dp"
-   android:layout_weight="1" />
+   android:layout_weight="1" 
+  android:text="" />
   <TextView
    android:id="@+id/workly_widget_calendar_icon"
    android:layout_width="54dp"
@@ -81,10 +82,11 @@
   android:textColor="@color/workly_widget_secondary_text"
   android:textSize="15sp"
   android:timeZone="Asia/Kolkata" />
- <Space
+ <TextView
   android:layout_width="match_parent"
   android:layout_height="0dp"
-  android:layout_weight="1" />
+  android:layout_weight="1" 
+  android:text="" />
  <TextView
   android:layout_width="match_parent"
   android:layout_height="1dp"
