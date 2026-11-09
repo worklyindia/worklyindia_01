@@ -329,10 +329,33 @@ jobs:
           if saved.status_code not in (200, 201, 204):
               raise SystemExit(f"Supabase release metadata save failed ({saved.status_code}): {saved.text[:800]}")
 
+          # Keep exactly one APK in the R2 releases prefix: the newly verified build.
+          # Do not touch GitHub Release archival assets or Supabase release history.
+          paginator = s3.get_paginator("list_objects_v2")
+          stale_keys = []
+          for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
+              for item in page.get("Contents", []):
+                  if item["Key"] != object_key:
+                      stale_keys.append({"Key": item["Key"]})
+          for offset in range(0, len(stale_keys), 1000):
+              batch = stale_keys[offset:offset + 1000]
+              result = s3.delete_objects(
+                  Bucket=bucket,
+                  Delete={"Objects": batch, "Quiet": False},
+              )
+              errors = result.get("Errors", [])
+              if errors:
+                  raise SystemExit("Cloudflare R2 old APK cleanup failed: " + str(errors[:5]))
+          remaining = []
+          for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
+              remaining.extend(item["Key"] for item in page.get("Contents", []))
+          if remaining != [object_key]:
+              raise SystemExit("Cloudflare R2 cleanup verification failed; remaining objects: " + str(remaining))
+
           print(f"Cloudflare R2 APK: {public_url}")
           print(f"Verified single Cloudflare R2 release object: {apk.stat().st_size:,} bytes.")
-          print("GitHub Release retained as a private archival copy; prior R2 releases are never deleted.")
-          print(f"Verified APK size: {apk.stat().st_size:,} bytes. Supabase draft saved; prior releases were retained.")
+          print("Old R2 APKs deleted; GitHub Release archival assets and Supabase release history retained.")
+          print(f"Verified APK size: {apk.stat().st_size:,} bytes. Supabase draft saved; only this APK remains in R2.")
           PY
 
       - name: Add public release summary
