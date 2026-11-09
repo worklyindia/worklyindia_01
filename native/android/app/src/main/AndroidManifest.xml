@@ -35,6 +35,16 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/workly_file_paths" />
         </provider>
+        <service
+            android:name=".WorklyQuickSettingsTileService"
+            android:label="Workly India"
+            android:icon="@drawable/ic_workly_launcher"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <receiver
             android:name=".NotificationActionReceiver"
             android:exported="false" />
