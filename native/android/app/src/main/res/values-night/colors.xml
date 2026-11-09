@@ -5,4 +5,7 @@
     <color name="workly_widget_primary_text">#F1F5F9</color>
     <color name="workly_widget_secondary_text">#B7C4D1</color>
     <color name="workly_widget_accent">#5ED6C4</color>
+    <color name="workly_widget_pill">#202B4D</color>
+    <color name="workly_widget_festival_icon">#8294FF</color>
+    <color name="workly_widget_festival_icon_text">#101827</color>
 </resources>
