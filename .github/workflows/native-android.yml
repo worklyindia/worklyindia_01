@@ -244,7 +244,7 @@ jobs:
                   defined[folder].add(file.stem)
 
           failures = []
-          java_root = Path("../../java")
+          java_root = root / "java"
           for source in java_root.rglob("*.kt"):
               content = source.read_text(encoding="utf-8")
               for kind, name in re.findall(r"\bR\.(id|layout|drawable|string|color)\.([A-Za-z0-9_]+)", content):
