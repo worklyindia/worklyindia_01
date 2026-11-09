@@ -11,6 +11,20 @@ export const useFavorites = () => {
 
   const fetchFavorites = useCallback(async () => {
     if (!user) return;
+    const cacheKey = 'workly-favorites-v1:' + user.id;
+
+    // Restore the last known IDs first; this keeps the saved list available offline.
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.every((id) => typeof id === 'string')) {
+          setFavorites(parsed);
+        }
+      }
+    } catch {
+      // Ignore invalid or unavailable local cache.
+    }
 
     try {
       // Fetch user's favorites
@@ -35,9 +49,10 @@ export const useFavorites = () => {
       }
 
       setFavorites(validFavorites);
+      try { localStorage.setItem(cacheKey, JSON.stringify(validFavorites)); } catch { /* Cache is optional. */ }
     } catch (error) {
       console.error('Error fetching favorites:', error);
-      setFavorites([]);
+      // Keep the last known IDs so the saved list can still render without a connection.
     }
   }, [user]);
 
@@ -89,7 +104,11 @@ export const useFavorites = () => {
 
         if (error) throw error;
 
-        setFavorites(prev => prev.filter(id => id !== jobId));
+        setFavorites(prev => {
+          const next = prev.filter(id => id !== jobId);
+          try { localStorage.setItem('workly-favorites-v1:' + user.id, JSON.stringify(next)); } catch { /* Cache is optional. */ }
+          return next;
+        });
         window.dispatchEvent(new Event('favorites-updated'));
         toast({
           title: "Removed from favorites",
@@ -106,7 +125,11 @@ export const useFavorites = () => {
 
         if (error) throw error;
 
-        setFavorites(prev => [...prev, jobId]);
+        setFavorites(prev => {
+          const next = [...prev, jobId];
+          try { localStorage.setItem('workly-favorites-v1:' + user.id, JSON.stringify(next)); } catch { /* Cache is optional. */ }
+          return next;
+        });
         window.dispatchEvent(new Event('favorites-updated'));
         toast({
           title: "Added to favorites",
