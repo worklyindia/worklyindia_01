@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shortcut_find_jobs_short">Find jobs</string>
+    <string name="shortcut_find_jobs_long">Find jobs on Workly India</string>
+    <string name="shortcut_my_activity_short">My activity</string>
+    <string name="shortcut_my_activity_long">View your Workly India activity</string>
+    <string name="shortcut_my_profile_short">My profile</string>
+    <string name="shortcut_my_profile_long">Open your Workly India profile</string>
+    <string name="shortcut_job_alerts_short">Job alerts</string>
+    <string name="shortcut_job_alerts_long">View your Workly India job alerts</string>
+</resources>
