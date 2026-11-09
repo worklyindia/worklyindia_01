@@ -12,6 +12,7 @@ export const useFavorites = () => {
   const fetchFavorites = useCallback(async () => {
     if (!user) return;
     const cacheKey = 'workly-favorites-v1:' + user.id;
+    setLoading(true);
 
     // Restore the last known IDs first; this keeps the saved list available offline.
     try {
@@ -50,14 +51,17 @@ export const useFavorites = () => {
 
       setFavorites(validFavorites);
       try { localStorage.setItem(cacheKey, JSON.stringify(validFavorites)); } catch { /* Cache is optional. */ }
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching favorites:', error);
       // Keep the last known IDs so the saved list can still render without a connection.
+      setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
     let isMounted = true;
+    if (user) setLoading(true);
     
     // Add small delay to prevent race conditions during route restoration
     const fetchTimer = setTimeout(() => {
