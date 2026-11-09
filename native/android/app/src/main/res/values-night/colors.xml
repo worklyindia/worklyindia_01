@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="workly_widget_surface">#111B2D</color>
+    <color name="workly_widget_text">#F4F7FC</color>
+    <color name="workly_widget_muted">#AAB8CC</color>
+    <color name="workly_widget_accent">#53D6B5</color>
+    <color name="workly_widget_divider">#34445B</color>
+    <color name="workly_widget_button_text">#FFFFFF</color>
+    <color name="workly_widget_chip">#26364D</color>
+    <color name="workly_widget_border">#34445B</color>
+</resources>
