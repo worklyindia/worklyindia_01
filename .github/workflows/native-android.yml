@@ -347,7 +347,7 @@ jobs:
           print(f"Cloudflare R2 APK: {public_url}")
           print(f"Verified Cloudflare R2 object and latest alias: {apk.stat().st_size:,} bytes.")
           print("GitHub Release retained as a private archival copy; prior R2 releases are never deleted.")
-          print(f"Verified APK size: {apk.stat().st_size:,} bytes. Removed {len(obsolete)} obsolete release record(s).")
+          print(f"Verified APK size: {apk.stat().st_size:,} bytes. Supabase draft saved; prior releases were retained.")
           PY
 
       - name: Add public release summary
