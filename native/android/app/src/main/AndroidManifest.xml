@@ -55,20 +55,16 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-        <receiver android:name=".WorklyDateTimeWidgetProvider" android:exported="true">
+        <receiver
+            android:name=".WorklyDateTimeWidgetProvider"
+            android:label="@string/workly_datetime_widget_label"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.worklyindia.app.ACTION_DATETIME_WIDGET_TICK" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/workly_datetime_widget_info" />
-        </receiver>
-        <receiver android:name=".WorklyJobsWidgetProvider" android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/workly_jobs_widget_info" />
         </receiver>
         <activity
             android:name=".MainActivity"
