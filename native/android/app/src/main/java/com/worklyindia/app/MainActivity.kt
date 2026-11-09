@@ -1306,24 +1306,65 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     inner class WorklyWebBridge {
         @JavascriptInterface
         fun canDisplayOverOtherApps(): Boolean {
-            return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || android.provider.Settings.canDrawOverlays(this@MainActivity)
+            return Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                android.provider.Settings.canDrawOverlays(this@MainActivity)
+        }
+
+        // Return a fresh OS permission snapshot so the website can explain the
+        // exact state instead of assuming that opening Settings granted access.
+        @JavascriptInterface
+        fun getOverlayPermissionStatus(): String {
+            val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+            val granted = !supported || android.provider.Settings.canDrawOverlays(this@MainActivity)
+            val declared = packageManager.checkPermission(
+                Manifest.permission.SYSTEM_ALERT_WINDOW,
+                packageName
+            ) == PackageManager.PERMISSION_GRANTED
+            return JSONObject()
+                .put("supported", supported)
+                .put("granted", granted)
+                .put("permissionDeclared", declared)
+                .put("androidVersion", Build.VERSION.RELEASE.orEmpty())
+                .put("apiLevel", Build.VERSION.SDK_INT)
+                .put("manufacturer", Build.MANUFACTURER.orEmpty())
+                .put("model", Build.MODEL.orEmpty())
+                .toString()
         }
 
         @JavascriptInterface
         fun openDisplayOverOtherAppsSettings(): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || android.provider.Settings.canDrawOverlays(this@MainActivity)) {
-                return true
-            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                android.provider.Settings.canDrawOverlays(this@MainActivity)
+            ) return true
+
             runOnUiThread {
+                val packageSettings = Intent(
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + packageName)
+                )
+                val generalSettings = Intent(
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION
+                )
                 try {
-                    val intent = Intent(
-                        android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:" + packageName)
-                    )
-                    startActivity(intent)
+                    // Prefer the app-specific page. Some OEM Settings apps ignore
+                    // the package URI, so retry with the general overlay page.
+                    try {
+                        startActivity(packageSettings)
+                    } catch (packageSettingsError: Exception) {
+                        android.util.Log.w(
+                            "WorklyOverlay",
+                            "App-specific overlay settings unavailable; opening general page",
+                            packageSettingsError
+                        )
+                        startActivity(generalSettings)
+                    }
                 } catch (error: Exception) {
                     android.util.Log.w("WorklyOverlay", "Could not open overlay permission settings", error)
-                    Toast.makeText(this@MainActivity, "Open Android Settings > Apps > Special app access > Display over other apps.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Open Settings > Apps > Special app access > Display over other apps. If Android says access is restricted, open Workly India App info > ⋮ > Allow restricted settings first.",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
             return false
@@ -1964,6 +2005,20 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             File(cacheDir, "secure-vault").listFiles()?.forEach { it.delete() }
         }
         registerNetworkListener()
+        // Re-check special overlay access every time the user returns from
+        // Android Settings and notify the embedded website of the real OS state.
+        if (::webView.isInitialized) {
+            val overlayGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+                android.provider.Settings.canDrawOverlays(this)
+            webView.post {
+                if (::webView.isInitialized) {
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('workly-native-overlay-permission', {detail:{granted:$overlayGranted}}));",
+                        null
+                    )
+                }
+            }
+        }
         if (isBiometricLockEnabled() && !biometricAuthenticatedForForeground) showBiometricLockPrompt(false)
         if (::webView.isInitialized) syncWebsiteSession()
         if (pendingWebsiteInstallUri != null) {
