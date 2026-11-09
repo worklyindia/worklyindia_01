@@ -13,7 +13,7 @@ val releaseProperties = Properties().apply {
 
 android {
     namespace = "com.worklyindia.app"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures { buildConfig = true }
 
@@ -64,7 +64,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     // Official Google Play in-app update flow (flexible updates). 
     implementation("com.google.android.play:app-update-ktx:2.1.0")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.17.0")
     // Native pull-to-refresh gesture for the embedded Workly WebView.
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     // Native fingerprint, face and device-credential app lock.
