@@ -22,6 +22,13 @@ import java.util.concurrent.TimeUnit
 /** Background sync: does not launch WebView or open the Festivals page. */
 class WorklyFestivalSyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
+        val currentYear = java.util.Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")).get(java.util.Calendar.YEAR)
+        val prefs = applicationContext.getSharedPreferences(WorklyFestivalWidgetBridge.PREFS, Context.MODE_PRIVATE)
+        // One complete annual download is enough. Keep it locally until next calendar year.
+        if (prefs.getInt(WorklyFestivalWidgetBridge.KEY_SYNC_YEAR, -1) == currentYear &&
+            prefs.getString(WorklyFestivalWidgetBridge.KEY_FESTIVALS, null) != null) {
+            return Result.success()
+        }
         var connection: HttpURLConnection? = null
         return try {
             val filter = URLEncoder.encode("Google Calendar API JSON", "UTF-8")
@@ -47,8 +54,10 @@ class WorklyFestivalSyncWorker(context: Context, params: WorkerParameters) : Wor
             val source = data.optJSONArray("festivals") ?: return Result.retry()
             val expanded = expandFestivalDays(source)
             if (expanded.length() == 0) return Result.retry()
-            if (WorklyFestivalWidgetBridge.saveFestivals(applicationContext, expanded.toString())) Result.success()
-            else Result.retry()
+            if (WorklyFestivalWidgetBridge.saveFestivals(applicationContext, expanded.toString())) {
+                prefs.edit().putInt(WorklyFestivalWidgetBridge.KEY_SYNC_YEAR, currentYear).commit()
+                Result.success()
+            } else Result.retry()
         } catch (e: Exception) {
             Log.w(TAG, "Background festival sync failed; keeping offline cache", e)
             Result.retry()
@@ -97,16 +106,21 @@ class WorklyFestivalSyncWorker(context: Context, params: WorkerParameters) : Wor
         private const val WORK_NAME = "workly-festival-calendar-sync"
 
         fun schedule(context: Context) {
-            val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-            val periodic = PeriodicWorkRequestBuilder<WorklyFestivalSyncWorker>(12, TimeUnit.HOURS)
-                .setConstraints(constraints).build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, periodic
-            )
-            val initial = androidx.work.OneTimeWorkRequestBuilder<WorklyFestivalSyncWorker>()
-                .setConstraints(constraints).build()
+            val year = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")).get(Calendar.YEAR)
+            val prefs = context.getSharedPreferences(WorklyFestivalWidgetBridge.PREFS, Context.MODE_PRIVATE)
+            if (prefs.getInt(WorklyFestivalWidgetBridge.KEY_SYNC_YEAR, -1) == year &&
+                prefs.getString(WorklyFestivalWidgetBridge.KEY_FESTIVALS, null) != null) return
+
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val request = androidx.work.OneTimeWorkRequestBuilder<WorklyFestivalSyncWorker>()
+                .setConstraints(constraints)
+                .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
-                "$WORK_NAME-initial", androidx.work.ExistingWorkPolicy.KEEP, initial
+                "$WORK_NAME-$year",
+                androidx.work.ExistingWorkPolicy.KEEP,
+                request
             )
         }
     }
