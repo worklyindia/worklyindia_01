@@ -60,6 +60,8 @@ android {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // Native GA4/Firebase Analytics: app installs, opens, sessions and screen views.
+    implementation("com.google.firebase:firebase-analytics")
     // Official Google Play in-app update flow (flexible updates). 
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.15.0")
