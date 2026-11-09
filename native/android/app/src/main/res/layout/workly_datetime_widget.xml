@@ -75,10 +75,13 @@
             android:timeZone="Asia/Kolkata" />
     </LinearLayout>
 
-    <View
+    <!-- TextView is supported by RemoteViews; a plain View is not. -->
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/workly_widget_border" />
+        android:background="@color/workly_widget_border"
+        android:includeFontPadding="false"
+        android:text="" />
 
     <LinearLayout
         android:id="@+id/workly_festival_open"
@@ -109,7 +112,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="TODAY'S FESTIVAL"
+                android:text="FESTIVALS"
                 android:textColor="@color/workly_widget_secondary_text"
                 android:textSize="12sp"
                 android:textStyle="bold" />
@@ -121,7 +124,7 @@
                 android:layout_marginTop="3dp"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="Govardhan Puja"
+                android:text="Explore festival calendar"
                 android:textColor="@color/workly_widget_primary_text"
                 android:textSize="18sp"
                 android:textStyle="bold" />
@@ -130,13 +133,13 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="8dp"
             android:background="@drawable/workly_widget_pill"
             android:paddingStart="12dp"
             android:paddingTop="7dp"
             android:paddingEnd="12dp"
             android:paddingBottom="7dp"
-            android:text="Today"
+            android:text="Open"
             android:textColor="@color/workly_widget_accent"
             android:textSize="14sp"
             android:textStyle="bold" />
