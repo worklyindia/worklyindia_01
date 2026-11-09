@@ -454,6 +454,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_ID: ${{ steps.upload-release-artifacts.outputs.artifact-id }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
           APK_FILE: native/android/app/build/outputs/Workly-India.apk
           AAB_FILE: native/android/app/build/outputs/Workly-India.aab
         run: |
@@ -494,5 +497,20 @@ jobs:
             else
               echo "::warning::Release files are not available; inspect the earlier build or rename step."
               find native/android/app/build/outputs -maxdepth 5 -type f -print 2>/dev/null || true
+            fi
+            if [ "$GITHUB_REF" = "refs/heads/main" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ -s "$APK_FILE" ]; then
+              VERSION_CODE=$(sed -n 's/^versionCode=//p' android-release.properties | head -n 1)
+              APK_URL="${R2_PUBLIC_BASE_URL%/}/android/releases/android-v${VERSION_CODE}/Workly-India.apk"
+              {
+                echo ""
+                echo "### Verified production APK"
+                echo "- **Cloudflare R2 download:** [Download Workly India APK](${APK_URL})"
+                echo "- **Owner Portal:** Release saved to Supabase as an unpublished draft. Select **Make Public** to enable app updates."
+              } >> "$GITHUB_STEP_SUMMARY"
+            elif [ -n "${ARTIFACT_ID:-}" ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "### PR / branch verification APK (not a production update)" >> "$GITHUB_STEP_SUMMARY"
+              echo "- **Download build artifact:** [Workly-India APK + AAB](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/${ARTIFACT_ID})" >> "$GITHUB_STEP_SUMMARY"
+              echo "- Cloudflare upload and Supabase production release creation are intentionally skipped for PR builds." >> "$GITHUB_STEP_SUMMARY"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
