@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="workly_widget_card">#17212B</color>
+    <color name="workly_widget_border">#334454</color>
+    <color name="workly_widget_primary_text">#F1F5F9</color>
+    <color name="workly_widget_secondary_text">#B7C4D1</color>
+    <color name="workly_widget_accent">#5ED6C4</color>
+</resources>
