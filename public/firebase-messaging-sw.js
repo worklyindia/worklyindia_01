@@ -159,9 +159,19 @@ self.addEventListener('pushsubscriptionchange', (event) => {
 /* Offline-first app shell and static-asset cache.
    Keep this in the same root worker as push notifications: a second root-scope
    worker would replace the notification handler and break push delivery. */
-const SHELL_CACHE = 'workly-offline-shell-v2';
-const ASSET_CACHE = 'workly-static-assets-v2';
+const SHELL_CACHE = 'workly-offline-shell-v3';
+const ASSET_CACHE = 'workly-static-assets-v3';
 const MAX_ASSET_ENTRIES = 180;
+const MAX_PAGE_ENTRIES = 120;
+
+function getSafeNavigationKey(url) {
+  // The app shell is the same for every SPA route. Strip query/hash values so
+  // OAuth, password-reset, invite and tracking tokens are never stored as keys.
+  return new Request(new URL(url.pathname, self.location.origin).href, {
+    method: 'GET',
+    credentials: 'same-origin',
+  });
+}
 const BYPASS_PREFIXES = [
   '/rest/', '/auth/', '/storage/', '/functions/', '/realtime/',
   '/api/', '/graphql/', '/_vercel/'
@@ -190,18 +200,24 @@ self.addEventListener('fetch', (event) => {
 
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
+      const cache = await caches.open(SHELL_CACHE);
+      const pageKey = getSafeNavigationKey(url);
       try {
         const response = await fetch(req);
         if (response && response.ok) {
-          const cache = await caches.open(SHELL_CACHE);
-          await cache.put(req, response.clone());
-          // Preserve the canonical SPA entry point as the offline navigation fallback.
+          // Store only the generic SPA document, keyed by pathname. Never
+          // persist query-string tokens or user-specific URL parameters.
+          await cache.put(pageKey, response.clone());
           if (url.pathname === '/') await cache.put('/', response.clone());
+          const keys = await cache.keys();
+          if (keys.length > MAX_PAGE_ENTRIES) {
+            await Promise.all(keys.slice(0, keys.length - MAX_PAGE_ENTRIES).map((key) => cache.delete(key)));
+          }
+          return response;
         }
-        return response;
+        return (await cache.match(pageKey)) || (await cache.match('/')) || response;
       } catch (_error) {
-        const cache = await caches.open(SHELL_CACHE);
-        return (await cache.match(req)) ||
+        return (await cache.match(pageKey)) ||
           (await cache.match('/')) ||
           Response.error();
       }
