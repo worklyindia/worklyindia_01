@@ -366,7 +366,10 @@ object NativePushManager {
             "whatsapp_message", "instagram_message", "facebook_message"
         ).any { marker -> marker in socialSourceText }
 
-        if (isSocialInboxNotification) {
+        val internalConversationId = data["conversation_id"]?.takeIf { it.matches(Regex("[0-9a-fA-F-]{36}")) }
+        val isInternalWorklyChat = !isSocialInboxNotification && internalConversationId != null
+
+        if (isSocialInboxNotification || isInternalWorklyChat) {
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
@@ -397,11 +400,23 @@ object NativePushManager {
                     .bigText(body)
                     .setBigContentTitle(title)
             )
-            builder.addAction(
-                android.R.drawable.ic_menu_send,
-                "Reply",
-                activityPendingIntent(chatUrl, tag.hashCode() + 1)
-            )
+            if (isInternalWorklyChat && internalConversationId != null) {
+                val remoteInput = androidx.core.app.RemoteInput.Builder("workly_chat_reply")
+                    .setLabel("Type a reply")
+                    .build()
+                val replyAction = NotificationCompat.Action.Builder(
+                    android.R.drawable.ic_menu_send,
+                    "Reply",
+                    NotificationActionReceiver.replyPendingIntent(context, internalConversationId, tag.hashCode() + 1)
+                ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
+                builder.addAction(replyAction)
+            } else {
+                builder.addAction(
+                    android.R.drawable.ic_menu_send,
+                    "Open chat",
+                    activityPendingIntent(chatUrl, tag.hashCode() + 1)
+                )
+            }
             builder.addAction(
                 android.R.drawable.ic_menu_view,
                 "Mark as read",
