@@ -1,6 +1,5 @@
 package com.worklyindia.app
 
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -10,6 +9,15 @@ import androidx.core.app.NotificationManagerCompat
 
 class NotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_ACK_CHARGING_ALERT) {
+            val serviceIntent = Intent(context, ChargingMonitorService::class.java).apply {
+                action = ChargingMonitorService.ACTION_ACKNOWLEDGE
+            }
+            runCatching { context.startService(serviceIntent) }
+                .onFailure { android.util.Log.e("WorklyCharging", "Could not stop battery alarm from notification", it) }
+            return
+        }
+
         val tag = intent.getStringExtra(EXTRA_TAG) ?: return
         val id = intent.getIntExtra(EXTRA_ID, tag.hashCode())
         when (intent.action) {
@@ -35,6 +43,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_MARK_READ = "com.worklyindia.app.ACTION_MARK_READ"
         const val ACTION_MUTE = "com.worklyindia.app.ACTION_MUTE"
+        const val ACTION_ACK_CHARGING_ALERT = "com.worklyindia.app.ACTION_ACK_CHARGING_ALERT"
         private const val EXTRA_TAG = "notification_tag"
         private const val EXTRA_ID = "notification_id"
 
