@@ -91,7 +91,6 @@ class MainActivity : FragmentActivity() {
     private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var offlineOverlay: FrameLayout? = null
-    private var noInternetBanner: TextView? = null
     // Preserve the exact in-app destination when a navigation fails offline.
     private var pendingOfflineUrl: String? = null
     private var offlineRetryInProgress = false
@@ -328,7 +327,13 @@ class MainActivity : FragmentActivity() {
                         pendingOfflineUrl = request.url.toString()
                         offlineRetryInProgress = false
                         view.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                        showOfflineScreen()
+                        if (!initialWebsiteLoadCompleted && !hasInternetConnection()) {
+                            // Keep the startup screen visible when no cached Home document exists.
+                            // A cached Home can still render; otherwise wait for network recovery.
+                            showStartupLoading()
+                        } else {
+                            showOfflineScreen()
+                        }
                     }
                 }
             }
@@ -785,7 +790,6 @@ class MainActivity : FragmentActivity() {
             offlineRetryInProgress = false
             lastLoadedUrl = website
             webView.loadUrl(website)
-            showNoInternetBanner()
         }
         if (openVaultShortcut) webView.post { showSecureDocumentVault() }
     }
@@ -1035,47 +1039,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
-    private fun showNoInternetBanner() {
-        if (!::rootLayout.isInitialized || noInternetBanner?.parent != null) return
-        val density = resources.displayMetrics.density
-        fun dp(value: Int) = (value * density).toInt()
-        val statusBarHeight = resources.getIdentifier("status_bar_height", "dimen", "android")
-            .takeIf { it > 0 }?.let { resources.getDimensionPixelSize(it) } ?: dp(24)
-        val dark = isNativeDarkTheme()
-        val banner = TextView(this).apply {
-            text = "●  No internet connection. Turn on mobile data or Wi-Fi."
-            textSize = 13f
-            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (dark) Color.rgb(39, 58, 82) else Color.rgb(36, 69, 91))
-                cornerRadius = dp(14).toFloat()
-            }
-            elevation = dp(8).toFloat()
-            contentDescription = "No internet connection. Turn on mobile data or Wi-Fi."
-        }
-        noInternetBanner = banner
-        rootLayout.addView(banner, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP
-        ).apply {
-            leftMargin = dp(14)
-            rightMargin = dp(14)
-            topMargin = statusBarHeight + dp(10)
-        })
-        banner.bringToFront()
-    }
-
-    private fun hideNoInternetBanner() {
-        noInternetBanner?.let { banner ->
-            (banner.parent as? android.view.ViewGroup)?.removeView(banner)
-        }
-        noInternetBanner = null
-    }
-
     private fun showOfflineScreen() {
         if (!::rootLayout.isInitialized || offlineOverlay?.parent != null) return
         val dark = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -1249,7 +1212,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         if (!::webView.isInitialized || isFinishing || isDestroyed) return
         if (!hasInternetConnection()) return
 
-        hideNoInternetBanner()
+        
         dispatchNativeEvent("workly-native-network-change", "{connected:true}")
         dispatchNativeEvent("online")
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
@@ -1289,7 +1252,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 if (internetReady) {
                     dispatchNativeEvent("online")
                     runOnUiThread {
-                        hideNoInternetBanner()
+                        
                         if (::webView.isInitialized) {
                             webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
                             // Retry the exact failed route after connectivity returns, even
