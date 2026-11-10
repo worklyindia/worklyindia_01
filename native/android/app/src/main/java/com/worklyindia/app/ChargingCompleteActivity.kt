@@ -1,8 +1,7 @@
 package com.worklyindia.app
 
 import android.app.Activity
-import android.media.Ringtone
-import android.media.RingtoneManager
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.view.WindowManager
@@ -14,13 +13,10 @@ import android.widget.TextView
 import android.view.ViewGroup
 
 class ChargingCompleteActivity : Activity() {
-    private var alarm: Ringtone? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockScreen()
         renderAlert()
-        playAlarm()
     }
 
     private fun showOverLockScreen() {
@@ -100,8 +96,7 @@ class ChargingCompleteActivity : Activity() {
             }
             setPadding(px(24), px(18), px(24), px(18))
             setOnClickListener {
-                stopAlarm()
-                getSystemService(android.app.NotificationManager::class.java).cancel(8211)
+                acknowledgeAlarm()
                 finish()
             }
         }
@@ -109,24 +104,11 @@ class ChargingCompleteActivity : Activity() {
         setContentView(root)
     }
 
-    private fun playAlarm() {
-        runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            alarm = RingtoneManager.getRingtone(this, uri)?.apply {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) isLooping = true
-                play()
-            }
+    private fun acknowledgeAlarm() {
+        val intent = Intent(this, ChargingMonitorService::class.java).apply {
+            action = ChargingMonitorService.ACTION_ACKNOWLEDGE
         }
-    }
-
-    private fun stopAlarm() {
-        runCatching { alarm?.stop() }
-        alarm = null
-    }
-
-    override fun onDestroy() {
-        stopAlarm()
-        super.onDestroy()
+        runCatching { startService(intent) }
+            .onFailure { android.util.Log.e("WorklyCharging", "Could not stop battery alarm", it) }
     }
 }
