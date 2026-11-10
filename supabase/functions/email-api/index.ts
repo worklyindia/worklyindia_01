@@ -2685,7 +2685,7 @@ serve(async req => {
           status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
-      const preview = chatText.replace(/\\s+/g, ' ').slice(0, 140);
+      const preview = chatText.replace(/\s+/g, ' ').slice(0, 140);
       const result = await sendToUsers(supabase, [recipientId], {
         title: 'New Workly Chat message',
         body: preview,
