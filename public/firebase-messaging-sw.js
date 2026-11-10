@@ -161,7 +161,6 @@ self.addEventListener('pushsubscriptionchange', (event) => {
    worker would replace the notification handler and break push delivery. */
 const SHELL_CACHE = 'workly-offline-shell-v2';
 const ASSET_CACHE = 'workly-static-assets-v2';
-const OFFLINE_URL = '/offline.html';
 const MAX_ASSET_ENTRIES = 180;
 const BYPASS_PREFIXES = [
   '/rest/', '/auth/', '/storage/', '/functions/', '/realtime/',
@@ -204,7 +203,6 @@ self.addEventListener('fetch', (event) => {
         const cache = await caches.open(SHELL_CACHE);
         return (await cache.match(req)) ||
           (await cache.match('/')) ||
-          (await caches.match(OFFLINE_URL)) ||
           Response.error();
       }
     })());
@@ -238,7 +236,7 @@ async function precacheAppShell() {
   const shellCache = await caches.open(SHELL_CACHE);
   const assetCache = await caches.open(ASSET_CACHE);
 
-  // Cache the app entry and the dedicated offline screen first.
+  // Cache the app entry and its static assets first.
   const shellResponse = await fetch('/');
   if (shellResponse.ok) {
     await shellCache.put('/', shellResponse.clone());
@@ -271,12 +269,6 @@ async function precacheAppShell() {
     await trimAssetCache(assetCache);
   }
 
-  try {
-    const offlineResponse = await fetch(OFFLINE_URL);
-    if (offlineResponse.ok) await shellCache.put(OFFLINE_URL, offlineResponse);
-  } catch (_error) {
-    // The shell still works if the optional fallback page is unavailable.
-  }
 }
 
 self.addEventListener('install', (event) => {
