@@ -28,6 +28,7 @@ const Notifications = () => {
   type NativeMessage = { id: number; source: string; title: string; message: string; time: number; canReply: boolean };
   const [nativeMessages, setNativeMessages] = useState<NativeMessage[]>([]);
   const [nativeAccess, setNativeAccess] = useState(false);
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
   const [nativeReplies, setNativeReplies] = useState<Record<number, string>>({});
   const [nativeReplyStatus, setNativeReplyStatus] = useState<Record<number, string>>({});
   const nativeBridge = getWorklyAndroidBridge();
@@ -35,6 +36,7 @@ const Notifications = () => {
     if (!nativeBridge) return;
     try {
       setNativeAccess(!!nativeBridge.hasExternalNotificationAccess?.());
+      setCloudSyncEnabled(!!nativeBridge.isExternalMessageCloudSyncEnabled?.());
       const parsed = JSON.parse(nativeBridge.getExternalNotificationInbox?.() || "[]");
       setNativeMessages(Array.isArray(parsed) ? parsed : []);
     } catch (error) {
@@ -157,6 +159,21 @@ const Notifications = () => {
             <Button variant="outline" size="sm" onClick={() => nativeBridge.openExternalNotificationAccessSettings?.()}>
               {nativeAccess ? "Access enabled" : "Enable access"}
             </Button>
+          </div>
+          <div className="mb-3 rounded-lg border border-border/60 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Sync messages to Workly database</p>
+                <p className="text-xs text-muted-foreground">When enabled, captured message text and your quick replies are saved to your signed-in Workly account. Turn this off any time.</p>
+              </div>
+              <Button variant={cloudSyncEnabled ? "default" : "outline"} size="sm" disabled={!nativeAccess} onClick={() => {
+                const next = !cloudSyncEnabled;
+                const saved = nativeBridge.setExternalMessageCloudSyncEnabled?.(next) === true;
+                if (saved) setCloudSyncEnabled(next);
+              }}>
+                {cloudSyncEnabled ? "On" : "Off"}
+              </Button>
+            </div>
           </div>
           {!nativeAccess ? (
             <p className="text-sm text-muted-foreground rounded-lg border p-3">Enable Workly India notification access in Android Settings to view supported WhatsApp, Instagram and Facebook notifications here.</p>
