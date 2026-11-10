@@ -53,8 +53,8 @@ jobs:
           )
           response.raise_for_status()
           rows = response.json()
-          if not isinstance(rows, list) or not rows:
-              raise SystemExit("No release rows returned. Refusing to delete any R2 objects (fail-safe).")
+          if not isinstance(rows, list):
+              raise SystemExit("Supabase release query did not return a list. Refusing cleanup.")
 
           referenced = set()
           for row in rows:
