@@ -398,6 +398,37 @@ class MainActivity : FragmentActivity() {
                     hideOfflineScreen()
                     if (hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_DEFAULT
                     syncWebsiteSession()
+                    // Persist the current SPA route so a force-closed app resumes
+                    // the same page instead of always returning to the homepage.
+                    view.evaluateJavascript("""
+                        (function() {
+                          if (window.__worklyRoutePersistenceInstalled) return;
+                          window.__worklyRoutePersistenceInstalled = true;
+                          var save = function() {
+                            try {
+                              if (window.WorklyAndroid && window.WorklyAndroid.saveLastVisitedRoute) {
+                                window.WorklyAndroid.saveLastVisitedRoute(window.location.href);
+                              }
+                            } catch (_) {}
+                          };
+                          var push = history.pushState;
+                          var replace = history.replaceState;
+                          history.pushState = function() {
+                            var result = push.apply(this, arguments);
+                            save();
+                            return result;
+                          };
+                          history.replaceState = function() {
+                            var result = replace.apply(this, arguments);
+                            save();
+                            return result;
+                          };
+                          window.addEventListener('popstate', save);
+                          window.addEventListener('hashchange', save);
+                          window.addEventListener('pagehide', save);
+                          save();
+                        })();
+                    """.trimIndent(), null)
                     dispatchNativeEvent("workly-native-bridge-ready")
                     // In this native shell Android already places the WebView below
                     // the status bar. WebView may still report a non-zero CSS
@@ -652,12 +683,17 @@ class MainActivity : FragmentActivity() {
         registerNetworkListener()
         val openVaultShortcut = intent.data?.scheme == "worklyindia" && intent.data?.host == "open" && intent.data?.path == "/vault"
         val openHomeFromQuickTile = intent.getBooleanExtra("workly_open_home", false)
-        val target = if (openHomeFromQuickTile) {
-            website
-        } else {
-            trustedInternalUrl(intent.getStringExtra("notification_url"))
-                ?: trustedInternalUrl(intent.data?.toString())
-                ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else website
+        val explicitTarget = trustedInternalUrl(intent.getStringExtra("notification_url"))
+            ?: trustedInternalUrl(intent.data?.toString())
+            ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else null
+        val savedRoute = getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
+            .getString("last_route", null)
+            ?.takeIf { it.startsWith("/") && !it.startsWith("//") }
+        val target = when {
+            openHomeFromQuickTile -> website
+            explicitTarget != null -> explicitTarget
+            !savedRoute.isNullOrBlank() -> "https://$allowedHost$savedRoute"
+            else -> website
         }
         lastLoadedUrl = target
         // Do not start WebView navigation while offline. This prevents a browser
@@ -1389,6 +1425,28 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun saveLastVisitedRoute(url: String): Boolean {
+            val safeUrl = trustedInternalUrl(url) ?: return false
+            val uri = Uri.parse(safeUrl)
+            val route = buildString {
+                append(uri.encodedPath?.takeIf { it.isNotBlank() } ?: "/")
+                uri.encodedQuery?.let { append("?"); append(it) }
+                uri.encodedFragment?.let { append("#"); append(it) }
+            }
+            if (route.startsWith("/auth") || route.startsWith("/oauth") ||
+                route.contains("access_token", ignoreCase = true) ||
+                route.contains("refresh_token", ignoreCase = true) ||
+                route.contains("code=", ignoreCase = true) ||
+                route.contains("token=", ignoreCase = true) ||
+                route.contains("otp=", ignoreCase = true)
+            ) return false
+            getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
+                .edit().putString("last_route", route).apply()
+            lastLoadedUrl = "https://$allowedHost$route"
+            return true
+        }
+
         @JavascriptInterface
         fun canDisplayOverOtherApps(): Boolean {
             return Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
