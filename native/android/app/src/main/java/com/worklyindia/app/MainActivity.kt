@@ -2183,8 +2183,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
-        ensureChargingMonitorRunning()
-        ensureChargingAlertAccess()
+        // Do not run the persistent charging foreground service: Android requires
+        // its ongoing notification, which users asked us to remove.
+        stopService(Intent(this, ChargingMonitorService::class.java))
+        getSystemService(android.app.NotificationManager::class.java).cancel(8210)
         showAppOpenLiveUpdate()
         // Decrypted files are exported to a short-lived app-private cache only
         // so Android's document viewer can open them. Remove leftovers as soon
@@ -2287,6 +2289,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             .build()
         runCatching {
             androidx.core.app.NotificationManagerCompat.from(this).notify(APP_OPEN_LIVE_NOTIFICATION_ID, notification)
+            // Show the Workspace active capsule briefly, then remove it completely.
+            activityScope.launch {
+                delay(4_000)
+                dismissAppOpenLiveUpdate()
+            }
         }.onFailure { error ->
             android.util.Log.w("WorklyLiveUpdate", "Could not show app-open Live Update", error)
         }
