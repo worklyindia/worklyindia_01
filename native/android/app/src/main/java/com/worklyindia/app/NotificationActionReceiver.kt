@@ -31,9 +31,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 try {
                     val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(EXTRA_REPLY)?.toString()?.trim().orEmpty()
                     val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 5000 && conversationId.matches(Regex("[0-9a-fA-F-]{36}"))) {
-                        sendAuthenticatedChatReply(context, conversationId, reply)
+                    if (reply.isBlank() || reply.length > 5000 || !conversationId.matches(Regex("[0-9a-fA-F-]{36}"))) {
+                        throw IllegalArgumentException("Reply details are missing or invalid. Open the chat and try again.")
                     }
+                    sendAuthenticatedChatReply(context, conversationId, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyChatReply", "Inline reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_REPLY)
@@ -49,9 +50,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(EXTRA_WHATSAPP_REPLY)?.toString()?.trim().orEmpty()
                     val phone = intent.getStringExtra(EXTRA_WHATSAPP_PHONE).orEmpty()
                     val audience = intent.getStringExtra(EXTRA_WHATSAPP_AUDIENCE).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 4096 && phone.matches(Regex("[+0-9]{10,16}")) && audience == "customer_service") {
-                        sendAuthenticatedWhatsAppReply(context, phone, audience, reply)
+                    if (reply.isBlank() || reply.length > 4096 || !phone.matches(Regex("[+0-9]{10,16}")) || audience != "customer_service") {
+                        throw IllegalArgumentException("WhatsApp reply details are missing or invalid. Open the conversation and try again.")
                     }
+                    sendAuthenticatedWhatsAppReply(context, phone, audience, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyWhatsAppReply", "Inline WhatsApp reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_WHATSAPP_REPLY)
@@ -66,11 +68,12 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(EXTRA_EMPLOYER_WA_REPLY)?.toString()?.trim().orEmpty()
                     val conversationId = intent.getStringExtra(EXTRA_EMPLOYER_WA_CONVERSATION_ID).orEmpty()
                     val phoneNumberId = intent.getStringExtra(EXTRA_EMPLOYER_WA_PHONE_NUMBER_ID).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 4096 &&
-                        conversationId.matches(Regex("[0-9a-fA-F-]{36}")) &&
-                        phoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}"))) {
-                        sendAuthenticatedEmployerWhatsAppReply(context, conversationId, phoneNumberId, reply)
+                    if (reply.isBlank() || reply.length > 4096 ||
+                        !conversationId.matches(Regex("[0-9a-fA-F-]{36}")) ||
+                        !phoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}"))) {
+                        throw IllegalArgumentException("Employer WhatsApp reply details are missing or invalid. Open the conversation and try again.")
                     }
+                    sendAuthenticatedEmployerWhatsAppReply(context, conversationId, phoneNumberId, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyEmployerWhatsAppReply", "Inline employer WhatsApp reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_EMPLOYER_WA_REPLY)
@@ -87,13 +90,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val accountId = intent.getStringExtra(EXTRA_META_ACCOUNT_ID).orEmpty()
                     val recipientId = intent.getStringExtra(EXTRA_META_RECIPIENT_ID).orEmpty()
                     val audience = intent.getStringExtra(EXTRA_META_AUDIENCE).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 2000 &&
-                        (platform == "instagram" || platform == "facebook") &&
-                        accountId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
-                        recipientId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
-                        (audience.isEmpty() || audience == "support")) {
-                        sendAuthenticatedMetaReply(context, platform, accountId, recipientId, audience, reply)
+                    if (reply.isBlank() || reply.length > 2000 ||
+                        (platform != "instagram" && platform != "facebook") ||
+                        !accountId.matches(Regex("[A-Za-z0-9_-]{1,100}")) ||
+                        !recipientId.matches(Regex("[A-Za-z0-9_-]{1,100}")) ||
+                        (audience.isNotEmpty() && audience != "support")) {
+                        throw IllegalArgumentException("Instagram/Facebook reply details are missing or invalid. Open the conversation and try again.")
                     }
+                    sendAuthenticatedMetaReply(context, platform, accountId, recipientId, audience, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyMetaReply", "Inline Meta reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_META_REPLY)
