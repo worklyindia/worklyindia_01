@@ -680,6 +680,10 @@ class MainActivity : FragmentActivity() {
         ))
         setContentView(rootLayout)
         ViewCompat.requestApplyInsets(rootLayout)
+        // Ask for notification and Android full-screen-alert access once the
+        // app window is ready, so the 100% battery alarm can ring and show
+        // its lock-screen activity when the device permits full-screen intents.
+        rootLayout.post { ensureChargingAlertAccess() }
         registerNetworkListener()
         val openVaultShortcut = intent.data?.scheme == "worklyindia" && intent.data?.host == "open" && intent.data?.path == "/vault"
         val openHomeFromQuickTile = intent.getBooleanExtra("workly_open_home", false)
