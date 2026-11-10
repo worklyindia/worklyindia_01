@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send, Activity, CheckCircle2, XCircle, Clock3, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -53,6 +53,10 @@ export default function AndroidAppUpdates() {
   const [loading, setLoading] = useState(true);
   const [updatingReleaseId, setUpdatingReleaseId] = useState<string | null>(null);
   const [downloadingReleaseId, setDownloadingReleaseId] = useState<string | null>(null);
+  const [workflowRun, setWorkflowRun] = useState<any>(null);
+  const [workflowJobs, setWorkflowJobs] = useState<any[]>([]);
+  const [workflowLoading, setWorkflowLoading] = useState(true);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,6 +108,42 @@ export default function AndroidAppUpdates() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  // The repository is public, so the latest Actions run and its individual
+  // step states can be read without exposing a GitHub token in the browser.
+  const loadWorkflowDiagnostics = useCallback(async () => {
+    setWorkflowLoading(true);
+    setWorkflowError(null);
+    try {
+      const headers = { Accept: "application/vnd.github+json" };
+      const runsResponse = await fetch(
+        "https://api.github.com/repos/worklyindia/worklyindia_01/actions/workflows/native-android.yml/runs?per_page=1",
+        { headers }
+      );
+      if (!runsResponse.ok) throw new Error("GitHub Actions run status could not be loaded (" + runsResponse.status + ").");
+      const runsData = await runsResponse.json();
+      const run = runsData.workflow_runs?.[0] ?? null;
+      setWorkflowRun(run);
+      if (!run) {
+        setWorkflowJobs([]);
+        return;
+      }
+      const jobsResponse = await fetch(
+        "https://api.github.com/repos/worklyindia/worklyindia_01/actions/runs/" + run.id + "/jobs?per_page=100",
+        { headers }
+      );
+      if (!jobsResponse.ok) throw new Error("Workflow step details could not be loaded (" + jobsResponse.status + ").");
+      const jobsData = await jobsResponse.json();
+      setWorkflowJobs(jobsData.jobs ?? []);
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "Workflow diagnostics are unavailable.");
+      setWorkflowJobs([]);
+    } finally {
+      setWorkflowLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadWorkflowDiagnostics(); }, [loadWorkflowDiagnostics]);
 
   const publishRelease = async (release: Release) => {
     if (release.is_published || updatingReleaseId) return;
