@@ -13,7 +13,10 @@ export const useAppReady = (authLoading: boolean, profileLoading: boolean, user:
   useEffect(() => {
     const isNativeAndroid = typeof navigator !== 'undefined' &&
       /WorklyIndiaApp\/1\.0/i.test(navigator.userAgent);
-    const maxWait = isNativeAndroid ? 15000 : 5000;
+    // If the device is offline, do not keep the app splash waiting for
+    // network-only profile checks; show the locally cached app after a short grace period.
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const maxWait = isOffline ? 1500 : (isNativeAndroid ? 15000 : 5000);
     const timer = setTimeout(() => setTimedOut(true), maxWait);
     return () => clearTimeout(timer);
   }, []);
