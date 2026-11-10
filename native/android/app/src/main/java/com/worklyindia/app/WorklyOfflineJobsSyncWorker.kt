@@ -22,7 +22,7 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
             val endpoint = "$SUPABASE_URL/rest/v1/jobs" +
                 "?select=id,title,api_company_name,location,salary_range,job_type,experience_level,category,description,requirements" +
                 "&status=eq.active&visibility=eq.public" +
-                "&order=published_at.desc.nullslast,created_at.desc&limit=20"
+                "&order=published_at.desc.nullslast,created_at.desc&limit=50"
             connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 10_000
@@ -58,8 +58,10 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
+            // Periodic sync continues after the user closes Workly; CONNECTED permits Wi-Fi and mobile data.
+            // Android may defer the exact run time for battery and data-saver policies.
             val request = PeriodicWorkRequestBuilder<WorklyOfflineJobsSyncWorker>(
-                6, TimeUnit.HOURS
+                1, TimeUnit.HOURS
             ).setConstraints(constraints).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request
