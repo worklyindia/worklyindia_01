@@ -326,7 +326,7 @@ export default function AndroidAppUpdates() {
         <Card className="w-full min-w-0 overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
             <CardTitle className="flex items-center gap-2 text-lg"><Activity className="h-5 w-5" /> Automatic cleanup status</CardTitle>
-            <CardDescription>New release Public hone ke baad scheduled GitHub workflow purane APKs, R2 files aur Supabase release records delete karta hai. Cleanup report yahan verify karein.</CardDescription>
+            <CardDescription>Android Workflow successful APK upload ke baad current Public release se purane versions clean karta hai. Owner Page par naya release Public karne ke baad Supabase turant usse purane versions clean karta hai. Dono cases mein active Public APK aur future drafts safe rehte hain.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
