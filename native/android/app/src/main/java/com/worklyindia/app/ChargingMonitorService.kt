@@ -88,6 +88,18 @@ class ChargingMonitorService : Service() {
             return
         }
 
+        // Android 8+ lets users disable an individual notification channel while
+        // leaving the app's master notification switch enabled. Do not mark this
+        // charging cycle as alerted when the battery-alert channel is blocked.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = getSystemService(NotificationManager::class.java)
+                .getNotificationChannel(ALERT_CHANNEL)
+            if (channel == null || channel.importance == NotificationManager.IMPORTANCE_NONE) {
+                android.util.Log.w(TAG, "Full-charge alert skipped: battery alert channel is disabled")
+                return
+            }
+        }
+
         val openIntent = Intent(this, ChargingCompleteActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
