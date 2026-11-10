@@ -179,6 +179,6 @@ jobs:
               "- Cleanup runs only after a Public release is verified.",
           ]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write("\\n".join(report) + "\\n")
-          print("\\n".join(report))
+              summary.write("\n".join(report) + "\n")
+          print("\n".join(report))
           PY
