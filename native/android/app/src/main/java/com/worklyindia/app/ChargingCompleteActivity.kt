@@ -8,11 +8,19 @@ import android.view.WindowManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.view.ViewGroup
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
+import android.view.animation.AccelerateDecelerateInterpolator
 
 class ChargingCompleteActivity : Activity() {
+    private val navy = Color.rgb(7, 17, 38)
+    private val mint = Color.rgb(28, 174, 132)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockScreen()
@@ -32,8 +40,8 @@ class ChargingCompleteActivity : Activity() {
             )
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD)
-        window.statusBarColor = Color.rgb(7, 17, 38)
-        window.navigationBarColor = Color.rgb(7, 17, 38)
+        window.statusBarColor = navy
+        window.navigationBarColor = navy
     }
 
     private fun renderAlert() {
@@ -42,66 +50,118 @@ class ChargingCompleteActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(px(28), px(34), px(28), px(30))
+            setPadding(px(26), px(24), px(26), px(28))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(7, 17, 38), Color.rgb(18, 45, 79), Color.rgb(8, 27, 51))
+                intArrayOf(navy, Color.rgb(17, 48, 82), Color.rgb(8, 27, 51))
             )
         }
+
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, px(42))
+        }
+        val logo = ImageView(this).apply {
+            setImageResource(R.mipmap.ic_launcher)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "Workly India app logo"
+        }
+        brand.addView(logo, LinearLayout.LayoutParams(px(42), px(42)).apply { rightMargin = px(11) })
+        brand.addView(TextView(this).apply {
+            text = "Workly India"
+            textSize = 20f
+            letterSpacing = 0.015f
+            gravity = Gravity.CENTER_VERTICAL
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        })
+        root.addView(brand)
+
         val icon = TextView(this).apply {
             text = "✓"
-            textSize = 46f
+            textSize = 76f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.rgb(28, 174, 132))
+                setColor(mint)
+                setStroke(px(5), Color.argb(48, 255, 255, 255))
             }
-            layoutParams = LinearLayout.LayoutParams(px(104), px(104)).apply { bottomMargin = px(28) }
+            elevation = px(12).toFloat()
+            alpha = 0f
+            scaleX = 0.55f
+            scaleY = 0.55f
         }
-        root.addView(icon)
+        root.addView(icon, LinearLayout.LayoutParams(px(164), px(164)).apply { bottomMargin = px(28) })
+
         root.addView(TextView(this).apply {
             text = "100% BATTERY"
             textSize = 14f
-            letterSpacing = 0.18f
+            letterSpacing = 0.22f
             gravity = Gravity.CENTER
             setTextColor(Color.rgb(133, 224, 197))
         })
         root.addView(TextView(this).apply {
-            text = "Your battery is fully charged!"
-            textSize = 28f
+            text = "Your battery is\nfully charged!"
+            textSize = 29f
             gravity = Gravity.CENTER
-            setTypeface(Typeface.DEFAULT, Typeface.BOLD)
+            setTypeface(Typeface.SERIF, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            setPadding(0, px(14), 0, px(12))
+            setPadding(0, px(18), 0, px(14))
         })
         root.addView(TextView(this).apply {
             text = "Your phone has reached 100% charge. You can unplug it now to help avoid leaving it connected longer than needed."
-            textSize = 16f
+            textSize = 17f
             gravity = Gravity.CENTER
             setTextColor(Color.rgb(220, 230, 242))
             setLineSpacing(px(5).toFloat(), 1f)
-            setPadding(px(4), 0, px(4), px(30))
+            setPadding(px(3), 0, px(3), px(34))
         })
+
         val button = TextView(this).apply {
             text = "OK, GOT IT"
-            textSize = 16f
-            letterSpacing = 0.08f
+            textSize = 17f
+            letterSpacing = 0.10f
             gravity = Gravity.CENTER
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {
                 setColor(Color.rgb(18, 160, 125))
-                cornerRadius = px(18).toFloat()
+                cornerRadius = px(28).toFloat()
             }
-            setPadding(px(24), px(18), px(24), px(18))
+            elevation = px(5).toFloat()
+            setPadding(px(24), px(21), px(24), px(21))
             setOnClickListener {
                 acknowledgeAlarm()
                 finish()
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
         }
         root.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, -2))
         setContentView(root)
+
+        icon.post {
+            ObjectAnimator.ofPropertyValuesHolder(
+                icon,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.55f, 1.08f, 1f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.55f, 1.08f, 1f),
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f)
+            ).apply {
+                duration = 850
+                interpolator = AccelerateDecelerateInterpolator()
+                start()
+            }
+            ObjectAnimator.ofFloat(icon, View.ALPHA, 1f, 0.82f, 1f).apply {
+                duration = 1900
+                repeatCount = ObjectAnimator.INFINITE
+                interpolator = AccelerateDecelerateInterpolator()
+                startDelay = 900
+                start()
+            }
+        }
+        root.alpha = 0f
+        root.animate().alpha(1f).setDuration(420).start()
     }
 
     private fun acknowledgeAlarm() {
