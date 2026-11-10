@@ -26,7 +26,7 @@ object WorklyOfflineDataStore {
     fun savePublicJobs(context: Context, rows: JSONArray): Boolean {
         if (rows.length() == 0) return false
         val safeRows = JSONArray()
-        for (index in 0 until rows.length().coerceAtMost(20)) {
+        for (index in 0 until rows.length().coerceAtMost(50)) {
             val row = rows.optJSONObject(index) ?: continue
             val id = row.optString("id").takeIf { it.isNotBlank() } ?: continue
             safeRows.put(JSONObject()
