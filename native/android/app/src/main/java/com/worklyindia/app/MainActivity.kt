@@ -1543,10 +1543,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         fun sendExternalNotificationReply(id: Int, message: String): Boolean {
             val text = message.trim().take(1000)
             if (id == Int.MIN_VALUE || text.isBlank()) return false
-            val results = android.os.Bundle().apply {
-                putCharSequence("workly_external_reply_text", text)
-            }
-            return ReplyRegistry.send(this@MainActivity, id, results)
+            return ReplyRegistry.sendText(this@MainActivity, id, text)
         }
 
         @JavascriptInterface
