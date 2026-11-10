@@ -44,7 +44,8 @@ class ChargingMonitorService : Service() {
             }
             ACTION_POWER_DISCONNECTED -> {
                 resetChargeCycleAndStopAlert()
-                return START_STICKY
+                stopSelf()
+                return START_NOT_STICKY
             }
             ACTION_ACKNOWLEDGE -> {
                 acknowledgeAlert()
@@ -85,6 +86,7 @@ class ChargingMonitorService : Service() {
             showChargeCompleteAlert()
         } else if (!charging) {
             resetChargeCycleAndStopAlert()
+            stopSelf()
         }
     }
 

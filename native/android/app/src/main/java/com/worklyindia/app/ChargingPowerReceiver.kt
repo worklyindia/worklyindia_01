@@ -28,23 +28,15 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 }
             }
             Intent.ACTION_POWER_DISCONNECTED -> {
-                // Reset this charge cycle, but KEEP the foreground monitor alive.
-                // Stopping here would leave the next plug-in dependent on a
-                // background foreground-service launch that Android may block.
-                val stopAlert = Intent(context, ChargingMonitorService::class.java)
-                    .setAction(ChargingMonitorService.ACTION_POWER_DISCONNECTED)
-                try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ContextCompat.startForegroundService(context, stopAlert)
-                    else context.startService(stopAlert)
-                } catch (error: Exception) {
-                    android.util.Log.e("WorklyCharging", "Could not stop battery alert after unplugging", error)
-                    context.getSystemService(android.app.NotificationManager::class.java).cancel(8211)
-                    context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE).edit()
-                        .putBoolean(ChargingMonitorService.KEY_ALERTED, false)
-                        .putBoolean(ChargingMonitorService.KEY_ACKNOWLEDGED, false)
-                        .apply()
-                }
-                android.util.Log.i("WorklyCharging", "Charger disconnected; alert stopped and notification cleared")
+                // Stop the foreground monitor on unplug so its ongoing notification
+                // disappears. The next POWER_CONNECTED event starts it again.
+                context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE).edit()
+                    .putBoolean(ChargingMonitorService.KEY_ALERTED, false)
+                    .putBoolean(ChargingMonitorService.KEY_ACKNOWLEDGED, false)
+                    .apply()
+                context.getSystemService(android.app.NotificationManager::class.java).cancel(8211)
+                context.stopService(Intent(context, ChargingMonitorService::class.java))
+                android.util.Log.i("WorklyCharging", "Charger disconnected; charging monitor stopped and notification cleared")
             }
         }
     }
