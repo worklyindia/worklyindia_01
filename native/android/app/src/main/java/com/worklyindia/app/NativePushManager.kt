@@ -420,8 +420,7 @@ object NativePushManager {
                 val isEmployerWhatsApp = notificationType == "whatsapp_message" &&
                     data["employer_notification"] == "true" &&
                     employerConversationId.matches(Regex("[0-9a-fA-F-]{36}")) &&
-                    employerPhoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}")) &&
-                    whatsappPhone != null
+                    employerPhoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}"))
                 val isOwnerSupportWhatsApp = notificationType == "whatsapp_message" &&
                     whatsappAudience == "customer_service" && whatsappPhone != null
                 val metaPlatform = when {
