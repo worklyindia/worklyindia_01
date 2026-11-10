@@ -552,7 +552,7 @@ jobs:
                   raise SystemExit("Post-cleanup verification failed: current Public release is missing.")
           cleanup_status = f"Verified — kept new v{name}" + (f" and Public v{active['version_name']}" if active else " (no Public release existed)") + f"; deleted {len(old_keys)} old APKs and {len(deleted_rows)} old rows"
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write("cleanup_status=" + cleanup_status.replace("\\n", " ") + "\\n")
+              output.write("cleanup_status=" + cleanup_status.replace("\n", " ") + "\n")
           print("Android release retention: " + cleanup_status)
 
           # Idempotently maintain the GitHub archival copy after the Cloudflare upload
@@ -601,7 +601,7 @@ jobs:
           print(f"Cloudflare R2 APK verified: {public_url}")
           print(f"Supabase Owner Release row verified: v{name} (versionCode {code}), unpublished draft.")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write("supabase_status=Saved and read-back verified (unpublished draft)\\n")
+              output.write("supabase_status=Saved and read-back verified (unpublished draft)\n")
 
 
           PY
