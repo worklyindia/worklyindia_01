@@ -80,6 +80,7 @@ import { useStackedComposer } from "@/hooks/useStackedComposer";
 
 import LottieSearchIcon from "@/components/LottieSearchIcon";
 import MetaSocialChat from "@/components/social/MetaSocialChat";
+import ExternalMessageInboxPanel from "@/components/social/ExternalMessageInboxPanel";
 import { ChatAccountAvatar, useChatAccountProfile } from "@/components/social/ChatAccountProfile";
 
 interface LinkedProfile {
@@ -171,6 +172,7 @@ export default function EmployerWhatsAppFullChat({ companyId, phoneNumberId = nu
   const [newMessage, setNewMessage] = useState("");
   const { inputRef: waInputRef, mirrorRef: waMirrorRef, expanded: waExpanded } = useStackedComposer(newMessage, { inlineControlsWidth: 88 });
   const [searchQuery, setSearchQuery] = useState("");
+  const [showDeviceInbox, setShowDeviceInbox] = useState(false);
   const [channel, setChannel] = useState<"whatsapp" | "instagram" | "facebook">(() => {
     const c = searchParams.get("channel");
     return c === "instagram" || c === "facebook" ? c : "whatsapp";
@@ -1429,12 +1431,33 @@ export default function EmployerWhatsAppFullChat({ companyId, phoneNumberId = nu
     }
   };
 
+  if (showDeviceInbox) return (
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+      <WorklyChatHeader
+        channel={channel}
+        connected={channel === "whatsapp" ? !!phoneNumberId : !!chatProfile.account}
+        picture={chatProfile.picture}
+        name={chatProfile.name}
+        refreshing={isRefreshing}
+        onBack={() => leaveWorklyChat(navigate, "/employer-portal")}
+        onRefresh={handleRefresh}
+        onNewChat={() => setShowNewChat(true)}
+        onProfile={() => navigate(profilePath)}
+        onTemplates={() => navigate("/employer/workly-chat/templates")}
+        onChannel={(nextChannel) => { setShowDeviceInbox(false); setChannel(nextChannel); navigate(`/employer/workly-chat?channel=${nextChannel}`, { replace: true }); }}
+        onDeviceInbox={() => setShowDeviceInbox(true)}
+        deviceInboxActive
+      />
+      <ExternalMessageInboxPanel />
+    </div>
+  );
+
   if (!phoneNumberId) return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background text-foreground">
       <WorklyChatHeader channel={channel} connected={channel !== "whatsapp" && !!chatProfile.account} picture={chatProfile.picture} name={chatProfile.name} refreshing={isRefreshing}
         onBack={() => leaveWorklyChat(navigate, "/employer-portal")} onRefresh={handleRefresh} onNewChat={() => setShowNewChat(true)}
         onProfile={() => navigate(profilePath)} onTemplates={() => navigate("/employer/workly-chat/templates")}
-        onChannel={(nextChannel) => { setChannel(nextChannel); navigate(`/employer/workly-chat?channel=${nextChannel}`, { replace: true }); }} />
+        onChannel={(nextChannel) => { setShowDeviceInbox(false); setChannel(nextChannel); navigate(`/employer/workly-chat?channel=${nextChannel}`, { replace: true }); }} onDeviceInbox={() => setShowDeviceInbox(true)} />
       {channel === "whatsapp" ? <WhatsAppChatConnectState onConnected={onConnected} /> : <MetaSocialChat platform={channel} />}
     </div>
   );
@@ -1481,7 +1504,7 @@ export default function EmployerWhatsAppFullChat({ companyId, phoneNumberId = nu
           <WorklyChatHeader channel={channel} connected={channel === "whatsapp" ? !!phoneNumberId : !!chatProfile.account} picture={chatProfile.picture} name={chatProfile.name} refreshing={isRefreshing}
             onBack={() => leaveWorklyChat(navigate, "/employer-portal")} onRefresh={handleRefresh} onNewChat={() => setShowNewChat(true)}
             onProfile={() => navigate(profilePath)} onTemplates={() => navigate("/employer/workly-chat/templates")}
-            onChannel={(nextChannel) => { setChannel(nextChannel); navigate(`/employer/workly-chat?channel=${nextChannel}`, { replace: true }); }} />
+            onChannel={(nextChannel) => { setShowDeviceInbox(false); setChannel(nextChannel); navigate(`/employer/workly-chat?channel=${nextChannel}`, { replace: true }); }} onDeviceInbox={() => setShowDeviceInbox(true)} />
         )}
 
         {channel !== "whatsapp" && <MetaSocialChat platform={channel} />}
