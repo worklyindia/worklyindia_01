@@ -71,6 +71,23 @@ export default function AndroidAppUpdates() {
 
     let rows = (data || []) as Release[];
 
+    // Self-heal stale unpublished releases when the Owner opens this page.
+    // The Edge Function verifies the active Public row before deleting older APKs/rows.
+    const activePublic = rows.filter((release) => release.is_published)
+      .sort((a, b) => b.version_code - a.version_code)[0];
+    if (activePublic && rows.some((release) => release.version_code < activePublic.version_code)) {
+      const { data: cleanupData, error: cleanupError } = await supabase.functions.invoke("enhanced-cleanup", {
+        body: { action: "cleanup_android_releases", public_release_id: activePublic.id },
+      });
+      if (!cleanupError && cleanupData?.success === true) {
+        const { data: refreshedRows, error: refreshError } = await supabase.from("android_app_releases")
+          .select("*").order("version_code", { ascending: false }).limit(100);
+        if (!refreshError && refreshedRows) rows = refreshedRows as Release[];
+      } else {
+        console.warn("Automatic old Android release cleanup is pending:", cleanupError, cleanupData);
+      }
+    }
+
     // The database size can be stale or accidentally contain the AAB size.
     // Read the actual APK object so the Owner Portal matches the APK artifact
     // reported by the native Android workflow.
