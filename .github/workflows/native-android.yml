@@ -523,7 +523,10 @@ jobs:
                   if key.startswith("android/releases/") and key.endswith("/Workly-India.apk"):
                       protected_keys.add(key)
 
-          cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+          # Every APK not referenced by a published release or the newest release is
+          # obsolete. Do not use an age cutoff: old unpublished drafts can be deleted
+          # immediately, even when uploaded less than one hour ago. The newest draft
+          # and all published releases are protected above.
           stale_objects = []
           reclaimed_bytes = 0
           apk_objects_before = 0
@@ -534,8 +537,6 @@ jobs:
                       continue
                   apk_objects_before += 1
                   if key in protected_keys:
-                      continue
-                  if obj["LastModified"] > cutoff:
                       continue
                   stale_objects.append({"Key": key})
                   reclaimed_bytes += int(obj.get("Size", 0))
