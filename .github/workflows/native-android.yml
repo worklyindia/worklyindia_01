@@ -108,7 +108,7 @@ jobs:
           if parts[-1] < 9:
               parts[-1] += 1
           else:
-              parts.extend([1, 0])
+              parts = parts[:-1] + [1, 0]
           version_name = ".".join(str(part) for part in parts)
 
           # The workflow run number is globally increasing for this workflow; also
