@@ -431,9 +431,73 @@ class MainActivity : FragmentActivity() {
                             save();
                             return result;
                           };
-                          window.addEventListener('popstate', save);
-                          window.addEventListener('hashchange', save);
+                          window.addEventListener('popstate', function() { save(); markRouteChange(); });
+                          window.addEventListener('hashchange', function() { save(); markRouteChange(); });
                           window.addEventListener('pagehide', save);
+
+                          // SPA navigation failures do not reach WebViewClient.onReceivedError:
+                          // React Router keeps the same document alive and failed data requests
+                          // are ordinary fetch/XHR errors. Detect only a failed request shortly
+                          // after an in-app route change, then ask Android to show its native
+                          // branded offline screen. Cached routes with no failed request remain usable.
+                          var routeFailureWindowUntil = 0;
+                          function markRouteChange() {
+                            routeFailureWindowUntil = Date.now() + 10000;
+                          }
+                          var originalPushState = history.pushState;
+                          history.pushState = function() {
+                            var result = originalPushState.apply(this, arguments);
+                            save();
+                            markRouteChange();
+                            return result;
+                          };
+                          var originalReplaceState = history.replaceState;
+                          history.replaceState = function() {
+                            var result = originalReplaceState.apply(this, arguments);
+                            save();
+                            markRouteChange();
+                            return result;
+                          };
+                          function reportOfflineRouteFailure() {
+                            if (Date.now() > routeFailureWindowUntil) return;
+                            var connected = navigator.onLine;
+                            try {
+                              if (window.WorklyAndroid && window.WorklyAndroid.isNetworkConnected) {
+                                connected = window.WorklyAndroid.isNetworkConnected();
+                              }
+                            } catch (_) {}
+                            if (connected) return;
+                            routeFailureWindowUntil = 0;
+                            try {
+                              if (window.WorklyAndroid && window.WorklyAndroid.onOfflineNavigationFailure) {
+                                window.WorklyAndroid.onOfflineNavigationFailure(window.location.href);
+                              }
+                            } catch (_) {}
+                          }
+                          if (window.fetch && !window.__worklyOfflineFetchHooked) {
+                            window.__worklyOfflineFetchHooked = true;
+                            var originalFetch = window.fetch.bind(window);
+                            window.fetch = function() {
+                              return originalFetch.apply(this, arguments).catch(function(error) {
+                                reportOfflineRouteFailure();
+                                throw error;
+                              });
+                            };
+                          }
+                          if (window.XMLHttpRequest && !window.__worklyOfflineXhrHooked) {
+                            window.__worklyOfflineXhrHooked = true;
+                            var originalOpen = XMLHttpRequest.prototype.open;
+                            var originalSend = XMLHttpRequest.prototype.send;
+                            XMLHttpRequest.prototype.open = function() {
+                              this.__worklyOfflineRouteRequest = true;
+                              return originalOpen.apply(this, arguments);
+                            };
+                            XMLHttpRequest.prototype.send = function() {
+                              this.addEventListener('error', reportOfflineRouteFailure, { once: true });
+                              this.addEventListener('timeout', reportOfflineRouteFailure, { once: true });
+                              return originalSend.apply(this, arguments);
+                            };
+                          }
                           save();
                         })();
                     """.trimIndent(), null)
@@ -1498,6 +1562,21 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 .edit().putString("last_route", route).apply()
             lastLoadedUrl = "https://$allowedHost$route"
             return true
+        }
+
+        @JavascriptInterface
+        fun onOfflineNavigationFailure(url: String) {
+            val safeUrl = trustedInternalUrl(url) ?: return
+            runOnUiThread {
+                if (hasInternetConnection() || isFinishing || isDestroyed) return@runOnUiThread
+                pendingOfflineUrl = safeUrl
+                lastLoadedUrl = safeUrl
+                offlineRetryInProgress = false
+                if (::webView.isInitialized) {
+                    webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                }
+                showOfflineScreen()
+            }
         }
 
         @JavascriptInterface
