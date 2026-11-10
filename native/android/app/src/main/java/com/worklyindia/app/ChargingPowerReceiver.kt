@@ -10,9 +10,11 @@ class ChargingPowerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_POWER_CONNECTED,
-            Intent.ACTION_BOOT_COMPLETED -> {
-                // Normally the persistent service is already running. This is a
-                // recovery path after boot or if Android stopped the process.
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                // Recover after boot, app update, or a charging event if Android
+                // previously stopped the process. The persistent service handles
+                // subsequent charge cycles without needing another background start.
                 val service = Intent(context, ChargingMonitorService::class.java)
                     .setAction(ChargingMonitorService.ACTION_START)
                 try {
