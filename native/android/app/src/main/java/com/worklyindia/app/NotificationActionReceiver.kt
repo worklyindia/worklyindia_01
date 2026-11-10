@@ -54,6 +54,24 @@ class NotificationActionReceiver : BroadcastReceiver() {
             }.start()
             return
         }
+        if (intent.action == ACTION_REPLY_EMPLOYER_WHATSAPP) {
+            val pending = goAsync()
+            Thread {
+                try {
+                    val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(EXTRA_EMPLOYER_WA_REPLY)?.toString()?.trim().orEmpty()
+                    val conversationId = intent.getStringExtra(EXTRA_EMPLOYER_WA_CONVERSATION_ID).orEmpty()
+                    val phoneNumberId = intent.getStringExtra(EXTRA_EMPLOYER_WA_PHONE_NUMBER_ID).orEmpty()
+                    if (reply.isNotBlank() && reply.length <= 4096 &&
+                        conversationId.matches(Regex("[0-9a-fA-F-]{36}")) &&
+                        phoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}"))) {
+                        sendAuthenticatedEmployerWhatsAppReply(context, conversationId, phoneNumberId, reply)
+                    }
+                } catch (error: Exception) {
+                    android.util.Log.e("WorklyEmployerWhatsAppReply", "Inline employer WhatsApp reply failed", error)
+                } finally { pending.finish() }
+            }.start()
+            return
+        }
         if (intent.action == ACTION_REPLY_META) {
             val pending = goAsync()
             Thread {
@@ -96,6 +114,32 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 runCatching { context.startActivity(settings) }
             }
         }
+    }
+
+    private fun sendAuthenticatedEmployerWhatsAppReply(context: Context, conversationId: String, phoneNumberId: String, message: String) {
+        val session = NativeAuth.refreshSession(context) ?: throw IllegalStateException("Sign in again to reply from notifications")
+        val base = "https://jubwzelupbntbetpajqb.supabase.co"
+        val apiKey = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
+        val connection = URL("$base/functions/v1/workly-india").openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.connectTimeout = 10000
+        connection.readTimeout = 25000
+        connection.setRequestProperty("apikey", apiKey)
+        connection.setRequestProperty("Authorization", "Bearer " + session.accessToken)
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        val payload = JSONObject()
+            .put("action", "send")
+            .put("conversation_id", conversationId)
+            .put("phone_number_id", phoneNumberId)
+            .put("message", message)
+        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+        val status = connection.responseCode
+        val response = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+        connection.disconnect()
+        if (status !in 200..299) throw IllegalStateException("Employer WhatsApp rejected inline reply [" + status + "]: " + response)
+        val result = JSONObject(response)
+        if (result.optBoolean("success") != true) throw IllegalStateException(result.optString("error", "Employer WhatsApp reply failed"))
     }
 
     private fun sendAuthenticatedMetaReply(context: Context, platform: String, accountId: String, recipientId: String, audience: String, message: String) {
@@ -190,6 +234,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_REPLY_CHAT = "com.worklyindia.app.ACTION_REPLY_CHAT"
         const val ACTION_REPLY_WHATSAPP = "com.worklyindia.app.ACTION_REPLY_WHATSAPP"
+        const val ACTION_REPLY_EMPLOYER_WHATSAPP = "com.worklyindia.app.ACTION_REPLY_EMPLOYER_WHATSAPP"
+        private const val EXTRA_EMPLOYER_WA_REPLY = "workly_employer_whatsapp_reply"
+        private const val EXTRA_EMPLOYER_WA_CONVERSATION_ID = "employer_wa_conversation_id"
+        private const val EXTRA_EMPLOYER_WA_PHONE_NUMBER_ID = "employer_wa_phone_number_id"
         private const val EXTRA_REPLY = "workly_chat_reply"
         private const val EXTRA_WHATSAPP_REPLY = "workly_whatsapp_reply"
         private const val EXTRA_WHATSAPP_PHONE = "whatsapp_phone"
@@ -214,6 +262,15 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 putExtra(EXTRA_META_ACCOUNT_ID, accountId)
                 putExtra(EXTRA_META_RECIPIENT_ID, recipientId)
                 putExtra(EXTRA_META_AUDIENCE, audience)
+            }
+            return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
+        }
+
+        fun employerWhatsAppReplyPendingIntent(context: Context, conversationId: String, phoneNumberId: String, requestCode: Int): PendingIntent {
+            val intent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = ACTION_REPLY_EMPLOYER_WHATSAPP
+                putExtra(EXTRA_EMPLOYER_WA_CONVERSATION_ID, conversationId)
+                putExtra(EXTRA_EMPLOYER_WA_PHONE_NUMBER_ID, phoneNumberId)
             }
             return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         }

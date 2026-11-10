@@ -359,8 +359,9 @@ function MetaThread({ platform, accountId, conv, onBack, audience }: { platform:
       }
       setText("");
       setReplyingTo(null);
-      await qc.invalidateQueries({ queryKey: key });
+      void qc.invalidateQueries({ queryKey: key });
       void qc.invalidateQueries({ queryKey: ["meta-chat-convs", platform] });
+      toast.success("Message sent");
     } catch (e) { toast.error((e as Error).message); }
     finally { setSending(false); }
   };
@@ -375,8 +376,9 @@ function MetaThread({ platform, accountId, conv, onBack, audience }: { platform:
         media_url: url, media_type: selectedMedia.type === "document" ? "file" : selectedMedia.type, text: caption?.trim() || "" });
       setSelectedMedia(null);
       setText("");
-      await qc.invalidateQueries({ queryKey: key });
+      void qc.invalidateQueries({ queryKey: key });
       void qc.invalidateQueries({ queryKey: ["meta-chat-convs", platform] });
+      toast.success("Attachment sent");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Could not send attachment."); }
     finally { setSendingMedia(false); }
   };
