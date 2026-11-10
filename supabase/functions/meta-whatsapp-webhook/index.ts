@@ -285,7 +285,7 @@ async function handleInbound(value: any) {
         } else if (enabledOwners.length > 1) await log('ai_support_ambiguous_owner', { phoneNumberId });
       } catch (e) { console.error('[wa-ai] support reply failed', e instanceof Error ? e.message : e); }
     }
-    await notifyOwners({ phone, name: name || (conv as any)?.contact_name || null, type, content, audience, image: (mediaMetadata as any)?.media_url, employerUserId: employer?.user_id });
+    await notifyOwners({ phone, name: name || (conv as any)?.contact_name || null, type, content, audience, image: (mediaMetadata as any)?.media_url, employerUserId: employer?.user_id, conversationId: employer?.user_id ? conv.id : undefined, phoneNumberId: employer?.user_id ? phoneNumberId : undefined });
   }
 }
 
@@ -369,7 +369,7 @@ const PUSH_PREVIEW: Record<string, string> = {
 };
 
 /** WhatsApp-style push to owners/admins through the single notification hub. Never throws. */
-async function notifyOwners(m: { phone: string; name: string | null; type: string; content: string; audience: Audience | null; image?: string; employerUserId?: string }) {
+async function notifyOwners(m: { phone: string; name: string | null; type: string; content: string; audience: Audience | null; image?: string; employerUserId?: string; conversationId?: string; phoneNumberId?: string }) {
   try {
     let userIds: string[] = [];
     if (m.employerUserId) userIds = [m.employerUserId];
@@ -401,7 +401,7 @@ async function notifyOwners(m: { phone: string; name: string | null; type: strin
           { action: 'mark-read', title: 'Mark as read', url },
         ],
         tag: `whatsapp-${m.audience ?? 'x'}-${m.phone}`,
-        data: { type: 'whatsapp_message', phone: m.phone, audience: m.audience ?? '' },
+        data: { type: 'whatsapp_message', phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.employerUserId ? (m.phoneNumberId ?? '') : '' },
       }),
     });
     if (!res.ok) console.error('[wa-push] hub failed', res.status, await res.text());
