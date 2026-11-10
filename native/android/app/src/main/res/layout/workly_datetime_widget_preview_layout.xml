@@ -3,6 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:background="@drawable/workly_widget_background"
     android:gravity="center_vertical"
     android:paddingStart="16dp"
     android:paddingEnd="16dp"
@@ -31,7 +32,7 @@
             android:format24Hour="HH:mm"
             android:includeFontPadding="false"
             android:textColor="#FFFFFFFF"
-            android:textSize="46sp"
+            android:textSize="42sp"
             android:textStyle="bold"
             android:timeZone="Asia/Kolkata" />
         <TextClock
@@ -58,8 +59,8 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="9dp"
-        android:layout_marginBottom="7dp"
+        android:layout_marginTop="7dp"
+        android:layout_marginBottom="5dp"
         android:background="#88FFFFFF" />
     <LinearLayout
         android:layout_width="match_parent"

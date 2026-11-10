@@ -1,10 +1,24 @@
 package com.worklyindia.app
 
 import android.app.Application
+import android.content.pm.ShortcutManager
 
 class WorklyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Clear obsolete launcher shortcuts that may show a personal account name.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N_MR1) {
+            runCatching {
+                val shortcuts = getSystemService(ShortcutManager::class.java)
+                val allowedIds = setOf("workly_jobs", "workly_activity", "workly_profile", "workly_secure_vault")
+                val obsoleteIds = (shortcuts.dynamicShortcuts + shortcuts.pinnedShortcuts)
+                    .map { it.id }.distinct().filterNot { it in allowedIds }
+                if (obsoleteIds.isNotEmpty()) {
+                    shortcuts.removeDynamicShortcuts(obsoleteIds)
+                    shortcuts.disableShortcuts(obsoleteIds, "This shortcut is no longer available")
+                }
+            }
+        }
         // Activate the existing lightweight, network-constrained quality monitor
         // on app startup. WorkManager keeps a single periodic instance across launches.
         WorklyNetworkMonitorWorker.schedule(this)
