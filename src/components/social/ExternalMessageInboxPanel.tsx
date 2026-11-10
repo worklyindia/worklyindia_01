@@ -29,7 +29,7 @@ export default function ExternalMessageInboxPanel() {
     queryFn: async () => {
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user) throw new Error("Please sign in to view synced messages.");
-      const { data, error } = await supabase.from("external_message_conversations")
+      const { data, error } = await (supabase as any).from("external_message_conversations")
         .select("id,user_id,platform,display_name,last_message,last_message_at,updated_at")
         .eq("user_id", auth.user.id).order("updated_at", { ascending: false }).limit(100);
       if (error) throw error;
@@ -41,7 +41,7 @@ export default function ExternalMessageInboxPanel() {
     queryKey: ["external-message-thread", selected?.id],
     enabled: !!selected,
     queryFn: async () => {
-      const { data, error } = await supabase.from("external_message_messages")
+      const { data, error } = await (supabase as any).from("external_message_messages")
         .select("id,direction,body,delivery_status,created_at")
         .eq("conversation_id", selected!.id).order("created_at", { ascending: true }).limit(500);
       if (error) throw error;
