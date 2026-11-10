@@ -18,6 +18,32 @@ import android.animation.PropertyValuesHolder
 import android.view.animation.AccelerateDecelerateInterpolator
 
 class ChargingCompleteActivity : Activity() {
+    private val unplugReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action == ACTION_CLOSE_ON_UNPLUG) {
+                acknowledgeAlarm()
+                finish()
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = android.content.IntentFilter(ACTION_CLOSE_ON_UNPLUG)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(unplugReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(unplugReceiver, filter)
+        }
+    }
+
+    override fun onStop() {
+        runCatching { unregisterReceiver(unplugReceiver) }
+        super.onStop()
+    }
+
     private val navy = Color.rgb(7, 17, 38)
     private val mint = Color.rgb(28, 174, 132)
 
@@ -162,6 +188,10 @@ class ChargingCompleteActivity : Activity() {
         }
         root.alpha = 0f
         root.animate().alpha(1f).setDuration(420).start()
+    }
+
+    companion object {
+        const val ACTION_CLOSE_ON_UNPLUG = "com.worklyindia.app.ACTION_CLOSE_BATTERY_SCREEN"
     }
 
     private fun acknowledgeAlarm() {
