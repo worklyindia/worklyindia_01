@@ -1,8 +1,0 @@
-INSERT INTO public.push_lifecycle_templates (event_type,title,body,button_text,button_url,enabled) VALUES ('google_bing_publish_activated','Job sent to Google & Bing 🌐',E'Job : {{job_title}}\nPaid : {{amount}}\nDate : {{date}}\nTime : {{time}}\nYour job will appear in Google & Bing search soon.','View Job','/employer-portal',true) ON CONFLICT (event_type) DO NOTHING;
-INSERT INTO public.telegram_lifecycle_templates (event_type,title,body,button_text,button_url,enabled) VALUES ('google_bing_publish_activated','🌐 Published on Google & Bing',E'💼 Job: {{job_title}}\n💳 Paid: {{amount}}\n🗓️ {{date}}  ⏰ {{time}}\n\n<i>Your job has been sent to Google & Bing and will show in search results soon.</i>','View Job','/employer-portal',true) ON CONFLICT (event_type) DO NOTHING;
-INSERT INTO public.email_lifecycle_templates (event_type,subject,body,button_url,enabled)
-SELECT 'google_bing_publish_activated','Your job is being published on Google & Bing',
- replace(replace(replace(replace(replace(replace(body,'BOOST ACTIVE','SEARCH PUBLISHING ACTIVE'),'Your job boost is live','Your job is going to Google &amp; Bing'),'Your job is now boosted and shows at the top of search results.','Your payment was received and your job has been sent to Google &amp; Bing for search listing.'),'BOOSTED JOB','JOB'),'Boost details','Publishing details'),'{{item}}','{{amount}}'),'/',true
-FROM public.email_lifecycle_templates WHERE event_type='job_boost_activated' ON CONFLICT (event_type) DO NOTHING;
-SELECT public.expire_job_boosts();
-SELECT cron.schedule('expire-job-boosts-hourly','0 * * * *','SELECT public.expire_job_boosts();');

@@ -1,3 +1,0 @@
-REVOKE EXECUTE ON FUNCTION public.check_ai_chat_usage_only_base(uuid,text), public.increment_ai_chat_usage_base(uuid,text,integer), public.get_user_ai_chat_status_base(uuid), public.is_ai_unlimited_owner(uuid) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.check_ai_chat_usage_only_base(uuid,text), public.increment_ai_chat_usage_base(uuid,text,integer), public.get_user_ai_chat_status_base(uuid), public.is_ai_unlimited_owner(uuid) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.check_ai_chat_usage_only(uuid,text), public.increment_ai_chat_usage(uuid,text,integer), public.get_user_ai_chat_status(uuid) FROM PUBLIC, anon;

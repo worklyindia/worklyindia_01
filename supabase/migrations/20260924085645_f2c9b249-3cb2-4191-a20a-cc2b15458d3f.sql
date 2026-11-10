@@ -1,1 +1,0 @@
-revoke execute on function public.owner_notification_delivery_history(date) from public, anon;

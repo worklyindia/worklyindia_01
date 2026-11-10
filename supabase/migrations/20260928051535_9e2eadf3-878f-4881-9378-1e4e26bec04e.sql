@@ -1,1 +1,0 @@
-REVOKE EXECUTE ON FUNCTION public.is_company_message_owner(uuid) FROM PUBLIC, anon;

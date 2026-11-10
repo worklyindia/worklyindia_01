@@ -1462,83 +1462,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 interviewCallVideoEnabled = active && videoEnabled
                 if (active) {
                     window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    showInterviewLiveUpdate(videoEnabled)
                 } else {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    dismissInterviewLiveUpdate()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode) {
                         runCatching { moveTaskToBack(false) }
                     }
                 }
             }
             return true
-        }
-
-        // Android 16 can promote eligible ongoing notifications to Live Updates.
-        // On earlier Android versions and OEM skins this remains a normal ongoing
-        // notification; the manufacturer controls whether it appears in a capsule.
-        private fun showInterviewLiveUpdate(videoEnabled: Boolean) {
-            if (!hasNotificationPermission()) return
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                manager.createNotificationChannel(
-                    android.app.NotificationChannel(
-                        INTERVIEW_LIVE_CHANNEL,
-                        "Workly active interview",
-                        android.app.NotificationManager.IMPORTANCE_LOW
-                    ).apply {
-                        description = "Status for an interview or call that you started"
-                        setShowBadge(false)
-                        setSound(null, null)
-                        enableVibration(false)
-                        enableLights(false)
-                    }
-                )
-            }
-            val openIntent = Intent(this@MainActivity, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val contentIntent = android.app.PendingIntent.getActivity(
-                this@MainActivity,
-                INTERVIEW_LIVE_NOTIFICATION_ID,
-                openIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                    (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0)
-            )
-            val detail = if (videoEnabled) "Video interview in progress" else "Audio call in progress"
-            val notification = androidx.core.app.NotificationCompat.Builder(
-                this@MainActivity,
-                INTERVIEW_LIVE_CHANNEL
-            )
-                .setSmallIcon(R.drawable.ic_stat_workly)
-                .setContentTitle("Workly India")
-                .setContentText(detail)
-                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText("$detail. Tap to return to your interview."))
-                .setContentIntent(contentIntent)
-                .setCategory(androidx.core.app.NotificationCompat.CATEGORY_CALL)
-                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
-                .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setSilent(true)
-                .setShowWhen(false)
-                .setRequestPromotedOngoing(true)
-                .build()
-            runCatching {
-                androidx.core.app.NotificationManagerCompat.from(this@MainActivity)
-                    .notify(INTERVIEW_LIVE_NOTIFICATION_ID, notification)
-            }.onFailure { error ->
-                android.util.Log.w("WorklyLiveUpdate", "Could not show interview Live Update", error)
-            }
-        }
-
-        private fun dismissInterviewLiveUpdate() {
-            runCatching {
-                androidx.core.app.NotificationManagerCompat.from(this@MainActivity)
-                    .cancel(INTERVIEW_LIVE_NOTIFICATION_ID)
-            }.onFailure { error ->
-                android.util.Log.w("WorklyLiveUpdate", "Could not dismiss interview Live Update", error)
-            }
         }
 
         @JavascriptInterface
@@ -2183,11 +2114,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
-        // Do not run the persistent charging foreground service: Android requires
-        // its ongoing notification, which users asked us to remove.
-        stopService(Intent(this, ChargingMonitorService::class.java))
-        getSystemService(android.app.NotificationManager::class.java).cancel(8210)
-        showAppOpenLiveUpdate()
+        // Keep the charging monitor running in the background. Android requires
+        // a quiet ongoing notification for a foreground service.
+        ensureChargingMonitorRunning()
+        getSystemService(android.app.NotificationManager::class.java).cancel(4108)
+        getSystemService(android.app.NotificationManager::class.java).cancel(4107)
         // Decrypted files are exported to a short-lived app-private cache only
         // so Android's document viewer can open them. Remove leftovers as soon
         // as the user returns to Workly India (and on the next app launch).
@@ -2241,70 +2172,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
         networkCallback = null
         super.onPause()
-    }
-
-    // Request Android 16 Live Update promotion while the user has Workly open.
-    // OEM capsule surfaces decide independently whether to display this notification.
-    private fun showAppOpenLiveUpdate() {
-        if (!hasNotificationPermission()) return
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                android.app.NotificationChannel(
-                    APP_OPEN_LIVE_CHANNEL,
-                    "Workly app open status",
-                    android.app.NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    description = "Live status while Workly India is open"
-                    setShowBadge(false)
-                    setSound(null, null)
-                    enableVibration(false)
-                    enableLights(false)
-                }
-            )
-        }
-        val openIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentIntent = android.app.PendingIntent.getActivity(
-            this,
-            APP_OPEN_LIVE_NOTIFICATION_ID,
-            openIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0)
-        )
-        val notification = androidx.core.app.NotificationCompat.Builder(this, APP_OPEN_LIVE_CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_workly)
-            .setContentTitle("Workly India")
-            .setContentText("Workspace active")
-            .setContentIntent(contentIntent)
-            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_LOW)
-            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
-            .setShowWhen(false)
-            .setRequestPromotedOngoing(true)
-            .build()
-        runCatching {
-            androidx.core.app.NotificationManagerCompat.from(this).notify(APP_OPEN_LIVE_NOTIFICATION_ID, notification)
-            // Show the Workspace active capsule briefly, then remove it completely.
-            activityScope.launch {
-                delay(4_000)
-                dismissAppOpenLiveUpdate()
-            }
-        }.onFailure { error ->
-            android.util.Log.w("WorklyLiveUpdate", "Could not show app-open Live Update", error)
-        }
-    }
-
-    private fun dismissAppOpenLiveUpdate() {
-        runCatching {
-            androidx.core.app.NotificationManagerCompat.from(this).cancel(APP_OPEN_LIVE_NOTIFICATION_ID)
-        }.onFailure { error ->
-            android.util.Log.w("WorklyLiveUpdate", "Could not dismiss app-open Live Update", error)
-        }
     }
 
     // Direct APK installs are updated from the public Workly release feed.
@@ -2996,10 +2863,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     companion object {
-        private const val APP_OPEN_LIVE_CHANNEL = "workly_app_open_live"
-        private const val APP_OPEN_LIVE_NOTIFICATION_ID = 4108
-        private const val INTERVIEW_LIVE_CHANNEL = "workly_interview_live"
-        private const val INTERVIEW_LIVE_NOTIFICATION_ID = 4107
         private const val REQUEST_APP_UPDATE = 4104
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_CHARGING_ALERT_NOTIFICATIONS = 704

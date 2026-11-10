@@ -1,1 +1,0 @@
-CREATE POLICY "No public access to payment events" ON public.payment_events FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);

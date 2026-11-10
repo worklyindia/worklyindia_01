@@ -1,2 +1,0 @@
-ALTER TABLE public.domain_pricing_settings DROP CONSTRAINT IF EXISTS domain_pricing_fx_mode_chk;
-ALTER TABLE public.domain_pricing_settings ADD CONSTRAINT domain_pricing_fx_mode_chk CHECK (fx_mode IN ('live','manual','ai'));

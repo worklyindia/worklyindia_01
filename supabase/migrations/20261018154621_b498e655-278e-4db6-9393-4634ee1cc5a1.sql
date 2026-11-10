@@ -1,7 +1,0 @@
-CREATE TABLE public.support_account_reply_settings (user_id uuid NOT NULL, channel text NOT NULL, account_id text NOT NULL DEFAULT '', settings jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id, channel, account_id));
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.support_account_reply_settings TO authenticated;
-GRANT ALL ON public.support_account_reply_settings TO service_role;
-ALTER TABLE public.support_account_reply_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Owners manage own support reply settings" ON public.support_account_reply_settings FOR ALL TO authenticated USING (user_id = auth.uid() AND EXISTS (SELECT 1 FROM public.admin_users a WHERE a.user_id = auth.uid() AND a.role = 'owner')) WITH CHECK (user_id = auth.uid() AND EXISTS (SELECT 1 FROM public.admin_users a WHERE a.user_id = auth.uid() AND a.role = 'owner'));
-CREATE FUNCTION public.touch_support_account_reply_settings() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$;
-CREATE TRIGGER touch_support_account_reply_settings BEFORE UPDATE ON public.support_account_reply_settings FOR EACH ROW EXECUTE FUNCTION public.touch_support_account_reply_settings();

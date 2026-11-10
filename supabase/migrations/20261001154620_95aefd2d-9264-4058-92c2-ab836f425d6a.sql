@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX api_keys_one_per_user_idx ON public.api_keys (user_id);

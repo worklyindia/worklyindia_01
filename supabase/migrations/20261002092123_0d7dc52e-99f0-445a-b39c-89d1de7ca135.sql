@@ -1,1 +1,0 @@
-ALTER TABLE public.developer_oauth_apps DROP COLUMN encrypted_client_secret;

@@ -1,2 +1,0 @@
-REVOKE EXECUTE ON FUNCTION public.add_purchased_api_calls(uuid, integer, numeric, text, text, text) FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.api_quota_refresh(uuid) FROM anon, authenticated;

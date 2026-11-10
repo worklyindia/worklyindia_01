@@ -1,4 +1,0 @@
-ALTER TABLE public.social_autoreply_settings DROP CONSTRAINT IF EXISTS social_autoreply_settings_platform_check;
-ALTER TABLE public.social_autoreply_settings ADD CONSTRAINT social_autoreply_settings_platform_check CHECK (platform = ANY (ARRAY['x'::text,'linkedin'::text,'telegram_bot'::text,'gmail'::text,'github'::text,'gitlab'::text,'discord'::text,'slack'::text]));
-ALTER TABLE public.social_autoreply_log DROP CONSTRAINT IF EXISTS social_autoreply_log_platform_check;
-ALTER TABLE public.social_autoreply_log ADD CONSTRAINT social_autoreply_log_platform_check CHECK (platform = ANY (ARRAY['x'::text,'linkedin'::text,'telegram_bot'::text,'gmail'::text,'github'::text,'gitlab'::text,'discord'::text,'slack'::text]));

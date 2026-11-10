@@ -1,1 +1,0 @@
-ALTER TABLE public.developer_connect_sessions ADD COLUMN IF NOT EXISTS channel text NOT NULL DEFAULT 'whatsapp';

@@ -1,1 +1,0 @@
-ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS notify_enabled boolean NOT NULL DEFAULT true;

@@ -1,7 +1,0 @@
-ALTER TABLE public.employer_whatsapp_accounts
-  ADD COLUMN IF NOT EXISTS ai_tone TEXT NOT NULL DEFAULT 'friendly',
-  ADD COLUMN IF NOT EXISTS ai_language TEXT NOT NULL DEFAULT 'auto',
-  ADD COLUMN IF NOT EXISTS ai_business_info TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS ai_custom_instructions TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS ai_signature TEXT NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS ai_reply_length TEXT NOT NULL DEFAULT 'short';

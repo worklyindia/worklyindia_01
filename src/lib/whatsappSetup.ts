@@ -1,2 +1,0 @@
-export { needsWhatsAppRegistration, needsWhatsAppSetup, needsBusinessVerification, validWhatsAppPin } from '../../supabase/functions/_shared/whatsappSetup';
-export type { WhatsAppSetupStatus } from '../../supabase/functions/_shared/whatsappSetup';

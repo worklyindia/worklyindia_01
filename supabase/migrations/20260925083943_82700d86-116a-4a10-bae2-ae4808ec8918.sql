@@ -1,1 +1,0 @@
-CREATE POLICY "No client access to whatsapp tokens" ON public.whatsapp_audience_tokens FOR ALL TO authenticated USING (false) WITH CHECK (false);

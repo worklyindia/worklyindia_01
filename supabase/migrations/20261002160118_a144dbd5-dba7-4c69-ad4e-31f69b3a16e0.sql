@@ -1,1 +1,0 @@
-ALTER TABLE public.developer_profiles ADD COLUMN IF NOT EXISTS avatar_url text NOT NULL DEFAULT '';
