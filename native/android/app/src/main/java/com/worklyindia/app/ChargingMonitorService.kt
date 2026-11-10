@@ -209,7 +209,7 @@ class ChargingMonitorService : Service() {
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
         private const val TAG = "WorklyCharging"
         private const val MONITOR_CHANNEL = "workly_charging_monitor"
-        private const val ALERT_CHANNEL = "workly_battery_full_alert"
+        const val ALERT_CHANNEL = "workly_battery_full_alert"
         private const val MONITOR_NOTIFICATION_ID = 8210
         private const val ALERT_NOTIFICATION_ID = 8211
         private const val MONITOR_REQUEST_CODE = 8212
