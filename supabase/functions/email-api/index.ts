@@ -2656,7 +2656,7 @@ serve(async req => {
       const metaResponse = await handleMetaSocial(req, {
         action: 'chat_send', platform, account_id: accountId, recipient_id: recipientId,
         text: replyText, ...(body.audience === 'support' ? { audience: 'support' } : {})
-      }, supabase);
+      }, supabase as any);
       const responseText = await metaResponse.text();
       return new Response(responseText, { status: metaResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
