@@ -167,7 +167,7 @@ export default function AndroidAppUpdates() {
         .neq("id", release.id)
         .eq("is_published", true);
       if (unpublishError) {
-        toast.warning("The new release is Public, but previous releases could not all be unpublished. Automatic cleanup will retry after the workflow checks the public release.");
+        toast.warning("The new release is Public, but previous releases could not all be unpublished. Supabase will retry the cleanup when the Owner publishes again.");
         throw unpublishError;
       }
 
@@ -191,7 +191,7 @@ export default function AndroidAppUpdates() {
       if (pushError || pushData?.success !== true) {
         console.error("Android release push failed:", pushError, pushData);
         if (pushData?.skipped) {
-          toast.warning("The release is public. Older releases will be removed by the automatic cleanup workflow.");
+          toast.warning("The release is public. Older releases were processed immediately by Supabase.");
         } else if (Number(pushData?.recipients || 0) === 0) {
           toast.warning("The release is public, but no Android devices are registered yet. Users must open the updated app, sign in, and allow notifications before they can receive this alert.");
         } else {
@@ -200,7 +200,7 @@ export default function AndroidAppUpdates() {
       } else {
         const sent = Number(pushData.sent || 0);
         const failed = Number(pushData.failed || 0);
-        toast.success(`Workly India v${release.version_name} is Public. Automatic cleanup will remove older releases shortly. FCM accepted ${sent} notification(s)${failed ? `; ${failed} failed` : ""}.`);
+        toast.success(`Workly India v${release.version_name} is Public. Supabase is removing older releases immediately. FCM accepted ${sent} notification(s)${failed ? `; ${failed} failed` : ""}.`);
       }
       await load();
     } catch (error) {
