@@ -6,7 +6,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import AppLoadingSpinner from "@/components/AppLoadingSpinner";
-import OfflineIndicator from "@/components/OfflineIndicator";
 import SlowNetworkBanner from "@/components/SlowNetworkBanner";
 import ServiceUnavailableOverlay from "@/components/ServiceUnavailableOverlay";
 import App from "./App.tsx";
@@ -95,7 +94,6 @@ root.render(
                   <App />
                 </Suspense>
                 <SlowNetworkBanner />
-                <OfflineIndicator />
                 <ServiceUnavailableOverlay />
                 <Toaster />
               </ThemeProvider>
