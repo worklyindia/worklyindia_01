@@ -45,7 +45,8 @@ export const createQueryClient = () => {
         },
         refetchOnWindowFocus: false,
         refetchOnMount: false,
-        refetchOnReconnect: false,
+        // Keep cached query data visible and refresh stale data in the background on reconnect.
+        refetchOnReconnect: true,
         networkMode: 'offlineFirst',
         structuralSharing: true,
       },
