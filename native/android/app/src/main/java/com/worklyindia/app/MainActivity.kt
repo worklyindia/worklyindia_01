@@ -552,7 +552,7 @@ class MainActivity : FragmentActivity() {
                               var pageReady = document.readyState === 'complete';
                               if (pageReady && hasRenderedApp) {
                                 if (!splashReadySince) splashReadySince = Date.now();
-                                if (Date.now() - splashReadySince >= 900) {
+                                if (Date.now() - splashReadySince >= 100) {
                                   clearInterval(splashWatcher);
                                   if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteReady) {
                                     window.WorklyAndroid.onWebsiteReady();
@@ -561,7 +561,7 @@ class MainActivity : FragmentActivity() {
                               } else {
                                 splashReadySince = 0;
                               }
-                            }, 200);
+                            }, 100);
                           }
 
                           if (window.__worklyNativeDownloadHandlerInstalled) return;
@@ -1267,8 +1267,15 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 } else {
                     dispatchNativeEvent("offline")
                     runOnUiThread {
-                        if (::webView.isInitialized) {
+                        if (::webView.isInitialized && !hasInternetConnection()) {
                             webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                            // Preserve the current route and cover the page immediately.
+                            val currentUrl = webView.url?.takeIf {
+                                Uri.parse(it).host == allowedHost
+                            } ?: lastLoadedUrl
+                            pendingOfflineUrl = currentUrl
+                            offlineRetryInProgress = false
+                            showOfflineScreen()
                         }
                     }
                 }
@@ -1279,8 +1286,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     dispatchNativeEvent("workly-native-network-change", "{connected:false}")
                     dispatchNativeEvent("offline")
                     runOnUiThread {
-                        if (::webView.isInitialized) {
+                        if (::webView.isInitialized && !hasInternetConnection()) {
                             webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                            val currentUrl = webView.url?.takeIf {
+                                Uri.parse(it).host == allowedHost
+                            } ?: lastLoadedUrl
+                            pendingOfflineUrl = currentUrl
+                            offlineRetryInProgress = false
+                            showOfflineScreen()
                         }
                     }
                 }
