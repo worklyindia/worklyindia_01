@@ -117,7 +117,7 @@ export default function AndroidAppUpdates() {
     try {
       const headers = { Accept: "application/vnd.github+json" };
       const runsResponse = await fetch(
-        "https://api.github.com/repos/worklyindia/worklyindia_01/actions/workflows/native-android.yml/runs?per_page=1",
+        "https://api.github.com/repos/worklyindia/worklyindia_01/actions/workflows/android-release-retention.yml/runs?per_page=1",
         { headers }
       );
       if (!runsResponse.ok) throw new Error("GitHub Actions run status could not be loaded (" + runsResponse.status + ").");
@@ -150,14 +150,26 @@ export default function AndroidAppUpdates() {
     if (!window.confirm(`Publish Workly India v${release.version_name} to all users? This will make it the public update and send an Android update notification.`)) return;
     setUpdatingReleaseId(release.id);
     try {
-      // Keep the release history. Ensure only the selected version is public.
-      const { error: unpublishError } = await supabase.from("android_app_releases")
-        .update({ is_published: false, published_at: null }).eq("is_published", true);
-      if (unpublishError) throw unpublishError;
-
-      const { error: publishError } = await supabase.from("android_app_releases")
-        .update({ is_published: true, published_at: new Date().toISOString() }).eq("id", release.id);
+      // Publish the selected release first, then verify it is public before
+      // unpublishing previous releases. The scheduled retention workflow only
+      // deletes older releases after it sees this verified public row.
+      const { data: publishedRows, error: publishError } = await supabase.from("android_app_releases")
+        .update({ is_published: true, published_at: new Date().toISOString() })
+        .eq("id", release.id)
+        .select("id,version_code,is_published");
       if (publishError) throw publishError;
+      if (!publishedRows?.some((row) => row.id === release.id && row.is_published === true)) {
+        throw new Error("The new Android release could not be verified as Public. Older releases were kept.");
+      }
+
+      const { error: unpublishError } = await supabase.from("android_app_releases")
+        .update({ is_published: false, published_at: null })
+        .neq("id", release.id)
+        .eq("is_published", true);
+      if (unpublishError) {
+        toast.warning("The new release is Public, but previous releases could not all be unpublished. Automatic cleanup will retry after the workflow checks the public release.");
+        throw unpublishError;
+      }
 
       const { data: pushData, error: pushError } = await supabase.functions.invoke("email-api", {
         body: {
@@ -169,7 +181,7 @@ export default function AndroidAppUpdates() {
       if (pushError || pushData?.success !== true) {
         console.error("Android release push failed:", pushError, pushData);
         if (pushData?.skipped) {
-          toast.warning("The release is public, but Android update notifications are disabled or the template is incomplete.");
+          toast.warning("The release is public. Older releases will be removed by the automatic cleanup workflow.");
         } else if (Number(pushData?.recipients || 0) === 0) {
           toast.warning("The release is public, but no Android devices are registered yet. Users must open the updated app, sign in, and allow notifications before they can receive this alert.");
         } else {
@@ -178,7 +190,7 @@ export default function AndroidAppUpdates() {
       } else {
         const sent = Number(pushData.sent || 0);
         const failed = Number(pushData.failed || 0);
-        toast.success(`Workly India v${release.version_name} is public. FCM accepted ${sent} notification(s)${failed ? `; ${failed} failed` : ""}.`);
+        toast.success(`Workly India v${release.version_name} is Public. Automatic cleanup will remove older releases shortly. FCM accepted ${sent} notification(s)${failed ? `; ${failed} failed` : ""}.`);
       }
       await load();
     } catch (error) {
@@ -303,8 +315,8 @@ export default function AndroidAppUpdates() {
 
         <Card className="w-full min-w-0 overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="flex items-center gap-2 text-lg"><Activity className="h-5 w-5" /> Workflow details & cleanup diagnostics</CardTitle>
-            <CardDescription>Latest Android build ka step-by-step status aur cleanup report yahan verify karein.</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-lg"><Activity className="h-5 w-5" /> Automatic cleanup status</CardTitle>
+            <CardDescription>New release Public hone ke baad scheduled GitHub workflow purane APKs, R2 files aur Supabase release records delete karta hai. Cleanup report yahan verify karein.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
