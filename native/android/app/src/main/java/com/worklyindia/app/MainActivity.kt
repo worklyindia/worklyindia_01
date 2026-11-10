@@ -2270,9 +2270,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
-        // Keep the charging monitor running in the background. Android requires
-        // a quiet ongoing notification for a foreground service.
-        ensureChargingMonitorRunning()
+        // Charging monitor is started only by ACTION_POWER_CONNECTED, never by opening the app.
         getSystemService(android.app.NotificationManager::class.java).cancel(4108)
         getSystemService(android.app.NotificationManager::class.java).cancel(4107)
         // Decrypted files are exported to a short-lived app-private cache only
