@@ -302,7 +302,10 @@ internal object ExternalMessageCloudSync {
         connection.setRequestProperty("Authorization", "Bearer $accessToken")
         connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
         val status = connection.responseCode
+        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+        val responseBody = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         connection.disconnect()
-        return status
+        if (status !in 200..299) return status
+        return if (runCatching { JSONObject(responseBody).optBoolean("success", false) }.getOrDefault(false)) status else 500
     }
 }
