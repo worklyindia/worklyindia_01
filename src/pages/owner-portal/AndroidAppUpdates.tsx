@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -98,41 +98,9 @@ export default function AndroidAppUpdates() {
       }
     }));
 
-    const newest = rows[0] ?? null;
-    const currentPublic = rows.find((release) => release.is_published) ?? null;
-
-    // Retain only the newest uploaded APK and the currently public APK.
-    // This allows the current app to keep updating users while a new draft is reviewed,
-    // but prevents old drafts and historical releases from accumulating in Supabase.
-    const keepIds = new Set([newest?.id, currentPublic?.id].filter(Boolean));
-    const keep = rows.filter((release) => keepIds.has(release.id));
-    const obsolete = rows.filter((release) => !keepIds.has(release.id));
-
-    if (obsolete.length > 0) {
-      const oldPaths = [...new Set(obsolete.map((release) => release.apk_path).filter(Boolean).filter((path) => !isExternalReleaseUrl(path)))];
-      const { error: storageError } = oldPaths.length
-        ? await supabase.storage.from("android-app-releases").remove(oldPaths)
-        : { error: null };
-
-      if (storageError) {
-        console.error("Old Android APK cleanup failed:", storageError);
-        toast.error("Old APK cleanup failed: " + storageError.message);
-        setReleases(rows);
-      } else {
-        const { error: rowsError } = await supabase.from("android_app_releases")
-          .delete().in("id", obsolete.map((release) => release.id));
-        if (rowsError) {
-          console.error("Old Android release records cleanup failed:", rowsError);
-          toast.error("Old release records could not be cleaned up: " + rowsError.message);
-          setReleases(keep);
-        } else {
-          setReleases(keep);
-          toast.success(`Cleaned up ${obsolete.length} old Android release(s).`);
-        }
-      }
-    } else {
-      setReleases(keep);
-    }
+    // Never prune release history when this page loads. Owner deletion is explicit;
+    // a separate R2 reconciliation workflow removes the matching object afterwards.
+    setReleases(rows);
     setLoading(false);
   }, []);
 
@@ -192,6 +160,26 @@ export default function AndroidAppUpdates() {
     setUpdatingReleaseId(null);
     if (error) toast.error("The release could not be unpublished: " + error.message);
     else { toast.success(`Workly India v${release.version_name} is now unpublished.`); await load(); }
+  };
+
+  const deleteRelease = async (release: Release) => {
+    if (release.is_published || updatingReleaseId) {
+      toast.error("Make this release unpublished before deleting it.");
+      return;
+    }
+    if (!window.confirm(`Permanently delete Workly India v${release.version_name} (version code ${release.version_code})? Its Cloudflare R2 APK will be removed by the automatic cleanup job within 15 minutes.`)) return;
+    setUpdatingReleaseId(release.id);
+    try {
+      const { error } = await supabase.from("android_app_releases").delete().eq("id", release.id);
+      if (error) throw error;
+      setReleases((current) => current.filter((item) => item.id !== release.id));
+      toast.success(`Release v${release.version_name} removed. Cloudflare APK cleanup is queued for the next 15-minute cycle.`);
+    } catch (error) {
+      console.error("Android release deletion failed:", error);
+      toast.error(error instanceof Error ? error.message : "The release could not be deleted.");
+    } finally {
+      setUpdatingReleaseId(null);
+    }
   };
 
   const getPreferredDownloadRelease = (release: Release) => {
@@ -328,6 +316,9 @@ export default function AndroidAppUpdates() {
                       <Button type="button" variant="secondary" className="w-full" onClick={() => void copyReleaseApkLink(release)}>
                         <Copy className="mr-2 h-4 w-4" />Copy Link
                       </Button>
+                      {!release.is_published && <Button type="button" variant="destructive" className="w-full" onClick={() => void deleteRelease(release)} disabled={!!updatingReleaseId}>
+                        {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}{busy ? "Deleting..." : "Delete Release"}
+                      </Button>}
                     </div>
                   </CardContent>
                 </Card>
