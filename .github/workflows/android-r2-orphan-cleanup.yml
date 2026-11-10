@@ -1,6 +1,10 @@
 name: Android R2 automatic old APK cleanup
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-r2-orphan-cleanup.yml'
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
