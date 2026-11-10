@@ -669,10 +669,20 @@ html {
     -webkit-touch-callout: default !important;
   }
   
-  /* Native-like keyboard behavior */
+  /* Keep the document scrollable while Android resizes the WebView for
+     the software keyboard. Fixed-positioning body here traps the page and
+     hides focused inputs/composers behind the keyboard. */
   body.keyboard-open {
-    position: fixed;
+    position: relative !important;
     width: 100%;
+    scroll-padding-bottom: calc(var(--workly-keyboard-height, 0px) + env(safe-area-inset-bottom) + 1rem);
+  }
+
+  body.keyboard-open input:focus,
+  body.keyboard-open textarea:focus,
+  body.keyboard-open select:focus,
+  body.keyboard-open [contenteditable="true"]:focus {
+    scroll-margin-bottom: calc(var(--workly-keyboard-height, 0px) + 1rem);
   }
   
   /* Native scroll momentum (iOS-like) */
