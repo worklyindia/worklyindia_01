@@ -60,7 +60,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
     }
 
     private fun sendAuthenticatedChatReply(context: Context, conversationId: String, message: String) {
-        val session = NativeAuth.session(context) ?: throw IllegalStateException("Sign in required")
+        val session = NativeAuth.refreshSession(context) ?: throw IllegalStateException("Sign in again to reply from notifications")
         val base = "https://jubwzelupbntbetpajqb.supabase.co"
         val apiKey = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
         fun request(path: String, method: String, body: String? = null): String {
