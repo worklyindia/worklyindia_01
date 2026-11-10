@@ -1044,7 +1044,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             setPadding(0, dp(10), 0, 0)
         }
         val message = TextView(this).apply {
-            text = "No internet connection detected. Turn on mobile data or connect to Wi-Fi, then check again. Wi-Fi without internet will not work."
+            text = "No internet connection. Turn on mobile data or connect to Wi-Fi. Workly India will automatically reconnect and reopen this page when internet is available."
             textSize = 15f
             typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             setTextColor(mutedColor)
@@ -1120,22 +1120,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             })
         }
         card.addView(footer)
-        val retryButton = TextView(this).apply {
-            text = "TRY AGAIN"
-            textSize = 15f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(Color.rgb(18, 160, 125))
-                cornerRadius = dp(16).toFloat()
-            }
-            setPadding(dp(28), dp(15), dp(28), dp(15))
-            setOnClickListener { retryOfflinePage() }
-        }
-        card.addView(retryButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { topMargin = dp(22) })
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
