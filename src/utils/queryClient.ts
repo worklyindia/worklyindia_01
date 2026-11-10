@@ -9,8 +9,8 @@ export const createQueryClient = () => {
   
   // On slow networks: much longer stale times, fewer retries
   const isSlowNetwork = speed === 'slow';
-  const FREE_PLAN_STALE_TIME = 30 * 60 * 1000;
-  const FREE_PLAN_GC_TIME = 2 * 60 * 60 * 1000;
+  const FREE_PLAN_STALE_TIME = 2 * 60 * 1000;
+  const FREE_PLAN_GC_TIME = 7 * 24 * 60 * 60 * 1000;
   
   return new QueryClient({
     defaultOptions: {
@@ -44,7 +44,7 @@ export const createQueryClient = () => {
           return Math.min(baseDelay * 2 ** attemptIndex, networkConfig.maxRetryDelay);
         },
         refetchOnWindowFocus: false,
-        refetchOnMount: false,
+        refetchOnMount: true,
         // Keep cached query data visible and refresh stale data in the background on reconnect.
         refetchOnReconnect: true,
         networkMode: 'offlineFirst',
