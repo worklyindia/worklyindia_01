@@ -20,7 +20,7 @@ import java.util.concurrent.Executors
 
 /**
  * Mirrors only explicitly allow-listed messaging notifications.
- * Message content is retained on-device only; original tap/reply actions are reused.
+ * Message content stays local unless cloud sync is explicitly enabled; source app tap/reply actions are reused.
  */
 class ExternalNotificationListenerService : NotificationListenerService() {
     override fun onCreate() {
