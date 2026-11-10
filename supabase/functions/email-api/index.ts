@@ -29,6 +29,7 @@ import { handleSupportAction, isSupportAction } from '../_shared/supportDesk.ts'
 import { handlePublicEmailApi, pollEmailWebhooks } from '../_shared/emailPublicApi.ts';
 import { trackApiResponse } from '../_shared/apiQuota.ts';
 import { handleDeveloperOAuthApps } from '../_shared/developerOAuthApps.ts';
+import { handleMetaSocial } from '../_shared/metaSocial.ts';
 
 // Single email entry point — every email in this app goes through the unified send-email endpoint.
 // Direct HTTP call (not functions.invoke) avoids known runtime hang issues.
@@ -2638,6 +2639,26 @@ serve(async req => {
     // Validate credentials for other actions
     if (!oneSignalAppId || !oneSignalApiKey) {
       throw new Error('Firebase credentials not configured');
+    }
+
+    // Authenticated Android notification reply for Meta inbox messages.
+    // handleMetaSocial verifies the caller JWT and owner-only support audience.
+    if (action === 'meta_inline_reply') {
+      const platform = body.platform === 'instagram' ? 'instagram' : body.platform === 'facebook' ? 'facebook' : '';
+      const accountId = typeof body.account_id === 'string' ? body.account_id.slice(0, 100) : '';
+      const recipientId = typeof body.recipient_id === 'string' ? body.recipient_id.slice(0, 100) : '';
+      const replyText = typeof body.message === 'string' ? body.message.trim().slice(0, 2000) : '';
+      if (!platform || !accountId || !recipientId || !replyText) {
+        return new Response(JSON.stringify({ success: false, error: 'platform, account_id, recipient_id and message are required' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const metaResponse = await handleMetaSocial(req, {
+        action: 'chat_send', platform, account_id: accountId, recipient_id: recipientId,
+        text: replyText, ...(body.audience === 'support' ? { audience: 'support' } : {})
+      }, supabase);
+      const responseText = await metaResponse.text();
+      return new Response(responseText, { status: metaResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // ==========================================
