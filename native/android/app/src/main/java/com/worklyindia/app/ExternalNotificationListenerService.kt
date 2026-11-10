@@ -167,6 +167,13 @@ internal object ReplyRegistry {
         targets[id] = Target(pendingIntent, remoteInputs)
     }
 
+    fun sendText(context: Context, id: Int, text: String): Boolean {
+        val target = targets[id] ?: return false
+        val input = target.remoteInputs.firstOrNull { it.allowFreeFormInput } ?: return false
+        val results = Bundle().apply { putCharSequence(input.resultKey, text) }
+        return send(context, id, results)
+    }
+
     fun send(context: Context, id: Int, results: Bundle): Boolean {
         val target = targets[id] ?: return false
         return try {
