@@ -708,15 +708,18 @@ class MainActivity : FragmentActivity() {
             else -> website
         }
         lastLoadedUrl = target
-        // Do not start WebView navigation while offline. This prevents a browser
-        // error page from appearing behind the branded offline screen.
+        // On a cold launch with no validated internet, keep the branded
+        // startup/loading screen visible. Do not let WebView render its raw
+        // network-error document or an incomplete cached website shell.
+        // The network callback loads this exact destination once internet returns.
         if (hasInternetConnection()) {
             webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
             webView.loadUrl(target)
         } else {
-            // Try the last cached app shell first; show fallback only if it is unavailable.
-            webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-            webView.loadUrl(target)
+            webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+            pendingOfflineUrl = null
+            offlineRetryInProgress = false
+            showStartupLoading()
         }
         if (openVaultShortcut) webView.post { showSecureDocumentVault() }
     }
