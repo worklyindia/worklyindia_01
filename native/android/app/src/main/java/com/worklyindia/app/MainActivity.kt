@@ -772,18 +772,18 @@ class MainActivity : FragmentActivity() {
             else -> website
         }
         lastLoadedUrl = target
-        // On a cold launch with no validated internet, keep the branded
-        // startup/loading screen visible. Do not let WebView render its raw
-        // network-error document or an incomplete cached website shell.
-        // The network callback loads this exact destination once internet returns.
+        // Offline cold-start always opens the locally cached Home page.
+        // Keep the user on Home; only show the offline screen after they request
+        // another page that cannot be opened without a network connection.
         if (hasInternetConnection()) {
             webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
             webView.loadUrl(target)
         } else {
-            webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+            webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
             pendingOfflineUrl = null
             offlineRetryInProgress = false
-            showStartupLoading()
+            lastLoadedUrl = website
+            webView.loadUrl(website)
         }
         if (openVaultShortcut) webView.post { showSecureDocumentVault() }
     }
@@ -1131,61 +1131,39 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         card.addView(heading)
         card.addView(message)
 
-        // Show a small, read-only snapshot of public jobs saved on this device.
-        val cachedJobs = WorklyOfflineDataStore.getPublicJobs(this).take(4)
-        if (cachedJobs.isNotEmpty()) {
-            val savedAt = WorklyOfflineDataStore.lastSyncedAt(this)
-            val syncedLabel = if (savedAt > 0L) {
-                "Saved on this device • " + java.text.SimpleDateFormat("dd MMM, hh:mm a", java.util.Locale.getDefault())
-                    .format(java.util.Date(savedAt))
-            } else "Saved on this device"
-            card.addView(TextView(this).apply {
-                text = "OFFLINE JOBS  ·  ${cachedJobs.size} SAVED"
-                textSize = 11f
-                letterSpacing = 0.08f
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
-                setTextColor(if (dark) Color.rgb(100, 220, 190) else Color.rgb(13, 128, 100))
-                gravity = Gravity.CENTER
-                setPadding(0, dp(4), 0, dp(5))
-            })
-            card.addView(TextView(this).apply {
-                text = syncedLabel
-                textSize = 11f
-                setTextColor(mutedColor)
-                gravity = Gravity.CENTER
-                setPadding(0, 0, 0, dp(8))
-            })
-            cachedJobs.forEach { job ->
-                val details = listOf(job.company, job.location, job.salary, job.jobType, job.experience)
-                    .filter { it.isNotBlank() }.joinToString("  •  ")
-                card.addView(TextView(this).apply {
-                    text = if (details.isBlank()) job.title else "${job.title}\n$details"
-                    textSize = 12f
-                    setTextColor(textColor)
-                    gravity = Gravity.CENTER
-                    maxLines = 3
-                    setPadding(dp(8), dp(5), dp(8), dp(3))
-                })
-                if (job.description.isNotBlank()) {
-                    card.addView(TextView(this).apply {
-                        text = job.description.take(220) + if (job.description.length > 220) "…" else ""
-                        textSize = 11f
-                        setTextColor(mutedColor)
-                        gravity = Gravity.CENTER
-                        maxLines = 3
-                        setPadding(dp(10), 0, dp(10), dp(5))
-                    })
-                }
+        val homeButton = TextView(this).apply {
+            text = "Back to Home"
+            textSize = 15f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) Color.rgb(13, 128, 100) else Color.rgb(13, 128, 100))
+                cornerRadius = dp(14).toFloat()
             }
-        } else {
-            card.addView(TextView(this).apply {
-                text = "Your saved job snapshot will appear here after the first successful sync."
-                textSize = 12f
-                setTextColor(mutedColor)
-                gravity = Gravity.CENTER
-                setPadding(dp(8), dp(4), dp(8), dp(8))
-            })
+            setPadding(dp(24), dp(15), dp(24), dp(15))
+            setOnClickListener {
+                // Home is the only page intentionally available as the offline fallback.
+                pendingOfflineUrl = null
+                offlineRetryInProgress = false
+                webView.settings.cacheMode = if (hasInternetConnection()) {
+                    WebSettings.LOAD_DEFAULT
+                } else {
+                    WebSettings.LOAD_CACHE_ELSE_NETWORK
+                }
+                hideOfflineScreen()
+                lastLoadedUrl = website
+                webView.loadUrl(website)
+            }
         }
+        card.addView(homeButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = dp(8)
+        })
         card.addView(footer)
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
