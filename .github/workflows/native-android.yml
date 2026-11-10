@@ -666,6 +666,7 @@ jobs:
           CLOUDFLARE_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.cloudflare_status }}
           APK_URL: ${{ steps.cloudflare-supabase-publish.outputs.apk_url }}
           SUPABASE_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.supabase_status }}
+          CLEANUP_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.cleanup_status }}
           ARTIFACT_ID: ${{ steps.upload-release-artifacts.outputs.artifact-id }}
         run: |
           python - <<'PY'
@@ -682,6 +683,7 @@ jobs:
               ("APK/AAB build", "BUILD_STATUS"), ("APK metadata verification", "APK_VERIFY_STATUS"),
               ("Rename APK/AAB", "RENAME_STATUS"), ("GitHub artifact upload", "ARTIFACT_STATUS"),
               ("Cloudflare + Supabase publishing", "PUBLISH_STATUS"),
+              ("Post-upload retention cleanup", "CLEANUP_STATUS"),
           ]
           failed = [(name, val(key)) for name, key in steps if val(key) == "failure"]
           skipped = [(name, val(key)) for name, key in steps if val(key) == "skipped"]
