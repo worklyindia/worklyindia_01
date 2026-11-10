@@ -97,7 +97,7 @@ jobs:
           # Start with five components; when the final digit reaches 9, append .1.0.
           # Examples: 2.4.3.1.9 -> 2.4.3.1.1.0 -> 2.4.3.1.1.1.
           raw_parts = latest_name.split(".")
-          if not raw_parts or any(not re.fullmatch(r"\\d+", part) for part in raw_parts):
+          if not raw_parts or any(not re.fullmatch(r"\d+", part) for part in raw_parts):
               raise SystemExit(f"Cannot safely increment Android version name: {latest_name!r}")
           # Split any legacy multi-digit component into individual digits.
           parts = [int(digit) for part in raw_parts for digit in part]
