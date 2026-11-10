@@ -87,6 +87,41 @@ object NativeAuth {
         )
     }.getOrNull()
 
+    /**
+     * Refresh the encrypted WebView session before background notification actions.
+     * Supabase rotates refresh tokens, so persist the complete replacement session.
+     */
+    fun refreshSession(context: Context): NativeSession? = runCatching {
+        val current = session(context) ?: return null
+        val connection = java.net.URL("https://jubwzelupbntbetpajqb.supabase.co/auth/v1/token?grant_type=refresh_token")
+            .openConnection() as java.net.HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.connectTimeout = 10000
+        connection.readTimeout = 15000
+        connection.setRequestProperty("apikey", "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o")
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.doOutput = true
+        val body = JSONObject().put("refresh_token", current.refreshToken).toString()
+        connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        val status = connection.responseCode
+        val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+            ?.bufferedReader()?.use { it.readText() }.orEmpty()
+        connection.disconnect()
+        if (status !in 200..299) throw IllegalStateException("Session refresh failed [$status]")
+        val json = JSONObject(response)
+        val user = json.optJSONObject("user") ?: throw IllegalStateException("Refresh response has no user")
+        val refreshedUserId = user.optString("id")
+        if (refreshedUserId != current.userId) throw SecurityException("Refreshed account does not match the signed-in account")
+        saveWebSession(
+            context,
+            json.getString("access_token"),
+            json.getString("refresh_token"),
+            refreshedUserId,
+            user.optString("email", current.email),
+            current.userRole
+        )
+    }.getOrNull()
+
     fun signOut(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
