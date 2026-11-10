@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.NotificationCompat
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import androidx.core.app.RemoteInput
 import java.net.HttpURLConnection
 import java.net.URL
@@ -30,9 +33,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
                     if (reply.isNotBlank() && reply.length <= 5000 && conversationId.matches(Regex("[0-9a-fA-F-]{36}"))) {
                         sendAuthenticatedChatReply(context, conversationId, reply)
+                        postReplyStatus(context, true, "Your reply was sent.")
                     }
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyChatReply", "Inline reply failed", error)
+                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
                 } finally { pending.finish() }
             }.start()
             return
@@ -47,9 +52,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val audience = intent.getStringExtra(EXTRA_WHATSAPP_AUDIENCE).orEmpty()
                     if (reply.isNotBlank() && reply.length <= 4096 && phone.matches(Regex("[+0-9]{10,16}")) && audience == "customer_service") {
                         sendAuthenticatedWhatsAppReply(context, phone, audience, reply)
+                        postReplyStatus(context, true, "Your reply was sent.")
                     }
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyWhatsAppReply", "Inline WhatsApp reply failed", error)
+                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
                 } finally { pending.finish() }
             }.start()
             return
@@ -65,9 +72,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         conversationId.matches(Regex("[0-9a-fA-F-]{36}")) &&
                         phoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}"))) {
                         sendAuthenticatedEmployerWhatsAppReply(context, conversationId, phoneNumberId, reply)
+                        postReplyStatus(context, true, "Your reply was sent.")
                     }
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyEmployerWhatsAppReply", "Inline employer WhatsApp reply failed", error)
+                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
                 } finally { pending.finish() }
             }.start()
             return
@@ -87,9 +96,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         recipientId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
                         (audience.isEmpty() || audience == "support")) {
                         sendAuthenticatedMetaReply(context, platform, accountId, recipientId, audience, reply)
+                        postReplyStatus(context, true, "Your reply was sent.")
                     }
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyMetaReply", "Inline Meta reply failed", error)
+                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
                 } finally { pending.finish() }
             }.start()
             return
@@ -113,6 +124,33 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 }
                 runCatching { context.startActivity(settings) }
             }
+        }
+    }
+
+    private fun postReplyStatus(context: Context, success: Boolean, detail: String) {
+        runCatching {
+            val channelId = "workly_reply_status_v1"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.createNotificationChannel(
+                    NotificationChannel(channelId, "Message reply status", NotificationManager.IMPORTANCE_DEFAULT)
+                )
+            }
+            val notification = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(R.drawable.ic_stat_workly)
+                .setContentTitle(if (success) "Workly India · Reply sent" else "Workly India · Reply not sent")
+                .setContentText(detail.take(180))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(detail.take(500)))
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .build()
+            NotificationManagerCompat.from(context).notify(
+                "workly-reply-status",
+                if (success) 7401 else 7402,
+                notification
+            )
+        }.onFailure {
+            android.util.Log.e("WorklyChatReply", "Could not show reply status notification", it)
         }
     }
 
