@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
-import android.app.RemoteInput
+import androidx.core.app.RemoteInput
 import java.net.HttpURLConnection
 import java.net.URL
 import org.json.JSONObject
@@ -129,6 +129,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
         connection.setRequestProperty("Content-Type", "application/json")
         connection.doOutput = true
         val payload = JSONObject()
+            .put("scope", "employer")
             .put("action", "send")
             .put("conversation_id", conversationId)
             .put("phone_number_id", phoneNumberId)
