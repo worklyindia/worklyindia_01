@@ -1160,9 +1160,27 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         return runtimeGranted && NotificationManagerCompat.from(this).areNotificationsEnabled()
     }
 
-    // Battery-full alerts must work independently of website login/push setup.
-    // Ask for notification access on-device, then guide Android 14+ users to
-    // explicitly allow full-screen intents so the alert can wake the screen.
+    // Battery-full alerts are notification-driven. Exact-alarm access is not
+    // required for ACTION_BATTERY_CHANGED monitoring, so do not request it.
+    // Guide the user through each real prerequisite in order.
+    private fun showChargingAccessSettings(title: String, message: String, settingsIntent: Intent) {
+        if (chargingAlertAccessDialogVisible || isFinishing || isDestroyed) return
+        chargingAlertAccessDialogVisible = true
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Open settings") { _, _ ->
+                runCatching { startActivity(settingsIntent) }
+                    .onFailure { error ->
+                        android.util.Log.w("WorklyCharging", "Could not open battery alert settings", error)
+                        Toast.makeText(this, "Open Workly India settings manually and enable notifications.", Toast.LENGTH_LONG).show()
+                    }
+            }
+            .setNegativeButton("Later", null)
+            .setOnDismissListener { chargingAlertAccessDialogVisible = false }
+            .show()
+    }
+
     private fun ensureChargingAlertAccess() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -1174,27 +1192,38 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             )
             return
         }
-        if (Build.VERSION.SDK_INT >= 34 &&
-            !getSystemService(android.app.NotificationManager::class.java).canUseFullScreenIntent() &&
-            !chargingAlertAccessDialogVisible && !isFinishing && !isDestroyed
-        ) {
-            chargingAlertAccessDialogVisible = true
-            AlertDialog.Builder(this)
-                .setTitle("Enable full-screen battery alerts")
-                .setMessage("Allow Workly India to show a full-screen alert when your phone reaches 100% charge. Also keep the “Battery fully charged” notification channel enabled.")
-                .setPositiveButton("Open setting") { _, _ ->
-                    runCatching {
-                        startActivity(
-                            Intent(
-                                android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
-                                Uri.parse("package:$packageName")
-                            )
-                        )
-                    }
-                }
-                .setNegativeButton("Later", null)
-                .setOnDismissListener { chargingAlertAccessDialogVisible = false }
-                .show()
+
+        val notificationManager = getSystemService(android.app.NotificationManager::class.java)
+        if (!androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            showChargingAccessSettings(
+                "Enable Workly notifications",
+                "Battery alerts are blocked because Workly India notifications are off. Turn notifications on to receive the 100% charge alert.",
+                Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+            )
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = notificationManager.getNotificationChannel(ChargingMonitorService.ALERT_CHANNEL)
+            if (channel == null || channel.importance == android.app.NotificationManager.IMPORTANCE_NONE) {
+                showChargingAccessSettings(
+                    "Enable battery alert channel",
+                    "Turn on the “Battery fully charged” notification channel and allow sound. Otherwise Workly cannot notify you at 100%.",
+                    Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                        .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, ChargingMonitorService.ALERT_CHANNEL)
+                )
+                return
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= 34 && !notificationManager.canUseFullScreenIntent()) {
+            showChargingAccessSettings(
+                "Allow full-screen battery alerts",
+                "Allow Workly India to open the full-screen 100% battery alert. Android may still limit this feature based on device and app eligibility.",
+                Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
+            )
         }
     }
 
