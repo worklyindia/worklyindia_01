@@ -733,7 +733,16 @@ class MainActivity : FragmentActivity() {
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            // Edge-to-edge disables the legacy adjustResize path on modern Android.
+            // Apply the IME bottom inset to the root so the WebView's measured area
+            // actually shrinks while the keyboard is visible (including gesture-nav devices).
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomInset = if (insets.isVisible(WindowInsetsCompat.Type.ime())) {
+                maxOf(bars.bottom, ime.bottom)
+            } else {
+                bars.bottom
+            }
+            view.setPadding(bars.left, bars.top, bars.right, bottomInset)
             WindowInsetsCompat.CONSUMED
         }
         // Keep the WebView scroll gestures native-refresh-free. The website has
