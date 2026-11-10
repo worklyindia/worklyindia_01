@@ -436,6 +436,94 @@ jobs:
 
           print(f"Supabase owner release metadata saved: v{name} (versionCode {code})")
 
+          # After the new APK upload, public URL, R2 object size, and Supabase draft
+          # are verified, retain the currently active Public release and prune only
+          # versions older than that active release. Never remove the live APK while
+          # the newly uploaded build is still an unpublished draft.
+          cleanup_status = "Skipped — no existing Public release to protect"
+          public_rows_response = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "id,version_code,version_name,is_published,apk_path", "is_published": "eq.true", "order": "version_code.desc", "limit": "1"},
+              timeout=30,
+          )
+          public_rows_response.raise_for_status()
+          public_rows = public_rows_response.json()
+          if public_rows:
+              active = public_rows[0]
+              active_code = int(active["version_code"])
+              active_key = f"android/releases/android-v{active_code}/Workly-India.apk"
+              # The active release must still exist in R2 and be publicly reachable.
+              active_head = s3.head_object(Bucket=bucket, Key=active_key)
+              active_probe = requests.head(active["apk_path"], allow_redirects=True, timeout=45)
+              if active_probe.status_code != 200 or int(active_head.get("ContentLength", 0)) <= 0:
+                  raise SystemExit("Retention safety check failed: current Public APK is not verifiably downloadable; nothing was deleted.")
+              old_keys = []
+              continuation = None
+              while True:
+                  page = s3.list_objects_v2(Bucket=bucket, Prefix="android/releases/", ContinuationToken=continuation) if continuation else s3.list_objects_v2(Bucket=bucket, Prefix="android/releases/")
+                  for obj in page.get("Contents", []):
+                      key = obj.get("Key", "")
+                      parts = key.split("/")
+                      if len(parts) != 4 or parts[0] != "android" or parts[1] != "releases" or parts[3] != "Workly-India.apk" or not parts[2].startswith("android-v"):
+                          continue
+                      try:
+                          old_code = int(parts[2][len("android-v"):])
+                      except ValueError:
+                          continue
+                      if 0 < old_code < active_code:
+                          old_keys.append(key)
+                  if not page.get("IsTruncated"):
+                      break
+                  continuation = page.get("NextContinuationToken")
+              for offset in range(0, len(old_keys), 1000):
+                  result = s3.delete_objects(
+                      Bucket=bucket,
+                      Delete={"Objects": [{"Key": key} for key in old_keys[offset:offset + 1000]], "Quiet": False},
+                  )
+                  if result.get("Errors"):
+                      raise SystemExit("R2 retention deletion failed: " + str(result["Errors"][0].get("Message", "unknown error")))
+              old_rows_response = requests.get(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"select": "id,version_code", "version_code": f"lt.{active_code}"},
+                  timeout=30,
+              )
+              old_rows_response.raise_for_status()
+              old_rows = old_rows_response.json()
+              if old_rows:
+                  deleted_response = requests.delete(
+                      f"{base}/rest/v1/android_app_releases",
+                      headers={**headers, "Prefer": "return=representation"},
+                      params={"version_code": f"lt.{active_code}", "select": "id"},
+                      timeout=30,
+                  )
+                  if deleted_response.status_code not in (200, 204):
+                      raise SystemExit(f"Supabase old release cleanup failed ({deleted_response.status_code}): {deleted_response.text[:500]}")
+                  deleted_rows = deleted_response.json() if deleted_response.content else []
+              else:
+                  deleted_rows = []
+              verify_anchor = requests.get(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"select": "id,is_published", "id": f"eq.{active['id']}", "limit": "1"},
+                  timeout=30,
+              )
+              verify_anchor.raise_for_status()
+              verify_remaining = requests.get(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"select": "id", "version_code": f"lt.{active_code}", "limit": "1"},
+                  timeout=30,
+              )
+              verify_remaining.raise_for_status()
+              if not verify_anchor.json() or verify_anchor.json()[0].get("is_published") is not True or verify_remaining.json():
+                  raise SystemExit("Post-cleanup verification failed; inspect Supabase and R2 before another cleanup.")
+              cleanup_status = f"Verified — protected Public v{active['version_name']}; deleted {len(old_keys)} older APKs and {len(deleted_rows)} older records"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("cleanup_status=" + cleanup_status.replace("\n", " ") + "\n")
+          print("Android release retention: " + cleanup_status)
+
           # Idempotently maintain the GitHub archival copy after the Cloudflare upload
           # and Supabase row are already verified. A duplicate tag on a workflow retry
           # must not prevent the APK from appearing in Owner Release Management.
