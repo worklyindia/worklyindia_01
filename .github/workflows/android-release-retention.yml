@@ -95,7 +95,7 @@ jobs:
           stale_objects = []
           reclaimed_bytes = 0
           scanned_apks = 0
-          pattern = re.compile(r"^android/releases/android-v(\\d+)/Workly-India\\.apk$")
+          pattern = re.compile(r"^android/releases/android-v(\d+)/Workly-India\.apk$")
           for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="android/releases/"):
               for obj in page.get("Contents", []):
                   key = obj["Key"]
