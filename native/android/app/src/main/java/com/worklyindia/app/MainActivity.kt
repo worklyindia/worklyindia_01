@@ -2162,7 +2162,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     override fun onPause() {
-        dismissAppOpenLiveUpdate()
+        getSystemService(android.app.NotificationManager::class.java).cancel(4108)
         // Stop network-quality tracking immediately when Workly India is no longer visible.
         networkCallback?.let { callback ->
             runCatching {
