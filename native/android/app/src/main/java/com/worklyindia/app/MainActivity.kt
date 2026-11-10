@@ -1135,7 +1135,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         val target = pendingOfflineUrl ?: lastLoadedUrl
         if (!::webView.isInitialized || target.isBlank()) return
         if (!hasInternetConnection()) {
-            Toast.makeText(this, "Internet connection is not ready yet. Please try again when data is on.", Toast.LENGTH_SHORT).show()
+            // Connectivity can change between the Android callback and this retry.
+            // Stay silently on the branded offline screen; the next validated
+            // network callback or onResume check will retry automatically.
+            offlineRetryInProgress = false
             return
         }
         offlineRetryInProgress = true
@@ -1148,6 +1151,21 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             (overlay.parent as? android.view.ViewGroup)?.removeView(overlay)
         }
         offlineOverlay = null
+    }
+
+    private fun recoverOfflinePageIfConnected() {
+        if (!::webView.isInitialized || isFinishing || isDestroyed) return
+        if (!hasInternetConnection()) return
+
+        dispatchNativeEvent("workly-native-network-change", "{connected:true}")
+        dispatchNativeEvent("online")
+        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+
+        if (pendingOfflineUrl != null && !offlineRetryInProgress) {
+            retryOfflinePage()
+        } else if (!initialWebsiteLoadCompleted && webView.url.isNullOrBlank()) {
+            webView.loadUrl(lastLoadedUrl)
+        }
     }
 
     private fun registerNetworkListener() {
@@ -1214,6 +1232,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         runCatching {
             manager.registerDefaultNetworkCallback(callback)
             networkCallback = callback
+            // Also inspect the current default network: registering a callback
+            // while data is already ON is not a reliable recovery trigger on
+            // every Android vendor build.
+            webView.post { recoverOfflinePageIfConnected() }
         }.onFailure {
             android.util.Log.w("WorklyWebView", "Network listener unavailable", it)
         }
@@ -2212,6 +2234,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             File(cacheDir, "secure-vault").listFiles()?.forEach { it.delete() }
         }
         registerNetworkListener()
+        // Network callbacks are unregistered while the app is backgrounded.
+        // Connectivity may already be restored before this Activity resumes,
+        // so check the active validated network immediately instead of waiting
+        // for another onCapabilitiesChanged callback.
+        recoverOfflinePageIfConnected()
         // Re-check special overlay access every time the user returns from
         // Android Settings and notify the embedded website of the real OS state.
         if (::webView.isInitialized) {
