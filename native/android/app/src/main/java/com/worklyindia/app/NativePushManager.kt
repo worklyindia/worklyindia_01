@@ -411,11 +411,31 @@ object NativePushManager {
                 ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                 builder.addAction(replyAction)
             } else {
-                builder.addAction(
-                    android.R.drawable.ic_menu_send,
-                    "Open chat",
-                    activityPendingIntent(chatUrl, tag.hashCode() + 1)
-                )
+                val whatsappPhone = data["phone"]?.takeIf { it.matches(Regex("[+0-9]{10,16}")) }
+                val whatsappAudience = data["audience"].orEmpty()
+                val isOwnerSupportWhatsApp = data["type"] == "whatsapp_message" && whatsappAudience == "customer_service" && whatsappPhone != null
+                if (isOwnerSupportWhatsApp) {
+                    val remoteInput = androidx.core.app.RemoteInput.Builder("workly_whatsapp_reply")
+                        .setLabel("Reply on WhatsApp")
+                        .build()
+                    val replyAction = NotificationCompat.Action.Builder(
+                        android.R.drawable.ic_menu_send,
+                        "Reply",
+                        NotificationActionReceiver.whatsappReplyPendingIntent(context, whatsappPhone!!, whatsappAudience, tag.hashCode() + 11)
+                    ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
+                    builder.addAction(replyAction)
+                    builder.addAction(
+                        android.R.drawable.ic_menu_view,
+                        "Open chat",
+                        activityPendingIntent(chatUrl, tag.hashCode() + 1)
+                    )
+                } else {
+                    builder.addAction(
+                        android.R.drawable.ic_menu_send,
+                        "Open chat",
+                        activityPendingIntent(chatUrl, tag.hashCode() + 1)
+                    )
+                }
             }
             builder.addAction(
                 android.R.drawable.ic_menu_view,
