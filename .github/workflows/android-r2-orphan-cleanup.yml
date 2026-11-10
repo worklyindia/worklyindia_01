@@ -1,4 +1,4 @@
-name: Android R2 orphan cleanup
+name: Android R2 automatic old APK cleanup
 
 on:
   schedule:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Remove only owner-deleted Android APK objects
+      - name: Keep public and latest APK; remove older unpublished releases automatically
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -44,11 +44,16 @@ jobs:
           if not all([base, service_key, account_id, access_key, secret_key]):
               raise SystemExit("Missing required Supabase or Cloudflare R2 secrets; refusing cleanup.")
 
-          headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+          headers = {
+              "apikey": service_key,
+              "Authorization": f"Bearer {service_key}",
+              "Content-Type": "application/json",
+              "Prefer": "return=representation",
+          }
           response = requests.get(
               f"{base}/rest/v1/android_app_releases",
               headers=headers,
-              params={"select": "apk_path", "limit": "10000"},
+              params={"select": "id,apk_path,is_published,version_code,created_at", "limit": "10000"},
               timeout=45,
           )
           response.raise_for_status()
@@ -56,13 +61,33 @@ jobs:
           if not isinstance(rows, list):
               raise SystemExit("Supabase release query did not return a list. Refusing cleanup.")
 
+          # Protect every public release and the newest uploaded release, even if it is still unpublished.
+          latest = max(rows, key=lambda row: (int(row.get("version_code") or 0), row.get("created_at") or ""), default=None)
+          protected_ids = {row["id"] for row in rows if row.get("is_published") and row.get("id")}
+          if latest and latest.get("id"):
+              protected_ids.add(latest["id"])
+
+          # Remove old unpublished release metadata automatically. Never delete a public or latest row.
+          old_rows = [row for row in rows if row.get("id") and row["id"] not in protected_ids and not row.get("is_published")]
+          removed_rows = 0
+          for row in old_rows:
+              delete_response = requests.delete(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"id": f"eq.{row['id']}", "is_published": "eq.false"},
+                  timeout=45,
+              )
+              delete_response.raise_for_status()
+              removed_rows += len(delete_response.json() or [])
+
+          protected = [row for row in rows if row.get("id") in protected_ids]
           referenced = set()
-          for row in rows:
+          for row in protected:
               value = row.get("apk_path") or ""
               parsed = urlparse(value)
               if parsed.scheme == "https" and parsed.hostname == "pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev":
                   key = parsed.path.lstrip("/")
-                  if key.startswith("android/releases/"):
+                  if key.startswith("android/releases/") and key.endswith("/Workly-India.apk"):
                       referenced.add(key)
 
           s3 = boto3.client(
@@ -73,6 +98,7 @@ jobs:
               region_name="auto",
           )
 
+          # A one-hour grace period protects a just-uploaded APK while release metadata is being saved.
           cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
           paginator = s3.get_paginator("list_objects_v2")
           candidates = []
@@ -80,11 +106,8 @@ jobs:
           for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
               for obj in page.get("Contents", []):
                   key = obj["Key"]
-                  if not key.endswith("/Workly-India.apk"):
+                  if not key.endswith("/Workly-India.apk") or key in referenced:
                       continue
-                  if key in referenced:
-                      continue
-                  # Protect uploads whose metadata write is still in progress or failed recently.
                   if obj["LastModified"] > cutoff:
                       continue
                   candidates.append({"Key": key})
@@ -99,8 +122,10 @@ jobs:
                   raise SystemExit(f"R2 returned delete errors: {errors[:5]}")
               deleted += len(result.get("Deleted", []))
 
-          print(f"Release rows protected: {len(rows)}")
-          print(f"Referenced R2 APK objects protected: {len(referenced)}")
-          print(f"Deleted orphaned APK objects: {deleted}")
+          print(f"Total release rows read: {len(rows)}")
+          print(f"Public/latest release rows protected: {len(protected_ids)}")
+          print(f"Older unpublished release rows deleted: {removed_rows}")
+          print(f"Protected R2 APK objects: {len(referenced)}")
+          print(f"Old unprotected APK objects deleted: {deleted}")
           print(f"Reclaimed bytes: {total}")
           PY
