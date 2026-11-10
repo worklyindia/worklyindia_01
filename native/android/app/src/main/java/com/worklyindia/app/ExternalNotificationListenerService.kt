@@ -14,6 +14,9 @@ import android.app.RemoteInput
 import androidx.core.app.NotificationCompat
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 
 /**
  * Mirrors only explicitly allow-listed messaging notifications.
@@ -47,10 +50,13 @@ class ExternalNotificationListenerService : NotificationListenerService() {
         }
         val originalInputs = originalAction?.remoteInputs
         if (originalAction != null && originalInputs != null) {
-            ReplyRegistry.put(id, originalAction.actionIntent, originalInputs)
+            ReplyRegistry.put(id, originalAction.actionIntent, originalInputs, packageName, title, sbn.key, sbn.postTime)
         }
 
         saveLocally(id, packageName, title, message, sbn.postTime, originalAction != null)
+        ExternalMessageCloudSync.sync(
+            this, packageName, title, message, sbn.key, sbn.postTime, id, "incoming"
+        )
         postMirror(id, packageName, title, message, source.contentIntent, originalAction, originalInputs)
     }
 
@@ -160,11 +166,11 @@ class ExternalNotificationListenerService : NotificationListenerService() {
 }
 
 internal object ReplyRegistry {
-    private data class Target(val pendingIntent: PendingIntent, val remoteInputs: Array<RemoteInput>)
+    private data class Target(val pendingIntent: PendingIntent, val remoteInputs: Array<RemoteInput>, val sourcePackage: String, val title: String, val notificationKey: String, val postedAt: Long)
     private val targets = java.util.concurrent.ConcurrentHashMap<Int, Target>()
 
-    fun put(id: Int, pendingIntent: PendingIntent, remoteInputs: Array<RemoteInput>) {
-        targets[id] = Target(pendingIntent, remoteInputs)
+    fun put(id: Int, pendingIntent: PendingIntent, remoteInputs: Array<RemoteInput>, sourcePackage: String, title: String, notificationKey: String, postedAt: Long) {
+        targets[id] = Target(pendingIntent, remoteInputs, sourcePackage, title, notificationKey, postedAt)
     }
 
     fun sendText(context: Context, id: Int, text: String): Boolean {
@@ -185,10 +191,118 @@ internal object ReplyRegistry {
             if (supplied.isEmpty) return false
             RemoteInput.addResultsToIntent(target.remoteInputs, fillIn, supplied)
             target.pendingIntent.send(context, 0, fillIn)
+            val replyText = target.remoteInputs.firstNotNullOfOrNull { supplied.getCharSequence(it.resultKey)?.toString() }?.trim().orEmpty()
+            if (replyText.isNotBlank()) {
+                ExternalMessageCloudSync.sync(
+                    context, target.sourcePackage, target.title, replyText,
+                    target.notificationKey, System.currentTimeMillis(), id, "outgoing"
+                )
+            }
             targets.remove(id)
             true
         } catch (_: Exception) {
             false
         }
+    }
+}
+
+
+/**
+ * Cloud sync is separately opt-in. Notification access alone never uploads
+ * private message text. Uses the signed-in user's Supabase session, never a
+ * service-role key in the Android app.
+ */
+internal object ExternalMessageCloudSync {
+    private const val PREFS = "workly_external_notifications"
+    private const val ENABLED = "cloud_sync_enabled"
+    private const val API_URL = "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/unified-social-api"
+    private const val API_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
+    private val executor = Executors.newSingleThreadExecutor()
+
+    fun setEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ENABLED, enabled).apply()
+    }
+
+    fun isEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ENABLED, false)
+
+    fun sync(
+        context: Context,
+        sourcePackage: String,
+        displayName: String,
+        message: String,
+        notificationKey: String,
+        timestamp: Long,
+        notificationId: Int,
+        direction: String
+    ) {
+        if (!isEnabled(context) || message.isBlank()) return
+        val appContext = context.applicationContext
+        executor.execute {
+            runCatching {
+                var session = NativeAuth.session(appContext) ?: return@runCatching
+                var response = sendRequest(
+                    session.accessToken, sourcePackage, displayName, message,
+                    notificationKey, timestamp, notificationId, direction
+                )
+                if (response == 401) {
+                    session = NativeAuth.refreshWebSession(appContext) ?: return@runCatching
+                    response = sendRequest(
+                        session.accessToken, sourcePackage, displayName, message,
+                        notificationKey, timestamp, notificationId, direction
+                    )
+                }
+                if (response !in 200..299) {
+                    android.util.Log.w("WorklyExternalSync", "Message sync failed with HTTP $response")
+                }
+            }.onFailure {
+                android.util.Log.w("WorklyExternalSync", "Message sync failed", it)
+            }
+        }
+    }
+
+    private fun sendRequest(
+        accessToken: String,
+        sourcePackage: String,
+        displayName: String,
+        message: String,
+        notificationKey: String,
+        timestamp: Long,
+        notificationId: Int,
+        direction: String
+    ): Int {
+        val platform = when (sourcePackage) {
+            "com.whatsapp" -> "whatsapp"
+            "com.whatsapp.w4b" -> "whatsapp_business"
+            "com.instagram.android" -> "instagram"
+            "com.facebook.orca" -> "messenger"
+            "com.facebook.katana" -> "facebook"
+            else -> return 400
+        }
+        val conversationKey = "$sourcePackage:${displayName.trim().lowercase()}"
+        val messageKey = "$platform:$notificationKey:$timestamp:$direction"
+        val payload = JSONObject()
+            .put("action", "external_message_sync")
+            .put("platform", platform)
+            .put("conversation_key", conversationKey)
+            .put("message_key", messageKey)
+            .put("source_package", sourcePackage)
+            .put("display_name", displayName.take(160))
+            .put("message", message.take(4000))
+            .put("created_at_ms", timestamp)
+            .put("notification_id", notificationId.toString())
+            .put("direction", direction)
+        val connection = URL(API_URL).openConnection() as HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.connectTimeout = 10000
+        connection.readTimeout = 10000
+        connection.doOutput = true
+        connection.setRequestProperty("Content-Type", "application/json")
+        connection.setRequestProperty("apikey", API_KEY)
+        connection.setRequestProperty("Authorization", "Bearer $accessToken")
+        connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+        val status = connection.responseCode
+        connection.disconnect()
+        return status
     }
 }
