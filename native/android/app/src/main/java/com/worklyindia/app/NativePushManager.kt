@@ -415,6 +415,13 @@ object NativePushManager {
                 val whatsappPhone = (data["phone"] ?: data["phone_number"] ?: data["sender_phone"])
                     ?.takeIf { it.matches(Regex("[+0-9]{10,16}")) }
                 val whatsappAudience = data["audience"].orEmpty()
+                val employerConversationId = data["conversation_id"].orEmpty()
+                val employerPhoneNumberId = data["phone_number_id"].orEmpty()
+                val isEmployerWhatsApp = notificationType == "whatsapp_message" &&
+                    data["employer_notification"] == "true" &&
+                    employerConversationId.matches(Regex("[0-9a-fA-F-]{36}")) &&
+                    employerPhoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}")) &&
+                    whatsappPhone != null
                 val isOwnerSupportWhatsApp = notificationType == "whatsapp_message" &&
                     whatsappAudience == "customer_service" && whatsappPhone != null
                 val metaPlatform = when {
@@ -430,7 +437,19 @@ object NativePushManager {
                     metaAccountId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
                     metaRecipientId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
                     (metaAudience.isEmpty() || metaAudience == "support")
-                if (isOwnerSupportWhatsApp) {
+                if (isEmployerWhatsApp) {
+                    val remoteInput = androidx.core.app.RemoteInput.Builder("workly_employer_whatsapp_reply")
+                        .setLabel("Reply to customer")
+                        .build()
+                    val replyAction = NotificationCompat.Action.Builder(
+                        android.R.drawable.ic_menu_send,
+                        "Reply",
+                        NotificationActionReceiver.employerWhatsAppReplyPendingIntent(
+                            context, employerConversationId, employerPhoneNumberId, tag.hashCode() + 31
+                        )
+                    ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
+                    builder.addAction(replyAction)
+                } else if (isOwnerSupportWhatsApp) {
                     val remoteInput = androidx.core.app.RemoteInput.Builder("workly_whatsapp_reply")
                         .setLabel("Reply on WhatsApp")
                         .build()
