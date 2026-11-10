@@ -173,7 +173,7 @@ export default function AndroidAppUpdates() {
       const { error } = await supabase.from("android_app_releases").delete().eq("id", release.id);
       if (error) throw error;
       setReleases((current) => current.filter((item) => item.id !== release.id));
-      toast.success(`Release v${release.version_name} removed. Cloudflare APK cleanup is queued for the next hourly cleanup cycle.`);
+      toast.success(`Release v${release.version_name} removed. Cloudflare APK cleanup will run automatically after a one-hour safety window.`);
     } catch (error) {
       console.error("Android release deletion failed:", error);
       toast.error(error instanceof Error ? error.message : "The release could not be deleted.");
