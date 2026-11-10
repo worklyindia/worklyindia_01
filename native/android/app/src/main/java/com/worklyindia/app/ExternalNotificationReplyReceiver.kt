@@ -9,10 +9,9 @@ import android.widget.Toast
 class ExternalNotificationReplyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getIntExtra(ExternalNotificationListenerService.EXTRA_ID, Int.MIN_VALUE)
-        val text = android.app.RemoteInput.getResultsFromIntent(intent)
-            ?.getCharSequence("reply")?.toString()?.trim().orEmpty()
-        if (id == Int.MIN_VALUE || text.isBlank()) return
-        val sent = ReplyRegistry.send(context, id, text)
+        if (id == Int.MIN_VALUE) return
+        val results = android.app.RemoteInput.getResultsFromIntent(intent)
+        val sent = results != null && ReplyRegistry.send(context, id, results)
         if (sent) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(ExternalNotificationListenerService.MIRROR_TAG, id)
