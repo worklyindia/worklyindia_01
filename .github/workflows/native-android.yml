@@ -93,14 +93,22 @@ jobs:
                   latest_name = str(rows[0]["version_name"])
                   latest_minimum = int(rows[0].get("min_supported_version_code") or 1)
 
-          # Four-part versionName: major.minor.patch.build.
-          # Existing three-part versions migrate to build 1 on the next release.
+          # Four-part versionName: each component is a single digit (0-9).
+          # Increment as a decimal odometer: 2.4.3.9 -> 2.4.4.0.
           match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?", latest_name)
           if not match:
               raise SystemExit(f"Cannot safely increment Android version name: {latest_name!r}")
-          major, minor, patch = map(int, match.groups()[:3])
-          build = int(match.group(4) or 0) + 1
-          version_name = f"{major}.{minor}.{patch}.{build}"
+          parts = [int(part or 0) for part in match.groups()]
+          if any(part < 0 or part > 9 for part in parts):
+              raise SystemExit(f"Version components must each be a single digit 0-9: {latest_name!r}")
+          for index in range(3, -1, -1):
+              parts[index] += 1
+              if parts[index] <= 9:
+                  break
+              parts[index] = 0
+          else:
+              raise SystemExit("Android version name exhausted 9.9.9.9; choose a new major version.")
+          version_name = ".".join(str(part) for part in parts)
 
           # The workflow run number is globally increasing for this workflow; also
           # guard against a database versionCode that is already ahead of it.
