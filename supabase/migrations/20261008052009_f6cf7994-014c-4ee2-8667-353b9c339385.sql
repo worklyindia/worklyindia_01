@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.developer_referred_whatsapp_users() FROM PUBLIC, anon;

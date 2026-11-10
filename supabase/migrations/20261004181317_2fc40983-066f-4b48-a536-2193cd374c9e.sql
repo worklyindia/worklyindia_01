@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS api_subscriptions_payment_id_uniq ON public.api_subscriptions(payment_id) WHERE payment_id IS NOT NULL AND payment_mode = 'manual' AND subscription_id LIKE 'order_%' AND activated_at > '2026-10-04';

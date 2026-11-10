@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>https://worklyindia.devs.surf/</loc>
+    <image:image><image:loc>https://worklyindia.devs.surf/og-image.jpg</image:loc></image:image>
+    <image:image><image:loc>https://worklyindia.devs.surf/workly-india-logo.png</image:loc></image:image>
+    <image:image><image:loc>https://worklyindia.devs.surf/icons/icon-512x512.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://worklyindia.devs.surf/about-us</loc>
+    <image:image><image:loc>https://worklyindia.devs.surf/workly-india-logo.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://worklyindia.devs.surf/jobs</loc>
+    <image:image><image:loc>https://worklyindia.devs.surf/og-image.jpg</image:loc></image:image>
+  </url>
+</urlset>

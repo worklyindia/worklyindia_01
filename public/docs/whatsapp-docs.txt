@@ -1,0 +1,768 @@
+Workly India — WhatsApp Business API
+Web page: https://worklyindia.devs.surf/developers/whatsapp-docs
+
+WhatsApp Business integration guide
+
+Everything developers need to connect a business number, integrate a website, send approved messages, receive events, and manage the Meta business profile.
+
+Integrations
+Multiple numbers
+Templates
+Messages & media
+Replies, reactions & read
+Incoming messages
+Business profile
+Onboarding & Embedded Signup
+Connect WhatsApp for your users
+Bulk / Campaign messaging
+Rate limits & tiers
+Troubleshooting
+Integrations
+
+Integrate your website or automation tool with one secure endpoint after connecting your WhatsApp Business number.
+
+Use a WhatsApp Business account and a phone number you control. Complete Meta's business, email, phone, and display-name checks when requested.
+Open WhatsApp → Number in your employer account and connect the number through Meta.
+Open Developer Portal → Generate New Key. Store the wfh_ key only on your server.
+Create a message template and wait for Meta to mark it APPROVED. Review often completes within 24 hours but can take longer; only the returned Meta status confirms approval.
+Send an approved template to your own phone, then reply from WhatsApp to open the 24-hour customer-service window.
+Add your server URL under Developer Portal → Webhooks and subscribe to WhatsApp message and delivery events.
+
+For your own Meta app, WhatsApp setup uses whatsapp_business_management and whatsapp_business_messaging; business onboarding may also require business_management. Access for other businesses depends on Meta App Review, advanced access and any required business verification. Obtain the recipient's opt-in before business-initiated messaging and honor opt-outs. Examples use dummy IDs and numbers; replace them with your own connection data and keep real credentials private.
+
+Open WhatsApp
+
+Endpoint: POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api
+
+Header: x-api-key: wfh_YOUR_API_KEY
+
+Phone format: E.164 digits only, including country code and without +.
+
+Where to use the API
+Your website's server / backend (Node, PHP, Python, etc.): call the REST endpoint with your x-api-key header.
+CRM, ERP, Zapier, Make, n8n: use an HTTP request step with the same URL, header and JSON body.
+Real-time incoming messages and delivery status: add a webhook in Developer Portal with the WhatsApp events.
+Never put your API key in browser JavaScript or a mobile app — keep it on your server.
+Action
+Check connection and monthly usage
+
+Run these before sending. Add from when you need to inspect a particular connected number.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"status"}'
+
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"usage"}'
+Multiple WhatsApp numbers
+Connect as many numbers as you need from WhatsApp → Number → Add another number. One API key works for all of them.
+Call list_numbers to get each number's phone_number_id.
+Add "from" (phone_number_id or the number) to any request to choose the sender. If only one is connected it is used automatically; with several, the request returns 400 until you pass "from".
+Templates belong to the WhatsApp Business account of the chosen number — if your numbers are in different accounts, create the template for each one.
+Successful sends return "from"; incoming-message webhooks include phone_number_id so you know which number received the message.
+Unknown "from" returns 404 with the message Number is not connected to your account.
+Action
+List your connected numbers
+
+Returns every number connected to your account with its phone_number_id. Pass "from" to choose any connected number.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"list_numbers"}'
+
+# Response
+{"success":true,"numbers":[
+  {"phone_number_id":"111111111111111","phone":"+91 98765 43210","verified_name":"Sales"},
+  {"phone_number_id":"222222222222222","phone":"+91 91234 56789","verified_name":"Support"}
+]}
+Action
+Send from a specific number (curl)
+
+Add "from" to any action — send_text, send_template, send_media, list/create/edit/delete template, status. Use the phone_number_id or the number itself.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_template","from":"222222222222222","to":"919876543210","template_name":"order_update","language":"en_US","body_params":["Alex","A1234"]}'
+Action
+JavaScript / Node.js
+
+Run on your server only.
+
+Code example
+const API = "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api";
+
+async function wa(body) {
+  const res = await fetch(API, {
+    method: "POST",
+    headers: { "x-api-key": process.env.WORKLY_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  return data;
+}
+
+const { numbers } = await wa({ action: "list_numbers" });
+const support = numbers.find((n) => n.verified_name === "Support");
+
+await wa({ action: "send_text", from: support.phone_number_id, to: "919876543210", text: "Hi from Support" });
+await wa({ action: "send_text", from: numbers[0].phone_number_id, to: "919876543210", text: "Hi from Sales" });
+Action
+Python
+
+Same request with the requests library.
+
+Code example
+import os, requests
+
+API = "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api"
+HEADERS = {"x-api-key": os.environ["WORKLY_API_KEY"], "Content-Type": "application/json"}
+
+def wa(body):
+    data = requests.post(API, json=body, headers=HEADERS, timeout=30).json()
+    if not data.get("success"):
+        raise RuntimeError(data.get("error"))
+    return data
+
+numbers = wa({"action": "list_numbers"})["numbers"]
+for n in numbers:
+    wa({"action": "send_text", "from": n["phone_number_id"], "to": "919876543210", "text": f"Hello from {n['verified_name']}"})
+Action
+PHP
+
+cURL example.
+
+Code example
+<?php
+$ch = curl_init("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api");
+curl_setopt_array($ch, [
+  CURLOPT_POST => true,
+  CURLOPT_RETURNTRANSFER => true,
+  CURLOPT_HTTPHEADER => ["x-api-key: " . getenv("WORKLY_API_KEY"), "Content-Type: application/json"],
+  CURLOPT_POSTFIELDS => json_encode(["action" => "send_text", "from" => "222222222222222", "to" => "919876543210", "text" => "Hello"]),
+]);
+echo curl_exec($ch);
+Templates
+
+Use UTILITY for transactional updates, MARKETING for promotions, and AUTHENTICATION for one-time codes. Meta may reject a template if variable examples are missing or the message has too little text around its variables. Editing an approved template can trigger a new review.
+
+Names use lowercase letters, numbers, and underscores. Language codes must match exactly, such as en_US.
+Headers can contain text, image, video, or document content; bodies can use positional variables such as {{1}}.
+Every variable needs a realistic example. Check status and rejected_reason before sending.
+Templates are shared at WhatsApp Business Account level. Deleting one affects every number using that account.
+Action
+Check connection & template approval
+
+Confirm your number is connected, then list templates. Only APPROVED templates can be sent.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"list_templates","status":"APPROVED"}'
+Action
+Create a template (submit for approval)
+
+Lowercase name, exact language code, and one example per variable. Meta reviews it (up to 48 hours).
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"create_template","name":"order_update","language":"en_US","category":"UTILITY","components":[{"type":"BODY","text":"Hello {{1}}, your order {{2}} is on its way. Reply here if you need help.","example":{"body_text":[["Alex","A1234"]]}}]}'
+Action
+Update a template
+
+Use the template id from list_templates. Editing resubmits it for Meta review.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"edit_template","template_id":"META_TEMPLATE_ID","components":[{"type":"BODY","text":"Hello {{1}}, your order {{2}} has shipped. Contact us if you need help.","example":{"body_text":[["Alex","A1234"]]}}]}'
+Action
+Delete a template
+
+Removes the template from your WhatsApp Business account.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"delete_template","name":"order_update"}'
+Action
+Send an approved template
+
+Required to start a chat or message outside the 24-hour window. body_params fill {{1}}, {{2}} in order.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_template","to":"919876543210","template_name":"order_update","language":"en_US","body_params":["Alex","A1234"]}'
+Messages & media
+
+The 24-hour customer-service window starts or refreshes when the customer sends a message, not when your business sends a template. Outside that window, use an approved template with the exact language and parameters. Template approval does not replace recipient opt-in or guarantee delivery. Meta charges depend on category, destination and current pricing; Workly API quota is separate from Meta messaging charges.
+
+Supported media types are image, video, audio, and document.
+The media URL must be a public HTTPS link that Meta can download. Documents can include a filename.
+Captions work with images, videos, and documents; audio messages do not accept captions.
+Successful sends return a message_id. Save it to match later sent, delivered, read, or failed events.
+Action
+Send a text message
+
+Allowed within 24 hours of the customer's last message.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_text","to":"919876543210","text":"Your order is ready for collection."}'
+Action
+Send media
+
+Public HTTPS link to an image, video, audio or document. Check usage with {"action":"usage"}.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_media","to":"919876543210","media_type":"document","media_url":"https://example.com/invoice.pdf","caption":"Your invoice","filename":"invoice.pdf"}'
+Replies, reactions & read receipts
+Every successful send returns message_id (a wamid.… id). Incoming webhooks also include message_id. Save it — replies and reactions point to it.
+Reply / quote: add "reply_to":"wamid…" to send_text, send_media or send_template. The customer sees your message with the original quoted above it.
+Reaction: send_reaction with message_id and one emoji. Send "emoji":"" to remove your reaction. Reactions are allowed only within 30 days of the original message and do not trigger a notification sound.
+Read + typing: mark_read shows blue ticks to the customer; add "typing":true to show "typing…" for up to 25 seconds or until you reply.
+Free-form replies and reactions work only within the 24-hour customer window; outside it send an approved template.
+All of these also accept "from" to pick which of your numbers sends.
+Action
+Reply to a message (quote)
+
+reply_to = the message_id you received in the webhook or got back from a send.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_text","to":"919876543210","text":"Yes, the interview is at 10 AM.","reply_to":"wamid.HBgMOTE5ODc2NTQzMjEw..."}'
+
+# Response
+{"success":true,"message_id":"wamid.HBgM...NEW","to":"919876543210","from":"111111111111111"}
+Action
+Reply with a file
+
+reply_to works the same on send_media and send_template.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_media","to":"919876543210","media_type":"document","media_url":"https://example.com/offer.pdf","filename":"offer.pdf","reply_to":"wamid.HBgM..."}'
+Action
+React with an emoji
+
+One emoji per message. Sending a new emoji replaces the old one.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_reaction","to":"919876543210","message_id":"wamid.HBgM...","emoji":"👍"}'
+Action
+Remove a reaction
+
+Send an empty emoji.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"send_reaction","to":"919876543210","message_id":"wamid.HBgM...","emoji":""}'
+Action
+Mark as read + show typing
+
+Use the incoming message_id. typing is optional.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"mark_read","message_id":"wamid.HBgM...","typing":true}'
+Action
+Incoming reply / reaction (webhook body)
+
+What your webhook receives when a customer replies to or reacts on your message.
+
+Code example
+// Customer replied (quoted) to your message
+{"event":"whatsapp.message.received","data":{"phone_number_id":"111111111111111","from":"919876543210","name":"Rahul","type":"text","text":"Is it remote?","message_id":"wamid.IN1","context":{"id":"wamid.YOUR_MSG"}}}
+
+// Customer reacted
+{"event":"whatsapp.message.received","data":{"phone_number_id":"111111111111111","from":"919876543210","type":"reaction","reaction":{"message_id":"wamid.YOUR_MSG","emoji":"❤️"}}}
+Action
+JavaScript — auto reply + react
+
+Inside your webhook handler, on your server.
+
+Code example
+app.post("/workly-webhook", async (req, res) => {
+  res.sendStatus(200); // answer fast
+  const { event, data } = req.body;
+  if (event !== "whatsapp.message.received" || data.type !== "text") return;
+  await wa({ action: "mark_read", message_id: data.message_id, from: data.phone_number_id, typing: true });
+  await wa({ action: "send_reaction", to: data.from, message_id: data.message_id, emoji: "👍", from: data.phone_number_id });
+  await wa({ action: "send_text", to: data.from, text: "Thanks! We will get back soon.", reply_to: data.message_id, from: data.phone_number_id });
+});
+Incoming messages & delivery status
+
+There are two separate webhook connections: Meta sends events to Workly's configured Meta receiver; Workly forwards subscribed developer events to your server URL saved in Developer Portal → Webhooks. Do not put your developer endpoint into Meta's callback settings or replace Workly's receiver. Your server verifies Workly's X-Webhook-Signature, not Meta's upstream signature. Read stored employer conversations in WhatsApp Chat.
+
+Add a webhook in Developer Portal → Webhooks and select whatsapp.message.received and/or whatsapp.message.status (or whatsapp.* for all). Each POST has headers X-Webhook-Event and X-Webhook-Signature (HMAC-SHA256 hex of the raw body using your endpoint secret). Reply with HTTP 200 within 8 seconds; slow requests are dropped and not retried.
+
+Action
+Webhook payloads
+
+data.phone_number_id tells you which of your numbers received the event. context is set when the customer quoted one of your messages; reaction is set for emoji reactions (empty emoji = removed).
+
+Code example
+// Incoming text
+{"event":"whatsapp.message.received","created_at":"2026-10-01T12:00:00Z","data":{
+  "phone_number_id":"111111111111111","from":"919876543210","name":"Rahul",
+  "type":"text","text":"Hi","message_id":"wamid.IN1","timestamp":"1790855000",
+  "media_url":null,"context":null,"raw":{...}}}
+
+// type can be: text, image, video, audio, document, sticker, location, contacts, button, interactive, reaction
+
+// Delivery status (sent | delivered | read | failed)
+{"event":"whatsapp.message.status","created_at":"...","data":{
+  "phone_number_id":"111111111111111","message_id":"wamid.OUT1","status":"read",
+  "recipient":"919876543210","timestamp":"1790855100","errors":null}}
+Action
+Verify the signature (Node.js)
+
+Use the raw request body, not re-serialized JSON.
+
+Code example
+import crypto from "crypto";
+app.post("/workly-webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const expected = crypto.createHmac("sha256", process.env.WORKLY_WEBHOOK_SECRET).update(req.body).digest("hex");
+  const got = req.get("X-Webhook-Signature") || "";
+  if (got.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected))) return res.sendStatus(401);
+  res.sendStatus(200);
+  const { event, data } = JSON.parse(req.body.toString());
+  // handle event...
+});
+WhatsApp Business profile
+
+Use these API actions from your website's server to read or update the customer-facing profile for any connected number.
+
+Profile picture
+
+JPG or PNG, under 5 MB, at least 192 × 192 pixels.
+
+About
+
+Required short status shown beneath the business name; up to 139 characters.
+
+Description
+
+Explain what the business does in up to 512 characters.
+
+Contact details
+
+Address, contact email, and up to two full website links.
+
+Business category
+
+Choose the Meta category that best represents the business.
+
+Account health
+
+Review display-name status, verification, quality rating, messaging limit, and throughput.
+
+Call get_profile first. Add from to select a number; if only one is connected it is used automatically; with several, the request returns 400 until you pass from.
+update_profile requires about. Omitted optional text fields are cleared, so send the complete profile you want to keep.
+Profile pictures must be JPG or PNG, under 5 MB and at least 192 × 192 pixels. Send one as a base64 data URL in profile_picture.
+Never expose the wfh_ key in browser code. Your website form must submit to your own server, which then calls this API.
+Action
+Read the business profile
+
+Returns the editable fields plus Meta-controlled number, display-name, quality, verification, messaging-limit and throughput details.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"get_profile","from":"111111111111111"}'
+Action
+Update the business profile
+
+Send the complete profile from your website's server. websites accepts up to two full URLs.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"update_profile","from":"111111111111111","about":"Official customer support","description":"Orders, delivery and customer support","address":"Mumbai, Maharashtra","email":"support@example.com","websites":["https://example.com","https://jobs.example.com"],"vertical":"PROF_SERVICES"}'
+Action
+Website form handler (Node.js)
+
+Your browser submits to this private server route; only the server sends the Workly India API key.
+
+Code example
+app.post("/api/whatsapp/profile", async (req, res) => {
+  const response = await fetch("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api", {
+    method: "POST",
+    headers: {
+      "x-api-key": process.env.WORKLY_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "update_profile", ...req.body }),
+  });
+  const result = await response.json();
+  res.status(response.status).json(result);
+});
+Onboarding & Embedded Signup
+
+Onboard many businesses, each with its own WhatsApp number connected through Embedded Signup. All calls are POST to one URL with the business's wfh_ key in the x-api-key header.
+
+Embedded Signup first: a business can send only after its number is connected through the Facebook connect flow. Manual tokens are a backup, not the default.
+One business = one key: each business uses its own wfh_ API key. Keys never see another business's numbers, templates or chats.
+Add from (phone_number_id or the number digits) to any send call to choose the sender; without it, the business's default number is used.
+
+Embedded Signup — connect a WhatsApp number
+Every business connects its own number with the Facebook (Meta) connect button — no manual tokens. Open Employer → WhatsApp → Number and click 'Connect with Facebook'.
+
+Code example
+What happens behind the button:
+1. Facebook login opens with the app's Embedded Signup configuration
+2. Business picks (or creates) a WhatsApp Business account and adds a number
+3. Meta returns a code + waba_id + phone_number_id to the app
+4. The app exchanges the code for a token, subscribes the app to the
+   WhatsApp account, registers the number, and stores everything
+   under that business — server-side only
+
+Result: the number shows as Connected with its quality rating,
+and all API calls for that business use it automatically.
+
+Onboard many businesses (multi-customer)
+Each customer/business has its own company profile and its own connected number(s). Onboarding a new customer is always the same two steps: create their account, then they connect WhatsApp with Embedded Signup. Their messages, templates and chats stay fully separate from every other business.
+
+Code example
+Per business:
+- Own company profile  → own API key (wfh_...)
+- Own WhatsApp number(s) via Embedded Signup
+- Own templates, chats, campaigns and usage quota
+
+One business can also connect several numbers
+(Employer → WhatsApp → Number → "Add another number"):
+
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"list_numbers"}'
+
+# { "success": true, "numbers": [
+#   { "phone_number_id": "1111", "phone": "+91 98xxxxxx01", "verified_name": "Your Business", "quality_rating": "GREEN" },
+#   { "phone_number_id": "2222", "phone": "+91 98xxxxxx02", "verified_name": "Your Business", "quality_rating": "GREEN" } ]}
+
+Connect WhatsApp for your users
+
+Have your own users? Put a Connect WhatsApp button on your website. Each user connects their own WhatsApp Business number, and you send from it with your same wfh_ key. Each user's number, templates and chats stay separate.
+
+Sub-accounts are visible only to your key. Other developers get "Sub-account not found".
+All sub-account calls count against your own API quota and appear in your API Logs.
+Meta tokens stay on Workly India servers. You never see or store them.
+Meta requirement: connecting many outside businesses needs Workly India to be a verified Meta Tech Provider. Until that approval is complete, Meta may limit who can finish the connect step.
+Action
+1. Create a sub-account for your user
+
+Call once per user of your website. external_id is your own user ID; calling again with the same external_id returns the existing sub-account.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"action":"create_sub_account","external_id":"user_123","name":"Rahul Traders"}'
+
+# { "success": true, "created": true,
+#   "sub_account": { "sub_account_id": "5f1c...", "external_id": "user_123", "status": "pending", "numbers": [] } }
+Action
+2. Get a connect link and show your Connect WhatsApp button
+
+The link opens a Workly India page with Connect with Facebook. It works once and expires after 1 hour, so create it when the user clicks your button. return_url must be https.
+
+Code example
+// Your server (Node.js / Express)
+app.post("/connect-whatsapp", async (req, res) => {
+  const r = await fetch("https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api", {
+    method: "POST",
+    headers: { "x-api-key": process.env.WORKLY_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "create_connect_link",
+      external_id: req.user.id,
+      return_url: "https://your-site.com/whatsapp/done",
+    }),
+  });
+  const { connect_url } = await r.json();
+  res.redirect(connect_url);
+});
+
+// After connecting, the user returns to:
+// https://your-site.com/whatsapp/done?status=connected&sub_account_id=...&external_id=user_123&phone_number_id=...
+// status can also be "failed" (with error=...) or "cancelled".
+Action
+3. Send messages as your user
+
+Add sub_account_id or external_id to any action (send_template, send_text, send_media, list_numbers, list_templates, create_template, get_profile...). Without it, your own number is used.
+
+Code example
+curl -X POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api \
+  -H "x-api-key: wfh_YOUR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"action":"send_template","external_id":"user_123","to":"919876543210",
+       "template_name":"order_update","language":"en_US","body_params":["A1234"]}'
+
+# { "success": true, "message_id": "wamid...", "from": "1111", "sub_account_id": "5f1c..." }
+Action
+Python example
+
+The same flow with requests.
+
+Code example
+import os, requests
+API = "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api"
+H = {"x-api-key": os.environ["WORKLY_API_KEY"]}
+
+requests.post(API, headers=H, json={"action": "create_sub_account", "external_id": "user_123", "name": "Rahul Traders"})
+link = requests.post(API, headers=H, json={"action": "create_connect_link", "external_id": "user_123",
+                                            "return_url": "https://your-site.com/whatsapp/done"}).json()["connect_url"]
+# redirect the user to link ... later:
+requests.post(API, headers=H, json={"action": "send_text", "external_id": "user_123", "to": "919876543210", "text": "Hello!"})
+Action
+Manage sub-accounts
+
+List (paginated, up to 100 per page), get one, disconnect a number, or delete a sub-account. You can also see them in Developer menu → Sub-accounts.
+
+Code example
+{"action":"list_sub_accounts","page":1,"per_page":50,"status":"connected","search":"rahul"}
+{"action":"get_sub_account","external_id":"user_123"}
+{"action":"disconnect_sub_account","external_id":"user_123","phone_number_id":"1111"}
+{"action":"delete_sub_account","external_id":"user_123"}
+Action
+Webhook events
+
+Your registered webhooks receive these, signed with your secret. Incoming messages and statuses for a user's number include sub_account_id and external_id.
+
+Code example
+whatsapp.sub_account.connected  { sub_account_id, external_id, phone_number_id, phone, verified_name }
+whatsapp.sub_account.failed     { sub_account_id, external_id, error }
+whatsapp.message.received       { ..., sub_account_id, external_id }
+whatsapp.message.status         { ..., sub_account_id, external_id }
+
+Bulk / Campaign messaging
+
+Send one approved template to many contacts by looping over your CSV list and calling the API once per number.
+
+How bulk sending works
+A campaign = one approved template sent to many contacts. There is one send_template call per recipient: read your contact list (CSV, sheet or database) and call the API once per number with a small delay. Recipients who have not messaged you in 24 hours must get a template; free-form text works only inside the 24-hour window.
+
+Code example
+CSV file (contacts.csv):
+phone,name
+919876543210,Rahul
+919123456789,Priya
+
+For each row → one API call:
+POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api
+{ "action": "send_template", "to": "<phone>", "template_name": "...", "language": "en_US", "body_params": ["<name>"] }
+
+Bulk send with JavaScript (CSV upload)
+Reads a CSV file, then sends the template to every row with a 1 second gap so Meta rate limits are respected.
+
+Code example
+import fs from "fs";
+
+const API = "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api";
+const KEY = process.env.WORKLY_API_KEY;
+
+async function sendTemplate(to, name) {
+  const r = await fetch(API, {
+    method: "POST",
+    headers: { "x-api-key": KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "send_template", to,
+      template_name: "offer_october", language: "en",
+      body_params: [name],
+    }),
+  });
+  const j = await r.json();
+  if (!j.success) throw new Error(`${to}: ${j.error}`);
+  return j;
+}
+
+const rows = fs.readFileSync("contacts.csv", "utf8").trim().split("\n").slice(1);
+for (const line of rows) {
+  const [phone, name] = line.split(",");
+  try { await sendTemplate(phone.trim(), name.trim()); console.log("sent", phone); }
+  catch (e) { console.error("failed", e.message); }
+  await new Promise((r) => setTimeout(r, 1000)); // 1 msg / second
+}
+
+Bulk send with Python (CSV upload)
+Same flow with requests and the csv module.
+
+Code example
+import csv, os, time, requests
+
+API = "https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api"
+H = {"x-api-key": os.environ["WORKLY_API_KEY"]}
+
+def send_template(to, name):
+    j = requests.post(API, json={
+        "action": "send_template", "to": to,
+        "template_name": "offer_october", "language": "en",
+        "body_params": [name],
+    }, headers=H).json()
+    if not j.get("success"):
+        raise Exception(f"{to}: {j.get('error')}")
+    return j
+
+with open("contacts.csv") as f:
+    for row in csv.DictReader(f):
+        try:
+            send_template(row["phone"].strip(), row["name"].strip())
+            print("sent", row["phone"])
+        except Exception as e:
+            print("failed", e)
+        time.sleep(1)  # 1 msg / second
+
+Check the result of each send
+Every call returns success plus the WhatsApp message id. Keep a log of failed numbers and retry them later — do not retry instantly in a tight loop.
+
+Code example
+# Success
+{ "success": true, "message_id": "wamid.HBgM..." }
+
+# Failure — save the number and retry after some time
+{ "success": false, "error": "Template is not approved by Meta yet", "meta_code": 132001 }
+
+Rules to avoid blocks
+Approved templates only: Bulk messages to users who have not messaged you in 24 hours must use a Meta-approved template. Free-form text works only inside the 24-hour window.
+Pace your sends: Keep about 1 message per second per number. New numbers start with a daily limit (e.g. 250 business-initiated conversations) that Meta raises automatically with good quality.
+Phone format: Digits only, with country code and no +: 919876543210.
+Opt-out: Stop messaging any user who asks to stop, or Meta will lower your quality rating and may restrict the number.
+
+Rate limits & messaging tiers
+
+Workly India enforces the same tiered limits Meta does, so one customer's heavy or low-quality sending can never slow down or block anyone else on the platform. Limits are enforced per API key, per sub-account, and per phone number.
+
+Three scopes are checked on every send: Your API key as a whole, each sub-account, and each phone number each have their own counter. The first scope to reach its cap blocks the send — exactly how Meta enforces limits.
+24-hour messaging tier: Each number has a Meta messaging tier: 250, 2,000, 10,000, 100,000 or Unlimited business-initiated conversations per 24 hours. New numbers start at 250; Meta lifts it to 2,000 after business verification, then raises it automatically (10,000, 100,000, Unlimited) as quality and unique-customer volume grow. The limit is shared by every number in your business portfolio. The window is rolling — it resets 24 hours after the first message of the current window.
+Burst limit: At most 20 messages per second per scope. If you burst faster, the API tells you to retry after 1 second.
+Quality-based throttling: If Meta drops a number's quality rating to YELLOW, its limit is automatically halved; RED quarters it (minimum 50). When Meta restores GREEN, the full limit applies again — no action needed from you.
+Check your usage anytime: Call {"action":"status"} — the whatsapp_limits field shows your tier, used_24h, remaining_24h and resets_at, so you never need to contact support to know where you stand.
+When a limit is hit: The send returns success:false with error, limit, used, remaining, resets_at and retry_after_seconds. Queue the message and retry after retry_after_seconds — do not retry in a tight loop.
+
+See your current limit status
+The status action always returns your live 24-hour usage for the number.
+
+POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api
+{"action":"status"}
+
+# Response (excerpt)
+{
+  "success": true,
+  "connected": true,
+  "quality_rating": "GREEN",
+  "whatsapp_limits": {
+    "tier": "TIER_2K",
+    "limit_24h": 2000,
+    "used_24h": 132,
+    "remaining_24h": 1868,
+    "resets_at": "2026-10-09T12:00:00.000Z"
+  }
+}
+
+Full overview: account + all sub-accounts
+One call returns your API-key usage, every number on your own account, and every sub-account with its numbers — each with tier, used, remaining and reset time. The same data is shown on the WhatsApp Limits page in the Developer Portal.
+
+POST https://jubwzelupbntbetpajqb.supabase.co/functions/v1/whatsapp-api
+{"action":"limits_overview"}
+
+# Response (excerpt)
+{
+  "success": true,
+  "api_key": { "used_24h": 412, "resets_at": "2026-10-09T12:00:00.000Z" },
+  "account": {
+    "numbers": [
+      { "phone": "+919876543210", "quality_rating": "GREEN", "tier": "TIER_2K",
+        "limit_24h": 2000, "used_24h": 132, "remaining_24h": 1868,
+        "resets_at": "2026-10-09T12:00:00.000Z" }
+    ]
+  },
+  "sub_accounts": [
+    { "sub_account_id": "uuid", "external_id": "customer-42", "status": "connected",
+      "used_24h": 280, "resets_at": "2026-10-09T09:30:00.000Z",
+      "numbers": [
+        { "phone": "+919123456780", "quality_rating": "YELLOW", "tier": "TIER_250",
+          "limit_24h": 125, "used_24h": 100, "remaining_24h": 25,
+          "resets_at": "2026-10-09T09:30:00.000Z" }
+      ]
+    }
+  ]
+}
+
+Response when a limit is reached
+HTTP 429. Read retry_after_seconds and queue the message instead of retrying immediately.
+
+{
+  "success": false,
+  "error": "WhatsApp 24-hour messaging limit reached for this number. The limit resets on a rolling window and rises automatically with a good quality rating, just like Meta tiers.",
+  "reason": "tier_limit",
+  "scope": "phone_number",
+  "used": 250,
+  "limit": 250,
+  "remaining": 0,
+  "resets_at": "2026-10-09T12:00:00.000Z",
+  "retry_after_seconds": 3600
+}
+
+Troubleshooting
+
+Every response is JSON. Success: {"success":true,...}. Failure: {"success":false,"error":"...","meta_code":131047} (meta_code only for WhatsApp errors).
+
+400 — Invalid request
+A field is missing or wrong; see details. Also returned for WhatsApp errors with meta_code.
+401 — API key problem
+Missing, invalid, inactive or expired x-api-key (must start with wfh_).
+402 — Subscription inactive
+Activate an API plan in Developer Portal.
+403 — No company
+The key's account has no company profile. Create the company profile first.
+404 — Number not connected
+The from value doesn't match any of your numbers. Call list_numbers.
+409 — WhatsApp not connected
+Connect and verify a number on the employer WhatsApp page before sending.
+429 — WhatsApp limit reached
+The 24-hour tier limit or the per-second burst limit was hit for your API key, sub-account or number. The response includes resets_at and retry_after_seconds — retry after that. See Rate limits & tiers.
+502 — Meta unavailable
+Temporary WhatsApp outage. Retry after a short wait.
+meta_code 131047 — 24-hour window expired
+Send an approved template instead of text, media, reply or reaction.
+meta_code 131026 — Message undeliverable
+Recipient isn't on WhatsApp, or the number/country code is wrong.
+meta_code 132001 — Template not found
+Check exact template name and language code, and that it's APPROVED on the same number's account.
+meta_code 132000 — Parameter count mismatch
+body_params must match the number of {{n}} variables exactly.
+meta_code 131056 — Too many messages
+Rate limit to the same recipient. Slow down and retry.
+meta_code 131009 — Invalid parameter
+Often a wrong reply_to/message_id or a non-public media URL.

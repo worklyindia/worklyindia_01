@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="workly_widget_card">#00000000</color>
+    <color name="workly_widget_border">#88FFFFFF</color>
+    <color name="workly_widget_primary_text">#FFFFFFFF</color>
+    <color name="workly_widget_secondary_text">#FFE8ECF4</color>
+    <color name="workly_widget_accent">#FFC5D0FF</color>
+    <color name="workly_widget_pill">#00000000</color>
+    <color name="workly_widget_festival_icon">#00000000</color>
+    <color name="workly_widget_festival_icon_text">#FFFFFFFF</color>
+</resources>

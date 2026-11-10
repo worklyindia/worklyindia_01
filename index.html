@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f7f9fb" />
+
+    <script>
+      // Apply the user's saved website theme before first paint to avoid a flash,
+      // and keep the browser chrome (theme-color / color-scheme) in sync with it.
+      // This forces the Chrome address bar to follow the website toggle, not the
+      // phone's system dark mode.
+      (function () {
+        var STORAGE_KEY = 'workly-theme';
+        var LIGHT_COLOR = '#f7f9fb';
+        var DARK_COLOR = '#010816';
+
+        function getTheme() {
+          try {
+            var stored = window.localStorage.getItem(STORAGE_KEY);
+            if (stored === 'dark' || stored === 'light') return stored;
+          } catch (e) {}
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        function setMeta(name, content) {
+          var metas = document.querySelectorAll('meta[name="' + name + '"]');
+          if (!metas || metas.length === 0) {
+            var m = document.createElement('meta');
+            m.setAttribute('name', name);
+            document.head.appendChild(m);
+            metas = [m];
+          }
+          for (var i = 0; i < metas.length; i++) {
+            metas[i].setAttribute('content', content);
+          }
+        }
+
+        function applyTheme() {
+          var theme = getTheme();
+          var dark = theme === 'dark';
+          var color = dark ? DARK_COLOR : LIGHT_COLOR;
+
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = theme;
+          document.documentElement.style.setProperty('--app-shell-bg', color);
+          document.documentElement.style.backgroundColor = color;
+
+          setMeta('theme-color', color);
+          setMeta('color-scheme', theme);
+
+          function paintBody() {
+            if (document.body) document.body.style.backgroundColor = color;
+          }
+          paintBody();
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', paintBody);
+          }
+        }
+
+        applyTheme();
+
+        // React (useTheme) updates same-tab state directly; this handles
+        // cross-tab toggles and any late reads of the meta tags.
+        try {
+          window.addEventListener('storage', function (e) {
+            if (e.key === STORAGE_KEY) {
+              applyTheme();
+            }
+          });
+        } catch (e) {}
+      })();
+    </script>
+
+    
+    <!-- Google Search Console Verification -->
+    <meta name="google-site-verification" content="googled548c9436462790c" />
+    
+    <!-- Yandex Webmaster Verification -->
+    <meta name="yandex-verification" content="f52ae84aa3774712" />
+    
+    <!-- Pinterest Verification -->
+    <meta name="p:domain_verify" content="21f6d9c3323d17f0a5b286a96cc55393" />
+    
+    <!-- Trustpilot Verification -->
+    <meta name="trustpilot-one-time-domain-verification-id" content="c6c2d84c-7252-4bf3-92bd-ad57b771c25f" />
+    
+    <!-- Analytics are queued immediately but network scripts load after page startup/idle. -->
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
+      window.gtag('consent', 'default', {
+        analytics_storage: 'granted', ad_storage: 'granted',
+        ad_user_data: 'granted', ad_personalization: 'granted'
+      });
+      window.gtag('js', new Date());
+      window.gtag('config', 'G-Z24GDEX6WM', {
+        send_page_view: true, anonymize_ip: true,
+        cookie_flags: 'SameSite=None;Secure'
+      });
+      window.dataLayer.push({'gtm.start': new Date().getTime(), event:'gtm.js'});
+      (function(){
+        var loaded=false;
+        function loadAnalytics(){
+          if(loaded || !window.location.hostname.includes('worklyindia')) return;
+          loaded=true;
+          var ga=document.createElement('script');
+          ga.async=true; ga.src='https://www.googletagmanager.com/gtag/js?id=G-Z24GDEX6WM';
+          document.head.appendChild(ga);
+          var gtm=document.createElement('script');
+          gtm.async=true; gtm.src='https://www.googletagmanager.com/gtm.js?id=GTM-KL73G5K3';
+          document.head.appendChild(gtm);
+        }
+        ['pointerdown','keydown','touchstart','scroll'].forEach(function(n){
+          window.addEventListener(n,loadAnalytics,{once:true,passive:true});
+        });
+        window.addEventListener('load',function(){ setTimeout(loadAnalytics,10000); },{once:true});
+      })();
+    </script>
+    <!-- End deferred Google Analytics / Tag Manager -->
+    <!-- Optimized owner-supplied favicon and home-screen icons. -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png?v=20261022b">
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png?v=20261022" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png?v=20261022" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    
+    <!-- Handle redirects from 404.html - CRITICAL for SPA routing on Vercel -->
+    <script>
+      (function() {
+        var redirect = sessionStorage.getItem('redirect');
+        if (redirect && redirect !== '/' && redirect !== window.location.pathname) {
+          console.log('index.html: Found redirect path:', redirect);
+          sessionStorage.removeItem('redirect');
+          // Use replaceState to update URL without page reload
+          // React Router will pick up this URL and render correct component
+          history.replaceState(null, '', redirect);
+          console.log('index.html: URL updated to:', redirect);
+        }
+      })();
+    </script>
+    <style>
+      * {
+        -webkit-text-size-adjust: 100%;
+        -moz-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+        touch-action: manipulation;
+      }
+      html, body {
+        overflow-x: hidden;
+        width: 100%;
+        position: relative;
+      }
+      /* Allow carousels to handle their own touch events */
+      .embla-carousel {
+        touch-action: pan-y;
+      }
+    </style>
+    <title>Workly India - Free Remote Jobs &amp; Verified Hiring Portal</title>
+    
+    <!-- Primary Meta Tags -->
+    <meta name="title" content="Workly India - Free Remote Jobs &amp; Verified Hiring Portal" />
+    <meta name="description" content="Trusted Indian remote job portal. Find verified remote jobs - data entry, customer support, content writing, typing jobs. 100% free for job seekers. Employers post jobs free. Apply now!">
+    <meta name="keywords" content="remote jobs india, remote jobs india 2026, online jobs without investment, data entry jobs from home, customer support Workly India, typing jobs india, part time jobs from home, freelance jobs india, post jobs free india, hire remote professionals, job posting sites india, genuine online jobs, legitimate Workly India, Workly India opportunities, Workly India jobs near me" />
+    <meta name="author" content="Workly India" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="language" content="English" />
+    <meta name="geo.region" content="IN" />
+    <meta name="geo.placename" content="India" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://worklyindia.devs.surf/" />
+    <meta property="og:site_name" content="Workly India" />
+    <meta name="application-name" content="Workly India" />
+    <meta name="apple-mobile-web-app-title" content="Workly India" />
+    <link rel="canonical" href="https://worklyindia.devs.surf/" />
+    <meta property="og:title" content="Workly India - Free Remote Jobs &amp; Verified Hiring Portal" />
+    <meta property="og:description" content="Find verified remote jobs in India - data entry, customer support, content writing and typing. 100% free for job seekers; employers post jobs free." />
+    
+    
+    <!-- Static fallback OG image — MUST be an absolute https URL or WhatsApp/Facebook/Twitter render no preview at all.
+         Runtime <Helmet> swaps in the live uploaded OG image for JS-aware crawlers (Googlebot). -->
+    <meta property="og:image" content="https://worklyindia.devs.surf/og-image.jpg?v=2">
+    <meta property="og:image:secure_url" content="https://worklyindia.devs.surf/og-image.jpg?v=2" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:alt" content="Workly India - Remote Jobs India 2026 - Free Job Posting Platform" />
+    <meta property="og:locale" content="en_IN" />
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://worklyindia.devs.surf/" />
+    <meta name="twitter:title" content="Workly India - Free Remote Jobs &amp; Verified Hiring Portal" />
+    <meta name="twitter:description" content="Find verified remote jobs in India - data entry, customer support, content writing and typing. 100% free for job seekers; employers post jobs free." />
+    
+    
+    <meta name="twitter:image" content="https://worklyindia.devs.surf/og-image.jpg?v=2">
+    <meta name="twitter:site" content="@WorklyIndia" />
+    <meta name="twitter:creator" content="@WorklyIndia" />
+    
+    <!-- hreflang Tags for Multi-language Support -->
+    <link rel="alternate" hreflang="en-in" href="https://worklyindia.devs.surf/" />
+    <link rel="alternate" hreflang="hi" href="https://worklyindia.devs.surf/" />
+    <link rel="alternate" hreflang="x-default" href="https://worklyindia.devs.surf/" />
+    
+    <!-- Structured Data - Organization Schema (Enhanced for AI Bots & Google 2025) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": "https://worklyindia.devs.surf/#organization",
+      "name": "Workly India",
+      "legalName": "Vishalbhai Muljibhai Gohil",
+      "founder": { "@type": "Person", "@id": "https://worklyindia.devs.surf/#founder", "name": "Vishalbhai Muljibhai Gohil", "jobTitle": "Founder & CEO", "url": "https://worklyindia.devs.surf/about-us#founder", "sameAs": ["https://in.linkedin.com/in/gohil-vishal"] },
+      "alternateName": ["WorklyIndia", "Workly India Jobs", "Workly India Remote Jobs", "worklyindia.devs.surf"],
+      "slogan": "Free verified remote jobs and hiring in India",
+      "knowsAbout": ["Remote jobs in India", "Work from home jobs", "Online hiring", "Resume builder", "Job search", "Employer hiring platform"],
+      "brand": { "@type": "Brand", "name": "Workly India", "logo": "https://worklyindia.devs.surf/workly-india-logo.png" },
+      "url": "https://worklyindia.devs.surf/",
+      "disambiguatingDescription": "Workly India (worklyindia.devs.surf) is an independent remote jobs and hiring platform from Patan, Gujarat. It is not affiliated with WorkIndia.",
+      "sameAs": [
+        "https://www.facebook.com/share/1Jj9yDRirA/",
+        "https://www.instagram.com/worklyindiaofficial",
+        "https://youtube.com/@worklyindiaofficial",
+        "https://x.com/worklyindia",
+        "https://t.me/WorklyIndia",
+        "https://maps.google.com/maps?cid=6183675393057517431"
+      ],
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://worklyindia.devs.surf/workly-india-logo.png",
+        "width": 512,
+        "height": 512
+      },
+      "image": "https://worklyindia.devs.surf/og-image.jpg?v=2",
+      "description": "India's premier platform connecting talented professionals with legitimate Workly India opportunities. Find verified remote jobs, Remote positions, and online work across India. Free for job seekers - no registration fees.",
+      "foundingDate": "2024-01-01",
+      "email": "worklyindia@outlook.com",
+      "taxID": "UDYAM-GJ-18-0022888",
+      "identifier": [
+        {
+          "@type": "PropertyValue",
+          "propertyID": "UDYAM",
+          "value": "UDYAM-GJ-18-0022888"
+        },
+        {
+          "@type": "PropertyValue",
+          "propertyID": "IEC",
+          "value": "EBGPG4522J"
+        }
+      ],
+      "areaServed": {
+        "@type": "Country",
+        "name": "India"
+      },
+      "knowsLanguage": ["Hindi", "English"],
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Sankhewsar",
+        "addressLocality": "Patan",
+        "addressRegion": "Gujarat",
+        "postalCode": "384246",
+        "addressCountry": "IN"
+      },
+      "contactPoint": [{
+        "@type": "ContactPoint",
+        "telephone": "+91-9904923067",
+        "contactType": "customer service",
+        "email": "worklyindia@outlook.com",
+        "areaServed": "IN",
+        "availableLanguage": ["Hindi", "English"],
+        "hoursAvailable": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+          "opens": "09:00",
+          "closes": "18:00"
+        }
+      }],
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Remote Job Services",
+        "itemListElement": [
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Remote Job Listings",
+              "description": "Browse verified remote job opportunities - completely free for job seekers"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Resume Builder",
+              "description": "Professional resume building tools to create winning resumes"
+            }
+          },
+          {
+            "@type": "Offer",
+            "itemOffered": {
+              "@type": "Service",
+              "name": "Career Guidance",
+              "description": "Expert career counseling and interview preparation tips"
+            }
+          }
+        ]
+      }
+    }
+    </script>
+
+    <!-- Structured Data - Main site navigation (helps Google show sitelinks) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      "name": "Workly India main pages",
+      "itemListElement": [
+        {"@type": "SiteNavigationElement", "position": 1, "name": "Search Jobs", "url": "https://worklyindia.devs.surf/jobs"},
+        {"@type": "SiteNavigationElement", "position": 2, "name": "Post a Job", "url": "https://worklyindia.devs.surf/post-job"},
+        {"@type": "SiteNavigationElement", "position": 3, "name": "Employer Portal", "url": "https://worklyindia.devs.surf/employer-portal"},
+        {"@type": "SiteNavigationElement", "position": 4, "name": "Resume Builder", "url": "https://worklyindia.devs.surf/resume-builder"},
+        {"@type": "SiteNavigationElement", "position": 5, "name": "Website Pricing", "url": "https://worklyindia.devs.surf/pricing"},
+        {"@type": "SiteNavigationElement", "position": 6, "name": "Contact Us", "url": "https://worklyindia.devs.surf/contact-us"}
+      ]
+    }
+    </script>
+    
+    <!-- Structured Data - BreadcrumbList Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "name": "Workly India",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://worklyindia.devs.surf/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Jobs",
+          "item": "https://worklyindia.devs.surf/jobs"
+        }
+      ]
+    }
+    </script>
+    
+    <!-- Structured Data - WebSite Schema with Search Action -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": "https://worklyindia.devs.surf/#website",
+      "name": "Workly India",
+      "alternateName": ["WorklyIndia", "Workly"],
+      "url": "https://worklyindia.devs.surf/",
+      "inLanguage": "en-IN",
+      "publisher": { "@id": "https://worklyindia.devs.surf/#organization" },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://worklyindia.devs.surf/jobs?search={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    
+    <!-- Structured Data - FAQ Schema for Common Job Search Queries -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How to find genuine remote jobs in India?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Workly India is a platform for verified remote jobs in India. All employers are verified and jobs are screened for authenticity. Browse our job listings and apply directly to companies. It's 100% free for job seekers with no registration fees."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How to post jobs online for free in India?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Employers can post jobs for free on Workly India. Simply register on our Employer Portal, complete your company profile, and start posting jobs. Your first job posting is absolutely FREE with no hidden charges."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Are these remote jobs free to apply?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, all job applications on Workly India are 100% free for job seekers. You never have to pay to apply for any job listed on our website. We verify employers to ensure legitimate job opportunities."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What types of remote jobs are available?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "We offer various Remote jobs including Data Entry, Customer Support, Content Writing, Digital Marketing, Software Development, Virtual Assistant, Graphic Design, Teaching, Typing Jobs, Sales, Telecalling, and many more across India."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How to hire remote employees in India?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Post your job on Workly India's Employer Portal. You'll get access to 75,000+ verified candidates. Features include direct messaging, application tracking, company profile page, and analytics dashboard. First job posting is FREE!"
+          }
+        }
+      ]
+    }
+    </script>
+    
+    <!-- Structured Data - Employment Agency / Job Board Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "EmploymentAgency",
+      "name": "Workly India",
+      "alternateName": "Workly India Job Portal",
+      "description": "India's leading remote job portal connecting verified employers with talented professionals across India. Free job posting for employers, free job applications for seekers.",
+      "url": "https://worklyindia.devs.surf",
+      "logo": "https://worklyindia.devs.surf/workly-india-logo.png",
+      "areaServed": {
+        "@type": "Country",
+        "name": "India"
+      },
+      "serviceType": ["Job Posting", "Recruitment Services", "Remote Hiring", "Remote Jobs", "Freelance Hiring"],
+      "priceRange": "₹0 - Free for first job",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "reviewCount": "12500",
+        "bestRating": "5",
+        "worstRating": "1"
+      }
+    }
+    </script>
+    
+    <!-- LCP FIX: DNS prefetch and preconnect for Supabase (reduce latency) -->    <link rel="dns-prefetch" href="https://jubwzelupbntbetpajqb.supabase.co" />
+    <link rel="dns-prefetch" href="https://img.youtube.com" />
+    
+    <!-- PERFORMANCE FIX: Preload critical resources with highest priority -->
+    <!-- NOTE: Do NOT preload /src/index.css here — Vite hashes the CSS at build
+         time and this literal path 404s on Vercel, breaking strict-MIME and
+         causing a "Refused to apply style" console error. Vite injects the
+         hashed CSS <link> automatically. -->
+    <link rel="preload" href="/workly-india-logo.png" as="image" fetchpriority="high" />
+    
+    <!-- CLS FIX: Preload fonts with font-display:optional to prevent layout shift -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" /></noscript>
+    
+    
+    
+    <!-- Razorpay Payment Gateway Optimization -->
+
+    <!-- TrustBox script -->
+    <!-- End TrustBox script -->
+
+    <style>
+      /* CLS FIX: System font stack with swap for zero FOIT */
+      html { 
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+        font-display: swap; 
+        scroll-behavior: smooth;
+      }
+      body { 
+        margin: 0; 
+        background: var(--app-shell-bg, #fafafa); 
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      /* CLS FIX: Reserve space for hero banner to prevent layout shift */
+      .hero-banner-placeholder {
+        min-height: 200px;
+        aspect-ratio: 2 / 1;
+      }
+      @media (min-width: 768px) {
+        .hero-banner-placeholder {
+          min-height: 280px;
+          aspect-ratio: 2.5 / 1;
+        }
+      }
+      
+      /* ═══════════════════════════════════════════════════════ */
+      /* ULTRA PREMIUM MULTI-COLOR SPLASH SCREEN                  */
+      /* ═══════════════════════════════════════════════════════ */
+      .instant-hero { 
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; 
+        background: #050510;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        color: white; text-align: center; padding: 20px;
+        transform: translateZ(0); will-change: opacity, transform;
+        transition: opacity 0.8s cubic-bezier(0.4,0,0,1), transform 0.8s cubic-bezier(0.4,0,0,1);
+        overflow: hidden;
+      }
+      .instant-hero.hidden { opacity: 0; transform: scale(1.08) translateZ(0); pointer-events: none; }
+
+      .splash-aurora {
+        position: absolute; inset: -50%; width: 200%; height: 200%;
+        animation: auroraRotate 20s linear infinite; filter: blur(80px); opacity: 0.6;
+      }
+      .splash-aurora::before, .splash-aurora::after { content: ''; position: absolute; border-radius: 50%; }
+      .splash-aurora::before { width: 40%; height: 40%; top: 10%; left: 5%; background: radial-gradient(circle, rgba(255,50,100,0.25) 0%, transparent 70%); animation: blobMove1 8s ease-in-out infinite alternate; }
+      .splash-aurora::after { width: 35%; height: 35%; bottom: 15%; right: 10%; background: radial-gradient(circle, rgba(0,200,255,0.2) 0%, transparent 70%); animation: blobMove2 10s ease-in-out infinite alternate; }
+      
+      .splash-aurora-b { position: absolute; inset: -30%; width: 160%; height: 160%; filter: blur(100px); opacity: 0.5; pointer-events: none; animation: auroraRotate 25s linear infinite reverse; }
+      .splash-aurora-b::before, .splash-aurora-b::after { content: ''; position: absolute; border-radius: 50%; }
+      .splash-aurora-b::before { width: 45%; height: 45%; top: 20%; right: 5%; background: radial-gradient(circle, rgba(168,85,247,0.25) 0%, transparent 70%); animation: blobMove3 9s ease-in-out infinite alternate; }
+      .splash-aurora-b::after { width: 38%; height: 38%; bottom: 5%; left: 15%; background: radial-gradient(circle, rgba(34,197,94,0.18) 0%, transparent 70%); animation: blobMove1 12s ease-in-out infinite alternate-reverse; }
+      
+      .splash-aurora-c { position: absolute; inset: -20%; width: 140%; height: 140%; filter: blur(90px); opacity: 0.4; pointer-events: none; }
+      .splash-aurora-c::before, .splash-aurora-c::after { content: ''; position: absolute; border-radius: 50%; }
+      .splash-aurora-c::before { width: 30%; height: 30%; top: 40%; left: 30%; background: radial-gradient(circle, rgba(251,191,36,0.2) 0%, transparent 70%); animation: blobMove2 7s ease-in-out infinite alternate; }
+      .splash-aurora-c::after { width: 35%; height: 35%; top: 5%; right: 25%; background: radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%); animation: blobMove3 11s ease-in-out infinite alternate-reverse; }
+
+      .splash-noise {
+        position: absolute; inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+        opacity: 0.3; pointer-events: none; z-index: 1;
+      }
+
+      .splash-particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
+      .splash-particle { position: absolute; border-radius: 50%; animation: particleFloat linear infinite; }
+      .splash-particle:nth-child(1) { left: 8%; width: 3px; height: 3px; background: rgba(255,50,100,0.45); animation-duration: 14s; }
+      .splash-particle:nth-child(2) { left: 20%; width: 4px; height: 4px; background: rgba(99,102,241,0.4); animation-duration: 16s; animation-delay: -3s; }
+      .splash-particle:nth-child(3) { left: 35%; width: 2px; height: 2px; background: rgba(0,200,255,0.45); animation-duration: 11s; animation-delay: -5s; }
+      .splash-particle:nth-child(4) { left: 50%; width: 3px; height: 3px; background: rgba(251,191,36,0.4); animation-duration: 19s; animation-delay: -2s; }
+      .splash-particle:nth-child(5) { left: 65%; width: 2.5px; height: 2.5px; background: rgba(168,85,247,0.45); animation-duration: 15s; animation-delay: -7s; }
+      .splash-particle:nth-child(6) { left: 80%; width: 3px; height: 3px; background: rgba(34,197,94,0.4); animation-duration: 12s; animation-delay: -4s; }
+      .splash-particle:nth-child(7) { left: 45%; width: 2px; height: 2px; background: rgba(244,63,94,0.35); animation-duration: 17s; animation-delay: -8s; }
+      .splash-particle:nth-child(8) { left: 72%; width: 3.5px; height: 3.5px; background: rgba(59,130,246,0.35); animation-duration: 13s; animation-delay: -1s; }
+
+      .splash-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; animation: contentReveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
+      .splash-scene { margin-bottom: 2.5rem; position: relative; }
+      .splash-logo-container { position: relative; width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; animation: neonEntrance 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+      .neon-ring-outer {
+        position: absolute; width: 200px; height: 200px; border-radius: 50%;
+        border: 2.5px solid transparent;
+        background: linear-gradient(#050510,#050510) padding-box, conic-gradient(from 0deg, #ff3264, #fbbf24, #22c55e, #3b82f6, #a855f7, #ff3264) border-box;
+        animation: neonRingRotate 6s linear infinite;
+        box-shadow: 0 0 25px rgba(168,85,247,0.2), 0 0 50px rgba(255,50,100,0.08);
+      }
+      .neon-ring-middle {
+        position: absolute; width: 160px; height: 160px; border-radius: 50%;
+        border: 1.5px solid transparent;
+        background: linear-gradient(#050510,#050510) padding-box, conic-gradient(from 180deg, rgba(0,200,255,0.6), rgba(168,85,247,0.4), rgba(255,50,100,0.3), rgba(34,197,94,0.4), rgba(0,200,255,0.6)) border-box;
+        animation: neonRingRotate 10s linear infinite reverse;
+      }
+      .neon-ring-inner { position: absolute; width: 126px; height: 126px; border-radius: 50%; border: 1px dashed rgba(255,255,255,0.08); animation: neonRingRotate 20s linear infinite; }
+      .neon-ring-dot { position: absolute; top: -5px; left: calc(50% - 5px); width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, #ff3264, #fbbf24); box-shadow: 0 0 12px #ff3264, 0 0 24px rgba(255,50,100,0.5); animation: dotPulse 2s ease-in-out infinite; }
+      .neon-ring-dot-2 { position: absolute; bottom: -4px; right: calc(50% - 4px); width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #22c55e); box-shadow: 0 0 10px #3b82f6, 0 0 20px rgba(59,130,246,0.4); animation: dotPulse 2.5s ease-in-out infinite 0.5s; }
+
+      .neon-center-icon { position: relative; z-index: 10; animation: neonIconFloat 4s ease-in-out infinite; filter: drop-shadow(0 0 10px #818cf8) drop-shadow(0 0 25px rgba(168,85,247,0.4)) drop-shadow(0 0 40px rgba(255,50,100,0.15)); }
+      .splash-reflection { width: 80px; height: 14px; background: radial-gradient(ellipse, rgba(168,85,247,0.2) 0%, rgba(59,130,246,0.15) 50%, transparent 80%); border-radius: 50%; margin-top: 0.5rem; animation: reflectionPulse 4s ease-in-out infinite; filter: blur(10px); }
+
+      .splash-brand-wrap { margin-bottom: 1.5rem; animation: brandReveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both; }
+      .splash-brand {
+        font-size: 1.7rem; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+        background: linear-gradient(90deg, #ff6b9d, #fbbf24, #22c55e, #3b82f6, #a855f7, #ff6b9d);
+        background-size: 300% 100%;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        animation: rainbowShift 5s linear infinite;
+        font-family: 'Inter', system-ui, sans-serif; line-height: 1;
+      }
+      .splash-brand-sub {
+        font-size: 0.6rem; font-weight: 500; letter-spacing: 0.4em; text-transform: uppercase;
+        background: linear-gradient(90deg, rgba(165,180,252,0.6), rgba(0,200,255,0.5), rgba(168,85,247,0.5), rgba(165,180,252,0.6));
+        background-size: 200% 100%;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        animation: rainbowShift 7s linear infinite reverse;
+        margin-top: 0.6rem; font-family: 'Inter', system-ui, sans-serif;
+      }
+
+      .splash-progress-wrap { width: 200px; margin-bottom: 1.5rem; animation: brandReveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.6s both; }
+      .splash-progress-track { width: 100%; height: 3px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
+      .splash-progress-fill {
+        height: 100%; width: 0%; border-radius: 4px;
+        background: linear-gradient(90deg, #ff3264, #fbbf24, #22c55e, #3b82f6, #a855f7, #ff3264);
+        background-size: 300% 100%;
+        animation: progressFill 3.5s cubic-bezier(0.4, 0, 0.2, 1) forwards, rainbowShift 2s linear infinite;
+        box-shadow: 0 0 10px rgba(168,85,247,0.4), 0 0 20px rgba(255,50,100,0.2);
+      }
+      .splash-progress-text { font-size: 0.55rem; color: rgba(255,255,255,0.22); margin-top: 0.8rem; letter-spacing: 0.25em; text-transform: uppercase; font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+      .splash-tagline { font-size: 0.75rem; color: rgba(255,255,255,0.25); letter-spacing: 0.05em; font-family: 'Inter', system-ui, sans-serif; font-weight: 400; animation: brandReveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.8s both; }
+
+      .splash-badge { position: absolute; bottom: max(2rem, env(safe-area-inset-bottom, 2rem)); display: flex; align-items: center; gap: 6px; padding: 6px 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 100px; backdrop-filter: blur(8px); animation: brandReveal 1s cubic-bezier(0.16, 1, 0.3, 1) 1s both; }
+      .splash-badge-dot { width: 6px; height: 6px; background: #22c55e; border-radius: 50%; animation: dotPulse 2s ease-in-out infinite; box-shadow: 0 0 8px rgba(34,197,94,0.5); }
+      .splash-badge-text { font-size: 0.55rem; color: rgba(255,255,255,0.3); letter-spacing: 0.12em; text-transform: uppercase; font-family: 'Inter', system-ui, sans-serif; font-weight: 500; }
+
+      @keyframes auroraRotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      @keyframes blobMove1 { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(30%,20%) scale(1.3); } }
+      @keyframes blobMove2 { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(-25%,15%) scale(1.2); } }
+      @keyframes blobMove3 { 0% { transform: translate(0,0) scale(1); } 100% { transform: translate(15%,-25%) scale(1.4); } }
+      @keyframes particleFloat { 0% { transform: translateY(100vh) scale(0); opacity: 0; } 10% { opacity: 1; transform: translateY(90vh) scale(1); } 90% { opacity: 0.4; } 100% { transform: translateY(-10vh) scale(0.2); opacity: 0; } }
+      @keyframes contentReveal { 0% { opacity: 0; transform: translateY(50px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+      @keyframes neonEntrance { 0% { opacity: 0; transform: scale(0.2) rotate(-15deg); } 50% { transform: scale(1.1) rotate(3deg); } 100% { opacity: 1; transform: scale(1) rotate(0deg); } }
+      @keyframes neonRingRotate { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      @keyframes neonIconFloat { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-10px) scale(1.03); } }
+      @keyframes reflectionPulse { 0%, 100% { opacity: 0.3; transform: scaleX(1); } 50% { opacity: 0.6; transform: scaleX(1.4); } }
+      @keyframes brandReveal { 0% { opacity: 0; transform: translateY(20px); filter: blur(8px); } 100% { opacity: 1; transform: translateY(0); filter: blur(0px); } }
+      @keyframes rainbowShift { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
+      @keyframes progressFill { 0% { width: 0%; } 15% { width: 20%; } 35% { width: 45%; } 55% { width: 65%; } 75% { width: 82%; } 100% { width: 95%; } }
+      @keyframes dotPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.6); } }
+      * { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+    </style>
+    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</head>
+  <body>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KL73G5K3"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    
+    <div id="root"></div>
+    
+    <!-- Splash/loading screen removed; keep a no-op hook for existing callers -->
+    <script>
+      window.__loadingScreenHidden = true;
+      window.__hideLoadingScreen = function() {};
+    </script>
+
+    <!-- PERFORMANCE FIX: Conditional scripts for production only -->
+    <script>
+      // Only load analytics and tracking on production
+      if (window.location.hostname.includes('worklyindia')) {
+        // Delay Meta Pixel and Clarity until the browser is idle after initial load.
+        var loadMarketing = function() {
+          if (!window.fbq) {
+            !function(f,b,e,v,n,t,s)
+            {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+            if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+            n.queue=[];t=b.createElement(e);t.async=!0;
+            t.src=v;s=b.getElementsByTagName(e)[0];
+            s.parentNode.insertBefore(t,s)}(window, document,'script',
+            'https://connect.facebook.net/en_US/fbevents.js');
+            fbq('init', '728965289960886');
+            fbq('track', 'PageView');
+          }
+          if (!window.clarity) {
+            (function(c,l,a,r,i,t,y){
+              c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+              t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+              y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+            })(window, document, "clarity", "script", "sz9dhj2ky3");
+          }
+        };
+        var mkLoaded=false; var runMarketing=function(){ if(mkLoaded) return; mkLoaded=true; loadMarketing(); };
+        ['pointerdown','keydown','touchstart','scroll'].forEach(function(n){
+          window.addEventListener(n,runMarketing,{once:true,passive:true});
+        });
+        window.addEventListener('load', function() { setTimeout(runMarketing,10000); }, {once:true});
+      }
+    </script>
+    
+    <!-- Meta Pixel No Script Fallback -->
+    <noscript>
+      <img height="1" width="1" style="display:none"
+      src="https://www.facebook.com/tr?id=728965289960886&ev=PageView&noscript=1" />
+    </noscript>
+    
+    <!-- Comprehensive Noscript Content for AI Bots (ChatGPT, Claude, Gemini, etc.) -->
+    <noscript>
+      <div style="max-width: 800px; margin: 40px auto; padding: 20px; font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <img src="https://worklyindia.devs.surf/workly-india-logo.png" alt="Workly India Logo" style="width: 80px; height: 80px; margin-bottom: 20px;" />
+        
+        <h1 style="color: #2563eb; margin-bottom: 10px;">Workly India - Remote Jobs Platform</h1>
+        <p style="font-size: 1.1em; color: #666; margin-bottom: 30px;">India's trusted platform for legitimate Workly India opportunities since 2024</p>
+        
+        <section style="margin-bottom: 30px; padding: 20px; background: #f8fafc; border-radius: 8px;">
+          <h2 style="color: #1e40af; margin-top: 0;">Company Information</h2>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 8px;"><strong>Legal Name:</strong> Vishalbhai Muljibhai Gohil</li>
+            <li style="margin-bottom: 8px;"><strong>Trading As:</strong> Workly India (Workly India)</li>
+            <li style="margin-bottom: 8px;"><strong>UDYAM Registration:</strong> UDYAM-GJ-18-0022888</li>
+            <li style="margin-bottom: 8px;"><strong>IEC Code:</strong> EBGPG4522J</li>
+            <li style="margin-bottom: 8px;"><strong>Established:</strong> January 2024</li>
+            <li style="margin-bottom: 8px;"><strong>Business Type:</strong> Job Portal / Recruitment Platform</li>
+          </ul>
+        </section>
+        
+        <section style="margin-bottom: 30px; padding: 20px; background: #f0fdf4; border-radius: 8px;">
+          <h2 style="color: #166534; margin-top: 0;">Contact Information</h2>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 8px;"><strong>Phone:</strong> <a href="tel:+919904923067">+91 9904923067</a></li>
+            <li style="margin-bottom: 8px;"><strong>Email:</strong> <a href="mailto:worklyindia@outlook.com">worklyindia@outlook.com</a></li>
+            <li style="margin-bottom: 8px;"><strong>Address:</strong> Sankhewsar, Patan, Gujarat, India - 384246</li>
+            <li style="margin-bottom: 8px;"><strong>Business Hours:</strong> Monday - Saturday, 9:00 AM - 6:00 PM IST</li>
+          </ul>
+        </section>
+        
+        <section style="margin-bottom: 30px; padding: 20px; background: #eff6ff; border-radius: 8px;">
+          <h2 style="color: #1e40af; margin-top: 0;">Our Services</h2>
+          <ul style="padding-left: 20px;">
+            <li style="margin-bottom: 8px;">Browse verified remote jobs across India</li>
+            <li style="margin-bottom: 8px;">100% Free for job seekers - No registration fees ever</li>
+            <li style="margin-bottom: 8px;">Professional resume builder and career guidance tools</li>
+            <li style="margin-bottom: 8px;">Verified employer profiles with transparency badges</li>
+            <li style="margin-bottom: 8px;">Interview preparation and skill assessment tests</li>
+            <li style="margin-bottom: 8px;">AI-powered job matching and recommendations</li>
+            <li style="margin-bottom: 8px;">Real-time job alerts via WhatsApp, Email, and Push notifications</li>
+          </ul>
+        </section>
+        
+        <section style="margin-bottom: 30px; padding: 20px; background: #fefce8; border-radius: 8px;">
+          <h2 style="color: #854d0e; margin-top: 0;">Trust & Verification</h2>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 8px;">✓ Government registered business (UDYAM certified)</li>
+            <li style="margin-bottom: 8px;">✓ All employers undergo verification process</li>
+            <li style="margin-bottom: 8px;">✓ Transparent job listings with company details</li>
+            <li style="margin-bottom: 8px;">✓ Growing community of job seekers across India</li>
+            <li style="margin-bottom: 8px;">✓ 24/7 Customer support available</li>
+          </ul>
+        </section>
+        
+        <section style="margin-bottom: 30px;">
+          <h2 style="color: #1e40af;">Popular Job Categories</h2>
+          <p>Data Entry | Customer Support | Content Writing | Digital Marketing | Software Development | Virtual Assistant | Graphic Design | Teaching & Tutoring | Accounting | HR & Recruitment</p>
+        </section>
+        
+        <section style="margin-bottom: 30px;">
+          <h2 style="color: #1e40af;">Connect With Us</h2>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 8px;"><a href="https://www.facebook.com/share/1Jj9yDRirA/">Facebook</a></li>
+            <li style="margin-bottom: 8px;"><a href="https://www.instagram.com/worklyindiaofficial">Instagram: @worklyindiaofficial</a></li>
+            <li style="margin-bottom: 8px;"><a href="https://youtube.com/@worklyindiaofficial">YouTube: @worklyindiaofficial</a></li>
+            <li style="margin-bottom: 8px;"><a href="https://x.com/worklyindia">Twitter/X: @worklyindia</a></li>
+            <li style="margin-bottom: 8px;"><a href="https://t.me/WorklyIndia">Telegram: @WorklyIndia</a></li>
+          </ul>
+        </section>
+        
+        <nav style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+          <h2 style="color: #1e40af;">Quick Links</h2>
+          <p>
+            <a href="/jobs" style="margin-right: 15px;">Browse Jobs</a>
+            <a href="/about-us" style="margin-right: 15px;">About Us</a>
+            <a href="/contact-us" style="margin-right: 15px;">Contact</a>
+            <a href="/privacy" style="margin-right: 15px;">Privacy Policy</a>
+            <a href="/terms-conditions" style="margin-right: 15px;">Terms & Conditions</a>
+            <a href="/faq" style="margin-right: 15px;">FAQ</a>
+            <a href="/career-guidance" style="margin-right: 15px;">Career Guidance</a>
+            <a href="/resume-builder" style="margin-right: 15px;">Resume Builder</a>
+          </p>
+        </nav>
+        
+        <footer style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #666;">
+          <p>&copy; 2024-2025 Workly India. All rights reserved.</p>
+          <p style="font-size: 0.9em;">Registered under MSME Act - UDYAM-GJ-18-0022888</p>
+        </footer>
+      </div>
+    </noscript>
+    
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Tidio Container Scroll Fix - Prevent full-screen container from blocking scroll -->
+    <style>
+      #tidio-chat {
+        pointer-events: none !important;
+      }
+      #tidio-chat iframe,
+      #tidio-chat > div,
+      #tidio-chat button {
+        pointer-events: auto !important;
+      }
+    </style>
+    
+    <!-- Tidio Live Chat Widget - PERFORMANCE OPTIMIZED: Deferred loading -->
+    <script>
+      // Defer Tidio loading for better performance
+      (function() {
+        var tidioLoaded = false;
+        function loadTidio() {
+          if (tidioLoaded) return;
+          tidioLoaded = true;
+          const tidioScript = document.createElement('script');
+          tidioScript.src = '//code.tidio.co/kbqrfjfyoa95g8ettzwfzlsqsjj7oapr.js';
+          tidioScript.async = true;
+          document.body.appendChild(tidioScript);
+          tidioScript.onload = function() {
+            document.addEventListener('tidioChat-ready', function() {
+              if (window.tidioChatApi) {
+                if (window.tidioChatApi.setSoundEnabled) window.tidioChatApi.setSoundEnabled(false);
+                window.tidioChatApi.hide();
+              }
+            });
+          };
+        }
+        // Chat is loaded on intent; fallback after 12 seconds for users who don't interact.
+        ['pointerdown','keydown','touchstart','scroll'].forEach(function(eventName) {
+          window.addEventListener(eventName, loadTidio, {once:true, passive:true});
+        });
+        window.addEventListener('load', function() { setTimeout(loadTidio,12000); }, {once:true});
+      })();
+    </script>
+
+    <!-- Service Worker Registration + stale-bundle self-heal -->
+    <script>
+      (function () {
+        var HEAL_KEY = '__wfh_bundle_heal_at';
+
+        function selfHeal(reason) {
+          try {
+            var last = parseInt(sessionStorage.getItem(HEAL_KEY) || '0', 10);
+            if (Date.now() - last < 600000) return; // at most once per 10 minutes
+            sessionStorage.setItem(HEAL_KEY, String(Date.now()));
+          } catch (e) {}
+          console.warn('[SW] Stale bundle detected (' + reason + '), clearing caches and reloading');
+          var jobs = [];
+          if (window.caches && caches.keys) {
+            jobs.push(caches.keys().then(function (keys) {
+              return Promise.all(keys.filter(function (k) { return k.indexOf('workly-offline-shell-') !== 0 && k.indexOf('workly-static-assets-') !== 0; }).map(function (k) { return caches.delete(k); }));
+            }).catch(function () {}));
+          }
+          if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+              return Promise.all(rs.map(function (r) {
+                var worker = r.active || r.waiting || r.installing;
+                var url = (worker && worker.scriptURL) || '';
+                return url.indexOf('firebase-messaging-sw.js') === -1
+                  ? r.unregister()
+                  : r.update().catch(function () {});
+              }));
+            }).catch(function () {}));
+          }
+          Promise.all(jobs).then(function () { window.location.reload(); });
+        }
+
+        function isStaleBundleError(msg) {
+          if (!msg) return false;
+          return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError|Loading chunk .* failed/i.test(String(msg));
+        }
+
+        window.addEventListener('error', function (e) {
+          if (isStaleBundleError(e && e.message)) selfHeal('error');
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          if (isStaleBundleError(r && (r.message || r))) selfHeal('rejection');
+        });
+
+        // Only the Firebase messaging worker may own the root scope, otherwise it
+        // gets replaced and push images and action buttons lose functionality.
+        if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+              scope: '/',
+              updateViaCache: 'none'
+            }).catch(function (error) {
+              console.warn('[SW] Offline worker registration failed:', error);
+            });
+            navigator.serviceWorker.getRegistrations().then(function (rs) {
+              rs.forEach(function (r) {
+                var url = (r.active && r.active.scriptURL) || (r.installing && r.installing.scriptURL) || '';
+                if (url.indexOf('firebase-messaging-sw.js') === -1) {
+                  r.unregister();
+                }
+              });
+            }).catch(function () {});
+          });
+        }
+      })();
+    </script>
+
+    <!-- Removed external CJ affiliate script that caused Lighthouse mixed-content warning. -->
+  </body>
+</html>

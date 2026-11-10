@@ -1,0 +1,128 @@
+Workly India — API Benefits
+Web page: https://worklyindia.devs.surf/api-docs/benefits
+
+Back to API Documentation
+Why Choose Our API
+API Benefits & Features
+
+Everything you need to build powerful job platform integrations
+
+Key Benefits
+Lightning Fast Integration
+
+Get up and running in minutes, not days
+
+Simple REST API design
+Comprehensive SDK support
+Clear documentation
+Code examples for all languages
+Interactive API playground
+Cost Effective
+
+Free tier for testing, affordable Pro plans
+
+Free tier: 100 requests/day
+No credit card required
+Pay only for what you use
+Volume discounts available
+Transparent pricing
+Enterprise Security
+
+Bank-level security for your data
+
+API key authentication
+Encrypted data transmission
+Rate limiting protection
+Audit logs
+GDPR compliant
+24/7 Reliability
+
+99.9% uptime SLA
+
+Distributed infrastructure
+Automatic failover
+Real-time health monitoring
+Scheduled maintenance windows
+Status page updates
+Scale Effortlessly
+
+Grow from startup to enterprise
+
+Auto-scaling infrastructure
+Handle millions of requests
+No performance degradation
+Predictable latency
+Load balancing
+Developer Friendly
+
+Built by developers, for developers
+
+RESTful design principles
+JSON responses
+Comprehensive error messages
+Versioned API
+Active community support
+Tier Comparison
+Feature	Free	Pro	Enterprise
+API Requests per Day	100	10,000	Unlimited
+API Keys	1	2	Custom
+Rate Limit Reset	Daily	Hourly	Custom
+Analytics Dashboard	Basic	Advanced	Custom
+Support	Community	Email	Dedicated
+SLA	-	99.9%	99.99%
+Webhooks	-	✓	✓
+Custom Integrations	-	-	✓
+Use Cases
+Job Aggregator Platforms
+
+Build job search engines that aggregate listings from multiple sources
+
+Real-time job updates
+Rich job metadata
+Company information
+HR Management Systems
+
+Integrate job posting capabilities into your HR platform
+
+Automated job posting
+Application tracking
+Candidate management
+Recruitment Tools
+
+Create specialized recruitment tools and dashboards
+
+Custom workflows
+Analytics integration
+Multi-channel posting
+Mobile Applications
+
+Power native mobile apps with our API
+
+Lightweight responses
+Efficient pagination
+Mobile-optimized data
+Time to Value
+5 mins
+
+Setup Time
+
+From signup to first API call
+
+2 hours
+
+Integration Time
+
+Full production integration
+
+10x
+
+Faster Development
+
+vs building from scratch
+
+Ready to Get Started?
+
+Join hundreds of developers building amazing job platform integrations with our API
+
+Generate Free API Key
+Learn How It Works

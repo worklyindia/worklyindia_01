@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS public.idx_whatsapp_conversations_phone;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_conversations_phone_audience ON public.whatsapp_conversations(phone_number, COALESCE(audience, ''));

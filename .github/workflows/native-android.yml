@@ -1,0 +1,763 @@
+name: Native Android
+# Rebuild the signed native app whenever Kotlin app/auth sources change.
+# Includes mobile login, password recovery and native 2FA verification.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "What's new in this APK (one update-specific changelog)"
+        required: true
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - "native/android/**"
+      - "android-release.properties"
+      - ".github/workflows/native-android.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "native/android/**"
+      - ".github/workflows/native-android.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+# Keep production-main releases serialized, while isolating PRs by PR number.
+# PR builds never queue behind or cancel a production release. Branch pushes are
+# limited to main above, preventing duplicate push + pull_request builds.
+concurrency:
+  group: workly-native-android-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  public-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v5
+
+      - name: Generate unique Android release version and metadata
+        id: release-metadata
+        env:
+          WORKFLOW_RUN_NUMBER: ${{ github.run_number }}
+          RELEASE_NOTES_INPUT: ${{ github.event.inputs.release_notes }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GITHUB_REF: ${{ github.ref }}
+          SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python -m pip install --quiet requests
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          import requests
+
+          path = Path("android-release.properties")
+          values = {}
+          if path.exists():
+              for line in path.read_text().splitlines():
+                  if "=" in line and not line.lstrip().startswith("#"):
+                      key, value = line.split("=", 1)
+                      values[key.strip()] = value.strip()
+
+          run_number = int(os.environ["WORKFLOW_RUN_NUMBER"])
+          base = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+          latest_code = 0
+          latest_minimum = 1
+          latest_name = values.get("versionName", "2.4.3.1.0")
+
+          # Production builds use the newest Supabase release row as the single source
+          # of truth. Draft releases count too, so an unpublished build cannot be reused.
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              if not service_key:
+                  raise SystemExit("SUPABASE_SERVICE_ROLE_KEY is required to generate a production release version.")
+              headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+              response = requests.get(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers=headers,
+                  params={"select": "version_code,version_name,min_supported_version_code", "order": "version_code.desc", "limit": "1"},
+                  timeout=30,
+              )
+              response.raise_for_status()
+              rows = response.json()
+              if rows:
+                  latest_code = int(rows[0]["version_code"])
+                  latest_name = str(rows[0]["version_name"])
+                  latest_minimum = int(rows[0].get("min_supported_version_code") or 1)
+
+          # Variable-length versionName: every dot-separated component is one digit (0-9).
+          # Start with five components; when the final digit reaches 9, append .1.0.
+          # Examples: 2.4.3.1.9 -> 2.4.3.1.1.0 -> 2.4.3.1.1.1.
+          raw_parts = latest_name.split(".")
+          if not raw_parts or any(not re.fullmatch(r"\d+", part) for part in raw_parts):
+              raise SystemExit(f"Cannot safely increment Android version name: {latest_name!r}")
+          # Split any legacy multi-digit component into individual digits.
+          parts = [int(digit) for part in raw_parts for digit in part]
+          if len(parts) < 5:
+              parts.extend([0] * (5 - len(parts)))
+          if any(part < 0 or part > 9 for part in parts):
+              raise SystemExit(f"Version components must each be a single digit 0-9: {latest_name!r}")
+          if parts[-1] < 9:
+              parts[-1] += 1
+          else:
+              parts = parts[:-1] + [1, 0]
+          version_name = ".".join(str(part) for part in parts)
+
+          # The workflow run number is globally increasing for this workflow; also
+          # guard against a database versionCode that is already ahead of it.
+          version_code = max(100000 + run_number, latest_code + 1)
+          if version_code > 2100000000:
+              raise SystemExit("Generated versionCode exceeds Android's supported maximum.")
+
+          release_notes = os.environ.get("RELEASE_NOTES_INPUT", "").strip()
+          if not release_notes:
+              commit_message = os.environ.get("HEAD_COMMIT_MESSAGE", "").splitlines()
+              release_notes = (commit_message[0].strip() if commit_message else "") or values.get(
+                  "releaseNotes", "Performance improvements and bug fixes."
+              )
+
+          values.update({
+              "versionName": version_name,
+              "versionCode": str(version_code),
+              "minSupportedVersionCode": values.get("minSupportedVersionCode", str(latest_minimum)),
+              "releaseNotes": release_notes,
+          })
+          path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
+              output.write(f"release_notes={release_notes}\n")
+
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as out:
+              out.write("## Workly India — Android release metadata\n\n")
+              out.write("| Detail | Value |\n|---|---|\n")
+              out.write(f"| Version name | {version_name} |\n")
+              out.write(f"| Version code | {version_code} |\n")
+              out.write(f"| Previous version code | {latest_code or 'not available for PR build'} |\n")
+              out.write(f"| Release notes | {release_notes} |\n\n")
+          print(f"Generated v{version_name} (versionCode {version_code})")
+          PY
+
+      - name: Set up Java 17
+        id: setup-java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK command-line tools
+        id: setup-android
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+          packages: ''
+
+      - name: Install required Android SDK packages
+        id: sdk-packages
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+          sdkmanager --list_installed
+
+      - name: Set up Gradle 9.7.0 and publish a public Build Scan
+        id: setup-gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.11.1'
+          build-scan-publish: true
+          build-scan-terms-of-use-url: 'https://gradle.com/terms-of-service'
+          build-scan-terms-of-use-agree: 'yes'
+
+      - name: Prepare release signing key
+        id: release-signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WORKLY_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.WORKLY_UPLOAD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            mkdir -p "$RUNNER_TEMP/workly-signing"
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/workly-signing/upload-key.jks"
+            echo "WORKLY_RELEASE_READY=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Public release signing secrets are missing. Configure WORKLY_UPLOAD_KEYSTORE_BASE64, WORKLY_UPLOAD_STORE_PASSWORD, WORKLY_UPLOAD_KEY_ALIAS and WORKLY_UPLOAD_KEY_PASSWORD."
+            exit 1
+          fi
+
+      - name: Sync Android launcher icon from saved Primary Logo
+        env:
+          SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
+          SUPABASE_PUBLISHABLE_KEY: sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o
+        run: |
+          python -m pip install --quiet Pillow requests
+          python - <<'PY'
+          import os
+          from io import BytesIO
+          from pathlib import Path
+          import requests
+          from PIL import Image
+
+          api = os.environ["SUPABASE_URL"].rstrip("/")
+          key = os.environ["SUPABASE_PUBLISHABLE_KEY"]
+          headers = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+          response = requests.post(f"{api}/rest/v1/rpc/get_brand_assets", headers=headers, json={}, timeout=30)
+          response.raise_for_status()
+          assets = response.json()
+          if isinstance(assets, list):
+              assets = assets[0] if assets else {}
+          logo_url = assets.get("logo_url") if isinstance(assets, dict) else None
+          if not isinstance(logo_url, str) or not logo_url.startswith("https://"):
+              raise SystemExit("Saved Brand & Logo Management Primary Logo is missing or is not a public HTTPS image.")
+          image_response = requests.get(logo_url, timeout=45)
+          image_response.raise_for_status()
+          source = Image.open(BytesIO(image_response.content)).convert("RGBA")
+          if source.width < 96 or source.height < 96:
+              raise SystemExit(f"Primary Logo is too small for an Android launcher icon: {source.size}")
+          # Preserve the exact artwork and aspect ratio; fit it on a transparent square
+          # so Android launchers can apply their own circular/squircle mask.
+          side = max(source.size)
+          canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+          canvas.alpha_composite(source, ((side - source.width) // 2, (side - source.height) // 2))
+          icon = Path("native/android/app/src/main/res/drawable-nodpi/ic_workly_launcher_image.png")
+          icon.parent.mkdir(parents=True, exist_ok=True)
+          canvas.resize((512, 512), Image.Resampling.LANCZOS).save(icon, format="PNG", optimize=True)
+          with Image.open(icon) as check:
+              check.verify()
+          print(f"Android launcher icon synced from saved Primary Logo: {source.size} -> {icon}")
+          PY
+
+      - name: Build signed public release APK and Play Store bundle
+        id: build-release
+        working-directory: native/android
+        env:
+          WORKLY_UPLOAD_STORE_FILE: ${{ runner.temp }}/workly-signing/upload-key.jks
+          WORKLY_UPLOAD_STORE_PASSWORD: ${{ secrets.WORKLY_UPLOAD_STORE_PASSWORD }}
+          WORKLY_UPLOAD_KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
+          WORKLY_UPLOAD_KEY_PASSWORD: ${{ secrets.WORKLY_UPLOAD_KEY_PASSWORD }}
+        run: |
+          gradle assembleWebsiteRelease bundlePlayStoreRelease --stacktrace
+
+      - name: Verify APK embedded version matches release metadata
+        id: verify-apk
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import subprocess
+          props = {}
+          for line in pathlib.Path("android-release.properties").read_text().splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key, value = line.split("=", 1)
+                  props[key.strip()] = value.strip()
+          apk_files = list(pathlib.Path("native/android/app/build/outputs/apk/website/release").glob("*.apk"))
+          if len(apk_files) != 1 or apk_files[0].stat().st_size == 0:
+              raise SystemExit(f"Expected exactly one non-empty website APK, found {len(apk_files)}")
+          sdk = pathlib.Path(os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", "/usr/local/lib/android/sdk")))
+          aapt = sdk / "build-tools/35.0.0/aapt"
+          if not aapt.exists():
+              raise SystemExit(f"Android aapt tool not found: {aapt}")
+          output = subprocess.check_output([str(aapt), "dump", "badging", str(apk_files[0])], text=True)
+          package = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", output, re.M)
+          if not package:
+              raise SystemExit("Could not read package/version metadata from the built APK.")
+          actual = package.groups()
+          expected = ("com.worklyindia.app", props["versionCode"], props["versionName"])
+          if actual != expected:
+              raise SystemExit(f"APK metadata mismatch: expected {expected}, got {actual}")
+          print(f"Verified APK package={actual[0]}, versionName={actual[2]}, versionCode={actual[1]}")
+          PY
+
+      - name: Rename release files for users
+        id: rename-release
+        run: |
+          set -euo pipefail
+          APK_FILE=$(find native/android/app/build/outputs/apk/website/release -maxdepth 1 -type f -name '*.apk' -print -quit)
+          AAB_FILE=$(find native/android/app/build/outputs/bundle/playStoreRelease -maxdepth 1 -type f -name '*.aab' -print -quit)
+          if [ -z "$APK_FILE" ] || [ -z "$AAB_FILE" ]; then
+            echo "::error::Release output missing. APK='$APK_FILE' AAB='$AAB_FILE'"
+            find native/android/app/build/outputs -maxdepth 5 -type f -print 2>/dev/null || true
+            exit 1
+          fi
+          mkdir -p native/android/app/build/outputs
+          cp "$APK_FILE" native/android/app/build/outputs/Workly-India.apk
+          cp "$AAB_FILE" native/android/app/build/outputs/Workly-India.aab
+          test -s native/android/app/build/outputs/Workly-India.apk
+          test -s native/android/app/build/outputs/Workly-India.aab
+
+      - name: Upload public release artifacts
+        id: upload-release-artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Workly-India
+          path: |
+            native/android/app/build/outputs/Workly-India.apk
+            native/android/app/build/outputs/Workly-India.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload APK to Cloudflare R2 and save a verified unpublished Supabase draft (GitHub archive optional)
+        id: cloudflare-supabase-publish
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          R2_ACCOUNT_ID: "07937ccf8d5c6398c657c170018f8f80"
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: workly-android-releases
+          R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+          APK_FILE: native/android/app/build/outputs/Workly-India.apk
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet requests boto3
+          python - <<'PY'
+          import os, pathlib, requests, subprocess, boto3
+          from botocore.exceptions import BotoCoreError, ClientError
+
+          base = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+          token = os.environ.get("GH_TOKEN", "")
+          repo = os.environ["GITHUB_REPOSITORY"]
+          missing = [name for name, value in {
+              "SUPABASE_SERVICE_ROLE_KEY": service_key,
+              "GITHUB_TOKEN": token,
+          }.items() if not value]
+          if missing:
+              raise SystemExit("Missing GitHub Actions secret(s): " + ", ".join(missing))
+
+          values = {}
+          for line in pathlib.Path("android-release.properties").read_text().splitlines():
+              if "=" in line and not line.lstrip().startswith("#"):
+                  k, v = line.split("=", 1)
+                  values[k.strip()] = v.strip()
+          code = int(values["versionCode"])
+          name = values["versionName"]
+          minimum = int(values.get("minSupportedVersionCode", "1"))
+          notes = values.get("releaseNotes", "")
+          apk = pathlib.Path(os.environ["APK_FILE"])
+          if not apk.is_file() or apk.stat().st_size == 0:
+              raise SystemExit("Signed APK is missing or empty; refusing to publish.")
+          tag = f"android-v{code}"
+          asset_name = "Workly-India.apk"
+
+          # Cloudflare R2 + Supabase are the production source of truth.
+          # GitHub Releases are only an optional archive and must never block owner-page updates.
+
+          account_id = os.environ.get("R2_ACCOUNT_ID", "")
+          access_key = os.environ.get("R2_ACCESS_KEY_ID", "")
+          secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+          bucket = os.environ.get("R2_BUCKET", "workly-android-releases")
+          public_base = os.environ["R2_PUBLIC_BASE_URL"].rstrip("/")
+          missing_r2 = [key for key, value in {
+              "R2_ACCOUNT_ID": account_id,
+              "R2_ACCESS_KEY_ID": access_key,
+              "R2_SECRET_ACCESS_KEY": secret_key,
+          }.items() if not value]
+          if missing_r2:
+              raise SystemExit("Missing GitHub Actions secret(s): " + ", ".join(missing_r2))
+
+          s3 = boto3.client(
+              "s3",
+              endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+              aws_access_key_id=access_key,
+              aws_secret_access_key=secret_key,
+              region_name="auto",
+          )
+          object_key = f"android/releases/{tag}/{asset_name}"
+          with apk.open("rb") as body:
+              s3.put_object(
+                  Bucket=bucket,
+                  Key=object_key,
+                  Body=body,
+                  ContentLength=apk.stat().st_size,
+                  ContentType="application/vnd.android.package-archive",
+                  CacheControl="public, max-age=31536000, immutable",
+                  Metadata={"version-code": str(code), "version-name": name, "commit": os.environ["GITHUB_SHA"]},
+              )
+          # Verify the exact uploaded object and its byte size before publishing metadata.
+          uploaded = s3.head_object(Bucket=bucket, Key=object_key)
+          if int(uploaded.get("ContentLength", -1)) != apk.stat().st_size:
+              raise SystemExit("Cloudflare R2 verification failed: uploaded APK size does not match the build.")
+          public_url = f"{public_base}/{object_key}"
+          probe = requests.head(public_url, allow_redirects=True, timeout=45)
+          if probe.status_code != 200:
+              raise SystemExit(f"Cloudflare public APK URL check failed ({probe.status_code}): {public_url}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"cloudflare_status=Verified\n")
+              output.write(f"apk_url={public_url}\n")
+
+          headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+          row = {
+              "version_code": code,
+              "version_name": name,
+              "apk_path": public_url,
+              "apk_size_bytes": apk.stat().st_size,
+              "release_notes": notes,
+              "min_supported_version_code": minimum,
+              "is_published": False,
+              "published_at": None,
+          }
+          existing = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "id", "version_code": f"eq.{code}", "limit": "1"},
+              timeout=30,
+          )
+          existing.raise_for_status()
+          rows = existing.json()
+          if rows:
+              saved = requests.patch(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers={**headers, "Content-Type": "application/json"},
+                  params={"id": f"eq.{rows[0]['id']}"},
+                  json=row, timeout=30,
+              )
+          else:
+              saved = requests.post(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers={**headers, "Content-Type": "application/json", "Prefer": "return=representation"},
+                  json=row, timeout=30,
+              )
+          if saved.status_code not in (200, 201, 204):
+              raise SystemExit(f"Supabase release metadata save failed ({saved.status_code}): {saved.text[:800]}")
+
+          print(f"Supabase owner release metadata saved: v{name} (versionCode {code})")
+
+          # Retention runs only after upload + Supabase read-back verification; preserve new draft and any live Public APK.
+          # Keep the just-uploaded build plus the currently Public release (if any).
+          # Delete every other older APK/release row. Future versions are never touched.
+          draft_check = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select":"id,version_code,version_name,apk_path,apk_size_bytes,is_published","version_code":f"eq.{code}","limit":"1"},
+              timeout=30,
+          )
+          draft_check.raise_for_status()
+          draft_rows = draft_check.json()
+          if len(draft_rows) != 1:
+              raise SystemExit("Retention blocked: latest uploaded draft is missing or duplicated.")
+          draft = draft_rows[0]
+          if (int(draft["version_code"]) != code or draft["version_name"] != name
+              or draft["apk_path"] != public_url or int(draft["apk_size_bytes"]) != apk.stat().st_size
+              or draft["is_published"] is not False):
+              raise SystemExit("Retention blocked: latest uploaded draft metadata did not verify.")
+
+          public_rows_response = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select":"id,version_code,version_name,is_published,apk_path","is_published":"eq.true","order":"version_code.desc","limit":"1"},
+              timeout=30,
+          )
+          public_rows_response.raise_for_status()
+          public_rows = public_rows_response.json()
+          active = public_rows[0] if public_rows else None
+          active_code = int(active["version_code"]) if active else None
+          keep_codes = {code}
+          if active_code is not None:
+              keep_codes.add(active_code)
+              active_key = f"android/releases/android-v{active_code}/Workly-India.apk"
+              active_head = s3.head_object(Bucket=bucket, Key=active_key)
+              active_probe = requests.head(active["apk_path"], allow_redirects=True, timeout=45)
+              if active_probe.status_code != 200 or int(active_head.get("ContentLength", 0)) <= 0:
+                  raise SystemExit("Retention safety check failed: current Public APK is not downloadable; nothing was deleted.")
+
+          # Discover exact versioned APK keys. Only older versions are candidates;
+          # unrelated objects and any future-version object are preserved.
+          old_keys = []
+          continuation = None
+          while True:
+              page = s3.list_objects_v2(Bucket=bucket, Prefix="android/releases/", ContinuationToken=continuation) if continuation else s3.list_objects_v2(Bucket=bucket, Prefix="android/releases/")
+              for obj in page.get("Contents", []):
+                  key = obj.get("Key", "")
+                  parts = key.split("/")
+                  if len(parts) != 4 or parts[0] != "android" or parts[1] != "releases" or parts[3] != "Workly-India.apk" or not parts[2].startswith("android-v"):
+                      continue
+                  try:
+                      old_code = int(parts[2][len("android-v"):])
+                  except ValueError:
+                      continue
+                  if 0 < old_code < code and old_code not in keep_codes:
+                      old_keys.append(key)
+              if not page.get("IsTruncated"):
+                  break
+              continuation = page.get("NextContinuationToken")
+
+          # Verify the newly uploaded APK and any current Public APK immediately
+          # before destructive operations.
+          new_head = s3.head_object(Bucket=bucket, Key=object_key)
+          if int(new_head.get("ContentLength", -1)) != apk.stat().st_size:
+              raise SystemExit("Retention blocked: newly uploaded APK failed final size verification.")
+          for offset in range(0, len(old_keys), 1000):
+              result = s3.delete_objects(
+                  Bucket=bucket,
+                  Delete={"Objects":[{"Key":key} for key in old_keys[offset:offset+1000]],"Quiet":False},
+              )
+              if result.get("Errors"):
+                  raise SystemExit("R2 retention deletion failed: " + str(result["Errors"][0].get("Message","unknown error")))
+          # Remove older Supabase rows, excluding the protected current Public row.
+          old_rows_params = {"select":"id,version_code","version_code":f"lt.{code}"}
+          if active:
+              old_rows_params["id"] = f"neq.{active['id']}"
+          old_rows_response = requests.get(
+              f"{base}/rest/v1/android_app_releases", headers=headers,
+              params=old_rows_params, timeout=30,
+          )
+          old_rows_response.raise_for_status()
+          old_rows = old_rows_response.json()
+          deleted_rows = []
+          if old_rows:
+              delete_params = {"version_code":f"lt.{code}","select":"id"}
+              if active:
+                  delete_params["id"] = f"neq.{active['id']}"
+              deleted_response = requests.delete(
+                  f"{base}/rest/v1/android_app_releases",
+                  headers={**headers,"Prefer":"return=representation"},
+                  params=delete_params, timeout=30,
+              )
+              if deleted_response.status_code not in (200,204):
+                  raise SystemExit(f"Supabase old release cleanup failed ({deleted_response.status_code}): {deleted_response.text[:500]}")
+              deleted_rows = deleted_response.json() if deleted_response.content else []
+
+          # Read-after-write verification: latest draft and active Public release survive;
+          # no older DB rows remain except the active Public release.
+          verify_latest = requests.get(
+              f"{base}/rest/v1/android_app_releases", headers=headers,
+              params={"select":"id,version_code,is_published","id":f"eq.{draft['id']}","limit":"1"}, timeout=30,
+          )
+          verify_latest.raise_for_status()
+          if not verify_latest.json() or verify_latest.json()[0].get("is_published") is not False:
+              raise SystemExit("Post-cleanup verification failed: latest draft is missing.")
+          verify_older = requests.get(
+              f"{base}/rest/v1/android_app_releases", headers=headers,
+              params={"select":"id,version_code","version_code":f"lt.{code}","limit":"1000"}, timeout=30,
+          )
+          verify_older.raise_for_status()
+          unexpected = [row for row in verify_older.json() if not active or row["id"] != active["id"]]
+          if unexpected:
+              raise SystemExit("Post-cleanup verification failed: stale database release rows remain.")
+          if active:
+              verify_active = requests.get(
+                  f"{base}/rest/v1/android_app_releases", headers=headers,
+                  params={"select":"id,is_published","id":f"eq.{active['id']}","limit":"1"}, timeout=30,
+              )
+              verify_active.raise_for_status()
+              if not verify_active.json() or verify_active.json()[0].get("is_published") is not True:
+                  raise SystemExit("Post-cleanup verification failed: current Public release is missing.")
+          cleanup_status = f"Verified — kept new v{name}" + (f" and Public v{active['version_name']}" if active else " (no Public release existed)") + f"; deleted {len(old_keys)} old APKs and {len(deleted_rows)} old rows"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("cleanup_status=" + cleanup_status.replace("\\n", " ") + "\\n")
+          print("Android release retention: " + cleanup_status)
+
+          # Idempotently maintain the GitHub archival copy after the Cloudflare upload
+          # and Supabase row are already verified. A duplicate tag on a workflow retry
+          # must not prevent the APK from appearing in Owner Release Management.
+          try:
+              gh_env = {**os.environ, "GH_TOKEN": token}
+              existing_release = subprocess.run(
+                  ["gh", "release", "view", tag, "--repo", repo],
+                  check=False, capture_output=True, text=True, env=gh_env,
+              )
+              if existing_release.returncode != 0:
+                  subprocess.run([
+                      "gh", "release", "create", tag,
+                      "--repo", repo, "--title", f"Workly India v{name} (build {code})",
+                      "--notes", notes or f"Workly India Android release v{name}",
+                  ], check=True, env=gh_env)
+              subprocess.run([
+                  "gh", "release", "upload", tag, f"{apk}#{asset_name}",
+                  "--repo", repo, "--clobber",
+              ], check=True, env=gh_env)
+              print(f"GitHub archival release verified: {tag}")
+          except (subprocess.CalledProcessError, OSError) as error:
+              print(f"::warning::GitHub archive upload failed; Cloudflare R2 and Supabase release are already saved: {error}")
+
+          # Preserve prior R2 APKs: the currently public release may still be needed by
+          # installed apps until the owner publishes this newly uploaded draft.
+          final_object = s3.head_object(Bucket=bucket, Key=object_key)
+          if int(final_object.get("ContentLength", -1)) != apk.stat().st_size:
+              raise SystemExit("Final Cloudflare R2 object verification failed.")
+          verify = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "version_code,version_name,apk_path,apk_size_bytes,is_published", "version_code": f"eq.{code}", "limit": "1"},
+              timeout=30,
+          )
+          verify.raise_for_status()
+          verified_rows = verify.json()
+          if len(verified_rows) != 1:
+              raise SystemExit("Supabase read-back verification failed: expected exactly one release row.")
+          verified = verified_rows[0]
+          if (int(verified["version_code"]) != code or verified["version_name"] != name
+              or verified["apk_path"] != public_url or int(verified["apk_size_bytes"]) != apk.stat().st_size
+              or verified["is_published"] is not False):
+              raise SystemExit("Supabase read-back verification failed: saved release metadata does not match the uploaded APK.")
+          print(f"Cloudflare R2 APK verified: {public_url}")
+          print(f"Supabase Owner Release row verified: v{name} (versionCode {code}), unpublished draft.")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("supabase_status=Saved and read-back verified (unpublished draft)\\n")
+
+
+          PY
+
+      - name: Add public release summary
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_ID: ${{ steps.upload-release-artifacts.outputs.artifact-id }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
+          APK_FILE: native/android/app/build/outputs/Workly-India.apk
+          AAB_FILE: native/android/app/build/outputs/Workly-India.aab
+        run: |
+          {
+            echo "## Workly India — Public Android Release"
+            echo ""
+            printf -- '- **Commit:** `%s`\n\n' "$GITHUB_SHA"
+            APK_FILE="native/android/app/build/outputs/Workly-India.apk"
+            AAB_FILE="native/android/app/build/outputs/Workly-India.aab"
+            if [ -s "$APK_FILE" ] && [ -s "$AAB_FILE" ]; then
+              python - <<'PY'
+          import json, os, pathlib, urllib.request
+          def size_line(label, size):
+              print(f"| {label} | {size:,} bytes | {size / 1_000_000:.2f} MB | {size / 1_048_576:.2f} MiB |")
+          apk = pathlib.Path(os.environ["APK_FILE"])
+          aab = pathlib.Path(os.environ["AAB_FILE"])
+          print("| File | Exact size (bytes) | Decimal MB | Binary MiB |")
+          print("|---|---:|---:|---:|")
+          size_line("Signed APK", apk.stat().st_size)
+          size_line("Google Play AAB", aab.stat().st_size)
+          artifact_id = os.environ.get("ARTIFACT_ID", "").strip()
+          token = os.environ.get("GITHUB_TOKEN", "")
+          if artifact_id and token:
+              url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/artifacts/{artifact_id}"
+              request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      artifact = json.load(response)
+                  size_line("Workly-India.zip (GitHub downloaded artifact)", int(artifact["size_in_bytes"]))
+                  print(f"\nArtifact ID: {artifact_id} · Name: {artifact.get('name', 'Workly-India')}")
+              except Exception as error:
+                  print(f"| Workly-India.zip | Could not verify GitHub archive size: {error} | — | — |")
+          else:
+              print("| Workly-India.zip | GitHub artifact size unavailable in this run | — | — |")
+          PY
+              echo ""
+              echo "- Artifact contains the APK and AAB files listed above; ZIP size is read from GitHub's artifact API (the same archive used for download)."
+            else
+              echo "::warning::Release files are not available; inspect the earlier build or rename step."
+              find native/android/app/build/outputs -maxdepth 5 -type f -print 2>/dev/null || true
+            fi
+            if [ "$GITHUB_REF" = "refs/heads/main" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ -s "$APK_FILE" ]; then
+              VERSION_CODE=$(sed -n 's/^versionCode=//p' android-release.properties | head -n 1)
+              APK_URL="${R2_PUBLIC_BASE_URL%/}/android/releases/android-v${VERSION_CODE}/Workly-India.apk"
+              {
+                echo ""
+                echo "### Verified production APK"
+                echo "- **Cloudflare R2 download:** [Download Workly India APK](${APK_URL})"
+                echo "- **Owner Portal:** Release saved to Supabase as an unpublished draft. Select **Make Public** to enable app updates."
+              } >> "$GITHUB_STEP_SUMMARY"
+            elif [ -n "${ARTIFACT_ID:-}" ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "### PR / branch verification APK (not a production update)" >> "$GITHUB_STEP_SUMMARY"
+              echo "- **Download build artifact:** [Workly-India APK + AAB](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/${ARTIFACT_ID})" >> "$GITHUB_STEP_SUMMARY"
+              echo "- Cloudflare upload and Supabase production release creation are intentionally skipped for PR builds." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write complete release, error and skip diagnostics
+        if: always()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION_NAME: ${{ steps.release-metadata.outputs.version_name }}
+          VERSION_CODE: ${{ steps.release-metadata.outputs.version_code }}
+          RELEASE_NOTES: ${{ steps.release-metadata.outputs.release_notes }}
+          CHECKOUT_STATUS: ${{ steps.checkout.outcome }}
+          JAVA_STATUS: ${{ steps.setup-java.outcome }}
+          ANDROID_STATUS: ${{ steps.setup-android.outcome }}
+          SDK_STATUS: ${{ steps.sdk-packages.outcome }}
+          GRADLE_STATUS: ${{ steps.setup-gradle.outcome }}
+          SIGNING_STATUS: ${{ steps.release-signing.outcome }}
+          BUILD_STATUS: ${{ steps.build-release.outcome }}
+          APK_VERIFY_STATUS: ${{ steps.verify-apk.outcome }}
+          RENAME_STATUS: ${{ steps.rename-release.outcome }}
+          ARTIFACT_STATUS: ${{ steps.upload-release-artifacts.outcome }}
+          PUBLISH_STATUS: ${{ steps.cloudflare-supabase-publish.outcome }}
+          CLOUDFLARE_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.cloudflare_status }}
+          APK_URL: ${{ steps.cloudflare-supabase-publish.outputs.apk_url }}
+          SUPABASE_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.supabase_status }}
+          CLEANUP_STATUS: ${{ steps.cloudflare-supabase-publish.outputs.cleanup_status }}
+          ARTIFACT_ID: ${{ steps.upload-release-artifacts.outputs.artifact-id }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          e = os.environ
+          summary = Path(e["GITHUB_STEP_SUMMARY"])
+          def val(key):
+              return e.get(key, "").strip() or "Not produced"
+          steps = [
+              ("Checkout", "CHECKOUT_STATUS"), ("Java setup", "JAVA_STATUS"),
+              ("Android SDK setup", "ANDROID_STATUS"), ("SDK packages", "SDK_STATUS"),
+              ("Gradle setup", "GRADLE_STATUS"), ("Release signing", "SIGNING_STATUS"),
+              ("APK/AAB build", "BUILD_STATUS"), ("APK metadata verification", "APK_VERIFY_STATUS"),
+              ("Rename APK/AAB", "RENAME_STATUS"), ("GitHub artifact upload", "ARTIFACT_STATUS"),
+              ("Cloudflare + Supabase publishing", "PUBLISH_STATUS"),
+              ("Post-upload retention cleanup", "CLEANUP_STATUS"),
+          ]
+          failed = [(name, val(key)) for name, key in steps if val(key) == "failure"]
+          skipped = [(name, val(key)) for name, key in steps if val(key) == "skipped"]
+          production = e["REF_NAME"] == "main" and e["EVENT_NAME"] != "pull_request"
+          lines = [
+              "", "## Android Release — complete diagnostics",
+              "", "| Field | Result |", "|---|---|",
+              f"| Version name | {val('VERSION_NAME')} |",
+              f"| Version code | {val('VERSION_CODE')} |",
+              f"| Release notes | {val('RELEASE_NOTES')} |",
+              f"| Build type | {'Production main build' if production else 'PR / branch verification only'} |",
+              f"| APK/AAB artifact | {'Uploaded — ' + val('ARTIFACT_ID') if val('ARTIFACT_STATUS') == 'success' else val('ARTIFACT_STATUS')} |",
+              f"| Cloudflare APK URL | {('[Download Workly India APK](' + val('APK_URL') + ')') if val('APK_URL') != 'Not produced' else 'Not uploaded / URL not produced'} |",
+              f"| Cloudflare status | {val('CLOUDFLARE_STATUS') if val('CLOUDFLARE_STATUS') != 'Not produced' else ('Skipped — PR/branch builds do not publish production APKs' if not production else 'Failed or not reached; see Error Details')} |",
+              f"| Supabase Owner status | {val('SUPABASE_STATUS') if val('SUPABASE_STATUS') != 'Not produced' else ('Skipped — PR/branch builds do not create production release rows' if not production else 'Failed or not reached; see Error Details')} |",
+              "", "### Step-by-step status", "",
+              "| Step | Status |", "|---|---|",
+          ]
+          lines += [f"| {name} | {val(key)} |" for name, key in steps]
+          lines += ["", "### Error Details", ""]
+          if failed:
+              lines += [f"- **{name}:** failed. Open [this workflow run's logs](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}/attempts/{e['RUN_ATTEMPT']}) and expand the named step for the exact error output." for name, _ in failed]
+          elif val("PUBLISH_STATUS") == "failure":
+              lines.append(f"- Publishing failed. See [workflow logs](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}/attempts/{e['RUN_ATTEMPT']}) for the exact Cloudflare/Supabase response.")
+          else:
+              lines.append("- No failed steps were reported by GitHub Actions.")
+          lines += ["", "### Skip Details", ""]
+          if skipped:
+              lines += [f"- **{name}:** skipped by workflow conditions or because an earlier step failed." for name, _ in skipped]
+          if not production:
+              lines.append("- **Cloudflare production upload:** intentionally skipped because this is not a main-branch production run.")
+              lines.append("- **Supabase production release row:** intentionally skipped because this is not a main-branch production run.")
+          elif val("PUBLISH_STATUS") == "skipped":
+              lines.append("- Production publishing did not run; inspect the earlier failed step and its logs.")
+          if not skipped and production and val("PUBLISH_STATUS") != "skipped":
+              lines.append("- No skipped steps were reported.")
+          lines += ["", f"Workflow run: [#{e['RUN_ID']}](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}) · Attempt {e['RUN_ATTEMPT']}", ""]
+          with summary.open("a") as out:
+              out.write("\n".join(lines))
+          PY
