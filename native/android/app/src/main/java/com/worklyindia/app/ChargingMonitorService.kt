@@ -222,6 +222,17 @@ class ChargingMonitorService : Service() {
         super.onDestroy()
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // When the user swipes Workly India away from Android Recents, treat it
+        // as a deliberate force-close: next manual launch starts at website Home.
+        // Ordinary backgrounding/locking does not remove this saved route.
+        getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
+            .edit()
+            .remove("last_route")
+            .apply()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
