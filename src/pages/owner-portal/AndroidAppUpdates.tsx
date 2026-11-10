@@ -171,6 +171,16 @@ export default function AndroidAppUpdates() {
         throw unpublishError;
       }
 
+      const { data: cleanupData, error: cleanupError } = await supabase.functions.invoke("enhanced-cleanup", {
+        body: { action: "cleanup_android_releases", public_release_id: release.id },
+      });
+      if (cleanupError || cleanupData?.success !== true) {
+        console.error("Immediate Android release cleanup failed:", cleanupError, cleanupData);
+        toast.warning(cleanupData?.error || "New release is Public, but old releases were not deleted. Check Supabase logs and R2 secrets.");
+      } else {
+        toast.success(`Immediate cleanup complete: ${Number(cleanupData.deleted_database_rows || 0)} old records and ${Number(cleanupData.deleted_r2_apks || 0)} old APKs deleted.`);
+      }
+
       const { data: pushData, error: pushError } = await supabase.functions.invoke("email-api", {
         body: {
           action: "send_android_release_push",
