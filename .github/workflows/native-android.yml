@@ -436,7 +436,7 @@ jobs:
 
           print(f"Supabase owner release metadata saved: v{name} (versionCode {code})")
 
-          # Retention runs only after the new APK upload and draft row have been saved.
+          # Retention runs only after upload + Supabase read-back verification; preserve new draft and any live Public APK.
           # Keep the just-uploaded build plus the currently Public release (if any).
           # Delete every other older APK/release row. Future versions are never touched.
           draft_check = requests.get(
