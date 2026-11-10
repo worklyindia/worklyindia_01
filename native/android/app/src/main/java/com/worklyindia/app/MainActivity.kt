@@ -92,6 +92,7 @@ class MainActivity : FragmentActivity() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var offlineOverlay: FrameLayout? = null
     private var reconnectCheckInProgress = false
+    private var chargingAlertAccessDialogVisible = false
     // The branded startup cover is for the first app launch only. Showing it
     // on every same-origin document navigation makes the app feel like a slow website.
     private var initialWebsiteLoadCompleted = false
@@ -1159,6 +1160,44 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         return runtimeGranted && NotificationManagerCompat.from(this).areNotificationsEnabled()
     }
 
+    // Battery-full alerts must work independently of website login/push setup.
+    // Ask for notification access on-device, then guide Android 14+ users to
+    // explicitly allow full-screen intents so the alert can wake the screen.
+    private fun ensureChargingAlertAccess() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_CHARGING_ALERT_NOTIFICATIONS
+            )
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 34 &&
+            !getSystemService(android.app.NotificationManager::class.java).canUseFullScreenIntent() &&
+            !chargingAlertAccessDialogVisible && !isFinishing && !isDestroyed
+        ) {
+            chargingAlertAccessDialogVisible = true
+            AlertDialog.Builder(this)
+                .setTitle("Enable full-screen battery alerts")
+                .setMessage("Allow Workly India to show a full-screen alert when your phone reaches 100% charge. Also keep the “Battery fully charged” notification channel enabled.")
+                .setPositiveButton("Open setting") { _, _ ->
+                    runCatching {
+                        startActivity(
+                            Intent(
+                                android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                Uri.parse("package:$packageName")
+                            )
+                        )
+                    }
+                }
+                .setNegativeButton("Later", null)
+                .setOnDismissListener { chargingAlertAccessDialogVisible = false }
+                .show()
+        }
+    }
+
     private fun biometricPreferences() = getSharedPreferences("workly_app_security", Context.MODE_PRIVATE)
 
     private fun queryDisplayName(uri: Uri): String {
@@ -2002,6 +2041,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     grantResults.getOrNull(index) == PackageManager.PERMISSION_GRANTED
             }
             if (origin != null && callback != null) callback.invoke(origin, granted, true)
+        } else if (requestCode == REQUEST_CHARGING_ALERT_NOTIFICATIONS) {
+            if (hasNotificationPermission()) ensureChargingAlertAccess()
+            else Toast.makeText(this, "Allow Workly India notifications so it can alert you at 100% charge.", Toast.LENGTH_LONG).show()
         } else if (requestCode == REQUEST_NOTIFICATIONS) {
             val granted = hasNotificationPermission()
             if (pendingNativePushSession != null) {
@@ -2082,6 +2124,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
+        ensureChargingAlertAccess()
         showAppOpenLiveUpdate()
         // Decrypted files are exported to a short-lived app-private cache only
         // so Android's document viewer can open them. Remove leftovers as soon
@@ -2892,6 +2935,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val INTERVIEW_LIVE_NOTIFICATION_ID = 4107
         private const val REQUEST_APP_UPDATE = 4104
         private const val REQUEST_NOTIFICATIONS = 701
+        private const val REQUEST_CHARGING_ALERT_NOTIFICATIONS = 704
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_VAULT_IMPORT = 4105
         private const val REQUEST_MEDIA = 702
