@@ -323,8 +323,8 @@ class MainActivity : FragmentActivity() {
                         if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
                         if (!hasInternetConnection()) {
                             view.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                            // Do not leave a blocking startup spinner over the cached page.
-                            hideStartupLoading()
+                            // Keep the branded app loader visible if no cached shell exists yet.
+                            // A cached shell will finish normally and hide the loader in onWebsiteReady().
                         }
                     }
                 }
@@ -1120,8 +1120,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     runOnUiThread {
                         if (::webView.isInitialized) {
                             // Keep the current page and its in-memory data visible.
-                            // React Query refreshes stale data in the background on the online event.
+                            // If the first-ever load failed offline, retry once connectivity returns.
                             webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+                            if (!initialWebsiteLoadCompleted) webView.loadUrl(lastLoadedUrl)
                         }
                     }
                 } else {
