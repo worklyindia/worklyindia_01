@@ -1541,7 +1541,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             return true
         }
 
-        // Notification content remains in private app storage and is never uploaded.
+        // Notification content stays on-device unless the user explicitly enables Workly cloud sync.
         @JavascriptInterface
         fun getExternalNotificationInbox(): String {
             return getSharedPreferences(
