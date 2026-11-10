@@ -321,7 +321,11 @@ class MainActivity : FragmentActivity() {
                 if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost) {
                     runOnUiThread {
                         if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
-                        if (!hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                        if (!hasInternetConnection()) {
+                            view.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                            // Do not leave a blocking startup spinner over the cached page.
+                            hideStartupLoading()
+                        }
                     }
                 }
             }
@@ -1115,10 +1119,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     dispatchNativeEvent("online")
                     runOnUiThread {
                         if (::webView.isInitialized) {
-                        // Keep the current page and its in-memory data visible.
-                        // React Query refreshes stale data in the background on the online event.
-                        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-                    }
+                            // Keep the current page and its in-memory data visible.
+                            // React Query refreshes stale data in the background on the online event.
+                            webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+                        }
                     }
                 } else {
                     dispatchNativeEvent("offline")
