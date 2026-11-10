@@ -42,6 +42,10 @@ class ChargingMonitorService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_POWER_DISCONNECTED -> {
+                resetChargeCycleAndStopAlert()
+                return START_STICKY
+            }
             ACTION_ACKNOWLEDGE -> {
                 acknowledgeAlert()
                 return START_STICKY
@@ -77,7 +81,20 @@ class ChargingMonitorService : Service() {
         val percent = if (level >= 0) (level * 100 / scale) else -1
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
             status == BatteryManager.BATTERY_STATUS_FULL
-        if (charging && percent >= 100) showChargeCompleteAlert()
+        if (charging && percent >= 100) {
+            showChargeCompleteAlert()
+        } else if (!charging) {
+            resetChargeCycleAndStopAlert()
+        }
+    }
+
+    private fun resetChargeCycleAndStopAlert() {
+        stopAlertAlarm()
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_ALERTED, false)
+            .putBoolean(KEY_ACKNOWLEDGED, false)
+            .apply()
+        getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
     }
 
     private fun showChargeCompleteAlert() {
@@ -242,6 +259,7 @@ class ChargingMonitorService : Service() {
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
         const val ACTION_ACKNOWLEDGE = "com.worklyindia.app.CHARGING_ALERT_ACKNOWLEDGE"
+        const val ACTION_POWER_DISCONNECTED = "com.worklyindia.app.CHARGING_POWER_DISCONNECTED"
         private const val TAG = "WorklyCharging"
         private const val MONITOR_CHANNEL = "workly_charging_monitor"
         const val ALERT_CHANNEL = "workly_battery_full_alert"
