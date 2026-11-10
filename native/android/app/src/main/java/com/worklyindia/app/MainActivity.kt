@@ -1530,6 +1530,17 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             }
         }
 
+        @JavascriptInterface
+        fun isExternalMessageCloudSyncEnabled(): Boolean {
+            return ExternalMessageCloudSync.isEnabled(this@MainActivity)
+        }
+
+        @JavascriptInterface
+        fun setExternalMessageCloudSyncEnabled(enabled: Boolean): Boolean {
+            ExternalMessageCloudSync.setEnabled(this@MainActivity, enabled)
+            return true
+        }
+
         // Notification content remains in private app storage and is never uploaded.
         @JavascriptInterface
         fun getExternalNotificationInbox(): String {
