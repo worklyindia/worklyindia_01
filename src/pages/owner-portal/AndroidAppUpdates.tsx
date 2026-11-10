@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -98,8 +98,7 @@ export default function AndroidAppUpdates() {
       }
     }));
 
-    // Never prune release history when this page loads. Owner deletion is explicit;
-    // a separate R2 reconciliation workflow removes the matching object afterwards.
+    // Old unpublished releases are removed automatically by the scheduled R2 cleanup workflow.
     setReleases(rows);
     setLoading(false);
   }, []);
@@ -162,25 +161,6 @@ export default function AndroidAppUpdates() {
     else { toast.success(`Workly India v${release.version_name} is now unpublished.`); await load(); }
   };
 
-  const deleteRelease = async (release: Release) => {
-    if (release.is_published || updatingReleaseId) {
-      toast.error("Make this release unpublished before deleting it.");
-      return;
-    }
-    if (!window.confirm(`Permanently delete Workly India v${release.version_name} (version code ${release.version_code})? Its Cloudflare R2 APK will be removed by the automatic cleanup job within about 75 minutes.`)) return;
-    setUpdatingReleaseId(release.id);
-    try {
-      const { error } = await supabase.from("android_app_releases").delete().eq("id", release.id);
-      if (error) throw error;
-      setReleases((current) => current.filter((item) => item.id !== release.id));
-      toast.success(`Release v${release.version_name} removed. Cloudflare APK cleanup will run automatically after a one-hour safety window (then the next 15-minute cleanup run).`);
-    } catch (error) {
-      console.error("Android release deletion failed:", error);
-      toast.error(error instanceof Error ? error.message : "The release could not be deleted.");
-    } finally {
-      setUpdatingReleaseId(null);
-    }
-  };
 
   const getPreferredDownloadRelease = (release: Release) => {
     if (isExternalReleaseUrl(release.apk_path)) return release;
@@ -316,9 +296,7 @@ export default function AndroidAppUpdates() {
                       <Button type="button" variant="secondary" className="w-full" onClick={() => void copyReleaseApkLink(release)}>
                         <Copy className="mr-2 h-4 w-4" />Copy Link
                       </Button>
-                      {!release.is_published && <Button type="button" variant="destructive" className="w-full" onClick={() => void deleteRelease(release)} disabled={!!updatingReleaseId}>
-                        {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}{busy ? "Deleting..." : "Delete Release"}
-                      </Button>}
+
                     </div>
                   </CardContent>
                 </Card>
