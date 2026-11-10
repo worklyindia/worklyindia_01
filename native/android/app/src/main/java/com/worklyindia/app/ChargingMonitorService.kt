@@ -85,8 +85,9 @@ class ChargingMonitorService : Service() {
         if (charging && percent >= 100) {
             showChargeCompleteAlert()
         } else if (!charging) {
+            // A transient/stale BATTERY_CHANGED status must not kill the monitor.
+            // The explicit POWER_DISCONNECTED broadcast owns service shutdown.
             resetChargeCycleAndStopAlert()
-            stopSelf()
         }
     }
 

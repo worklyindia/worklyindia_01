@@ -1137,43 +1137,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         card.addView(heading)
         card.addView(message)
 
-        val homeButton = TextView(this).apply {
-            text = "Back to Home"
-            textSize = 15f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            isClickable = true
-            isFocusable = true
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (dark) Color.rgb(13, 128, 100) else Color.rgb(13, 128, 100))
-                cornerRadius = dp(14).toFloat()
-            }
-            setPadding(dp(24), dp(15), dp(24), dp(15))
-            setOnClickListener {
-                // Home is the only page intentionally available as the offline fallback.
-                pendingOfflineUrl = null
-                offlineRetryInProgress = false
-                // Persist the explicit Home choice so the failed destination is not restored later.
-                getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
-                    .edit().putString("last_route", "/").apply()
-                webView.stopLoading()
-                webView.settings.cacheMode = if (hasInternetConnection()) {
-                    WebSettings.LOAD_DEFAULT
-                } else {
-                    WebSettings.LOAD_CACHE_ELSE_NETWORK
-                }
-                hideOfflineScreen()
-                lastLoadedUrl = website
-                webView.loadUrl(website)
-            }
-        }
-        card.addView(homeButton, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            topMargin = dp(8)
-        })
         card.addView(footer)
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,

@@ -28,8 +28,7 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 }
             }
             Intent.ACTION_POWER_DISCONNECTED -> {
-                // Stop the foreground monitor on unplug so its ongoing notification
-                // disappears. The next POWER_CONNECTED event starts it again.
+                // Reset this charge cycle and stop the foreground service on unplug.
                 context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean(ChargingMonitorService.KEY_ALERTED, false)
                     .putBoolean(ChargingMonitorService.KEY_ACKNOWLEDGED, false)
