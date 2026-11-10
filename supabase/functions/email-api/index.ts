@@ -2641,6 +2641,75 @@ serve(async req => {
     }
 
     // ==========================================
+    // ACTION: send_chat_message_push
+    // Authenticated chat notification. The recipient is derived from the
+    // conversation row; callers cannot choose an arbitrary user_id.
+    // ==========================================
+    if (action === 'send_chat_message_push') {
+      const authHeader = req.headers.get('Authorization') ?? '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      const { data: authData } = token ? await supabase.auth.getUser(token) : { data: { user: null } } as any;
+      const sender = authData?.user;
+      const conversationId = typeof body.conversation_id === 'string' ? body.conversation_id : '';
+      const chatText = typeof body.message === 'string' ? body.message.trim() : '';
+      if (!sender) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), {
+          status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(conversationId) || !chatText || chatText.length > 5000) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid conversation or message' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const { data: conversation, error: conversationError } = await supabase
+        .from('conversations')
+        .select('id, employer_id, applicant_id')
+        .eq('id', conversationId)
+        .maybeSingle();
+      if (conversationError || !conversation) {
+        return new Response(JSON.stringify({ success: false, error: 'Conversation not found' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      let recipientId: string;
+      let senderType: 'employer' | 'applicant';
+      if (sender.id === conversation.employer_id) {
+        recipientId = conversation.applicant_id;
+        senderType = 'employer';
+      } else if (sender.id === conversation.applicant_id) {
+        recipientId = conversation.employer_id;
+        senderType = 'applicant';
+      } else {
+        return new Response(JSON.stringify({ success: false, error: 'Not a conversation participant' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      const preview = chatText.replace(/\s+/g, ' ').slice(0, 140);
+      const result = await sendToUsers(supabase, [recipientId], {
+        title: 'New Workly Chat message',
+        body: preview,
+        url: '/activity',
+        data: {
+          type: 'workly_chat_message',
+          source: 'workly_chat',
+          conversation_id: conversationId,
+          sender_type: senderType
+        },
+        priority: 'high',
+        tag: `workly-chat-${conversationId}`
+      });
+      return new Response(JSON.stringify({
+        success: result.sent > 0,
+        sent: result.sent,
+        failed: result.failed,
+        error: result.errors[0] ?? (result.sent > 0 ? undefined : 'No registered push device')
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // ==========================================
     // ACTION: send_push - Send push to user
     // ==========================================
     if (action === 'send_push') {

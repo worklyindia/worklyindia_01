@@ -148,7 +148,24 @@ export function ChatDialog({ open, onOpenChange, applicant, jobId, employerId }:
         })
 
       if (error) throw error
-      
+
+      // The Edge Function derives the other participant from this conversation
+      // and validates the authenticated sender before sending a push payload.
+      try {
+        const { error: notificationError } = await supabase.functions.invoke('email-api', {
+          body: {
+            action: 'send_chat_message_push',
+            conversation_id: conversation.id,
+            message: newMessage.trim()
+          }
+        })
+        if (notificationError) {
+          console.warn('Chat message push notification failed:', notificationError.message)
+        }
+      } catch (notificationError) {
+        console.warn('Chat message push notification failed:', notificationError)
+      }
+
       setNewMessage("")
     } catch (error) {
       console.error('Error sending message:', error)
