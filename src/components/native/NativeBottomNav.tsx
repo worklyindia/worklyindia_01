@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Briefcase, User, Settings } from 'lucide-react';
+import { Home, Briefcase, Activity, Menu } from 'lucide-react';
 import { useNativeFeel } from '@/hooks/useNativeFeel';
 import { usePlatformStyle } from '@/hooks/usePlatformStyle';
 import { cn } from '@/lib/utils';
@@ -9,14 +9,13 @@ interface NavItem {
   label: string;
   icon: typeof Home;
   path: string;
-  badge?: number;
 }
 
 const navItems: NavItem[] = [
-  { id: 'home', label: 'Home', icon: Home, path: '/employer-portal' },
-  { id: 'jobs', label: 'Jobs', icon: Briefcase, path: '/employer-portal?tab=jobs' },
-  { id: 'profile', label: 'Profile', icon: User, path: '/employer-profile' },
-  { id: 'settings', label: 'Settings', icon: Settings, path: '/employer-settings' },
+  { id: 'home', label: 'Home', icon: Home, path: '/' },
+  { id: 'jobs', label: 'Jobs', icon: Briefcase, path: '/jobs' },
+  { id: 'activity', label: 'Activity', icon: Activity, path: '/activity' },
+  { id: 'more', label: 'More', icon: Menu, path: '/more' },
 ];
 
 export const NativeBottomNav = () => {
@@ -26,10 +25,8 @@ export const NativeBottomNav = () => {
   const { isIOS, isAndroid } = usePlatformStyle();
 
   const isActive = (path: string) => {
-    if (path === '/employer-portal') {
-      return location.pathname === '/employer-portal' && !location.search.includes('tab=jobs');
-    }
-    return location.pathname + location.search === path;
+    if (path === '/') return location.pathname === '/';
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const handleNavClick = (path: string) => {
@@ -39,6 +36,7 @@ export const NativeBottomNav = () => {
 
   return (
     <nav
+      aria-label="Main navigation"
       className={cn(
         "fixed bottom-0 left-0 right-0 z-50 border-t",
         "bg-background/95 backdrop-blur-xl",
@@ -53,28 +51,22 @@ export const NativeBottomNav = () => {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
-          
+
           return (
             <button
               key={item.id}
+              type="button"
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
               onClick={() => handleNavClick(item.path)}
               className={cn(
                 "flex flex-col items-center justify-center min-w-[60px] px-3 py-2 rounded-xl transition-all",
-                active
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground",
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground",
                 isIOS && "active:scale-95",
                 isAndroid && "active:opacity-70"
               )}
             >
-              <div className="relative">
-                <Icon className={cn("w-6 h-6", active && "drop-shadow-[0_0_8px_hsl(var(--primary)/0.5)]")} />
-                {item.badge && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {item.badge > 9 ? '9+' : item.badge}
-                  </span>
-                )}
-              </div>
+              <Icon className={cn("w-6 h-6", active && "drop-shadow-[0_0_8px_hsl(var(--primary)/0.5)]")} />
               <span className={cn(
                 "text-[10px] font-medium mt-0.5 transition-all",
                 active && "font-semibold"
