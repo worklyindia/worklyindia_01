@@ -117,7 +117,7 @@ export default function AndroidAppUpdates() {
     try {
       const headers = { Accept: "application/vnd.github+json" };
       const runsResponse = await fetch(
-        "https://api.github.com/repos/worklyindia/worklyindia_01/actions/workflows/android-release-retention.yml/runs?per_page=1",
+        "https://api.github.com/repos/worklyindia/worklyindia_01/actions/workflows/native-android.yml/runs?per_page=1",
         { headers }
       );
       if (!runsResponse.ok) throw new Error("GitHub Actions run status could not be loaded (" + runsResponse.status + ").");
