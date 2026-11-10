@@ -9,14 +9,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme}
-      className="toaster group"
+      className="toaster group workly-app-toaster"
       position="top-center"
+      offset="max(14px, env(safe-area-inset-top))"
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-md group-[.toaster]:py-2 group-[.toaster]:px-3 group-[.toaster]:text-sm group-[.toaster]:rounded-lg group-[.toaster]:max-w-[280px]",
-          title: "group-[.toast]:text-sm group-[.toast]:font-medium",
-          description: "group-[.toast]:text-xs group-[.toast]:text-muted-foreground",
+            "group toast group-[.toaster]:bg-[#263F55] group-[.toaster]:text-white group-[.toaster]:border-white/15 group-[.toaster]:shadow-xl group-[.toaster]:py-3 group-[.toaster]:px-4 group-[.toaster]:text-sm group-[.toaster]:rounded-2xl group-[.toaster]:w-[calc(100vw-28px)] group-[.toaster]:max-w-[440px]",
+          title: "group-[.toast]:text-sm group-[.toast]:font-semibold group-[.toast]:text-white",
+          description: "group-[.toast]:text-xs group-[.toast]:text-white/85",
           actionButton:
             "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground group-[.toast]:text-xs group-[.toast]:py-1 group-[.toast]:px-2",
           cancelButton:
