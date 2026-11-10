@@ -43,7 +43,7 @@ class ExternalNotificationListenerService : NotificationListenerService() {
         val id = (packageName + ":" + sbn.key).hashCode()
         val originalAction = source.actions?.firstOrNull { action ->
             val inputs = action.remoteInputs
-            !action.isContextual && !inputs.isNullOrEmpty() && inputs.any { it.allowFreeFormInput }
+            !inputs.isNullOrEmpty() && inputs.any { it.allowFreeFormInput }
         }
         val originalInputs = originalAction?.remoteInputs
         if (originalAction != null && originalInputs != null) {
@@ -167,14 +167,16 @@ internal object ReplyRegistry {
         targets[id] = Target(pendingIntent, remoteInputs)
     }
 
-    fun send(context: Context, id: Int, text: String): Boolean {
+    fun send(context: Context, id: Int, results: Bundle): Boolean {
         val target = targets[id] ?: return false
         return try {
             val fillIn = Intent()
-            val results = Bundle().apply {
-                target.remoteInputs.forEach { putCharSequence(it.resultKey, text) }
+            val supplied = Bundle()
+            target.remoteInputs.forEach { input ->
+                results.getCharSequence(input.resultKey)?.let { supplied.putCharSequence(input.resultKey, it) }
             }
-            RemoteInput.addResultsToIntent(target.remoteInputs, fillIn, results)
+            if (supplied.isEmpty) return false
+            RemoteInput.addResultsToIntent(target.remoteInputs, fillIn, supplied)
             target.pendingIntent.send(context, 0, fillIn)
             targets.remove(id)
             true
