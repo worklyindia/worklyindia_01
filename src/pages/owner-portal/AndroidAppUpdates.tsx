@@ -167,13 +167,13 @@ export default function AndroidAppUpdates() {
       toast.error("Make this release unpublished before deleting it.");
       return;
     }
-    if (!window.confirm(`Permanently delete Workly India v${release.version_name} (version code ${release.version_code})? Its Cloudflare R2 APK will be removed by the automatic cleanup job within 15 minutes.`)) return;
+    if (!window.confirm(`Permanently delete Workly India v${release.version_name} (version code ${release.version_code})? Its Cloudflare R2 APK will be removed by the automatic cleanup job within 1 hour.`)) return;
     setUpdatingReleaseId(release.id);
     try {
       const { error } = await supabase.from("android_app_releases").delete().eq("id", release.id);
       if (error) throw error;
       setReleases((current) => current.filter((item) => item.id !== release.id));
-      toast.success(`Release v${release.version_name} removed. Cloudflare APK cleanup is queued for the next 15-minute cycle.`);
+      toast.success(`Release v${release.version_name} removed. Cloudflare APK cleanup is queued for the next hourly cleanup cycle.`);
     } catch (error) {
       console.error("Android release deletion failed:", error);
       toast.error(error instanceof Error ? error.message : "The release could not be deleted.");
