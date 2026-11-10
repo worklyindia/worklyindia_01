@@ -12,9 +12,12 @@ class ChargingPowerReceiver : BroadcastReceiver() {
             Intent.ACTION_POWER_CONNECTED,
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                // Recover after boot, app update, or a charging event if Android
-                // previously stopped the process. The persistent service handles
-                // subsequent charge cycles without needing another background start.
+                // Restore the monitor after boot/update only when the device is actually charging.
+                val battery = context.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                val status = battery?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+                val isCharging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == android.os.BatteryManager.BATTERY_STATUS_FULL
+                if (!isCharging) return
                 val service = Intent(context, ChargingMonitorService::class.java)
                     .setAction(ChargingMonitorService.ACTION_START)
                 try {
@@ -34,6 +37,7 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                     .putBoolean(ChargingMonitorService.KEY_ACKNOWLEDGED, false)
                     .apply()
                 context.getSystemService(android.app.NotificationManager::class.java).cancel(8211)
+                context.sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(context.packageName))
                 context.stopService(Intent(context, ChargingMonitorService::class.java))
                 android.util.Log.i("WorklyCharging", "Charger disconnected; charging monitor stopped and notification cleared")
             }
