@@ -91,6 +91,9 @@ class MainActivity : FragmentActivity() {
     private var pendingGeoOrigin: String? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var offlineOverlay: FrameLayout? = null
+    // Preserve the exact in-app destination when a navigation fails offline.
+    private var pendingOfflineUrl: String? = null
+    private var offlineRetryInProgress = false
     private var reconnectCheckInProgress = false
     private var chargingAlertAccessDialogVisible = false
     // The branded startup cover is for the first app launch only. Showing it
@@ -321,11 +324,10 @@ class MainActivity : FragmentActivity() {
                 if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost) {
                     runOnUiThread {
                         if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
-                        if (!hasInternetConnection()) {
-                            view.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-                            // Keep the branded app loader visible if no cached shell exists yet.
-                            // A cached shell will finish normally and hide the loader in onWebsiteReady().
-                        }
+                        pendingOfflineUrl = request.url.toString()
+                        offlineRetryInProgress = false
+                        view.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                        showOfflineScreen()
                     }
                 }
             }
@@ -395,7 +397,13 @@ class MainActivity : FragmentActivity() {
                 super.onPageFinished(view, url)
                 if (Uri.parse(url).host == allowedHost) {
                     if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
-                    hideOfflineScreen()
+                    // WebView may call onPageFinished for its own network-error page.
+                    // Keep the branded offline screen until a deliberate retry succeeds.
+                    if (pendingOfflineUrl == null || offlineRetryInProgress) {
+                        pendingOfflineUrl = null
+                        offlineRetryInProgress = false
+                        hideOfflineScreen()
+                    }
                     if (hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_DEFAULT
                     syncWebsiteSession()
                     // Persist the current SPA route so a force-closed app resumes
@@ -1112,6 +1120,22 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             })
         }
         card.addView(footer)
+        val retryButton = TextView(this).apply {
+            text = "TRY AGAIN"
+            textSize = 15f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.rgb(18, 160, 125))
+                cornerRadius = dp(16).toFloat()
+            }
+            setPadding(dp(28), dp(15), dp(28), dp(15))
+            setOnClickListener { retryOfflinePage() }
+        }
+        card.addView(retryButton, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = dp(22) })
         overlay.addView(card, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
@@ -1121,6 +1145,18 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
+    }
+
+    private fun retryOfflinePage() {
+        val target = pendingOfflineUrl ?: lastLoadedUrl
+        if (!::webView.isInitialized || target.isBlank()) return
+        if (!hasInternetConnection()) {
+            Toast.makeText(this, "Internet connection is not ready yet. Please try again when data is on.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        offlineRetryInProgress = true
+        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+        webView.loadUrl(target)
     }
 
     private fun hideOfflineScreen() {
@@ -1159,10 +1195,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     dispatchNativeEvent("online")
                     runOnUiThread {
                         if (::webView.isInitialized) {
-                            // Keep the current page and its in-memory data visible.
-                            // If the first-ever load failed offline, retry once connectivity returns.
                             webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
-                            if (!initialWebsiteLoadCompleted) webView.loadUrl(lastLoadedUrl)
+                            // Retry the exact failed route after connectivity returns, even
+                            // when the app had already completed its first successful load.
+                            if (pendingOfflineUrl != null && !offlineRetryInProgress) {
+                                retryOfflinePage()
+                            } else if (!initialWebsiteLoadCompleted) {
+                                webView.loadUrl(lastLoadedUrl)
+                            }
                         }
                     }
                 } else {
