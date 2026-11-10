@@ -1540,6 +1540,16 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
 
         @JavascriptInterface
+        fun sendExternalNotificationReply(id: Int, message: String): Boolean {
+            val text = message.trim().take(1000)
+            if (id == Int.MIN_VALUE || text.isBlank()) return false
+            val results = android.os.Bundle().apply {
+                putCharSequence("workly_external_reply_text", text)
+            }
+            return ReplyRegistry.send(this@MainActivity, id, results)
+        }
+
+        @JavascriptInterface
         fun saveLastVisitedRoute(url: String): Boolean {
             val safeUrl = trustedInternalUrl(url) ?: return false
             val uri = Uri.parse(safeUrl)
