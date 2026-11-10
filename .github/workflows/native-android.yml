@@ -72,7 +72,7 @@ jobs:
           service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
           latest_code = 0
           latest_minimum = 1
-          latest_name = values.get("versionName", "2.4.3")
+          latest_name = values.get("versionName", "2.4.3.1.0")
 
           # Production builds use the newest Supabase release row as the single source
           # of truth. Draft releases count too, so an unpublished build cannot be reused.
@@ -93,21 +93,22 @@ jobs:
                   latest_name = str(rows[0]["version_name"])
                   latest_minimum = int(rows[0].get("min_supported_version_code") or 1)
 
-          # Four-part versionName: each component is a single digit (0-9).
-          # Increment as a decimal odometer: 2.4.3.9 -> 2.4.4.0.
-          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?", latest_name)
-          if not match:
+          # Variable-length versionName: every dot-separated component is one digit (0-9).
+          # Start with five components; when the final digit reaches 9, append .1.0.
+          # Examples: 2.4.3.1.9 -> 2.4.3.1.1.0 -> 2.4.3.1.1.1.
+          raw_parts = latest_name.split(".")
+          if not raw_parts or any(not re.fullmatch(r"\\d+", part) for part in raw_parts):
               raise SystemExit(f"Cannot safely increment Android version name: {latest_name!r}")
-          parts = [int(part or 0) for part in match.groups()]
+          # Split any legacy multi-digit component into individual digits.
+          parts = [int(digit) for part in raw_parts for digit in part]
+          if len(parts) < 5:
+              parts.extend([0] * (5 - len(parts)))
           if any(part < 0 or part > 9 for part in parts):
               raise SystemExit(f"Version components must each be a single digit 0-9: {latest_name!r}")
-          for index in range(3, -1, -1):
-              parts[index] += 1
-              if parts[index] <= 9:
-                  break
-              parts[index] = 0
+          if parts[-1] < 9:
+              parts[-1] += 1
           else:
-              raise SystemExit("Android version name exhausted 9.9.9.9; choose a new major version.")
+              parts.extend([1, 0])
           version_name = ".".join(str(part) for part in parts)
 
           # The workflow run number is globally increasing for this workflow; also
