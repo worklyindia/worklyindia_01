@@ -411,9 +411,25 @@ object NativePushManager {
                 ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                 builder.addAction(replyAction)
             } else {
-                val whatsappPhone = data["phone"]?.takeIf { it.matches(Regex("[+0-9]{10,16}")) }
+                val notificationType = data["type"].orEmpty().lowercase()
+                val whatsappPhone = (data["phone"] ?: data["phone_number"] ?: data["sender_phone"])
+                    ?.takeIf { it.matches(Regex("[+0-9]{10,16}")) }
                 val whatsappAudience = data["audience"].orEmpty()
-                val isOwnerSupportWhatsApp = data["type"] == "whatsapp_message" && whatsappAudience == "customer_service" && whatsappPhone != null
+                val isOwnerSupportWhatsApp = notificationType == "whatsapp_message" &&
+                    whatsappAudience == "customer_service" && whatsappPhone != null
+                val metaPlatform = when {
+                    notificationType == "instagram_message" || data["platform"] == "instagram" -> "instagram"
+                    notificationType == "facebook_message" || data["platform"] == "facebook" -> "facebook"
+                    else -> ""
+                }
+                val metaAccountId = data["account_id"].orEmpty()
+                val metaRecipientId = data["sender_id"].orEmpty()
+                val metaAudience = data["audience"].orEmpty()
+                val isMetaInboxMessage = notificationType in setOf("instagram_message", "facebook_message") &&
+                    metaPlatform.isNotBlank() &&
+                    metaAccountId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
+                    metaRecipientId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
+                    (metaAudience.isEmpty() || metaAudience == "support")
                 if (isOwnerSupportWhatsApp) {
                     val remoteInput = androidx.core.app.RemoteInput.Builder("workly_whatsapp_reply")
                         .setLabel("Reply on WhatsApp")
@@ -424,18 +440,24 @@ object NativePushManager {
                         NotificationActionReceiver.whatsappReplyPendingIntent(context, whatsappPhone!!, whatsappAudience, tag.hashCode() + 11)
                     ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                     builder.addAction(replyAction)
-                    builder.addAction(
-                        android.R.drawable.ic_menu_view,
-                        "Open chat",
-                        activityPendingIntent(chatUrl, tag.hashCode() + 1)
-                    )
-                } else {
-                    builder.addAction(
+                } else if (isMetaInboxMessage) {
+                    val remoteInput = androidx.core.app.RemoteInput.Builder("workly_meta_reply")
+                        .setLabel("Reply on " + if (metaPlatform == "instagram") "Instagram" else "Messenger")
+                        .build()
+                    val replyAction = NotificationCompat.Action.Builder(
                         android.R.drawable.ic_menu_send,
-                        "Open chat",
-                        activityPendingIntent(chatUrl, tag.hashCode() + 1)
-                    )
+                        "Reply",
+                        NotificationActionReceiver.metaReplyPendingIntent(
+                            context, metaPlatform, metaAccountId, metaRecipientId, metaAudience, tag.hashCode() + 21
+                        )
+                    ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
+                    builder.addAction(replyAction)
                 }
+                builder.addAction(
+                    android.R.drawable.ic_menu_view,
+                    "Open chat",
+                    activityPendingIntent(chatUrl, tag.hashCode() + 1)
+                )
             }
             builder.addAction(
                 android.R.drawable.ic_menu_view,
