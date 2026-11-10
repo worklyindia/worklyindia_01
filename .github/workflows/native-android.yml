@@ -526,10 +526,14 @@ jobs:
           cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
           stale_objects = []
           reclaimed_bytes = 0
+          apk_objects_before = 0
           for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="android/releases/"):
               for obj in page.get("Contents", []):
                   key = obj["Key"]
-                  if not key.endswith("/Workly-India.apk") or key in protected_keys:
+                  if not key.endswith("/Workly-India.apk"):
+                      continue
+                  apk_objects_before += 1
+                  if key in protected_keys:
                       continue
                   if obj["LastModified"] > cutoff:
                       continue
@@ -568,15 +572,32 @@ jobs:
 
           for key in protected_keys:
               s3.head_object(Bucket=bucket, Key=key)
+          apk_objects_after = 0
+          for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix="android/releases/"):
+              apk_objects_after += sum(1 for obj in page.get("Contents", []) if obj["Key"].endswith("/Workly-India.apk"))
+          remaining_response = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "id", "limit": "10000"},
+              timeout=45,
+          )
+          remaining_response.raise_for_status()
+          remaining_rows = len(remaining_response.json() or [])
           print(f"Automatic upload cleanup: protected release rows={len(protected_ids)}")
           print(f"Older unpublished Supabase rows deleted={deleted_rows}")
+          print(f"Supabase release records remaining={remaining_rows}")
+          print(f"R2 APK objects before cleanup={apk_objects_before}")
           print(f"Old unreferenced R2 APK objects deleted={deleted_objects}")
+          print(f"R2 APK objects remaining={apk_objects_after}")
           print(f"R2 bytes reclaimed={reclaimed_bytes}")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write("\\n### Automatic APK cleanup\\n")
+              summary.write("\\n### Automatic APK cleanup — verified counts\\n")
               summary.write(f"- Protected public/latest release rows: {len(protected_ids)}\\n")
-              summary.write(f"- Older unpublished release rows deleted: {deleted_rows}\\n")
+              summary.write(f"- Older unpublished Supabase rows deleted: {deleted_rows}\\n")
+              summary.write(f"- Supabase release records remaining: {remaining_rows}\\n")
+              summary.write(f"- R2 APK objects before cleanup: {apk_objects_before}\\n")
               summary.write(f"- Old unreferenced R2 APKs deleted: {deleted_objects}\\n")
+              summary.write(f"- R2 APK objects remaining after cleanup: {apk_objects_after}\\n")
               summary.write(f"- R2 bytes reclaimed: {reclaimed_bytes:,}\\n")
           PY
 
