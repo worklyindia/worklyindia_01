@@ -9,6 +9,7 @@ import { FirebasePushService } from "@/services/FirebasePushService";
 import Header from "@/components/Header";
 import LazyImage from "@/components/LazyImage";
 import { getOptimizedLogo } from "@/utils/performance";
+import { getWorklyAndroidBridge } from "@/lib/nativeAppBridge";
 
 const logoUrl = "https://worklyindia.devs.surf/icons/icon-512x512.png";
 
@@ -24,6 +25,23 @@ const Notifications = () => {
   } = useNotifications();
   
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  type NativeMessage = { id: number; source: string; title: string; message: string; time: number; canReply: boolean };
+  const [nativeMessages, setNativeMessages] = useState<NativeMessage[]>([]);
+  const [nativeAccess, setNativeAccess] = useState(false);
+  const [nativeReplies, setNativeReplies] = useState<Record<number, string>>({});
+  const [nativeReplyStatus, setNativeReplyStatus] = useState<Record<number, string>>({});
+  const nativeBridge = getWorklyAndroidBridge();
+  const refreshNativeInbox = () => {
+    if (!nativeBridge) return;
+    try {
+      setNativeAccess(!!nativeBridge.hasExternalNotificationAccess?.());
+      const parsed = JSON.parse(nativeBridge.getExternalNotificationInbox?.() || "[]");
+      setNativeMessages(Array.isArray(parsed) ? parsed : []);
+    } catch (error) {
+      console.warn("Could not read device notification inbox", error);
+    }
+  };
+  useEffect(() => { refreshNativeInbox(); }, []);
 
   const filteredNotifications = filter === "unread" 
     ? notifications.filter(n => !n.is_read)
@@ -128,6 +146,53 @@ const Notifications = () => {
         </div>
       </div>
 
+
+      {nativeBridge && (
+        <section className="px-4 pt-4" aria-label="Device message inbox">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 className="font-semibold text-sm">Device message inbox</h2>
+              <p className="text-xs text-muted-foreground">Private notifications from supported apps on this phone</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => nativeBridge.openExternalNotificationAccessSettings?.()}>
+              {nativeAccess ? "Access enabled" : "Enable access"}
+            </Button>
+          </div>
+          {!nativeAccess ? (
+            <p className="text-sm text-muted-foreground rounded-lg border p-3">Enable Workly India notification access in Android Settings to view supported WhatsApp, Instagram and Facebook notifications here.</p>
+          ) : nativeMessages.length === 0 ? (
+            <p className="text-sm text-muted-foreground rounded-lg border p-3">No supported device messages yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {nativeMessages.slice().sort((a, b) => b.time - a.time).map((item) => (
+                <article key={item.id} className="rounded-lg border border-border/60 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">{item.source.replace(/^.*\./, "")}</p>
+                      <h3 className="text-sm font-medium">{item.title}</h3>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground whitespace-nowrap">{format(new Date(item.time), "MMM dd • hh:mm a")}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap break-words">{item.message}</p>
+                  {item.canReply && (
+                    <div className="flex gap-2 mt-3">
+                      <input aria-label={`Reply to ${item.title}`} value={nativeReplies[item.id] || ""} onChange={(event) => setNativeReplies((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Quick reply…" className="min-w-0 flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm" />
+                      <Button size="sm" disabled={!nativeReplies[item.id]?.trim()} onClick={() => {
+                        const text = nativeReplies[item.id]?.trim();
+                        if (!text) return;
+                        const sent = nativeBridge.sendExternalNotificationReply?.(item.id, text) === true;
+                        setNativeReplyStatus((current) => ({ ...current, [item.id]: sent ? "Reply sent" : "Open the original app to reply" }));
+                        if (sent) setNativeReplies((current) => ({ ...current, [item.id]: "" }));
+                      }}>Reply</Button>
+                    </div>
+                  )}
+                  {nativeReplyStatus[item.id] && <p className="text-xs text-muted-foreground mt-2" role="status">{nativeReplyStatus[item.id]}</p>}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
         <div className="px-4 py-2">
 
