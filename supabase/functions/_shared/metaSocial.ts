@@ -710,7 +710,7 @@ async function resolveSenderName(platform: Platform, senderId: string, token: st
 }
 
 async function notifySocialPush(supabase: SupabaseClient, ev: {
-  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; eventId: string; imageUrl?: string;
+  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string;
 }, account: any, recipientUserId: string) {
   try {
     const isIg = ev.platform === 'instagram';
@@ -745,6 +745,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
         data: {
           type: `${ev.platform}_${ev.kind}`, source: ev.platform, platform: ev.platform,
           sender_id: ev.senderId, sender_name: name, conversation_id: ev.senderId, event_id: ev.eventId,
+          account_id: ev.accountId || '', audience: ev.audience || '',
         },
       }),
     });
@@ -791,7 +792,7 @@ async function processEvent(supabase: SupabaseClient, ev: {
   // are registered against the owner's actual auth user ID.
   const pushRecipientId = supportUserId || account.user_id;
   // Notify the owner for every new inbox message, independent of AI reply settings.
-  if (ev.kind === 'message') await notifySocialPush(supabase, ev, account, pushRecipientId);
+  if (ev.kind === 'message') await notifySocialPush(supabase, { ...ev, accountId: account.id, audience: supportUserId ? 'support' : '' }, account, pushRecipientId);
   // Developer webhooks: instagram.message.received, facebook.comment.received, etc.
   await forwardToCustomerWebhooks(supabase, account.user_id, `${ev.platform}.${ev.kind}.received`, {
     account_id: account.id, page_id: account.page_id, ig_user_id: account.ig_user_id,
