@@ -13,6 +13,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { EmployerAuthProvider } from "@/contexts/EmployerAuthContext";
 import "./index.css";
 import { createQueryClient } from "@/utils/queryClient";
+import { restoreAndPersistQueryCache } from "@/utils/persistentQueryCache";
 import { initializeApp, hideLoadingFallback, initializePerformanceUtils, initializeErrorMonitoring } from "@/utils/appInitializer";
 import { prefetchStaticData } from "@/hooks/useStaticData";
 import { initializeSentry } from "@/utils/sentry";
@@ -71,38 +72,41 @@ initializeApp();
 // Create optimized query client
 const queryClient = createQueryClient();
 
-// Prefetch static data for instant access
-prefetchStaticData(queryClient);
-
-// Initialize utilities
-initializePerformanceUtils();
-initializeErrorMonitoring();
-initializeMarketingTools();
-
+// Restore previously viewed public data before the first React paint.
+// Private account, chat, payment and identity data is never written to this cache.
 const root = createRoot(document.getElementById("root")!);
 
-// Render app once - ErrorBoundary will handle any errors
-root.render(
-  <StrictMode>
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <AuthProvider>
-            <EmployerAuthProvider>
-              <ThemeProvider>
-                <Suspense fallback={null}>
-                  <App />
-                </Suspense>
-                <SlowNetworkBanner />
-                <ServiceUnavailableOverlay />
-                <Toaster />
-              </ThemeProvider>
-            </EmployerAuthProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ErrorBoundary>
-  </StrictMode>
-);
+// Initialize utilities without blocking the first screen.
+void initializePerformanceUtils();
+void initializeErrorMonitoring();
+void initializeMarketingTools();
 
-// Loading screen is now hidden by AppContent once React is fully mounted
+void (async () => {
+  await restoreAndPersistQueryCache(queryClient);
+  prefetchStaticData(queryClient);
+
+  // Render only after the local snapshot has had a chance to hydrate, so
+  // cached content can be displayed immediately while fresh requests run.
+  root.render(
+    <StrictMode>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <AuthProvider>
+              <EmployerAuthProvider>
+                <ThemeProvider>
+                  <Suspense fallback={<AppLoadingSpinner />}>
+                    <App />
+                  </Suspense>
+                  <SlowNetworkBanner />
+                  <ServiceUnavailableOverlay />
+                  <Toaster />
+                </ThemeProvider>
+              </EmployerAuthProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </StrictMode>
+  );
+})();
