@@ -6,6 +6,7 @@ type Props = {
   channel: ChatPlatform; connected: boolean; picture?: string | null; name?: string | null; refreshing: boolean;
   onBack: () => void; onRefresh: () => void; onNewChat: () => void;
   onProfile: () => void; onTemplates: () => void; onChannel: (channel: ChatPlatform) => void;
+  onDeviceInbox?: () => void; deviceInboxActive?: boolean;
 };
 export default function WorklyChatHeader(props: Props) {
   const label = props.channel === "whatsapp" ? "WhatsApp" : props.channel === "instagram" ? "Instagram" : "Facebook";
@@ -23,7 +24,8 @@ export default function WorklyChatHeader(props: Props) {
       </div>
     </div>
     <div role="tablist" aria-label="Chat platform" className="grid grid-cols-3 border-b border-border bg-background">
-      {(["whatsapp", "instagram", "facebook"] as const).map((channel) => <Button key={channel} role="tab" variant="ghost" aria-selected={props.channel === channel} onClick={() => props.onChannel(channel)} className={`h-auto rounded-none border-b-2 py-3 text-sm font-medium ${props.channel === channel ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{channel === "whatsapp" ? "WhatsApp" : channel === "instagram" ? "Instagram" : "Facebook"}</Button>)}
+      {(["whatsapp", "instagram", "facebook"] as const).map((channel) => <Button key={channel} role="tab" variant="ghost" aria-selected={!props.deviceInboxActive && props.channel === channel} onClick={() => props.onChannel(channel)} className={`h-auto rounded-none border-b-2 py-3 text-sm font-medium ${!props.deviceInboxActive && props.channel === channel ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{channel === "whatsapp" ? "WhatsApp" : channel === "instagram" ? "Instagram" : "Facebook"}</Button>)}
+      {props.onDeviceInbox && <Button role="tab" aria-selected={!!props.deviceInboxActive} variant="ghost" onClick={props.onDeviceInbox} className={`h-auto rounded-none border-b-2 py-3 text-sm font-medium ${props.deviceInboxActive ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>Phone Inbox</Button>}
     </div>
   </>;
 }
