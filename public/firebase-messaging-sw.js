@@ -215,11 +215,15 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         }
-        return (await cache.match(pageKey)) || (await cache.match('/')) || response;
+        // Only show an offline document when this exact route was saved.
+        // Falling back to '/' makes uncached routes display the Home app shell
+        // instead of allowing Android WebView to show Workly's native offline UI.
+        return (await cache.match(pageKey)) || response;
       } catch (_error) {
-        return (await cache.match(pageKey)) ||
-          (await cache.match('/')) ||
-          Response.error();
+        // Do not substitute the Home page for an uncached destination.
+        // Response.error() reaches the native WebViewClient, which displays
+        // the branded Workly India offline screen and retries this same URL.
+        return (await cache.match(pageKey)) || Response.error();
       }
     })());
     return;
