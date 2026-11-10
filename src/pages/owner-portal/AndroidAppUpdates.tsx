@@ -301,6 +301,41 @@ export default function AndroidAppUpdates() {
           </CardContent>
         </Card>
 
+        <Card className="w-full min-w-0 overflow-hidden">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-lg"><Activity className="h-5 w-5" /> Workflow details & cleanup diagnostics</CardTitle>
+            <CardDescription>Latest Android build ka step-by-step status aur cleanup report yahan verify karein.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Release records remaining</p><p className="text-2xl font-semibold tabular-nums">{releases.length}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Public records</p><p className="text-2xl font-semibold tabular-nums">{releases.filter((item) => item.is_published).length}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Unpublished records</p><p className="text-2xl font-semibold tabular-nums">{releases.filter((item) => !item.is_published).length}</p></div>
+            </div>
+            {workflowLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading latest workflow steps...</div>
+              : workflowError ? <p className="text-sm text-destructive">{workflowError}</p>
+              : !workflowRun ? <p className="text-sm text-muted-foreground">No Android workflow run found yet.</p>
+              : <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                  <div className="min-w-0"><p className="font-semibold">Run #{workflowRun.run_number} · {workflowRun.display_title || workflowRun.name}</p><p className="text-xs text-muted-foreground">Started: {workflowRun.created_at ? new Date(workflowRun.created_at).toLocaleString() : "—"} · Attempt {workflowRun.run_attempt}</p><p className="text-xs text-muted-foreground">Overall: {workflowRun.status === "completed" ? workflowRun.conclusion : workflowRun.status}</p></div>
+                  <a href={workflowRun.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-medium hover:bg-muted">Full cleanup report <ExternalLink className="h-4 w-4" /></a>
+                </div>
+                {workflowJobs.map((job) => <div key={job.id} className="rounded-lg border p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    {job.conclusion === "success" ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : job.conclusion === "failure" || job.conclusion === "cancelled" ? <XCircle className="h-4 w-4 text-destructive" /> : <Clock3 className="h-4 w-4 text-muted-foreground" />}
+                    <p className="text-sm font-semibold">{job.name}</p><Badge className="ml-auto" variant={job.conclusion === "success" ? "default" : "secondary"}>{job.conclusion || job.status}</Badge>
+                  </div>
+                  <div className="space-y-1.5">{(job.steps || []).map((step: any) => <div key={step.number} className="flex items-center justify-between gap-3 text-xs"><span className="min-w-0 break-words text-muted-foreground">{step.number}. {step.name}</span><span className={step.conclusion === "success" ? "shrink-0 text-green-600" : step.conclusion === "failure" ? "shrink-0 text-destructive" : "shrink-0 text-muted-foreground"}>{step.conclusion || step.status}</span></div>)}</div>
+                </div>)}
+                <p className="text-xs text-muted-foreground">Exact old unpublished records deleted, old R2 APKs deleted, bytes reclaimed aur errors GitHub run ke Full cleanup report mein milenge. R2 objects ki remaining count bhi isi cleanup report se confirm karein.</p>
+              </div>}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => void loadWorkflowDiagnostics()} disabled={workflowLoading}><RefreshCw className={workflowLoading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />Refresh workflow</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => void load()}><RefreshCw className="mr-2 h-4 w-4" />Refresh releases</Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <section className="space-y-3">
           <div>
             <h2 className="text-lg font-semibold">Android app releases</h2>
