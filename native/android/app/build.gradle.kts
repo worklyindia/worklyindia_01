@@ -28,7 +28,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = releaseProperties.getProperty("versionCode", "7").toInt()
-        versionName = releaseProperties.getProperty("versionName", "2.4.1")
+        versionName = releaseProperties.getProperty("versionName", "2.4.6")
     }
 
     signingConfigs {
