@@ -1509,6 +1509,55 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     inner class WorklyWebBridge {
         @JavascriptInterface
+        fun hasExternalNotificationAccess(): Boolean {
+            val enabled = android.provider.Settings.Secure.getString(
+                contentResolver,
+                "enabled_notification_listeners"
+            ).orEmpty()
+            return enabled.split(":").any { component ->
+                runCatching { android.content.ComponentName.unflattenFromString(component)?.packageName == packageName }.getOrDefault(false)
+            }
+        }
+
+        @JavascriptInterface
+        fun openExternalNotificationAccessSettings(): Boolean {
+            return try {
+                startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                true
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyNotifications", "Could not open notification access settings", error)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun isExternalMessageCloudSyncEnabled(): Boolean {
+            return ExternalMessageCloudSync.isEnabled(this@MainActivity)
+        }
+
+        @JavascriptInterface
+        fun setExternalMessageCloudSyncEnabled(enabled: Boolean): Boolean {
+            ExternalMessageCloudSync.setEnabled(this@MainActivity, enabled)
+            return true
+        }
+
+        // Notification content stays on-device unless the user explicitly enables Workly cloud sync.
+        @JavascriptInterface
+        fun getExternalNotificationInbox(): String {
+            return getSharedPreferences(
+                ExternalNotificationListenerService.PREFS,
+                Context.MODE_PRIVATE
+            ).getString(ExternalNotificationListenerService.KEY_ITEMS, "[]") ?: "[]"
+        }
+
+        @JavascriptInterface
+        fun sendExternalNotificationReply(id: Int, message: String): Boolean {
+            val text = message.trim().take(1000)
+            if (id == Int.MIN_VALUE || text.isBlank()) return false
+            return ReplyRegistry.sendText(this@MainActivity, id, text)
+        }
+
+        @JavascriptInterface
         fun saveLastVisitedRoute(url: String): Boolean {
             val safeUrl = trustedInternalUrl(url) ?: return false
             val uri = Uri.parse(safeUrl)

@@ -19,6 +19,12 @@ export interface WorklyAndroidBridge {
   isBiometricLockEnabled?(): boolean;
   setBiometricLockEnabled?(enabled: boolean): boolean;
   scanResumeImage?(dataUrl: string): boolean;
+  hasExternalNotificationAccess?(): boolean;
+  openExternalNotificationAccessSettings?(): boolean;
+  getExternalNotificationInbox?(): string;
+  sendExternalNotificationReply?(id: number, message: string): boolean;
+  isExternalMessageCloudSyncEnabled?(): boolean;
+  setExternalMessageCloudSyncEnabled?(enabled: boolean): boolean;
 }
 
 type WorklyWindow = Window & { WorklyAndroid?: WorklyAndroidBridge };

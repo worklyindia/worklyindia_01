@@ -160,11 +160,11 @@ jobs:
           sdkmanager --install "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
           sdkmanager --list_installed
 
-      - name: Set up Gradle 9.7.0 and publish a public Build Scan
+      - name: Set up Gradle 9.9.0 and publish a public Build Scan
         id: setup-gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.11.1'
+          gradle-version: '9.9.0'
           build-scan-publish: true
           build-scan-terms-of-use-url: 'https://gradle.com/terms-of-service'
           build-scan-terms-of-use-agree: 'yes'
@@ -707,6 +707,17 @@ jobs:
           summary = Path(e["GITHUB_STEP_SUMMARY"])
           def val(key):
               return e.get(key, "").strip() or "Not produced"
+          production = e["REF_NAME"] == "main" and e["EVENT_NAME"] != "pull_request"
+          publishing_skipped = val("PUBLISH_STATUS") == "skipped" and not production
+          def status_for(name, key):
+              raw = val(key)
+              if key == "PUBLISH_STATUS" and publishing_skipped:
+                  return "Skipped — PR/branch verification only; production publishing runs from main"
+              if key == "CLEANUP_STATUS" and publishing_skipped:
+                  return "Not applicable — no production upload occurred in this PR/branch build"
+              if key == "CLEANUP_STATUS" and val("PUBLISH_STATUS") == "success" and raw == "Not produced":
+                  return "Not produced — inspect publishing step output; cleanup result missing"
+              return raw
           steps = [
               ("Checkout", "CHECKOUT_STATUS"), ("Java setup", "JAVA_STATUS"),
               ("Android SDK setup", "ANDROID_STATUS"), ("SDK packages", "SDK_STATUS"),
@@ -718,7 +729,6 @@ jobs:
           ]
           failed = [(name, val(key)) for name, key in steps if val(key) == "failure"]
           skipped = [(name, val(key)) for name, key in steps if val(key) == "skipped"]
-          production = e["REF_NAME"] == "main" and e["EVENT_NAME"] != "pull_request"
           lines = [
               "", "## Android Release — complete diagnostics",
               "", "| Field | Result |", "|---|---|",
@@ -733,7 +743,7 @@ jobs:
               "", "### Step-by-step status", "",
               "| Step | Status |", "|---|---|",
           ]
-          lines += [f"| {name} | {val(key)} |" for name, key in steps]
+          lines += [f"| {name} | {status_for(name, key)} |" for name, key in steps]
           lines += ["", "### Error Details", ""]
           if failed:
               lines += [f"- **{name}:** failed. Open [this workflow run's logs](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}/attempts/{e['RUN_ATTEMPT']}) and expand the named step for the exact error output." for name, _ in failed]

@@ -81,6 +81,18 @@
             android:name=".NotificationActionReceiver"
             android:exported="false" />
         <service
+            android:name=".ExternalNotificationListenerService"
+            android:label="Workly India message access"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <receiver
+            android:name=".ExternalNotificationReplyReceiver"
+            android:exported="false" />
+        <service
             android:name=".WorklyFirebaseMessagingService"
             android:exported="false">
             <intent-filter>

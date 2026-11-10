@@ -87,6 +87,38 @@ object NativeAuth {
         )
     }.getOrNull()
 
+
+    fun refreshWebSession(context: Context): NativeSession? {
+        val current = session(context) ?: return null
+        return runCatching {
+            val connection = java.net.URL("https://jubwzelupbntbetpajqb.supabase.co/auth/v1/token?grant_type=refresh_token")
+                .openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("apikey", "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o")
+            val payload = JSONObject().put("refresh_token", current.refreshToken).toString()
+            connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            connection.disconnect()
+            if (status !in 200..299) return@runCatching null
+            val json = JSONObject(response)
+            val refreshed = saveWebSession(
+                context,
+                json.getString("access_token"),
+                json.optString("refresh_token", current.refreshToken),
+                current.userId,
+                current.email,
+                current.userRole
+            )
+            refreshed
+        }.getOrNull()
+    }
+
     fun signOut(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
