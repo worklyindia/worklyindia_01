@@ -98,7 +98,7 @@ export default function AndroidAppUpdates() {
       }
     }));
 
-    // Old unpublished releases are removed automatically by the scheduled R2 cleanup workflow.
+    // Older unpublished releases are removed automatically after a successful new APK upload.
     setReleases(rows);
     setLoading(false);
   }, []);
