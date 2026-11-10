@@ -2122,8 +2122,32 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
+    // Starting the monitor while the app is visibly open is a reliable
+    // recovery path if Android/Realme missed ACTION_POWER_CONNECTED.
+    private fun startChargingMonitorIfPluggedIn() {
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            ?: return
+        val status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val plugged = battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL
+        if (!plugged || !charging) return
+        val monitor = Intent(this, ChargingMonitorService::class.java)
+            .setAction(ChargingMonitorService.ACTION_START)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(this, monitor)
+            } else {
+                startService(monitor)
+            }
+        }.onFailure { error ->
+            android.util.Log.e("WorklyCharging", "Could not start monitor from app foreground", error)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        startChargingMonitorIfPluggedIn()
         ensureChargingAlertAccess()
         showAppOpenLiveUpdate()
         // Decrypted files are exported to a short-lived app-private cache only
