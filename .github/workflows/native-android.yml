@@ -160,11 +160,11 @@ jobs:
           sdkmanager --install "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
           sdkmanager --list_installed
 
-      - name: Set up Gradle 9.7.0 and publish a public Build Scan
+      - name: Set up Gradle 8.14.3 and publish a public Build Scan
         id: setup-gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '8.11.1'
+          gradle-version: '8.14.3'
           build-scan-publish: true
           build-scan-terms-of-use-url: 'https://gradle.com/terms-of-service'
           build-scan-terms-of-use-agree: 'yes'
