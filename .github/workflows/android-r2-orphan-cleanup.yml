@@ -1,0 +1,106 @@
+name: Android R2 orphan cleanup
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-r2-orphan-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Remove only owner-deleted Android APK objects
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: workly-android-releases
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet requests boto3
+          python - <<'PY'
+          import os
+          from datetime import datetime, timezone, timedelta
+          from urllib.parse import urlparse
+          import boto3
+          import requests
+
+          base = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+          account_id = os.environ["R2_ACCOUNT_ID"]
+          access_key = os.environ["R2_ACCESS_KEY_ID"]
+          secret_key = os.environ["R2_SECRET_ACCESS_KEY"]
+          bucket = os.environ.get("R2_BUCKET", "workly-android-releases")
+          if not all([base, service_key, account_id, access_key, secret_key]):
+              raise SystemExit("Missing required Supabase or Cloudflare R2 secrets; refusing cleanup.")
+
+          headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+          response = requests.get(
+              f"{base}/rest/v1/android_app_releases",
+              headers=headers,
+              params={"select": "apk_path", "limit": "10000"},
+              timeout=45,
+          )
+          response.raise_for_status()
+          rows = response.json()
+          if not isinstance(rows, list) or not rows:
+              raise SystemExit("No release rows returned. Refusing to delete any R2 objects (fail-safe).")
+
+          referenced = set()
+          for row in rows:
+              value = row.get("apk_path") or ""
+              parsed = urlparse(value)
+              if parsed.scheme == "https" and parsed.hostname == "pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev":
+                  key = parsed.path.lstrip("/")
+                  if key.startswith("android/releases/"):
+                      referenced.add(key)
+
+          s3 = boto3.client(
+              "s3",
+              endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+              aws_access_key_id=access_key,
+              aws_secret_access_key=secret_key,
+              region_name="auto",
+          )
+
+          cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+          paginator = s3.get_paginator("list_objects_v2")
+          candidates = []
+          total = 0
+          for page in paginator.paginate(Bucket=bucket, Prefix="android/releases/"):
+              for obj in page.get("Contents", []):
+                  key = obj["Key"]
+                  if not key.endswith("/Workly-India.apk"):
+                      continue
+                  if key in referenced:
+                      continue
+                  # Protect uploads whose metadata write is still in progress or failed recently.
+                  if obj["LastModified"] > cutoff:
+                      continue
+                  candidates.append({"Key": key})
+                  total += int(obj.get("Size", 0))
+
+          deleted = 0
+          for offset in range(0, len(candidates), 1000):
+              batch = candidates[offset:offset + 1000]
+              result = s3.delete_objects(Bucket=bucket, Delete={"Objects": batch, "Quiet": False})
+              errors = result.get("Errors", [])
+              if errors:
+                  raise SystemExit(f"R2 returned delete errors: {errors[:5]}")
+              deleted += len(result.get("Deleted", []))
+
+          print(f"Release rows protected: {len(rows)}")
+          print(f"Referenced R2 APK objects protected: {len(referenced)}")
+          print(f"Deleted orphaned APK objects: {deleted}")
+          print(f"Reclaimed bytes: {total}")
+          PY
