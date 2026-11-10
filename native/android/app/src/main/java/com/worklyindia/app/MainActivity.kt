@@ -321,7 +321,7 @@ class MainActivity : FragmentActivity() {
                 if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost) {
                     runOnUiThread {
                         if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
-                        if (!hasInternetConnection()) showOfflineScreen()
+                        if (!hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
                     }
                 }
             }
@@ -1114,16 +1114,19 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 if (internetReady) {
                     dispatchNativeEvent("online")
                     runOnUiThread {
-                        val wasOffline = offlineOverlay?.parent != null
-                        if (wasOffline && !reconnectCheckInProgress && ::webView.isInitialized) {
-                            showStartupLoading()
-                            hideOfflineScreen()
-                            webView.loadUrl(lastLoadedUrl)
-                        }
+                        if (::webView.isInitialized) {
+                        // Keep the current page and its in-memory data visible.
+                        // React Query refreshes stale data in the background on the online event.
+                        webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
+                    }
                     }
                 } else {
                     dispatchNativeEvent("offline")
-                    runOnUiThread { if (!initialWebsiteLoadCompleted) showOfflineScreen() }
+                    runOnUiThread {
+                        if (::webView.isInitialized) {
+                            webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                        }
+                    }
                 }
             }
 
@@ -1131,7 +1134,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 if (!hasInternetConnection()) {
                     dispatchNativeEvent("workly-native-network-change", "{connected:false}")
                     dispatchNativeEvent("offline")
-                    runOnUiThread { if (!initialWebsiteLoadCompleted) showOfflineScreen() }
+                    runOnUiThread {
+                        if (::webView.isInitialized) {
+                            webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                        }
+                    }
                 }
             }
         }
@@ -2131,7 +2138,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 hideOfflineScreen()
                 webView.loadUrl(target)
             } else {
-                showOfflineScreen()
+                // Open the requested route from WebView/service-worker cache when available.
+                webView.settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
+                webView.loadUrl(target)
             }
         }
     }
