@@ -35,6 +35,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         throw IllegalArgumentException("Reply details are missing or invalid. Open the chat and try again.")
                     }
                     sendAuthenticatedChatReply(context, conversationId, reply)
+                    cancelReplyNotification(context, intent)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyChatReply", "Inline reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_REPLY)
@@ -54,6 +55,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         throw IllegalArgumentException("WhatsApp reply details are missing or invalid. Open the conversation and try again.")
                     }
                     sendAuthenticatedWhatsAppReply(context, phone, audience, reply)
+                    cancelReplyNotification(context, intent)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyWhatsAppReply", "Inline WhatsApp reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_WHATSAPP_REPLY)
@@ -74,6 +76,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         throw IllegalArgumentException("Employer WhatsApp reply details are missing or invalid. Open the conversation and try again.")
                     }
                     sendAuthenticatedEmployerWhatsAppReply(context, conversationId, phoneNumberId, reply)
+                    cancelReplyNotification(context, intent)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyEmployerWhatsAppReply", "Inline employer WhatsApp reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_EMPLOYER_WA_REPLY)
@@ -98,6 +101,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
                         throw IllegalArgumentException("Instagram/Facebook reply details are missing or invalid. Open the conversation and try again.")
                     }
                     sendAuthenticatedMetaReply(context, platform, accountId, recipientId, audience, reply)
+                    cancelReplyNotification(context, intent)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyMetaReply", "Inline Meta reply failed", error)
                     postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_META_REPLY)
@@ -125,6 +129,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 runCatching { context.startActivity(settings) }
             }
         }
+    }
+
+    private fun cancelReplyNotification(context: Context, sourceIntent: Intent) {
+        val tag = sourceIntent.getStringExtra(EXTRA_TAG)
+        val id = sourceIntent.getIntExtra(EXTRA_ID, tag?.hashCode() ?: 0)
+        if (!tag.isNullOrBlank()) NotificationManagerCompat.from(context).cancel(tag, id)
+        NotificationManagerCompat.from(context).cancel("workly-reply-error", 7402)
     }
 
     /** Show a retryable error only when sending fails; successful replies stay silent. */
@@ -307,9 +318,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
         private const val EXTRA_TAG = "notification_tag"
         private const val EXTRA_ID = "notification_id"
 
-        fun metaReplyPendingIntent(context: Context, platform: String, accountId: String, recipientId: String, audience: String, requestCode: Int): PendingIntent {
+        fun metaReplyPendingIntent(context: Context, platform: String, accountId: String, recipientId: String, audience: String, tag: String, id: Int, requestCode: Int): PendingIntent {
             val intent = Intent(context, NotificationActionReceiver::class.java).apply {
                 action = ACTION_REPLY_META
+                putExtra(EXTRA_TAG, tag)
+                putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_META_PLATFORM, platform)
                 putExtra(EXTRA_META_ACCOUNT_ID, accountId)
                 putExtra(EXTRA_META_RECIPIENT_ID, recipientId)
@@ -318,27 +331,33 @@ class NotificationActionReceiver : BroadcastReceiver() {
             return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         }
 
-        fun employerWhatsAppReplyPendingIntent(context: Context, conversationId: String, phoneNumberId: String, requestCode: Int): PendingIntent {
+        fun employerWhatsAppReplyPendingIntent(context: Context, conversationId: String, phoneNumberId: String, tag: String, id: Int, requestCode: Int): PendingIntent {
             val intent = Intent(context, NotificationActionReceiver::class.java).apply {
                 action = ACTION_REPLY_EMPLOYER_WHATSAPP
+                putExtra(EXTRA_TAG, tag)
+                putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_EMPLOYER_WA_CONVERSATION_ID, conversationId)
                 putExtra(EXTRA_EMPLOYER_WA_PHONE_NUMBER_ID, phoneNumberId)
             }
             return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         }
 
-        fun whatsappReplyPendingIntent(context: Context, phone: String, audience: String, requestCode: Int): PendingIntent {
+        fun whatsappReplyPendingIntent(context: Context, phone: String, audience: String, tag: String, id: Int, requestCode: Int): PendingIntent {
             val intent = Intent(context, NotificationActionReceiver::class.java).apply {
                 action = ACTION_REPLY_WHATSAPP
+                putExtra(EXTRA_TAG, tag)
+                putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_WHATSAPP_PHONE, phone)
                 putExtra(EXTRA_WHATSAPP_AUDIENCE, audience)
             }
             return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
         }
 
-        fun replyPendingIntent(context: Context, conversationId: String, requestCode: Int): PendingIntent {
+        fun replyPendingIntent(context: Context, conversationId: String, tag: String, id: Int, requestCode: Int): PendingIntent {
             val intent = Intent(context, NotificationActionReceiver::class.java).apply {
                 action = ACTION_REPLY_CHAT
+                putExtra(EXTRA_TAG, tag)
+                putExtra(EXTRA_ID, id)
                 putExtra(EXTRA_CONVERSATION_ID, conversationId)
             }
             return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
