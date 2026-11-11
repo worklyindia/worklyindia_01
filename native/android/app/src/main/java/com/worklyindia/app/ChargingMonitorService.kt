@@ -109,8 +109,6 @@ class ChargingMonitorService : Service() {
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_ALERTED, false)
             .putBoolean(KEY_ACKNOWLEDGED, false)
-            .putBoolean(KEY_STARTED_ANNOUNCED, false)
-            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
             .apply()
         getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
     }
