@@ -2776,15 +2776,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             },
             primaryLabel = "Open settings",
             secondaryLabel = "Not now",
-            onPrimary = {
-                val settingsIntent = Intent(
-                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:" + packageName)
-                )
-                runCatching { startActivity(settingsIntent) }.onFailure {
-                    Toast.makeText(this, "Please allow Workly India to install updates in Android settings.", Toast.LENGTH_LONG).show()
-                }
-            },
+            onPrimary = { requestWebsiteInstallPermission() },
             onSecondary = { }
         )
     }
@@ -2895,20 +2887,36 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         return dialog
     }
 
+    private fun requestWebsiteInstallPermission() {
+        waitingForWebsiteInstallPermission = true
+        websiteUpdatePrefs.edit().putBoolean("waiting_permission", true).apply()
+        val packageSettings = Intent(
+            android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:" + packageName)
+        )
+        try {
+            startActivity(packageSettings)
+        } catch (firstError: Exception) {
+            android.util.Log.w("WorklyAppUpdate", "Per-source install settings unavailable; opening app settings", firstError)
+            val appSettings = Intent(
+                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + packageName)
+            )
+            runCatching { startActivity(appSettings) }.onFailure {
+                android.util.Log.e("WorklyAppUpdate", "Could not open install permission settings", it)
+                Toast.makeText(this, "Open Android Settings > Apps > Workly India > Install unknown apps and allow it.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun continueWebsiteInstallIfAllowed() {
         val apkUri = pendingWebsiteInstallUri ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            waitingForWebsiteInstallPermission = true
-            websiteUpdatePrefs.edit().putBoolean("waiting_permission", true).apply()
-            val settingsIntent = Intent(
-                android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                Uri.parse("package:" + packageName)
-            )
-            runCatching { startActivity(settingsIntent) }.onFailure {
-                Toast.makeText(this, "Allow Workly India to install updates in Android settings.", Toast.LENGTH_LONG).show()
-            }
+            requestWebsiteInstallPermission()
             return
         }
+        waitingForWebsiteInstallPermission = false
+        websiteUpdatePrefs.edit().putBoolean("waiting_permission", false).apply()
         try {
             // Install through PackageInstaller so Android 14+ can retain the
             // user's existing full-screen-intent choice across an in-app APK update.
@@ -2967,7 +2975,29 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             websiteDownloadId = -1L
         } catch (error: Exception) {
             android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
-            Toast.makeText(this, "Could not open the installer. Please try again.", Toast.LENGTH_LONG).show()
+            if (error is SecurityException &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !packageManager.canRequestPackageInstalls()
+            ) {
+                requestWebsiteInstallPermission()
+                return
+            }
+
+            // OEM package installers sometimes reject a PackageInstaller session
+            // before issuing STATUS_PENDING_USER_ACTION. Fall back to Android's
+            // standard APK confirmation UI while preserving the URI read grant.
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            runCatching { startActivity(viewIntent) }.onFailure { fallbackError ->
+                android.util.Log.e("WorklyAppUpdate", "Standard APK installer fallback also failed", fallbackError)
+                Toast.makeText(
+                    this,
+                    "Android could not open the APK installer. Check Workly India's 'Install unknown apps' permission and try again.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
