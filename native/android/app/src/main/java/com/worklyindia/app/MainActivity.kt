@@ -68,7 +68,6 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -112,7 +111,6 @@ class MainActivity : FragmentActivity() {
     private var websiteUpdateCheckInProgress = false
     private var websiteUpdateDialogVisible = false
     private var websiteUpdateDialog: android.app.Dialog? = null
-    private var websiteUpdatePollingJob: Job? = null
     private var pendingWebsiteInstallUri: Uri? = null
     private var websiteDownloadId: Long = -1L
     private var websiteDownloadRelease: JSONObject? = null
@@ -2389,25 +2387,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             resumePendingWebsiteInstall()
         } else if (::appUpdateManager.isInitialized) {
             if (isPlayStoreInstall) checkForPlayStoreUpdate() else {
+                // Check once when the app returns to the foreground; no background polling.
                 checkForWebsiteRelease()
-                startWebsiteUpdatePolling()
             }
         }
     }
 
-    private fun startWebsiteUpdatePolling() {
-        if (isPlayStoreInstall || websiteUpdatePollingJob?.isActive == true) return
-        websiteUpdatePollingJob = activityScope.launch {
-            // Keep checking while the app stays in the foreground. This only
-            // updates native UI and never reloads or navigates the WebView.
-            while (!isFinishing && !isDestroyed) {
-                delay(30_000L)
-                if (!isFinishing && !isDestroyed && pendingWebsiteInstallUri == null && websiteDownloadId == -1L) {
-                    checkForWebsiteRelease()
-                }
-            }
-        }
-    }
 
     // Finish the APK hand-off after Android has fully resumed the app from
     // "Allow from this source" settings, so the system confirmation opens at once.
@@ -2446,8 +2431,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     override fun onPause() {
-        websiteUpdatePollingJob?.cancel()
-        websiteUpdatePollingJob = null
         getSystemService(android.app.NotificationManager::class.java).cancel(4108)
         // Stop network-quality tracking immediately when Workly India is no longer visible.
         networkCallback?.let { callback ->
