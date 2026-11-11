@@ -190,6 +190,7 @@ class ChargingMonitorService : Service() {
         runCatching {
             chargingStartPlayer?.release()
             chargingStartPlayer = MediaPlayer().apply {
+                setWakeMode(applicationContext, android.os.PowerManager.PARTIAL_WAKE_LOCK)
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         // Media usage remains audible in Silent mode; it follows
