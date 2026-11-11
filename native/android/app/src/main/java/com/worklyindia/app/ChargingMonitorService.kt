@@ -34,14 +34,38 @@ class ChargingMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannels()
-        startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
-        registerBatteryReceiver()
+        if (hasFullScreenAccess(this)) {
+            startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
+            registerBatteryReceiver()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Monitoring is explicitly tied to Android's full-screen notification access.
+        // If the user turns it off in Settings, remove every battery-protection
+        // notification and stop the service instead of silently continuing.
+        if (!hasFullScreenAccess(this)) {
+            stopChargingStartPlayback()
+            stopAlertAlarm()
+            getSystemService(NotificationManager::class.java).apply {
+                cancel(MONITOR_NOTIFICATION_ID)
+                cancel(ALERT_NOTIFICATION_ID)
+                cancel(PROTECTION_NOTIFICATION_ID)
+            }
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_STOP -> {
+                stopChargingStartPlayback()
                 stopAlertAlarm()
+                getSystemService(NotificationManager::class.java).apply {
+                    cancel(MONITOR_NOTIFICATION_ID)
+                    cancel(ALERT_NOTIFICATION_ID)
+                    cancel(PROTECTION_NOTIFICATION_ID)
+                }
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -354,7 +378,11 @@ class ChargingMonitorService : Service() {
         stopAlertAlarm()
         if (batteryReceiverRegistered) runCatching { unregisterReceiver(batteryReceiver) }
         batteryReceiverRegistered = false
-        getSystemService(NotificationManager::class.java).cancel(MONITOR_NOTIFICATION_ID)
+        getSystemService(NotificationManager::class.java).apply {
+            cancel(MONITOR_NOTIFICATION_ID)
+            cancel(ALERT_NOTIFICATION_ID)
+            cancel(PROTECTION_NOTIFICATION_ID)
+        }
         super.onDestroy()
     }
 
@@ -388,6 +416,21 @@ class ChargingMonitorService : Service() {
         const val ALERT_CHANNEL = "workly_battery_full_alert"
         const val MONITOR_NOTIFICATION_ID = 8210
         const val ALERT_NOTIFICATION_ID = 8211
+        const val PROTECTION_NOTIFICATION_ID = 8209
+
+        fun hasFullScreenAccess(context: Context): Boolean {
+            return Build.VERSION.SDK_INT < 34 ||
+                context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+        }
+
+        fun stopMonitoring(context: Context) {
+            context.stopService(Intent(context, ChargingMonitorService::class.java))
+            context.getSystemService(NotificationManager::class.java).apply {
+                cancel(MONITOR_NOTIFICATION_ID)
+                cancel(ALERT_NOTIFICATION_ID)
+                cancel(PROTECTION_NOTIFICATION_ID)
+            }
+        }
         private const val MONITOR_REQUEST_CODE = 8212
         private const val ALERT_REQUEST_CODE = 8213
         private const val STOP_ALERT_REQUEST_CODE = 8214
