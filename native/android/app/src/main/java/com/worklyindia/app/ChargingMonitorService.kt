@@ -47,8 +47,8 @@ class ChargingMonitorService : Service() {
             }
             ACTION_POWER_DISCONNECTED -> {
                 resetChargeCycleAndStopAlert()
-                stopSelf()
-                return START_NOT_STICKY
+                readCurrentBatteryState()
+                return START_STICKY
             }
             ACTION_ACKNOWLEDGE -> {
                 acknowledgeAlert()
@@ -287,21 +287,29 @@ class ChargingMonitorService : Service() {
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val statusText = when {
-            percent in 0..100 && charging -> "Charging • $percent% • Monitoring active"
-            percent in 0..100 -> "Charging paused • $percent% • Monitoring active"
-            else -> "Checking charging status…"
+        val stateText = when {
+            percent in 0..100 && charging -> "Charging"
+            percent in 0..100 -> "Battery"
+            charging -> "Charging"
+            else -> "Battery"
+        }
+        val statusText = if (percent in 0..100) {
+            "$stateText • $percent% • Active"
+        } else {
+            "$stateText • Active"
         }
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
-            .setContentTitle("Workly charging monitor")
+            .setContentTitle("Workly")
             .setContentText(statusText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPublicVersion(
                 NotificationCompat.Builder(this, MONITOR_CHANNEL)
                     .setSmallIcon(R.drawable.ic_stat_workly)
-                    .setContentTitle("Workly charging monitor")
+                    .setContentTitle("Workly")
                     .setContentText(statusText)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .build()
             )
