@@ -40,8 +40,12 @@ class PackageInstallStatusActivity : Activity() {
                 }
                 if (confirmation != null) {
                     try {
+                        // Bring Android's own confirmation screen to the foreground reliably
+                        // after the app has returned from the "Allow from this source" Settings page.
+                        confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                         startActivity(confirmation)
                     } catch (error: Exception) {
+                        android.util.Log.e("WorklyAppUpdate", "Could not launch Android install confirmation", error)
                         Toast.makeText(this, "Please complete the Android update confirmation.", Toast.LENGTH_LONG).show()
                     }
                 } else {

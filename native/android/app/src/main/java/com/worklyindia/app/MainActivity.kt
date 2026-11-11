@@ -126,6 +126,7 @@ class MainActivity : FragmentActivity() {
     private var pendingNativePushFirebaseConfig: JSONObject? = null
     private var pendingAutoPushRegistrationSession: NativeSession? = null
     private var waitingForWebsiteInstallPermission = false
+    private var websiteInstallLaunchPending = false
     private val websiteUpdatePrefs by lazy { getSharedPreferences("workly_android_update", Context.MODE_PRIVATE) }
     private var websiteDownloadProgressBar: ProgressBar? = null
     private var websiteDownloadProgressLabel: TextView? = null
@@ -779,12 +780,24 @@ class MainActivity : FragmentActivity() {
         val explicitTarget = trustedInternalUrl(intent.getStringExtra("notification_url"))
             ?: trustedInternalUrl(intent.data?.toString())
             ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else null
-        val savedRoute = getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
-            .getString("last_route", null)
+        val navigationPrefs = getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
+        // A swipe-away from Android Recents is a deliberate full close. The
+        // foreground monitor service records this independently of Activity
+        // destruction, so the next normal app launch starts at Home. A simple
+        // background/resume never sets this flag and keeps the last route.
+        val forceHomeAfterTaskRemoval = navigationPrefs.getBoolean("force_home_next_launch", false)
+        if (forceHomeAfterTaskRemoval) {
+            navigationPrefs.edit()
+                .remove("force_home_next_launch")
+                .remove("last_route")
+                .commit()
+        }
+        val savedRoute = navigationPrefs.getString("last_route", null)
             ?.takeIf { it.startsWith("/") && !it.startsWith("//") }
         val target = when {
             openHomeFromQuickTile -> website
             explicitTarget != null -> explicitTarget
+            forceHomeAfterTaskRemoval -> website
             !savedRoute.isNullOrBlank() -> "https://$allowedHost$savedRoute"
             else -> website
         }
@@ -2398,9 +2411,23 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 clearPendingWebsiteInstall()
             } else if (waitingForWebsiteInstallPermission &&
                 (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls())) {
-                waitingForWebsiteInstallPermission = false
-                websiteUpdatePrefs.edit().putBoolean("waiting_permission", false).apply()
-                continueWebsiteInstallIfAllowed()
+                // Settings returns before the Activity is always fully interactive on every OEM.
+                // Defer the PackageInstaller session until the resumed window is ready, so the
+                // Android "Install update" confirmation appears immediately after permission is granted.
+                // Keep the persisted permission-waiting flag until PackageInstaller.commit()
+                // succeeds. Clearing it before posting can lose the install if Android
+                // recreates this Activity while returning from Settings.
+                websiteInstallDialogVisible = false
+                if (!websiteInstallLaunchPending) {
+                    websiteInstallLaunchPending = true
+                    window.decorView.post {
+                        if (!isFinishing && !isDestroyed && pendingWebsiteInstallUri != null) {
+                            continueWebsiteInstallIfAllowed()
+                        } else {
+                            websiteInstallLaunchPending = false
+                        }
+                    }
+                }
             } else if (waitingForWebsiteInstallPermission) {
                 showWebsiteInstallPermissionDialog()
             } else {
@@ -2896,10 +2923,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun continueWebsiteInstallIfAllowed() {
-        val apkUri = pendingWebsiteInstallUri ?: return
+        val apkUri = pendingWebsiteInstallUri ?: run {
+            websiteInstallLaunchPending = false
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
             waitingForWebsiteInstallPermission = true
-            websiteUpdatePrefs.edit().putBoolean("waiting_permission", true).apply()
+            websiteInstallLaunchPending = false
+            websiteUpdatePrefs.edit().putBoolean("waiting_permission", true).commit()
             val settingsIntent = Intent(
                 android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:" + packageName)
@@ -2960,12 +2991,18 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     )
                     session.commit(statusPendingIntent.intentSender)
                 }
+                // The APK install request is now safely handed to Android.
+                waitingForWebsiteInstallPermission = false
+                websiteUpdatePrefs.edit().remove("waiting_permission").commit()
+                websiteInstallLaunchPending = false
             } catch (installError: Exception) {
+                websiteInstallLaunchPending = false
                 runCatching { installer.abandonSession(sessionId) }
                 throw installError
             }
             websiteDownloadId = -1L
         } catch (error: Exception) {
+            websiteInstallLaunchPending = false
             android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
             Toast.makeText(this, "Could not open the installer. Please try again.", Toast.LENGTH_LONG).show()
         }

@@ -287,29 +287,22 @@ class ChargingMonitorService : Service() {
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val stateText = when {
-            percent in 0..100 && charging -> "Charging"
-            percent in 0..100 -> "Battery"
-            charging -> "Charging"
-            else -> "Battery"
-        }
-        val statusText = if (percent in 0..100) {
-            "$stateText • $percent% • Active"
-        } else {
-            "$stateText • Active"
-        }
+        val batteryText = if (percent in 0..100) "Monitoring Your Battery $percent%🔋" else "Monitoring Your Battery 🔋"
+        val notificationTitle = "Workly India Battery Protection"
+        val notificationText = batteryText
+        val expandedText = "$batteryText\nSmart monitoring while charging. 😊"
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
-            .setContentTitle("Workly")
-            .setContentText(statusText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
+            .setContentTitle(notificationTitle)
+            .setContentText(notificationText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPublicVersion(
                 NotificationCompat.Builder(this, MONITOR_CHANNEL)
                     .setSmallIcon(R.drawable.ic_stat_workly)
-                    .setContentTitle("Workly")
-                    .setContentText(statusText)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
+                    .setContentTitle(notificationTitle)
+                    .setContentText(notificationText)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .build()
             )
@@ -361,8 +354,9 @@ class ChargingMonitorService : Service() {
         // Ordinary backgrounding/locking does not remove this saved route.
         getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
             .edit()
+            .putBoolean("force_home_next_launch", true)
             .remove("last_route")
-            .apply()
+            .commit()
         super.onTaskRemoved(rootIntent)
     }
 
