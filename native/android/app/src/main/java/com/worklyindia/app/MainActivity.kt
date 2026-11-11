@@ -157,7 +157,7 @@ class MainActivity : FragmentActivity() {
                         pendingWebsiteInstallUri = uri
                         persistPendingWebsiteInstall(uri, websiteDownloadRelease)
                         websiteDownloadId = -1L
-                        websiteUpdatePrefs.edit().remove("active_download_id").apply()
+                        websiteUpdatePrefs.edit().remove("active_download_id").remove("active_download_release").apply()
                         runOnUiThread {
                             websiteDownloadDialog?.dismiss()
                             websiteDownloadDialog = null
@@ -3020,6 +3020,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         waitingForWebsiteInstallPermission = false
         websiteUpdatePrefs.edit()
             .remove("active_download_id")
+            .remove("active_download_release")
             .remove("pending_apk_uri")
             .remove("pending_release")
             .remove("waiting_permission")
@@ -3091,6 +3092,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             .remove("pending_release")
             .remove("waiting_permission")
             .remove("active_download_id")
+            .remove("active_download_release")
             .apply()
         websiteInstallDialogVisible = false
     }
