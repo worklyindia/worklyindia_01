@@ -240,7 +240,18 @@ object NativePushManager {
             ?: data["job_id"]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) }
                 ?.let { "https://worklyindia.devs.surf/job/${Uri.encode(it)}" }
             ?: "https://worklyindia.devs.surf/notifications"
-        val tag = data["tag"]?.takeIf { it.isNotBlank() } ?: "workly-${System.currentTimeMillis()}"
+        // Reuse one notification identity for every message in the same inbox thread.
+        // notify(tag, id, ...) then replaces the previous alert instead of stacking.
+        val sourceKey = listOf("platform", "source", "channel", "integration", "provider")
+            .firstNotNullOfOrNull { key -> data[key]?.takeIf { it.isNotBlank() }?.lowercase() }
+            ?: data["type"]?.substringBefore("_")?.lowercase()
+            ?: "workly"
+        val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId", "sender_id", "senderId", "phone", "phone_number")
+            .firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_+\\-]{1,120}")) } }
+        val stableConversationTag = conversationKey?.let { "workly-$sourceKey-$it" }
+        val tag = data["tag"]?.takeIf { it.isNotBlank() }
+            ?: stableConversationTag
+            ?: "workly-${System.currentTimeMillis()}"
 
         fun activityPendingIntent(url: String?, requestCode: Int): PendingIntent {
             val openIntent = Intent(context, MainActivity::class.java).apply {
