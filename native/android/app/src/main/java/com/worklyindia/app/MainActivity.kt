@@ -2661,19 +2661,31 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     private fun monitorWebsiteDownloadProgress() {
         activityScope.launch {
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            var previousBytes = 0L
+            var previousSampleTime = android.os.SystemClock.elapsedRealtime()
+            var currentSpeed = 0L
             while (websiteDownloadId != -1L && websiteDownloadDialog?.isShowing == true) {
                 try {
                     manager.query(DownloadManager.Query().setFilterById(websiteDownloadId)).use { cursor ->
                         if (cursor.moveToFirst()) {
                             val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
                             val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            val elapsed = now - previousSampleTime
+                            if (elapsed >= 500L) {
+                                currentSpeed = (((downloaded - previousBytes).coerceAtLeast(0L) * 1000L) / elapsed)
+                                previousBytes = downloaded
+                                previousSampleTime = now
+                            }
+                            val speedText = "${android.text.format.Formatter.formatShortFileSize(this@MainActivity, currentSpeed)}/s"
+                            val downloadedText = android.text.format.Formatter.formatShortFileSize(this@MainActivity, downloaded)
                             if (total > 0L) {
                                 val percent = ((downloaded * 100L) / total).toInt().coerceIn(0, 100)
                                 websiteDownloadProgressBar?.isIndeterminate = false
                                 websiteDownloadProgressBar?.progress = percent
-                                websiteDownloadProgressLabel?.text = "$percent% downloaded  •  ${android.text.format.Formatter.formatShortFileSize(this@MainActivity, downloaded)} / ${android.text.format.Formatter.formatShortFileSize(this@MainActivity, total)}"
+                                websiteDownloadProgressLabel?.text = "$percent% downloaded  •  $downloadedText / ${android.text.format.Formatter.formatShortFileSize(this@MainActivity, total)}\nSpeed: $speedText"
                             } else {
-                                websiteDownloadProgressLabel?.text = "Downloading… ${android.text.format.Formatter.formatShortFileSize(this@MainActivity, downloaded)}"
+                                websiteDownloadProgressLabel?.text = "Downloading… $downloadedText\nSpeed: $speedText"
                             }
                         }
                     }
