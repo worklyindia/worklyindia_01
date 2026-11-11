@@ -3023,13 +3023,25 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     private fun restorePendingWebsiteInstall() {
         val uri = websiteUpdatePrefs.getString("pending_apk_uri", null)
-        val release = websiteUpdatePrefs.getString("pending_release", null)
+        val pendingRelease = websiteUpdatePrefs.getString("pending_release", null)
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val activeRelease = websiteUpdatePrefs.getString("active_download_release", null)
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
         pendingWebsiteInstallUri = uri?.let { runCatching { Uri.parse(it) }.getOrNull() }
-        websiteDownloadRelease = release?.let { runCatching { JSONObject(it) }.getOrNull() }
+        // Keep the release metadata paired with a completed APK. Previously the
+        // nullable active-download value overwrote pending_release on every launch,
+        // making the installed-version guard ineffective and reopening the installer.
+        websiteDownloadRelease = activeRelease ?: pendingRelease
         waitingForWebsiteInstallPermission = websiteUpdatePrefs.getBoolean("waiting_permission", false)
         websiteDownloadId = websiteUpdatePrefs.getLong("active_download_id", -1L)
-        websiteDownloadRelease = websiteUpdatePrefs.getString("active_download_release", null)
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+
+        // Also clear stale pending APK state if Android already installed this version.
+        val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
+        if (pendingWebsiteInstallUri != null && targetCode > 0L &&
+            getInstalledAppVersionCode() >= targetCode
+        ) {
+            clearPendingWebsiteInstall()
+        }
     }
 
     private fun resumeActiveWebsiteDownload() {
