@@ -2977,7 +2977,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         statusIntent,
                         statusPendingIntentFlags
                     )
-                            session.commit(statusPendingIntent.intentSender)
+                    session.commit(statusPendingIntent.intentSender)
                 }
                 // The APK install request is now safely handed to Android.
                 waitingForWebsiteInstallPermission = false
