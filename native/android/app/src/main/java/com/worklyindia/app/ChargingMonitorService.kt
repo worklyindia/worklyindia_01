@@ -354,8 +354,9 @@ class ChargingMonitorService : Service() {
         // Ordinary backgrounding/locking does not remove this saved route.
         getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
             .edit()
+            .putBoolean("force_home_next_launch", true)
             .remove("last_route")
-            .apply()
+            .commit()
         super.onTaskRemoved(rootIntent)
     }
 
