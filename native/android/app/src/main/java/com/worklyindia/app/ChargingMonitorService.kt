@@ -10,11 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -24,8 +22,7 @@ import androidx.core.app.NotificationManagerCompat
 class ChargingMonitorService : Service() {
     private var batteryReceiverRegistered = false
     private var alertRingtone: Ringtone? = null
-    private var chargingTts: TextToSpeech? = null
-    private var chargingTtsInitializing = false
+    private var chargingStartPlayer: MediaPlayer? = null
     @Volatile private var serviceDestroyed = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
@@ -123,137 +120,61 @@ class ChargingMonitorService : Service() {
     }
 
     /**
-     * Uses Android's own TextToSpeech engine. Prefer an installed offline
-     * English voice, but allow the engine's English fallback if needed.
-     * A transient initialization/speech error must never permanently disable
-     * TTS for future charging sessions.
+     * Plays the bundled charging-start MP3 directly. No device TTS engine,
+     * language pack, or network connection is required.
      */
     private fun playChargingStartAnnouncementOnce() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) ||
             prefs.getBoolean(KEY_STARTED_ANNOUNCED, false) ||
-            chargingTts != null || chargingTtsInitializing
+            chargingStartPlayer != null
         ) return
 
-        chargingTtsInitializing = true
-        try {
-            chargingTts = TextToSpeech(applicationContext) { status ->
-                chargingTtsInitializing = false
-                val engine = chargingTts
-                if (status != TextToSpeech.SUCCESS || engine == null || serviceDestroyed) {
-                    android.util.Log.e(TAG, "TextToSpeech initialization failed: status=$status")
-                    prefs.edit()
-                        .putBoolean(KEY_STARTED_ANNOUNCED, false)
-                        .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                        .putBoolean(KEY_TTS_UNAVAILABLE, false)
-                        .apply()
-                    engine?.shutdown()
-                    if (chargingTts === engine) chargingTts = null
-                    return@TextToSpeech
-                }
-
-                runCatching {
-                    // Use whichever language/voice the phone already provides.
-                    // The spoken phrase remains English ("Charging started"),
-                    // but do not require an English voice pack.
-                    val availableVoices = engine.voices.orEmpty()
-                    val preferredVoice = availableVoices.firstOrNull {
-                        !it.isNetworkConnectionRequired
-                    } ?: availableVoices.firstOrNull()
-
-                    if (preferredVoice != null) {
-                        val voiceResult = engine.setVoice(preferredVoice)
-                        val languageResult = engine.setLanguage(preferredVoice.locale)
-                        android.util.Log.i(
-                            TAG,
-                            "Selected device TTS voice: ${preferredVoice.name}, locale=${preferredVoice.locale}, voiceResult=$voiceResult languageResult=$languageResult"
-                        )
-                    } else {
-                        // Keep the TTS engine's configured default voice.
-                        android.util.Log.w(TAG, "No voice list returned; using the TTS engine's configured default")
-                    }
-
-                    engine.setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                            .build()
-                    )
-                    engine.setSpeechRate(1.0f)
-                    engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                        override fun onStart(utteranceId: String?) {
-                            prefs.edit()
-                                .putBoolean(KEY_STARTED_ANNOUNCED, true)
-                                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                                .putBoolean(KEY_TTS_UNAVAILABLE, false)
-                                .apply()
-                            android.util.Log.i(TAG, "Charging-start TTS speech started")
-                        }
-
-                        override fun onDone(utteranceId: String?) {
-                            android.util.Log.i(TAG, "Charging-start TTS completed")
-                            engine.shutdown()
-                            if (chargingTts === engine) chargingTts = null
-                        }
-
-                        @Deprecated("Deprecated in Java")
-                        override fun onError(utteranceId: String?) {
-                            handleChargingTtsError(engine, prefs, "TTS utterance failed")
-                        }
-
-                        override fun onError(utteranceId: String?, errorCode: Int) {
-                            handleChargingTtsError(engine, prefs, "TTS utterance failed: $errorCode")
-                        }
-                    })
-
-                    val result = engine.speak(
-                        "Charging started",
-                        TextToSpeech.QUEUE_FLUSH,
-                        Bundle(),
-                        "workly-charging-start"
-                    )
-                    if (result == TextToSpeech.ERROR) {
-                        handleChargingTtsError(engine, prefs, "TextToSpeech.speak returned ERROR")
-                    }
-                }.onFailure { error ->
-                    android.util.Log.e(TAG, "Could not configure or start charging TTS", error)
-                    handleChargingTtsError(engine, prefs, "TTS setup exception")
-                }
+        runCatching {
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_started)
+                ?: throw IllegalStateException("Could not load bundled charging-start audio")
+            chargingStartPlayer = player
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            player.setOnCompletionListener { completed ->
+                prefs.edit()
+                    .putBoolean(KEY_STARTED_ANNOUNCED, true)
+                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                    .apply()
+                android.util.Log.i(TAG, "Bundled charging-start audio completed")
+                completed.release()
+                if (chargingStartPlayer === completed) chargingStartPlayer = null
             }
-        } catch (error: Exception) {
-            chargingTtsInitializing = false
-            android.util.Log.e(TAG, "Could not create TextToSpeech engine", error)
+            player.setOnErrorListener { failed, what, extra ->
+                android.util.Log.e(TAG, "Bundled charging-start audio failed: what=$what extra=$extra")
+                prefs.edit()
+                    .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                    .apply()
+                failed.release()
+                if (chargingStartPlayer === failed) chargingStartPlayer = null
+                true
+            }
+            player.start()
+            android.util.Log.i(TAG, "Bundled charging-start MP3 playback started")
+        }.onFailure { error ->
+            android.util.Log.e(TAG, "Could not play bundled charging-start MP3", error)
             prefs.edit()
                 .putBoolean(KEY_STARTED_ANNOUNCED, false)
                 .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                .putBoolean(KEY_TTS_UNAVAILABLE, false)
                 .apply()
-            chargingTts?.shutdown()
-            chargingTts = null
+            stopChargingStartPlayback()
         }
     }
 
-    private fun handleChargingTtsError(
-        engine: TextToSpeech,
-        prefs: android.content.SharedPreferences,
-        reason: String
-    ) {
-        android.util.Log.e(TAG, reason)
-        prefs.edit()
-            .putBoolean(KEY_STARTED_ANNOUNCED, false)
-            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-            .putBoolean(KEY_TTS_UNAVAILABLE, false)
-            .apply()
-        runCatching { engine.stop() }
-        engine.shutdown()
-        if (chargingTts === engine) chargingTts = null
-    }
-
     private fun stopChargingStartPlayback() {
-        runCatching { chargingTts?.stop() }
-        runCatching { chargingTts?.shutdown() }
-        chargingTts = null
-        chargingTtsInitializing = false
+        runCatching { chargingStartPlayer?.stop() }
+        runCatching { chargingStartPlayer?.release() }
+        chargingStartPlayer = null
     }
 
     private fun showChargeCompleteAlert() {
