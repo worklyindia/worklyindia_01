@@ -210,7 +210,19 @@ object NativePushManager {
         }
     }
 
+    fun clearActiveNotifications(context: Context) {
+        val manager = NotificationManagerCompat.from(context)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            manager.activeNotifications
+                .filter { it.notification.channelId == CHANNEL_ID }
+                .forEach { manager.cancel(it.tag, it.id) }
+        }
+    }
+
     fun showNotification(context: Context, data: Map<String, String>) {
+        val activeSession = NativeAuth.session(context) ?: return
+        val targetUserId = data["user_id"] ?: data["recipient_user_id"] ?: data["target_user_id"]
+        if (!targetUserId.isNullOrBlank() && targetUserId != activeSession.userId) return
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) return
@@ -442,7 +454,7 @@ object NativePushManager {
                 val replyAction = NotificationCompat.Action.Builder(
                     android.R.drawable.ic_menu_send,
                     "Reply",
-                    NotificationActionReceiver.replyPendingIntent(context, internalConversationId, tag.hashCode() + 1)
+                    NotificationActionReceiver.replyPendingIntent(context, internalConversationId, tag, tag.hashCode(), tag.hashCode() + 1)
                 ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                 builder.addAction(replyAction)
             } else {
@@ -479,7 +491,7 @@ object NativePushManager {
                         android.R.drawable.ic_menu_send,
                         "Reply",
                         NotificationActionReceiver.employerWhatsAppReplyPendingIntent(
-                            context, employerConversationId, employerPhoneNumberId, tag.hashCode() + 31
+                            context, employerConversationId, employerPhoneNumberId, tag, tag.hashCode(), tag.hashCode() + 31
                         )
                     ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                     builder.addAction(replyAction)
@@ -490,7 +502,7 @@ object NativePushManager {
                     val replyAction = NotificationCompat.Action.Builder(
                         android.R.drawable.ic_menu_send,
                         "Reply",
-                        NotificationActionReceiver.whatsappReplyPendingIntent(context, whatsappPhone!!, whatsappAudience, tag.hashCode() + 11)
+                        NotificationActionReceiver.whatsappReplyPendingIntent(context, whatsappPhone!!, whatsappAudience, tag, tag.hashCode(), tag.hashCode() + 11)
                     ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                     builder.addAction(replyAction)
                 } else if (isMetaInboxMessage) {
@@ -501,7 +513,7 @@ object NativePushManager {
                         android.R.drawable.ic_menu_send,
                         "Reply",
                         NotificationActionReceiver.metaReplyPendingIntent(
-                            context, metaPlatform, metaAccountId, metaRecipientId, metaAudience, tag.hashCode() + 21
+                            context, metaPlatform, metaAccountId, metaRecipientId, metaAudience, tag, tag.hashCode(), tag.hashCode() + 21
                         )
                     ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                     builder.addAction(replyAction)
