@@ -23,6 +23,7 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 // Starting the foreground service here makes it independent of screen
                 // state, app visibility and lock-screen state.
                 context.getSystemService(NotificationManager::class.java).cancel(PROTECTION_NOTIFICATION_ID)
+                context.getSystemService(NotificationManager::class.java).cancel(ChargingMonitorService.MONITOR_NOTIFICATION_ID)
                 val prefs = context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE)
                 // Arm one announcement for this physical plug-in edge only.
                 // Duplicate broadcasts cannot replay after the first announcement.
@@ -47,6 +48,8 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                     context.getSystemService(NotificationManager::class.java).cancel(PROTECTION_NOTIFICATION_ID)
                     startMonitor(context, "boot/update while charging")
                 } else {
+                    context.getSystemService(NotificationManager::class.java).cancel(ChargingMonitorService.MONITOR_NOTIFICATION_ID)
+                    context.getSystemService(NotificationManager::class.java).cancel(ChargingMonitorService.ALERT_NOTIFICATION_ID)
                     showProtectionNotification(context)
                 }
             }
@@ -59,7 +62,8 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                     .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, false)
                     .putBoolean(ChargingMonitorService.KEY_TTS_UNAVAILABLE, false)
                     .apply()
-                context.getSystemService(android.app.NotificationManager::class.java).cancel(8211)
+                context.getSystemService(NotificationManager::class.java).cancel(ChargingMonitorService.MONITOR_NOTIFICATION_ID)
+                context.getSystemService(NotificationManager::class.java).cancel(ChargingMonitorService.ALERT_NOTIFICATION_ID)
                 context.getSystemService(NotificationManager::class.java).cancel(PROTECTION_NOTIFICATION_ID)
                 context.sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(context.packageName))
                 context.stopService(Intent(context, ChargingMonitorService::class.java))
@@ -94,7 +98,7 @@ class ChargingPowerReceiver : BroadcastReceiver() {
         val notification = NotificationCompat.Builder(context, PROTECTION_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setContentTitle("Workly battery protection")
-            .setContentText("Monitoring while your phone is charging")
+            .setContentText("Monitoring while your phone is not charging")
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(openIntent)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
