@@ -32,7 +32,7 @@ class ChatBubbleActivity : Activity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.setSupportMultipleWindows(false)
-            settings.useWideViewPort = true
+            settings.useWideViewPort = false
             settings.loadWithOverviewMode = false
             settings.textZoom = 100
             settings.setSupportZoom(false)
@@ -64,17 +64,7 @@ class ChatBubbleActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
-        val close = TextView(this).apply {
-            text = "×"
-            textSize = 28f
-            gravity = Gravity.CENTER
-            setTextColor(Color.DKGRAY)
-            setBackgroundColor(0xFFF2F4F7.toInt())
-            setOnClickListener { finish() }
-        }
-        val density = resources.displayMetrics.density
-        val closeSize = (48 * density).toInt()
-        root.addView(close, FrameLayout.LayoutParams(closeSize, closeSize, Gravity.TOP or Gravity.END))
+        // Android owns bubble dismissal; keep the compact surface for chat content.
         setContentView(root)
         webView.loadUrl(safeUrl)
     }
