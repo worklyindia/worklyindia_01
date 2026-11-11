@@ -1337,15 +1337,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun ensureChargingAlertAccess() {
-        // Android 14+ exposes a dedicated special-access setting for full-screen
-        // notifications. This is the only charging-related permission prompt
-        // shown on app launch. If already allowed, stay silent.
+        // Android 14+ exposes the user's full-screen notification choice.
+        // Monitoring is enabled only while this access is granted.
         if (Build.VERSION.SDK_INT >= 34) {
             val notificationManager = getSystemService(android.app.NotificationManager::class.java)
             if (!notificationManager.canUseFullScreenIntent()) {
                 showChargingAccessSettings(
                     "Enable full-screen notifications",
-                    "Allow Workly India to send full-screen battery alerts when your phone reaches 100%.",
+                    "Turn on Send full-screen notifications to enable Workly battery monitoring and charging alerts.",
                     Intent(
                         android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
                         Uri.parse("package:$packageName")
@@ -1353,20 +1352,21 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 )
             }
         }
-
-        // Keep charging monitoring independent from the optional full-screen
-        // access prompt. Do not request notification-channel or battery-
-        // optimization settings here.
         ensureChargingBackgroundAccess()
     }
 
     /**
-     * Start monitoring immediately when the phone is already charging.
-     * Do not interrupt app startup with additional permission/settings dialogs.
+     * Start monitoring only when Android full-screen notification access is ON.
+     * Returning from Settings re-checks the actual OS setting and starts/stops
+     * the service accordingly.
      */
     private fun ensureChargingBackgroundAccess() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (!ChargingMonitorService.hasFullScreenAccess(this)) {
+            ChargingMonitorService.stopMonitoring(this)
+            return
+        }
 
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
@@ -1374,42 +1374,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             status == BatteryManager.BATTERY_STATUS_CHARGING ||
             status == BatteryManager.BATTERY_STATUS_FULL
         if (isCharging) ensureChargingMonitorRunning()
-    }
-
-    /**
-     * Android 12+ can block a foreground service started from a background
-     * charger broadcast unless the user exempts the app from battery optimization.
-     * Ask once per day and start immediately when the user returns from Settings
-     * with the exemption enabled and the phone already charging.
-     */
-    private fun ensureChargingBackgroundAccess() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-
-        // Start the foreground monitor whenever the app is opened during an active
-        // charge, even before the user changes battery-optimization settings.
-        // Previously this was started only after the exemption was granted, which
-        // left the lock-screen monitor inactive for users who dismissed the prompt.
-        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-        val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
-        val isCharging = plugged != 0 ||
-            status == BatteryManager.BATTERY_STATUS_CHARGING ||
-            status == BatteryManager.BATTERY_STATUS_FULL
-        if (isCharging) ensureChargingMonitorRunning()
-
-        val powerManager = getSystemService(android.os.PowerManager::class.java)
-        if (powerManager.isIgnoringBatteryOptimizations(packageName)) return
-
-        val prefs = getSharedPreferences("workly_charging_setup", Context.MODE_PRIVATE)
-        val now = System.currentTimeMillis()
-        val lastPrompt = prefs.getLong("background_access_prompt_at", 0L)
-        if (now - lastPrompt < 24L * 60L * 60L * 1000L) return
-        prefs.edit().putLong("background_access_prompt_at", now).apply()
-        showChargingAccessSettings(
-            "Allow automatic battery protection",
-            "For reliable automatic monitoring while your screen is locked, open Battery optimization settings, find Workly India and choose “Don’t optimize” or “Unrestricted”. The monitor will start now too, but some phones may stop background services unless this setting is allowed.",
-            Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-        )
     }
 
     private fun biometricPreferences() = getSharedPreferences("workly_app_security", Context.MODE_PRIVATE)
