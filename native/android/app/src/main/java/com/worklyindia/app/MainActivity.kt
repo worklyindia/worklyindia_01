@@ -557,6 +557,8 @@ class MainActivity : FragmentActivity() {
                                 if (!splashReadySince) splashReadySince = Date.now();
                                 if (Date.now() - splashReadySince >= 100) {
                                   clearInterval(splashWatcher);
+                                  window.__worklyNativeSplashReady = true;
+                                  try { sessionStorage.removeItem('worklyNativeBootRecovery:' + location.pathname); } catch (_) {}
                                   if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteReady) {
                                     window.WorklyAndroid.onWebsiteReady();
                                   }
@@ -565,6 +567,22 @@ class MainActivity : FragmentActivity() {
                                 splashReadySince = 0;
                               }
                             }, 100);
+                            // A WebView can finish the document request while the React
+                            // app never hydrates (for example, a stale renderer/cache state).
+                            // Retry the same route once, then show the native retry screen
+                            // instead of leaving the startup skeleton on screen forever.
+                            setTimeout(function() {
+                              if (window.__worklyNativeSplashReady) return;
+                              var key = 'worklyNativeBootRecovery:' + location.pathname;
+                              var attempts = 0;
+                              try { attempts = Number(sessionStorage.getItem(key) || 0); } catch (_) {}
+                              if (attempts < 1) {
+                                try { sessionStorage.setItem(key, '1'); } catch (_) {}
+                                location.reload();
+                              } else if (window.WorklyAndroid && window.WorklyAndroid.onWebsiteLoadStalled) {
+                                window.WorklyAndroid.onWebsiteLoadStalled();
+                              }
+                            }, 12000);
                           }
 
                           if (window.__worklyNativeDownloadHandlerInstalled) return;
@@ -1538,7 +1556,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 route.contains("otp=", ignoreCase = true)
             ) return false
             getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
-                .edit().putString("last_route", route).apply()
+                .edit()
+                .putString("last_route", route)
+                .commit()
             lastLoadedUrl = "https://$allowedHost$route"
             return true
         }
@@ -1917,6 +1937,19 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         })();
                     """.trimIndent(), null)
                 }
+            }
+        }
+
+        @JavascriptInterface
+        fun onWebsiteLoadStalled() {
+            runOnUiThread {
+                if (initialWebsiteLoadCompleted || isFinishing || isDestroyed) return@runOnUiThread
+                initialWebsiteLoadCompleted = true
+                hideStartupLoading()
+                pendingOfflineUrl = webView.url?.takeIf { Uri.parse(it).host == allowedHost } ?: website
+                lastLoadedUrl = pendingOfflineUrl ?: website
+                offlineRetryInProgress = false
+                showOfflineScreen()
             }
         }
 
