@@ -1337,78 +1337,43 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun ensureChargingAlertAccess() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                REQUEST_CHARGING_ALERT_NOTIFICATIONS
-            )
-            return
-        }
-
-        val notificationManager = getSystemService(android.app.NotificationManager::class.java)
-        if (!androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()) {
-            showChargingAccessSettings(
-                "Enable Workly notifications",
-                "Battery alerts are blocked because Workly India notifications are off. Turn notifications on to receive the 100% charge alert.",
-                Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
-            )
-            return
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = notificationManager.getNotificationChannel(ChargingMonitorService.ALERT_CHANNEL)
-            if (channel == null || channel.importance == android.app.NotificationManager.IMPORTANCE_NONE) {
-                showChargingAccessSettings(
-                    "Enable battery alert channel",
-                    "Turn on the “Battery fully charged” notification channel and allow sound. Otherwise Workly cannot notify you at 100%.",
-                    Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
-                        .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, ChargingMonitorService.ALERT_CHANNEL)
-                )
-                return
-            }
-        }
-
+        // Android 14+ exposes a dedicated special-access setting for full-screen
+        // notifications. This is the only charging-related permission prompt
+        // shown on app launch. If already allowed, stay silent.
         if (Build.VERSION.SDK_INT >= 34) {
-            val accessPrefs = getSharedPreferences("workly_charging_access", Context.MODE_PRIVATE)
-            val hasFullScreenAccess = notificationManager.canUseFullScreenIntent()
-            if (hasFullScreenAccess) {
-                // Remember that access was granted and reset the one-time prompt.
-                // If the user later revokes access in Android Settings, we can
-                // explain how to restore it once, without nagging on every launch.
-                accessPrefs.edit()
-                    .putBoolean("full_screen_access_previously_granted", true)
-                    .putBoolean("full_screen_access_prompt_shown", false)
-                    .apply()
-            } else {
-                val wasPreviouslyGranted = accessPrefs.getBoolean("full_screen_access_previously_granted", false)
-                if (wasPreviouslyGranted) {
-                    // Access was switched off after being granted: allow one new prompt.
-                    accessPrefs.edit()
-                        .putBoolean("full_screen_access_previously_granted", false)
-                        .putBoolean("full_screen_access_prompt_shown", false)
-                        .apply()
-                }
-
-                // Do not repeat the prompt on every app launch or routine update
-                // when the user has never enabled this special access.
-                val promptAlreadyShown = accessPrefs.getBoolean("full_screen_access_prompt_shown", false)
-                if (!promptAlreadyShown) {
-                    accessPrefs.edit().putBoolean("full_screen_access_prompt_shown", true).apply()
-                    showChargingAccessSettings(
-                        "Allow full-screen battery alerts",
-                        "Allow Workly India to open the full-screen 100% battery alert. Android may still limit this feature based on device and app eligibility.",
-                        Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
+            val notificationManager = getSystemService(android.app.NotificationManager::class.java)
+            if (!notificationManager.canUseFullScreenIntent()) {
+                showChargingAccessSettings(
+                    "Enable full-screen notifications",
+                    "Allow Workly India to send full-screen battery alerts when your phone reaches 100%.",
+                    Intent(
+                        android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                        Uri.parse("package:$packageName")
                     )
-                }
+                )
             }
         }
 
+        // Keep charging monitoring independent from the optional full-screen
+        // access prompt. Do not request notification-channel or battery-
+        // optimization settings here.
         ensureChargingBackgroundAccess()
+    }
+
+    /**
+     * Start monitoring immediately when the phone is already charging.
+     * Do not interrupt app startup with additional permission/settings dialogs.
+     */
+    private fun ensureChargingBackgroundAccess() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+        val isCharging = plugged != 0 ||
+            status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL
+        if (isCharging) ensureChargingMonitorRunning()
     }
 
     /**
