@@ -1360,12 +1360,21 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
 
         if (Build.VERSION.SDK_INT >= 34 && !notificationManager.canUseFullScreenIntent()) {
-            showChargingAccessSettings(
-                "Allow full-screen battery alerts",
-                "Allow Workly India to open the full-screen 100% battery alert. Android may still limit this feature based on device and app eligibility.",
-                Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
-            )
-            return
+            // Do not show the full-screen access explanation on every app launch.
+            // SharedPreferences survive normal APK/Play Store updates, so a user
+            // who dismissed this once is not interrupted again after updating.
+            // The user can still enable access later from Android App info >
+            // Special app access > Full-screen notifications.
+            val accessPrefs = getSharedPreferences("workly_charging_access", Context.MODE_PRIVATE)
+            val promptAlreadyShown = accessPrefs.getBoolean("full_screen_access_prompt_shown", false)
+            if (!promptAlreadyShown) {
+                accessPrefs.edit().putBoolean("full_screen_access_prompt_shown", true).apply()
+                showChargingAccessSettings(
+                    "Allow full-screen battery alerts",
+                    "Allow Workly India to open the full-screen 100% battery alert. Android may still limit this feature based on device and app eligibility.",
+                    Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
+                )
+            }
         }
 
         ensureChargingBackgroundAccess()
