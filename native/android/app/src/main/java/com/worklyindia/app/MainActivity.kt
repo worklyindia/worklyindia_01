@@ -1366,14 +1366,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             return
         }
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-        val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
-        val isCharging = plugged != 0 ||
-            status == BatteryManager.BATTERY_STATUS_CHARGING ||
-            status == BatteryManager.BATTERY_STATUS_FULL
-        if (isCharging) ensureChargingMonitorRunning()
+        // Keep the service ready in both states: it shows "Battery" while
+        // unplugged and switches to the charging state immediately on plug-in.
+        ensureChargingMonitorRunning()
     }
 
     private fun biometricPreferences() = getSharedPreferences("workly_app_security", Context.MODE_PRIVATE)
