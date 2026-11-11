@@ -2330,35 +2330,44 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         if (isBiometricLockEnabled() && !biometricAuthenticatedForForeground) showBiometricLockPrompt(false)
         if (::webView.isInitialized) syncWebsiteSession()
         if (pendingWebsiteInstallUri != null) {
-            val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
-            if (targetCode > 0L && getInstalledAppVersionCode() >= targetCode) {
-                clearPendingWebsiteInstall()
-            } else if (waitingForWebsiteInstallPermission &&
-                (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls())) {
-                // Settings returns before the Activity is always fully interactive on every OEM.
-                // Defer the PackageInstaller session until the resumed window is ready, so the
-                // Android "Install update" confirmation appears immediately after permission is granted.
-                // Keep the persisted permission-waiting flag until PackageInstaller.commit()
-                // succeeds. Clearing it before posting can lose the install if Android
-                // recreates this Activity while returning from Settings.
-                websiteInstallDialogVisible = false
-                if (!websiteInstallLaunchPending) {
-                    websiteInstallLaunchPending = true
-                    window.decorView.post {
-                        if (!isFinishing && !isDestroyed && pendingWebsiteInstallUri != null) {
-                            continueWebsiteInstallIfAllowed()
-                        } else {
-                            websiteInstallLaunchPending = false
-                        }
-                    }
-                }
-            } else if (waitingForWebsiteInstallPermission) {
-                showWebsiteInstallPermissionDialog()
-            } else {
-                showWebsiteInstallReadyDialog(websiteDownloadRelease)
-            }
+            resumePendingWebsiteInstall()
         } else if (::appUpdateManager.isInitialized) {
             if (isPlayStoreInstall) checkForPlayStoreUpdate() else checkForWebsiteRelease()
+        }
+    }
+
+    // Finish the APK hand-off after Android has fully resumed the app from
+    // "Allow from this source" settings, so the system confirmation opens at once.
+    override fun onPostResume() {
+        super.onPostResume()
+        resumePendingWebsiteInstall()
+    }
+
+    private fun resumePendingWebsiteInstall() {
+        if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
+
+        val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
+        if (targetCode > 0L && getInstalledAppVersionCode() >= targetCode) {
+            clearPendingWebsiteInstall()
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            if (waitingForWebsiteInstallPermission) showWebsiteInstallPermissionDialog()
+            else showWebsiteInstallReadyDialog(websiteDownloadRelease)
+            return
+        }
+
+        if (!websiteInstallLaunchPending) {
+            websiteInstallDialogVisible = false
+            websiteInstallLaunchPending = true
+            window.decorView.post {
+                if (!isFinishing && !isDestroyed && pendingWebsiteInstallUri != null) {
+                    continueWebsiteInstallIfAllowed()
+                } else {
+                    websiteInstallLaunchPending = false
+                }
+            }
         }
     }
 
