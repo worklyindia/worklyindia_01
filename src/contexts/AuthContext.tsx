@@ -203,34 +203,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check for existing session - mark as initial load
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      // 30-day inactivity auto-logout: if last_login_at is older than 30 days,
-      // force re-authentication so the user re-verifies identity.
-      if (session?.user) {
-        try {
-          const { data: profileRow } = await supabase
-            .from('profiles')
-            .select('last_login_at')
-            .eq('id', session.user.id)
-            .maybeSingle();
-          const lastLoginIso = profileRow?.last_login_at || session.user.last_sign_in_at;
-          if (lastLoginIso) {
-            const ageMs = Date.now() - new Date(lastLoginIso).getTime();
-            const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-            if (ageMs > THIRTY_DAYS) {
-              console.log('🔒 Session expired (30-day inactivity), signing out', { ageDays: Math.round(ageMs / 86400000) });
-              await supabase.auth.signOut();
-              setSession(null);
-              setUser(null);
-              setLoading(false);
-              try { sonnerToast.info('Session expired. Please sign in again to continue.', { duration: 6000 }); } catch (_e) {}
-              return;
-            }
-          }
-        } catch (e) {
-          console.warn('inactivity check failed (non-critical):', e);
-        }
-      }
-
+      // Do not force-sign-out from a stale profile timestamp. Supabase owns
+      // token expiry/refresh; a delayed last_login_at write must not log out
+      // an otherwise valid active session.
       setSession(session);
       setUser(session?.user ?? null);
       if (!session?.user) {

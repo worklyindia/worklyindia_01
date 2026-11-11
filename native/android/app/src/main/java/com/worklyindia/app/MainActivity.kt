@@ -2121,34 +2121,45 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     val metadata = user.optJSONObject("user_metadata") ?: JSONObject()
                     val role = metadata.optString("user_type",
                         metadata.optString("account_type", metadata.optString("role", "jobseeker")))
-                    val saved = NativeAuth.saveWebSession(
-                        this@MainActivity,
-                        session.getString("access_token"),
-                        session.getString("refresh_token"),
-                        user.getString("id"),
-                        user.optString("email"),
-                        if (role.equals("employer", true)) "employer" else "jobseeker"
-                    )
-                    // Permission already granted means this device has opted in.
-                    // Register its native FCM token automatically after login so
-                    // owner-published Android releases can reach existing app users
-                    // without requiring them to open the notification settings page.
-                    if (hasNotificationPermission() && autoPushRegistrationUserId != saved.userId) {
-                        registerSignedInAndroidPush(saved)
-                    } else if (
-                        Build.VERSION.SDK_INT >= 33 &&
-                        ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        val promptKey = "notification_permission_prompted_${saved.userId}"
-                        val prefs = getSharedPreferences("workly_android_push", Context.MODE_PRIVATE)
-                        if (!prefs.getBoolean(promptKey, false)) {
-                            prefs.edit().putBoolean(promptKey, true).apply()
-                            pendingAutoPushRegistrationSession = saved
-                            ActivityCompat.requestPermissions(
-                                this@MainActivity,
-                                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                                REQUEST_NOTIFICATIONS
-                            )
+                    val userId = user.getString("id")
+                    val oldSession = NativeAuth.session(this@MainActivity)
+
+                    // One FCM installation must belong only to the currently
+                    // signed-in account. Remove the previous account mapping
+                    // before registering the replacement account.
+                    activityScope.launch(Dispatchers.IO) {
+                        if (oldSession != null && oldSession.userId != userId) {
+                            NativePushManager.unregister(this@MainActivity, oldSession)
+                        }
+                        val saved = NativeAuth.saveWebSession(
+                            this@MainActivity,
+                            session.getString("access_token"),
+                            session.getString("refresh_token"),
+                            userId,
+                            user.optString("email"),
+                            if (role.equals("employer", true)) "employer" else "jobseeker"
+                        )
+                        runOnUiThread {
+                            if (oldSession?.userId != saved.userId) autoPushRegistrationUserId = null
+                            // Permission already granted means this device has opted in.
+                            if (hasNotificationPermission() && autoPushRegistrationUserId != saved.userId) {
+                                registerSignedInAndroidPush(saved)
+                            } else if (
+                                Build.VERSION.SDK_INT >= 33 &&
+                                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                val promptKey = "notification_permission_prompted_${saved.userId}"
+                                val prefs = getSharedPreferences("workly_android_push", Context.MODE_PRIVATE)
+                                if (!prefs.getBoolean(promptKey, false)) {
+                                    prefs.edit().putBoolean(promptKey, true).apply()
+                                    pendingAutoPushRegistrationSession = saved
+                                    ActivityCompat.requestPermissions(
+                                        this@MainActivity,
+                                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                                        REQUEST_NOTIFICATIONS
+                                    )
+                                }
+                            }
                         }
                     }
                 } catch (error: Exception) {
