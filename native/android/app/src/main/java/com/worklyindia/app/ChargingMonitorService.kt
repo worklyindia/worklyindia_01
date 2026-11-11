@@ -314,7 +314,7 @@ class ChargingMonitorService : Service() {
         val batteryText = if (percent in 0..100) "Monitoring Your Battery $percent%🔋" else "Monitoring Your Battery 🔋"
         val notificationTitle = "Workly India Battery Protection"
         val notificationText = batteryText
-        val expandedText = "$batteryText\nSmart monitoring while charging. 😊"
+        val expandedText = batteryText
         val publicNotification = NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setContentTitle(notificationTitle)
