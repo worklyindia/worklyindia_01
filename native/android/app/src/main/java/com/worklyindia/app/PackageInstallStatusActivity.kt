@@ -40,12 +40,22 @@ class PackageInstallStatusActivity : Activity() {
                 }
                 if (confirmation != null) {
                     try {
+                        // The callback may arrive while Workly is backgrounded.
+                        // Explicitly launch Android's confirmation UI in a task.
+                        confirmation.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                         startActivity(confirmation)
+                        android.util.Log.i("WorklyAppUpdate", "Launched Android package install confirmation")
                     } catch (error: Exception) {
-                        Toast.makeText(this, "Please complete the Android update confirmation.", Toast.LENGTH_LONG).show()
+                        android.util.Log.e("WorklyAppUpdate", "Could not launch Android install confirmation", error)
+                        Toast.makeText(
+                            this,
+                            "Android could not open the install confirmation. Return to Workly and tap Install now again.",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 } else {
-                    Toast.makeText(this, "Android did not provide the update confirmation screen.", Toast.LENGTH_LONG).show()
+                    android.util.Log.e("WorklyAppUpdate", "PackageInstaller pending-user-action callback had no confirmation Intent")
+                    Toast.makeText(this, "Android did not provide the update confirmation screen. Please try Install now again.", Toast.LENGTH_LONG).show()
                 }
                 finish()
             }
