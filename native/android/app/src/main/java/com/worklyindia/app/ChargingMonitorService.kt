@@ -10,11 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
@@ -24,8 +22,7 @@ import androidx.core.app.NotificationManagerCompat
 class ChargingMonitorService : Service() {
     private var batteryReceiverRegistered = false
     private var alertRingtone: Ringtone? = null
-    private var chargingTts: TextToSpeech? = null
-    private var chargingTtsInitializing = false
+    private var chargingStartPlayer: MediaPlayer? = null
     @Volatile private var serviceDestroyed = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
@@ -50,8 +47,8 @@ class ChargingMonitorService : Service() {
             }
             ACTION_POWER_DISCONNECTED -> {
                 resetChargeCycleAndStopAlert()
-                stopSelf()
-                return START_NOT_STICKY
+                readCurrentBatteryState()
+                return START_STICKY
             }
             ACTION_ACKNOWLEDGE -> {
                 acknowledgeAlert()
@@ -123,130 +120,61 @@ class ChargingMonitorService : Service() {
     }
 
     /**
-     * Speaks the charging-start announcement using an installed on-device voice.
-     * No audio file, network request, or cloud TTS service is used. Only voices
-     * whose Voice.networkConnectionRequired is false are eligible.
+     * Plays the bundled charging-start MP3 directly. No device TTS engine,
+     * language pack, or network connection is required.
      */
     private fun playChargingStartAnnouncementOnce() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) ||
             prefs.getBoolean(KEY_STARTED_ANNOUNCED, false) ||
-            prefs.getBoolean(KEY_TTS_UNAVAILABLE, false) ||
-            chargingTts != null || chargingTtsInitializing
+            chargingStartPlayer != null
         ) return
 
-        chargingTtsInitializing = true
-        chargingTts = TextToSpeech(applicationContext) { status ->
-            chargingTtsInitializing = false
-            val engine = chargingTts
-            if (status != TextToSpeech.SUCCESS || engine == null || serviceDestroyed) {
-                android.util.Log.e(TAG, "On-device TextToSpeech initialization failed: status=$status")
-                prefs.edit().putBoolean(KEY_TTS_UNAVAILABLE, true).apply()
-                engine?.shutdown()
-                chargingTts = null
-                return@TextToSpeech
+        runCatching {
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_started)
+                ?: throw IllegalStateException("Could not load bundled charging-start audio")
+            chargingStartPlayer = player
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            player.setOnCompletionListener { completed ->
+                prefs.edit()
+                    .putBoolean(KEY_STARTED_ANNOUNCED, true)
+                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                    .apply()
+                android.util.Log.i(TAG, "Bundled charging-start audio completed")
+                completed.release()
+                if (chargingStartPlayer === completed) chargingStartPlayer = null
             }
-
-            runCatching {
-                val offlineEnglishVoices = engine.voices
-                    ?.filter { voice ->
-                        voice.locale.language.equals("en", ignoreCase = true) &&
-                            !voice.isNetworkConnectionRequired
-                    }
-                    .orEmpty()
-                val selectedVoice = offlineEnglishVoices.firstOrNull {
-                    it.locale.language.equals("en", ignoreCase = true) &&
-                        it.locale.country.equals("IN", ignoreCase = true)
-                } ?: offlineEnglishVoices.firstOrNull()
-
-                if (selectedVoice == null) {
-                    prefs.edit().putBoolean(KEY_TTS_UNAVAILABLE, true).apply()
-                    android.util.Log.w(
-                        TAG,
-                        "No offline English TTS voice is installed. Install English (India) voice data in Android Text-to-speech settings."
-                    )
-                    engine.shutdown()
-                    chargingTts = null
-                    return@runCatching
-                }
-
-                val languageResult = engine.setLanguage(selectedVoice.locale)
-                if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
-                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED
-                ) {
-                    prefs.edit().putBoolean(KEY_TTS_UNAVAILABLE, true).apply()
-                    engine.shutdown()
-                    chargingTts = null
-                    return@runCatching
-                }
-                engine.setVoice(selectedVoice)
-                engine.setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                engine.setSpeechRate(1.0f)
-                engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) {
-                        // Persist only after Android has actually begun speaking.
-                        prefs.edit()
-                            .putBoolean(KEY_STARTED_ANNOUNCED, true)
-                            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                            .apply()
-                    }
-
-                    override fun onDone(utteranceId: String?) {
-                        android.util.Log.i(TAG, "Offline charging-start TTS completed")
-                        engine.shutdown()
-                        if (chargingTts === engine) chargingTts = null
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        android.util.Log.e(TAG, "Offline charging-start TTS failed")
-                        prefs.edit()
-                            .putBoolean(KEY_STARTED_ANNOUNCED, false)
-                            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                            .putBoolean(KEY_TTS_UNAVAILABLE, true)
-                            .apply()
-                        engine.shutdown()
-                        if (chargingTts === engine) chargingTts = null
-                    }
-
-                    override fun onError(utteranceId: String?, errorCode: Int) {
-                        onError(utteranceId)
-                    }
-                })
-
-                val result = engine.speak(
-                    "Charging started",
-                    TextToSpeech.QUEUE_FLUSH,
-                    Bundle(),
-                    "workly-charging-start"
-                )
-                if (result == TextToSpeech.ERROR) {
-                    prefs.edit()
-                        .putBoolean(KEY_STARTED_ANNOUNCED, false)
-                        .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                        .putBoolean(KEY_TTS_UNAVAILABLE, true)
-                        .apply()
-                    engine.shutdown()
-                    if (chargingTts === engine) chargingTts = null
-                }
-            }.onFailure { error ->
-                android.util.Log.e(TAG, "Could not start offline charging announcement", error)
-                engine.shutdown()
-                if (chargingTts === engine) chargingTts = null
+            player.setOnErrorListener { failed, what, extra ->
+                android.util.Log.e(TAG, "Bundled charging-start audio failed: what=$what extra=$extra")
+                prefs.edit()
+                    .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                    .apply()
+                failed.release()
+                if (chargingStartPlayer === failed) chargingStartPlayer = null
+                true
             }
+            player.start()
+            android.util.Log.i(TAG, "Bundled charging-start MP3 playback started")
+        }.onFailure { error ->
+            android.util.Log.e(TAG, "Could not play bundled charging-start MP3", error)
+            prefs.edit()
+                .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                .apply()
+            stopChargingStartPlayback()
         }
     }
 
     private fun stopChargingStartPlayback() {
-        runCatching { chargingTts?.stop() }
-        runCatching { chargingTts?.shutdown() }
-        chargingTts = null
-        chargingTtsInitializing = false
+        runCatching { chargingStartPlayer?.stop() }
+        runCatching { chargingStartPlayer?.release() }
+        chargingStartPlayer = null
     }
 
     private fun showChargeCompleteAlert() {
@@ -359,21 +287,29 @@ class ChargingMonitorService : Service() {
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val statusText = when {
-            percent in 0..100 && charging -> "Charging • $percent% • Monitoring active"
-            percent in 0..100 -> "Charging paused • $percent% • Monitoring active"
-            else -> "Checking charging status…"
+        val stateText = when {
+            percent in 0..100 && charging -> "Charging"
+            percent in 0..100 -> "Battery"
+            charging -> "Charging"
+            else -> "Battery"
+        }
+        val statusText = if (percent in 0..100) {
+            "$stateText • $percent% • Active"
+        } else {
+            "$stateText • Active"
         }
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
-            .setContentTitle("Workly charging monitor")
+            .setContentTitle("Workly")
             .setContentText(statusText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPublicVersion(
                 NotificationCompat.Builder(this, MONITOR_CHANNEL)
                     .setSmallIcon(R.drawable.ic_stat_workly)
-                    .setContentTitle("Workly charging monitor")
+                    .setContentTitle("Workly")
                     .setContentText(statusText)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(statusText))
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .build()
             )
