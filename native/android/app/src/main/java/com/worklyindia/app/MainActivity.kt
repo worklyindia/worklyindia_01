@@ -126,6 +126,7 @@ class MainActivity : FragmentActivity() {
     private var pendingNativePushFirebaseConfig: JSONObject? = null
     private var pendingAutoPushRegistrationSession: NativeSession? = null
     private var waitingForWebsiteInstallPermission = false
+    private var websiteInstallLaunchPending = false
     private val websiteUpdatePrefs by lazy { getSharedPreferences("workly_android_update", Context.MODE_PRIVATE) }
     private var websiteDownloadProgressBar: ProgressBar? = null
     private var websiteDownloadProgressLabel: TextView? = null
@@ -2401,12 +2402,18 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 // Settings returns before the Activity is always fully interactive on every OEM.
                 // Defer the PackageInstaller session until the resumed window is ready, so the
                 // Android "Install update" confirmation appears immediately after permission is granted.
-                waitingForWebsiteInstallPermission = false
-                websiteUpdatePrefs.edit().putBoolean("waiting_permission", false).apply()
+                // Keep the persisted permission-waiting flag until PackageInstaller.commit()
+                // succeeds. Clearing it before posting can lose the install if Android
+                // recreates this Activity while returning from Settings.
                 websiteInstallDialogVisible = false
-                window.decorView.post {
-                    if (!isFinishing && !isDestroyed && pendingWebsiteInstallUri != null) {
-                        continueWebsiteInstallIfAllowed()
+                if (!websiteInstallLaunchPending) {
+                    websiteInstallLaunchPending = true
+                    window.decorView.post {
+                        if (!isFinishing && !isDestroyed && pendingWebsiteInstallUri != null) {
+                            continueWebsiteInstallIfAllowed()
+                        } else {
+                            websiteInstallLaunchPending = false
+                        }
                     }
                 }
             } else if (waitingForWebsiteInstallPermission) {
@@ -2904,10 +2911,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun continueWebsiteInstallIfAllowed() {
-        val apkUri = pendingWebsiteInstallUri ?: return
+        val apkUri = pendingWebsiteInstallUri ?: run {
+            websiteInstallLaunchPending = false
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
             waitingForWebsiteInstallPermission = true
-            websiteUpdatePrefs.edit().putBoolean("waiting_permission", true).apply()
+            websiteInstallLaunchPending = false
+            websiteUpdatePrefs.edit().putBoolean("waiting_permission", true).commit()
             val settingsIntent = Intent(
                 android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:" + packageName)
@@ -2966,14 +2977,20 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         statusIntent,
                         statusPendingIntentFlags
                     )
-                    session.commit(statusPendingIntent.intentSender)
+                            session.commit(statusPendingIntent.intentSender)
                 }
+                // The APK install request is now safely handed to Android.
+                waitingForWebsiteInstallPermission = false
+                websiteUpdatePrefs.edit().remove("waiting_permission").commit()
+                websiteInstallLaunchPending = false
             } catch (installError: Exception) {
+                websiteInstallLaunchPending = false
                 runCatching { installer.abandonSession(sessionId) }
                 throw installError
             }
             websiteDownloadId = -1L
         } catch (error: Exception) {
+            websiteInstallLaunchPending = false
             android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
             Toast.makeText(this, "Could not open the installer. Please try again.", Toast.LENGTH_LONG).show()
         }
