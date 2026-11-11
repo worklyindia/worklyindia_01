@@ -2861,8 +2861,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     cornerRadius = px(14).toFloat()
                 }
                 setOnClickListener {
+                    // Let the update sheet release its window focus before
+                    // launching Android's package installer. Some OEM builds
+                    // defer the installer if both windows transition together.
                     dialog.dismiss()
-                    onPrimary()
+                    sheet.postDelayed({
+                        if (!isFinishing && !isDestroyed) onPrimary()
+                    }, 250L)
                 }
             }, LinearLayout.LayoutParams(0, px(56), 1f).apply {
                 if (secondaryLabel != null) leftMargin = px(10)
@@ -2921,10 +2926,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             // ACTION_VIEW launches the system confirmation immediately in the foreground;
             // a PackageInstaller status callback can be deferred behind Workly on some
             // Android/OEM builds until the user leaves and re-enters the app.
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(Intent.EXTRA_RETURN_RESULT, true)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
+            android.util.Log.i("WorklyAppUpdate", "Launching Android package installer for $apkUri")
             startActivity(installIntent)
             waitingForWebsiteInstallPermission = false
             websiteUpdatePrefs.edit().remove("waiting_permission").commit()
