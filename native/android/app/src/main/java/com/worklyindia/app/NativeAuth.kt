@@ -91,6 +91,7 @@ object NativeAuth {
      * Refresh the encrypted WebView session before background notification actions.
      * Supabase rotates refresh tokens, so persist the complete replacement session.
      */
+    @Synchronized
     fun refreshSession(context: Context): NativeSession? = runCatching {
         val current = session(context) ?: return null
         val connection = java.net.URL("https://jubwzelupbntbetpajqb.supabase.co/auth/v1/token?grant_type=refresh_token")
