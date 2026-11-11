@@ -291,28 +291,38 @@ class ChargingMonitorService : Service() {
         val notificationTitle = "Workly India Battery Protection"
         val notificationText = batteryText
         val expandedText = "$batteryText\nSmart monitoring while charging. 😊"
+        val publicNotification = NotificationCompat.Builder(this, MONITOR_CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_workly)
+            .setContentTitle(notificationTitle)
+            .setContentText(notificationText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .build()
+            .apply {
+                // Keep Clear all from removing the public/lock-screen copy.
+                flags = flags or Notification.FLAG_NO_CLEAR
+            }
+
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setContentTitle(notificationTitle)
             .setContentText(notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setPublicVersion(
-                NotificationCompat.Builder(this, MONITOR_CHANNEL)
-                    .setSmallIcon(R.drawable.ic_stat_workly)
-                    .setContentTitle(notificationTitle)
-                    .setContentText(notificationText)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
-                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                    .build()
-            )
+            .setPublicVersion(publicNotification)
             .setContentIntent(openIntent)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+            .apply {
+                // Prevent accidental removal through Clear all where Android permits it.
+                flags = flags or Notification.FLAG_NO_CLEAR
+            }
     }
 
     private fun createChannels() {
