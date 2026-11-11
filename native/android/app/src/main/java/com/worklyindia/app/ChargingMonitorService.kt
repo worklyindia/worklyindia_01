@@ -96,7 +96,14 @@ class ChargingMonitorService : Service() {
         getSystemService(NotificationManager::class.java)
             .notify(MONITOR_NOTIFICATION_ID, buildMonitorNotification(percent, charging))
 
-        if (charging && percent in 0..99) {
+        // A charger connected at 100% (or Android's FULL status) must not
+        // trigger the charging-start voice. Consume the pending announcement
+        // so a later battery snapshot cannot play it unexpectedly.
+        if (charging && (percent >= 100 || status == BatteryManager.BATTERY_STATUS_FULL)) {
+            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                .apply()
+        } else if (charging && percent in 0..99) {
             playChargingStartAnnouncementOnce()
         }
         if (charging && percent >= 100) {
@@ -163,7 +170,22 @@ class ChargingMonitorService : Service() {
                     return@runCatching
                 }
 
+                val languageResult = engine.setLanguage(selectedVoice.locale)
+                if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED
+                ) {
+                    prefs.edit().putBoolean(KEY_TTS_UNAVAILABLE, true).apply()
+                    engine.shutdown()
+                    chargingTts = null
+                    return@runCatching
+                }
                 engine.setVoice(selectedVoice)
+                engine.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
                 engine.setSpeechRate(1.0f)
                 engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
