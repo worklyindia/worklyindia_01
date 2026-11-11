@@ -12,15 +12,25 @@ import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.media.MediaPlayer
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
+import java.io.File
+import java.net.URL
+import java.util.concurrent.Executors
 import androidx.core.app.NotificationManagerCompat
 
 class ChargingMonitorService : Service() {
     private var batteryReceiverRegistered = false
     private var alertRingtone: Ringtone? = null
+    private var chargingStartPlayer: MediaPlayer? = null
+    private val chargingAudioExecutor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile private var serviceDestroyed = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -82,6 +92,9 @@ class ChargingMonitorService : Service() {
         val percent = if (level >= 0) (level * 100 / scale) else -1
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
             status == BatteryManager.BATTERY_STATUS_FULL
+        if (charging && percent in 0..99) {
+            playChargingStartAnnouncementOnce()
+        }
         if (charging && percent >= 100) {
             showChargeCompleteAlert()
         } else if (!charging) {
@@ -98,6 +111,85 @@ class ChargingMonitorService : Service() {
             .putBoolean(KEY_ACKNOWLEDGED, false)
             .apply()
         getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
+    }
+
+    /**
+     * Plays the supplied Workly charging-start clip once per physical charging
+     * session. The receiver arms this only for ACTION_POWER_CONNECTED; boot and
+     * package-update restoration never arm it. Mark before async work to guard
+     * against duplicate BATTERY_CHANGED events.
+     */
+    private fun playChargingStartAnnouncementOnce() {
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) ||
+            prefs.getBoolean(KEY_STARTED_ANNOUNCED, false)
+        ) return
+
+        prefs.edit()
+            .putBoolean(KEY_STARTED_ANNOUNCED, true)
+            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+            .apply()
+
+        chargingAudioExecutor.execute {
+            runCatching {
+                val cachedAudio = File(cacheDir, CHARGING_START_AUDIO_FILE)
+                if (!cachedAudio.isFile || cachedAudio.length() == 0L) {
+                    val temporary = File(cacheDir, "$CHARGING_START_AUDIO_FILE.tmp")
+                    URL(CHARGING_START_AUDIO_URL).openConnection().apply {
+                        connectTimeout = 10_000
+                        readTimeout = 20_000
+                        getInputStream().use { input ->
+                            temporary.outputStream().use { output -> input.copyTo(output) }
+                        }
+                    }
+                    if (cachedAudio.exists()) cachedAudio.delete()
+                    check(temporary.renameTo(cachedAudio)) { "Could not cache charging-start audio" }
+                }
+                cachedAudio
+            }.onSuccess { audioFile ->
+                mainHandler.post {
+                    if (!serviceDestroyed) startChargingStartPlayback(audioFile)
+                }
+            }.onFailure { error ->
+                android.util.Log.e(TAG, "Charging-start announcement could not be downloaded or cached", error)
+            }
+        }
+    }
+
+    private fun startChargingStartPlayback(audioFile: File) {
+        runCatching {
+            chargingStartPlayer?.release()
+            chargingStartPlayer = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                setDataSource(audioFile.absolutePath)
+                setVolume(0.8f, 0.8f)
+                setOnPreparedListener { player ->
+                    if (!serviceDestroyed) player.start() else player.release()
+                }
+                setOnCompletionListener { player ->
+                    player.release()
+                    if (chargingStartPlayer === player) chargingStartPlayer = null
+                }
+                setOnErrorListener { player, what, extra ->
+                    android.util.Log.e(TAG, "Charging-start audio playback failed: what=$what extra=$extra")
+                    player.release()
+                    if (chargingStartPlayer === player) chargingStartPlayer = null
+                    true
+                }
+                prepareAsync()
+            }
+        }.onFailure { android.util.Log.e(TAG, "Could not play charging-start audio", it) }
+    }
+
+    private fun stopChargingStartPlayback() {
+        runCatching { chargingStartPlayer?.stop() }
+        runCatching { chargingStartPlayer?.release() }
+        chargingStartPlayer = null
     }
 
     private fun showChargeCompleteAlert() {
@@ -235,6 +327,9 @@ class ChargingMonitorService : Service() {
     }
 
     override fun onDestroy() {
+        serviceDestroyed = true
+        chargingAudioExecutor.shutdownNow()
+        stopChargingStartPlayback()
         stopAlertAlarm()
         if (batteryReceiverRegistered) runCatching { unregisterReceiver(batteryReceiver) }
         batteryReceiverRegistered = false
@@ -259,6 +354,10 @@ class ChargingMonitorService : Service() {
         const val PREFS = "workly_charging_alert"
         const val KEY_ALERTED = "alerted_this_charge"
         const val KEY_ACKNOWLEDGED = "alert_acknowledged"
+        const val KEY_STARTED_ANNOUNCED = "charging_start_announced"
+        const val KEY_START_ANNOUNCEMENT_PENDING = "charging_start_announcement_pending"
+        private const val CHARGING_START_AUDIO_URL = "https://pub-ee957862ecde456a8553e1cf5bae1852.r2.dev/hero-banners/ElevenLabs_2026-11-11T06_50_38_Ryan%20Kurk%20-%20Pleasant%20and%20Smooth_pvc_s50_sim75_v4.mp3"
+        private const val CHARGING_START_AUDIO_FILE = "workly-charging-started.mp3"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
         const val ACTION_ACKNOWLEDGE = "com.worklyindia.app.CHARGING_ALERT_ACKNOWLEDGE"

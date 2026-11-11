@@ -17,6 +17,12 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 // still report the previous (not charging) sticky status for a short time.
                 // Starting the foreground service here makes it independent of screen
                 // state, app visibility and lock-screen state.
+                val prefs = context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE)
+                // Arm one announcement for this physical plug-in edge only.
+                // Duplicate broadcasts cannot replay after the first announcement.
+                if (!prefs.getBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)) {
+                    prefs.edit().putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, true).apply()
+                }
                 startMonitor(context, "charger connected")
             }
             Intent.ACTION_BOOT_COMPLETED,
@@ -35,6 +41,8 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE).edit()
                     .putBoolean(ChargingMonitorService.KEY_ALERTED, false)
                     .putBoolean(ChargingMonitorService.KEY_ACKNOWLEDGED, false)
+                    .putBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)
+                    .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, false)
                     .apply()
                 context.getSystemService(android.app.NotificationManager::class.java).cancel(8211)
                 context.sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(context.packageName))
