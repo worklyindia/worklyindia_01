@@ -258,7 +258,8 @@ class ChargingMonitorService : Service() {
         if (alertRingtone?.isPlaying == true) return
         stopAlertAlarm()
         runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             alertRingtone = RingtoneManager.getRingtone(this, uri)?.apply {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
