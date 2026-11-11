@@ -1405,17 +1405,21 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
      */
     private fun ensureChargingBackgroundAccess() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+
+        // Start the foreground monitor whenever the app is opened during an active
+        // charge, even before the user changes battery-optimization settings.
+        // Previously this was started only after the exemption was granted, which
+        // left the lock-screen monitor inactive for users who dismissed the prompt.
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+        val isCharging = plugged != 0 ||
+            status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL
+        if (isCharging) ensureChargingMonitorRunning()
+
         val powerManager = getSystemService(android.os.PowerManager::class.java)
-        if (powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            val status = battery?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-            val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
-            val isCharging = plugged != 0 ||
-                status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                status == BatteryManager.BATTERY_STATUS_FULL
-            if (isCharging) ensureChargingMonitorRunning()
-            return
-        }
+        if (powerManager.isIgnoringBatteryOptimizations(packageName)) return
 
         val prefs = getSharedPreferences("workly_charging_setup", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
@@ -1424,7 +1428,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         prefs.edit().putLong("background_access_prompt_at", now).apply()
         showChargingAccessSettings(
             "Allow automatic battery protection",
-            "To start monitoring automatically while your screen is locked, Android needs Workly India to be excluded from battery optimization. In the next screen, find Workly India and choose “Don’t optimize” or “Unrestricted”.",
+            "For reliable automatic monitoring while your screen is locked, open Battery optimization settings, find Workly India and choose “Don’t optimize” or “Unrestricted”. The monitor will start now too, but some phones may stop background services unless this setting is allowed.",
             Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
         )
     }

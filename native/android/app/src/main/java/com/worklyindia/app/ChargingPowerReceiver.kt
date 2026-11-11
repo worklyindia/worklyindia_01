@@ -43,6 +43,7 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                     .putBoolean(ChargingMonitorService.KEY_ACKNOWLEDGED, false)
                     .putBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)
                     .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, false)
+                    .putBoolean(ChargingMonitorService.KEY_TTS_UNAVAILABLE, false)
                     .apply()
                 context.getSystemService(android.app.NotificationManager::class.java).cancel(8211)
                 context.sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(context.packageName))
