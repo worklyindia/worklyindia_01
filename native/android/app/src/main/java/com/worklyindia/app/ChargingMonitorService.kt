@@ -18,10 +18,7 @@ import android.speech.tts.UtteranceProgressListener
 import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
-import android.os.Handler
-import android.os.Looper
 import androidx.core.app.NotificationCompat
-import java.util.Locale
 import androidx.core.app.NotificationManagerCompat
 
 class ChargingMonitorService : Service() {
@@ -137,6 +134,7 @@ class ChargingMonitorService : Service() {
             val engine = chargingTts
             if (status != TextToSpeech.SUCCESS || engine == null || serviceDestroyed) {
                 android.util.Log.e(TAG, "On-device TextToSpeech initialization failed: status=$status")
+                prefs.edit().putBoolean(KEY_TTS_UNAVAILABLE, true).apply()
                 engine?.shutdown()
                 chargingTts = null
                 return@TextToSpeech
@@ -188,6 +186,7 @@ class ChargingMonitorService : Service() {
                         prefs.edit()
                             .putBoolean(KEY_STARTED_ANNOUNCED, false)
                             .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                            .putBoolean(KEY_TTS_UNAVAILABLE, true)
                             .apply()
                         engine.shutdown()
                         if (chargingTts === engine) chargingTts = null
@@ -208,6 +207,7 @@ class ChargingMonitorService : Service() {
                     prefs.edit()
                         .putBoolean(KEY_STARTED_ANNOUNCED, false)
                         .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                        .putBoolean(KEY_TTS_UNAVAILABLE, true)
                         .apply()
                     engine.shutdown()
                     if (chargingTts === engine) chargingTts = null
