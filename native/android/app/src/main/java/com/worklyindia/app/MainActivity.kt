@@ -2909,16 +2909,60 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             return
         }
         try {
-            // Use Android's dedicated package-install action for APK updates.
-            // The source permission is checked above; Android still shows its
-            // secure final confirmation screen (apps cannot silently self-install).
-            val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                clipData = android.content.ClipData.newRawUri("Workly India update", apkUri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Install through PackageInstaller so Android 14+ can retain the
+            // user's existing full-screen-intent choice across an in-app APK update.
+            // This does NOT silently grant access: we request GRANTED only when
+            // canUseFullScreenIntent() is already true before the update starts.
+            val installer = packageManager.packageInstaller
+            val params = android.content.pm.PackageInstaller.SessionParams(
+                android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
+            ).apply {
+                setAppPackageName(packageName)
+                if (Build.VERSION.SDK_INT >= 31) {
+                    setRequireUserAction(android.content.pm.PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+                }
+                if (Build.VERSION.SDK_INT >= 34) {
+                    val hadUserGrantedFullScreenAccess =
+                        getSystemService(android.app.NotificationManager::class.java).canUseFullScreenIntent()
+                    setPermissionState(
+                        Manifest.permission.USE_FULL_SCREEN_INTENT,
+                        if (hadUserGrantedFullScreenAccess)
+                            android.content.pm.PackageInstaller.SessionParams.PERMISSION_STATE_GRANTED
+                        else
+                            android.content.pm.PackageInstaller.SessionParams.PERMISSION_STATE_DEFAULT
+                    )
+                    android.util.Log.i(
+                        "WorklyAppUpdate",
+                        "Preserving pre-update full-screen access choice: granted=$hadUserGrantedFullScreenAccess"
+                    )
+                }
             }
-            startActivity(installIntent)
+            val sessionId = installer.createSession(params)
+            try {
+                installer.openSession(sessionId).use { session ->
+                    val input = contentResolver.openInputStream(apkUri)
+                        ?: throw IllegalStateException("Could not read downloaded APK.")
+                    input.use { source ->
+                        session.openWrite("workly-update.apk", 0, -1).use { output ->
+                            source.copyTo(output)
+                            session.fsync(output)
+                        }
+                    }
+                    val statusIntent = Intent(this, PackageInstallStatusActivity::class.java)
+                    val statusPendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+                        if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
+                    val statusPendingIntent = PendingIntent.getActivity(
+                        this,
+                        PACKAGE_INSTALL_STATUS_REQUEST,
+                        statusIntent,
+                        statusPendingIntentFlags
+                    )
+                    session.commit(statusPendingIntent.intentSender)
+                }
+            } catch (installError: Exception) {
+                runCatching { installer.abandonSession(sessionId) }
+                throw installError
+            }
             websiteDownloadId = -1L
         } catch (error: Exception) {
             android.util.Log.e("WorklyAppUpdate", "Could not open Android package installer", error)
@@ -2926,6 +2970,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
+
+    companion object {
+        private const val PACKAGE_INSTALL_STATUS_REQUEST = 7441
+    }
 
     private fun isNativeDarkTheme(): Boolean =
         (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
