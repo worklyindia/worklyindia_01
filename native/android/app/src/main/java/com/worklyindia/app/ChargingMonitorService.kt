@@ -182,7 +182,7 @@ class ChargingMonitorService : Service() {
                 engine.setVoice(selectedVoice)
                 engine.setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build()
                 )
@@ -253,71 +253,72 @@ class ChargingMonitorService : Service() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_ALERTED, false)) return
 
-        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
-            android.util.Log.w(TAG, "Full-charge alert skipped: app notifications are disabled")
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = getSystemService(NotificationManager::class.java).getNotificationChannel(ALERT_CHANNEL)
-            if (channel == null || channel.importance == NotificationManager.IMPORTANCE_NONE) {
-                android.util.Log.w(TAG, "Full-charge alert skipped: battery alert channel is disabled")
-                return
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        val notificationsEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val channelEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            notificationManager.getNotificationChannel(ALERT_CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE
+
+        if (!notificationsEnabled) {
+            android.util.Log.w(TAG, "Full-charge notification unavailable: app notifications are disabled; alarm will still be attempted")
+        } else if (!channelEnabled) {
+            android.util.Log.w(TAG, "Full-charge notification unavailable: battery alert channel is disabled; alarm will still be attempted")
+        } else {
+            val openIntent = Intent(this, ChargingCompleteActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            val alertActivityPendingIntent = PendingIntent.getActivity(
+                this, ALERT_REQUEST_CODE, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val stopIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_ACK_CHARGING_ALERT
+            }
+            val stopPendingIntent = PendingIntent.getBroadcast(
+                this, STOP_ALERT_REQUEST_CODE, stopIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val notificationBuilder = NotificationCompat.Builder(this, ALERT_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_workly)
+                .setContentTitle("100% BATTERY")
+                .setContentText("Your battery is fully charged!")
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setContentIntent(alertActivityPendingIntent)
+                .addAction(R.drawable.ic_stat_workly, "OK, GOT IT", stopPendingIntent)
+                .setAutoCancel(false)
+                .setOngoing(true)
+
+            if (Build.VERSION.SDK_INT < 34 || notificationManager.canUseFullScreenIntent()) {
+                notificationBuilder.setFullScreenIntent(alertActivityPendingIntent, true)
+            } else {
+                android.util.Log.w(TAG, "Full-screen access is off; Android will show the regular battery notification")
+            }
+
+            runCatching {
+                notificationManager.notify(ALERT_NOTIFICATION_ID, notificationBuilder.build())
+            }.onFailure {
+                android.util.Log.e(TAG, "Could not post full-charge notification", it)
             }
         }
 
-        val openIntent = Intent(this, ChargingCompleteActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val alertActivityPendingIntent = PendingIntent.getActivity(
-            this, ALERT_REQUEST_CODE, openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val stopIntent = Intent(this, NotificationActionReceiver::class.java).apply {
-            action = NotificationActionReceiver.ACTION_ACK_CHARGING_ALERT
-        }
-        val stopPendingIntent = PendingIntent.getBroadcast(
-            this, STOP_ALERT_REQUEST_CODE, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notificationBuilder = NotificationCompat.Builder(this, ALERT_CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_workly)
-            .setContentTitle("100% BATTERY")
-            .setContentText("Your battery is fully charged!")
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setContentIntent(alertActivityPendingIntent)
-            .addAction(R.drawable.ic_stat_workly, "OK, GOT IT", stopPendingIntent)
-            .setAutoCancel(false)
-            .setOngoing(true)
-
-        if (Build.VERSION.SDK_INT < 34 ||
-            getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
-        ) {
-            notificationBuilder.setFullScreenIntent(alertActivityPendingIntent, true)
-        }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            notificationBuilder.setDefaults(Notification.DEFAULT_VIBRATE or Notification.DEFAULT_SOUND)
-        }
-
-        try {
-            getSystemService(NotificationManager::class.java)
-                .notify(ALERT_NOTIFICATION_ID, notificationBuilder.build())
-            prefs.edit().putBoolean(KEY_ALERTED, true).putBoolean(KEY_ACKNOWLEDGED, false).apply()
-            startAlarmLoop()
-        } catch (error: SecurityException) {
-            android.util.Log.e(TAG, "Could not post full-charge notification", error)
-        }
+        // Do not let a disabled notification channel suppress the independent alarm sound.
+        prefs.edit().putBoolean(KEY_ALERTED, true).putBoolean(KEY_ACKNOWLEDGED, false).apply()
+        startAlarmLoop()
     }
 
     private fun startAlarmLoop() {
         if (alertRingtone?.isPlaying == true) return
         stopAlertAlarm()
         runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            if (uri == null) {
+                android.util.Log.w(TAG, "No alarm, ringtone, or notification sound is configured on this device")
+                return@runCatching
+            }
             alertRingtone = RingtoneManager.getRingtone(this, uri)?.apply {
                 // Alarm usage is independent of the normal ringtone/notification stream,
                 // so the alert can sound when the phone's ringer mode is Silent.
@@ -360,8 +361,8 @@ class ChargingMonitorService : Service() {
         )
         val statusText = when {
             percent in 0..100 && charging -> "Charging • $percent% • Monitoring active"
-            percent in 0..100 -> "Charger connected • $percent% • Monitoring active"
-            else -> "Monitoring battery while your phone is connected"
+            percent in 0..100 -> "Charging paused • $percent% • Monitoring active"
+            else -> "Checking charging status…"
         }
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
@@ -445,8 +446,8 @@ class ChargingMonitorService : Service() {
         private const val TAG = "WorklyCharging"
         private const val MONITOR_CHANNEL = "workly_charging_monitor"
         const val ALERT_CHANNEL = "workly_battery_full_alert"
-        private const val MONITOR_NOTIFICATION_ID = 8210
-        private const val ALERT_NOTIFICATION_ID = 8211
+        const val MONITOR_NOTIFICATION_ID = 8210
+        const val ALERT_NOTIFICATION_ID = 8211
         private const val MONITOR_REQUEST_CODE = 8212
         private const val ALERT_REQUEST_CODE = 8213
         private const val STOP_ALERT_REQUEST_CODE = 8214
