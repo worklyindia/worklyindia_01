@@ -1359,13 +1359,39 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             }
         }
 
-        if (Build.VERSION.SDK_INT >= 34 && !notificationManager.canUseFullScreenIntent()) {
-            showChargingAccessSettings(
-                "Allow full-screen battery alerts",
-                "Allow Workly India to open the full-screen 100% battery alert. Android may still limit this feature based on device and app eligibility.",
-                Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
-            )
-            return
+        if (Build.VERSION.SDK_INT >= 34) {
+            val accessPrefs = getSharedPreferences("workly_charging_access", Context.MODE_PRIVATE)
+            val hasFullScreenAccess = notificationManager.canUseFullScreenIntent()
+            if (hasFullScreenAccess) {
+                // Remember that access was granted and reset the one-time prompt.
+                // If the user later revokes access in Android Settings, we can
+                // explain how to restore it once, without nagging on every launch.
+                accessPrefs.edit()
+                    .putBoolean("full_screen_access_previously_granted", true)
+                    .putBoolean("full_screen_access_prompt_shown", false)
+                    .apply()
+            } else {
+                val wasPreviouslyGranted = accessPrefs.getBoolean("full_screen_access_previously_granted", false)
+                if (wasPreviouslyGranted) {
+                    // Access was switched off after being granted: allow one new prompt.
+                    accessPrefs.edit()
+                        .putBoolean("full_screen_access_previously_granted", false)
+                        .putBoolean("full_screen_access_prompt_shown", false)
+                        .apply()
+                }
+
+                // Do not repeat the prompt on every app launch or routine update
+                // when the user has never enabled this special access.
+                val promptAlreadyShown = accessPrefs.getBoolean("full_screen_access_prompt_shown", false)
+                if (!promptAlreadyShown) {
+                    accessPrefs.edit().putBoolean("full_screen_access_prompt_shown", true).apply()
+                    showChargingAccessSettings(
+                        "Allow full-screen battery alerts",
+                        "Allow Workly India to open the full-screen 100% battery alert. Android may still limit this feature based on device and app eligibility.",
+                        Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName"))
+                    )
+                }
+            }
         }
 
         ensureChargingBackgroundAccess()
