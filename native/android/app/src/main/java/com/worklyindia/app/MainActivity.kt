@@ -162,7 +162,7 @@ class MainActivity : FragmentActivity() {
                         runOnUiThread {
                             websiteDownloadDialog?.dismiss()
                             websiteDownloadDialog = null
-                            showWebsiteInstallReadyDialog(websiteDownloadRelease)
+                            window.decorView.post { continueWebsiteInstallIfAllowed() }
                         }
                     } else {
                         runOnUiThread { Toast.makeText(this@MainActivity, "Update download could not be opened. Please try again.", Toast.LENGTH_LONG).show() }
@@ -2413,7 +2413,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
             if (waitingForWebsiteInstallPermission) showWebsiteInstallPermissionDialog()
-            else showWebsiteInstallReadyDialog(websiteDownloadRelease)
+            else {
+                Toast.makeText(this, "Enable “Allow from this source” in Android settings to install the update.", Toast.LENGTH_LONG).show()
+            }
             return
         }
 
@@ -2683,44 +2685,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
-    private fun showWebsiteInstallReadyDialog(release: JSONObject?) {
-        if (pendingWebsiteInstallUri == null || websiteInstallDialogVisible || isFinishing || isDestroyed) return
-        websiteInstallDialogVisible = true
-        val versionName = release?.optString("version_name", "new version") ?: "new version"
-        val releaseNotes = release?.optString("release_notes", "")?.trim().orEmpty()
-        val mandatory = getInstalledAppVersionCode() < (release?.optInt("min_supported_version_code", 1) ?: 1).toLong()
-        val content = buildWebsiteUpdateCard(
-            versionName, "Download complete", releaseNotes,
-            showProgress = false
-        )
-
-        // Show the Supabase release notes first, then installation guidance separately.
-        val density = resources.displayMetrics.density
-        fun px(value: Int) = (value * density).toInt()
-        val dark = isNativeDarkTheme()
-        content.addView(TextView(this).apply {
-            text = "READY TO INSTALL"
-            textSize = 12f
-            letterSpacing = 0.08f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(if (dark) Color.rgb(76, 220, 190) else Color.rgb(13, 128, 100))
-            setPadding(0, px(12), 0, px(5))
-        }, LinearLayout.LayoutParams(-1, -2))
-        content.addView(TextView(this).apply {
-            text = "Your update has been downloaded successfully. Tap Install now to continue to Android's secure installation screen."
-            textSize = 14f
-            setTextColor(if (dark) Color.rgb(190, 202, 219) else Color.rgb(75, 85, 98))
-            setLineSpacing(px(3).toFloat(), 1f)
-        }, LinearLayout.LayoutParams(-1, -2))
-
-        showWebsiteUpdateBottomSheet(
-            content = content,
-            primaryLabel = "Install now",
-            secondaryLabel = if (mandatory) null else "Later",
-            onPrimary = { continueWebsiteInstallIfAllowed() },
-            onSecondary = { }
-        )
-    }
 
     private fun downloadWebsiteUpdate(release: JSONObject) {
         if (websiteDownloadId != -1L) {
@@ -3074,7 +3038,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             persistPendingWebsiteInstall(uri, websiteDownloadRelease)
                             websiteDownloadId = -1L
                             websiteUpdatePrefs.edit().remove("active_download_id").remove("active_download_release").apply()
-                            showWebsiteInstallReadyDialog(websiteDownloadRelease)
+                            window.decorView.post { continueWebsiteInstallIfAllowed() }
                         }
                     }
                     DownloadManager.STATUS_FAILED -> {
