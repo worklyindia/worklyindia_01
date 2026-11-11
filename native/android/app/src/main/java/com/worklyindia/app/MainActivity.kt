@@ -803,13 +803,23 @@ class MainActivity : FragmentActivity() {
         // foreground monitor service records this independently of Activity
         // destruction, so the next normal app launch starts at Home. A simple
         // background/resume never sets this flag and keeps the last route.
-        val forceHomeAfterTaskRemoval = navigationPrefs.getBoolean("force_home_next_launch", false)
+        // Android assigns a stable taskId while this app remains in Recents.
+        // If the user swipes the whole task away and launches again, Android creates
+        // a new taskId. This detects a real task removal even when the optional
+        // charging foreground service is not running (for example, access is OFF).
+        val previousTaskId = navigationPrefs.getInt("active_task_id", -1)
+        val taskWasRemoved = previousTaskId != -1 && previousTaskId != taskId
+        val forceHomeAfterTaskRemoval =
+            navigationPrefs.getBoolean("force_home_next_launch", false) || taskWasRemoved
+        val navigationEditor = navigationPrefs.edit()
+            .putInt("active_task_id", taskId)
         if (forceHomeAfterTaskRemoval) {
-            navigationPrefs.edit()
+            navigationEditor
                 .remove("force_home_next_launch")
                 .remove("last_route")
-                .commit()
         }
+        navigationEditor.commit()
+
         val savedRoute = navigationPrefs.getString("last_route", null)
             ?.takeIf { it.startsWith("/") && !it.startsWith("//") }
         val target = when {
@@ -2907,65 +2917,18 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             return
         }
         try {
-            // Install through PackageInstaller so Android 14+ can retain the
-            // user's existing full-screen-intent choice across an in-app APK update.
-            // This does NOT silently grant access: we request GRANTED only when
-            // canUseFullScreenIntent() is already true before the update starts.
-            val installer = packageManager.packageInstaller
-            val params = android.content.pm.PackageInstaller.SessionParams(
-                android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL
-            ).apply {
-                setAppPackageName(packageName)
-                if (Build.VERSION.SDK_INT >= 31) {
-                    setRequireUserAction(android.content.pm.PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
-                }
-                if (Build.VERSION.SDK_INT >= 34) {
-                    val hadUserGrantedFullScreenAccess =
-                        getSystemService(android.app.NotificationManager::class.java).canUseFullScreenIntent()
-                    setPermissionState(
-                        Manifest.permission.USE_FULL_SCREEN_INTENT,
-                        if (hadUserGrantedFullScreenAccess)
-                            android.content.pm.PackageInstaller.SessionParams.PERMISSION_STATE_GRANTED
-                        else
-                            android.content.pm.PackageInstaller.SessionParams.PERMISSION_STATE_DEFAULT
-                    )
-                    android.util.Log.i(
-                        "WorklyAppUpdate",
-                        "Preserving pre-update full-screen access choice: granted=$hadUserGrantedFullScreenAccess"
-                    )
-                }
+            // Hand the completed APK directly to Android's package installer.
+            // ACTION_VIEW launches the system confirmation immediately in the foreground;
+            // a PackageInstaller status callback can be deferred behind Workly on some
+            // Android/OEM builds until the user leaves and re-enters the app.
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            val sessionId = installer.createSession(params)
-            try {
-                installer.openSession(sessionId).use { session ->
-                    val input = contentResolver.openInputStream(apkUri)
-                        ?: throw IllegalStateException("Could not read downloaded APK.")
-                    input.use { source ->
-                        session.openWrite("workly-update.apk", 0, -1).use { output ->
-                            source.copyTo(output)
-                            session.fsync(output)
-                        }
-                    }
-                    val statusIntent = Intent(this, PackageInstallStatusActivity::class.java)
-                    val statusPendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or
-                        if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
-                    val statusPendingIntent = PendingIntent.getActivity(
-                        this,
-                        PACKAGE_INSTALL_STATUS_REQUEST,
-                        statusIntent,
-                        statusPendingIntentFlags
-                    )
-                    session.commit(statusPendingIntent.intentSender)
-                }
-                // The APK install request is now safely handed to Android.
-                waitingForWebsiteInstallPermission = false
-                websiteUpdatePrefs.edit().remove("waiting_permission").commit()
-                websiteInstallLaunchPending = false
-            } catch (installError: Exception) {
-                websiteInstallLaunchPending = false
-                runCatching { installer.abandonSession(sessionId) }
-                throw installError
-            }
+            startActivity(installIntent)
+            waitingForWebsiteInstallPermission = false
+            websiteUpdatePrefs.edit().remove("waiting_permission").commit()
+            websiteInstallLaunchPending = false
             websiteDownloadId = -1L
         } catch (error: Exception) {
             websiteInstallLaunchPending = false
