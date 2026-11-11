@@ -33,10 +33,10 @@ class PackageInstallStatusActivity : Activity() {
         when (callback.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 val confirmation = if (Build.VERSION.SDK_INT >= 33) {
-                    callback.getParcelableExtra(PackageInstaller.EXTRA_INTENT, Intent::class.java)
+                    callback.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
                 } else {
                     @Suppress("DEPRECATION")
-                    callback.getParcelableExtra<Intent>(PackageInstaller.EXTRA_INTENT)
+                    callback.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
                 }
                 if (confirmation != null) {
                     try {
