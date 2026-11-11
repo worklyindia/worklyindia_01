@@ -170,11 +170,21 @@ class MainActivity : FragmentActivity() {
                     val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
                     android.util.Log.e("WorklyAppUpdate", "Website APK download failed: $reason")
                     websiteDownloadId = -1L
+                    websiteUpdatePrefs.edit()
+                        .remove("active_download_id")
+                        .remove("active_download_release")
+                        .apply()
                     runOnUiThread {
                         websiteDownloadDialog?.dismiss()
                         websiteDownloadDialog = null
-                        Toast.makeText(this@MainActivity, "Update download failed. Please try again.", Toast.LENGTH_LONG).show()
-                        checkForWebsiteRelease()
+                        val reasonText = when (reason) {
+                            DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "An old update file already exists. Please tap Download update again."
+                            DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Not enough storage space to download the update."
+                            DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Download storage is unavailable. Please check your phone storage."
+                            DownloadManager.ERROR_CANNOT_RESUME -> "The download could not resume. Please try again."
+                            else -> "Update download failed (code $reason). Please check your internet and try again."
+                        }
+                        Toast.makeText(this@MainActivity, reasonText, Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -2384,6 +2394,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     override fun onPostResume() {
         super.onPostResume()
         resumePendingWebsiteInstall()
+        resumeActiveWebsiteDownload()
     }
 
     private fun resumePendingWebsiteInstall() {
@@ -2704,6 +2715,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun downloadWebsiteUpdate(release: JSONObject) {
+        if (websiteDownloadId != -1L) {
+            Toast.makeText(this, "The update is already downloading.", Toast.LENGTH_SHORT).show()
+            return
+        }
         val apkPath = release.optString("apk_path", "").trim()
         if (apkPath.isBlank()) {
             Toast.makeText(this, "Update file is not configured correctly.", Toast.LENGTH_LONG).show()
@@ -2736,6 +2751,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             "https://jubwzelupbntbetpajqb.supabase.co/storage/v1/object/public/android-app-releases/" + encodedPath
         }
         try {
+            val versionCode = release.optInt("version_code", 0)
+            require(versionCode > 0) { "Update version is invalid." }
+            // A unique filename avoids DownloadManager FILE_ALREADY_EXISTS failures
+            // when a previous APK remains in the app-specific Downloads folder.
+            val destinationName = "workly-india-update-$versionCode.apk"
             val request = DownloadManager.Request(Uri.parse(apkUrl))
                 .setTitle("Workly India update")
                 .setDescription("Downloading version " + release.optString("version_name"))
@@ -2743,11 +2763,16 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setAllowedOverMetered(true)
                 .setAllowedOverRoaming(false)
-                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "workly-india-update.apk")
+                .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, destinationName)
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             websiteDownloadRelease = release
             websiteDownloadId = manager.enqueue(request)
-            websiteUpdatePrefs.edit().putLong("active_download_id", websiteDownloadId).apply()
+            check(websiteDownloadId != -1L) { "Android could not queue the update download." }
+            websiteUpdatePrefs.edit()
+                .putLong("active_download_id", websiteDownloadId)
+                .putString("active_download_release", release.toString())
+                .apply()
+            android.util.Log.i("WorklyAppUpdate", "Queued APK download id=$websiteDownloadId version=$versionCode url=$apkUrl")
             showWebsiteDownloadProgress(release)
         } catch (error: Exception) {
             android.util.Log.e("WorklyAppUpdate", "Could not start APK download", error)
@@ -3010,6 +3035,51 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         pendingWebsiteInstallUri = uri?.let { runCatching { Uri.parse(it) }.getOrNull() }
         websiteDownloadRelease = release?.let { runCatching { JSONObject(it) }.getOrNull() }
         waitingForWebsiteInstallPermission = websiteUpdatePrefs.getBoolean("waiting_permission", false)
+        websiteDownloadId = websiteUpdatePrefs.getLong("active_download_id", -1L)
+        websiteDownloadRelease = websiteUpdatePrefs.getString("active_download_release", null)
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+    }
+
+    private fun resumeActiveWebsiteDownload() {
+        if (websiteDownloadId == -1L || pendingWebsiteInstallUri != null || isFinishing || isDestroyed) return
+        val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        runCatching {
+            manager.query(DownloadManager.Query().setFilterById(websiteDownloadId)).use { cursor ->
+                if (!cursor.moveToFirst()) {
+                    websiteDownloadId = -1L
+                    websiteUpdatePrefs.edit().remove("active_download_id").remove("active_download_release").apply()
+                    return
+                }
+                when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        val uri = manager.getUriForDownloadedFile(websiteDownloadId)
+                        if (uri != null) {
+                            pendingWebsiteInstallUri = uri
+                            persistPendingWebsiteInstall(uri, websiteDownloadRelease)
+                            websiteDownloadId = -1L
+                            websiteUpdatePrefs.edit().remove("active_download_id").remove("active_download_release").apply()
+                            showWebsiteInstallReadyDialog(websiteDownloadRelease)
+                        }
+                    }
+                    DownloadManager.STATUS_FAILED -> {
+                        val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                        android.util.Log.e("WorklyAppUpdate", "Restored APK download failed: $reason")
+                        websiteDownloadId = -1L
+                        websiteUpdatePrefs.edit().remove("active_download_id").remove("active_download_release").apply()
+                        Toast.makeText(this, "Update download failed. Please tap Download update to retry.", Toast.LENGTH_LONG).show()
+                    }
+                    DownloadManager.STATUS_PENDING,
+                    DownloadManager.STATUS_RUNNING,
+                    DownloadManager.STATUS_PAUSED -> {
+                        if (websiteDownloadDialog?.isShowing != true && websiteDownloadRelease != null) {
+                            showWebsiteDownloadProgress(websiteDownloadRelease!!)
+                        }
+                    }
+                }
+            }
+        }.onFailure { error ->
+            android.util.Log.e("WorklyAppUpdate", "Could not resume APK download", error)
+        }
     }
 
     private fun clearPendingWebsiteInstall() {
