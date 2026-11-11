@@ -309,8 +309,21 @@ export async function sendToUsers(
   if (allowedIds.length === 0) {
     return { sent: 0, failed: 0, invalidTokens: [], errors: [] };
   }
-  const tokens = await getUserTokens(supabase, allowedIds);
-  const result = await sendToTokens(tokens, payload);
+  // Keep the recipient identity in each data-only FCM payload. Android uses
+  // it to reject stale notifications after logout or when the device changes accounts.
+  const perUserResults = await Promise.all(allowedIds.map(async (userId) => {
+    const tokens = await getUserTokens(supabase, [userId]);
+    return sendToTokens(tokens, {
+      ...payload,
+      data: { ...(payload.data ?? {}), user_id: userId },
+    });
+  }));
+  const result: SendResult = {
+    sent: perUserResults.reduce((total, item) => total + item.sent, 0),
+    failed: perUserResults.reduce((total, item) => total + item.failed, 0),
+    invalidTokens: [...new Set(perUserResults.flatMap((item) => item.invalidTokens))],
+    errors: perUserResults.flatMap((item) => item.errors),
+  };
   await pruneInvalidTokens(supabase, result.invalidTokens);
   return result;
 }
