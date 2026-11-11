@@ -20,8 +20,8 @@ data class NativeSession(
 )
 
 /**
- * Minimal encrypted session bridge used only to register/unregister this WebView
- * installation for native Firebase notifications. Authentication stays on the website.
+ * Encrypted session bridge used by native notification actions.
+ * The website remains the source of truth for authentication.
  */
 object NativeAuth {
     private const val ALIAS = "workly_webview_session_key"
@@ -67,7 +67,7 @@ object NativeAuth {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
             .putString("data", Base64.encodeToString(encrypted, Base64.NO_WRAP))
-            .apply()
+            .commit()
         return session
     }
 
@@ -87,43 +87,65 @@ object NativeAuth {
         )
     }.getOrNull()
 
+    private fun accessTokenNeedsRefresh(token: String): Boolean = runCatching {
+        val payload = token.split(".").getOrNull(1) ?: return true
+        val decoded = Base64.decode(
+            payload,
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        val expiresAt = JSONObject(String(decoded, Charsets.UTF_8)).optLong("exp", 0L)
+        expiresAt <= (System.currentTimeMillis() / 1000L) + 60L
+    }.getOrDefault(true)
+
     /**
-     * Refresh the encrypted WebView session before background notification actions.
-     * Supabase rotates refresh tokens, so persist the complete replacement session.
+     * Avoid rotating Supabase's single-use refresh token on every reply.
+     * Refresh only near access-token expiry. A temporary network/server failure
+     * falls back to the still-stored access token; the API can then return its
+     * real authorization error instead of falsely telling a signed-in user to log in.
      */
     @Synchronized
-    fun refreshSession(context: Context): NativeSession? = runCatching {
+    fun refreshSession(context: Context): NativeSession? {
         val current = session(context) ?: return null
-        val connection = java.net.URL("https://jubwzelupbntbetpajqb.supabase.co/auth/v1/token?grant_type=refresh_token")
-            .openConnection() as java.net.HttpURLConnection
-        connection.requestMethod = "POST"
-        connection.connectTimeout = 10000
-        connection.readTimeout = 15000
-        connection.setRequestProperty("apikey", "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o")
-        connection.setRequestProperty("Content-Type", "application/json")
-        connection.doOutput = true
-        val body = JSONObject().put("refresh_token", current.refreshToken).toString()
-        connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-        val status = connection.responseCode
-        val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
-            ?.bufferedReader()?.use { it.readText() }.orEmpty()
-        connection.disconnect()
-        if (status !in 200..299) throw IllegalStateException("Session refresh failed [$status]")
-        val json = JSONObject(response)
-        val user = json.optJSONObject("user") ?: throw IllegalStateException("Refresh response has no user")
-        val refreshedUserId = user.optString("id")
-        if (refreshedUserId != current.userId) throw SecurityException("Refreshed account does not match the signed-in account")
-        saveWebSession(
-            context,
-            json.getString("access_token"),
-            json.getString("refresh_token"),
-            refreshedUserId,
-            user.optString("email", current.email),
-            current.userRole
-        )
-    }.getOrNull()
+        if (!accessTokenNeedsRefresh(current.accessToken)) return current
+
+        return try {
+            val connection = java.net.URL("https://jubwzelupbntbetpajqb.supabase.co/auth/v1/token?grant_type=refresh_token")
+                .openConnection() as java.net.HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 10000
+            connection.readTimeout = 15000
+            connection.setRequestProperty("apikey", "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o")
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            val body = JSONObject().put("refresh_token", current.refreshToken).toString()
+            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val status = connection.responseCode
+            val response = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            connection.disconnect()
+
+            if (status == 400 || status == 401) return null
+            if (status !in 200..299) return current
+
+            val json = JSONObject(response)
+            val user = json.optJSONObject("user") ?: return current
+            val refreshedUserId = user.optString("id")
+            if (refreshedUserId != current.userId) return null
+            saveWebSession(
+                context,
+                json.getString("access_token"),
+                json.getString("refresh_token"),
+                refreshedUserId,
+                user.optString("email", current.email),
+                current.userRole
+            )
+        } catch (error: Exception) {
+            android.util.Log.w("WorklyAuth", "Session refresh unavailable; trying current access token", error)
+            current
+        }
+    }
 
     fun signOut(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().commit()
     }
 }
