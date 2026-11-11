@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.view.Gravity
+import android.view.View
 import android.net.Uri
 
 /** Compact activity shown inside Android's conversation-bubble surface. */
@@ -31,7 +32,31 @@ class ChatBubbleActivity : Activity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.setSupportMultipleWindows(false)
-            webViewClient = WebViewClient()
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = false
+            settings.textZoom = 100
+            settings.setSupportZoom(false)
+            settings.builtInZoomControls = false
+            settings.displayZoomControls = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = true
+            isHorizontalScrollBarEnabled = false
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    super.onPageFinished(view, url)
+                    // Keep the site inside Android's compact bubble viewport.
+                    view.evaluateJavascript(
+                        "(function(){var m=document.querySelector('meta[name=viewport]');" +
+                            "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}" +
+                            "m.content='width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover';" +
+                            "document.documentElement.style.maxWidth='100%';" +
+                            "document.documentElement.style.overflowX='hidden';" +
+                            "if(document.body){document.body.style.maxWidth='100%';document.body.style.overflowX='hidden';}" +
+                            "})();",
+                        null
+                    )
+                }
+            }
             webChromeClient = WebChromeClient()
         }
         chatWebView = webView
@@ -47,7 +72,9 @@ class ChatBubbleActivity : Activity() {
             setBackgroundColor(0xFFF2F4F7.toInt())
             setOnClickListener { finish() }
         }
-        root.addView(close, FrameLayout.LayoutParams(48, 48, Gravity.TOP or Gravity.END))
+        val density = resources.displayMetrics.density
+        val closeSize = (48 * density).toInt()
+        root.addView(close, FrameLayout.LayoutParams(closeSize, closeSize, Gravity.TOP or Gravity.END))
         setContentView(root)
         webView.loadUrl(safeUrl)
     }
