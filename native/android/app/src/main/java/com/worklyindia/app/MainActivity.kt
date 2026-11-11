@@ -2108,6 +2108,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     NativePushManager.unregister(this@MainActivity, old)
                 }
                 NativeAuth.signOut(this@MainActivity)
+                NativePushManager.clearActiveNotifications(this@MainActivity)
                 autoPushRegistrationUserId = null
             }
         }
