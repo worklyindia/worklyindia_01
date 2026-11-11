@@ -153,41 +153,24 @@ class ChargingMonitorService : Service() {
                 }
 
                 runCatching {
-                    val englishVoices = engine.voices.orEmpty().filter {
-                        it.locale.language.equals("en", ignoreCase = true)
-                    }
-                    val preferredVoice = englishVoices.firstOrNull {
-                        it.locale.country.equals("IN", ignoreCase = true) &&
-                            !it.isNetworkConnectionRequired
-                    } ?: englishVoices.firstOrNull {
+                    // Use whichever language/voice the phone already provides.
+                    // The spoken phrase remains English ("Charging started"),
+                    // but do not require an English voice pack.
+                    val availableVoices = engine.voices.orEmpty()
+                    val preferredVoice = availableVoices.firstOrNull {
                         !it.isNetworkConnectionRequired
-                    } ?: englishVoices.firstOrNull {
-                        it.locale.country.equals("IN", ignoreCase = true)
-                    } ?: englishVoices.firstOrNull()
+                    } ?: availableVoices.firstOrNull()
 
-                    val languageResult = if (preferredVoice != null) {
-                        engine.setVoice(preferredVoice)
-                        engine.setLanguage(preferredVoice.locale)
+                    if (preferredVoice != null) {
+                        val voiceResult = engine.setVoice(preferredVoice)
+                        val languageResult = engine.setLanguage(preferredVoice.locale)
+                        android.util.Log.i(
+                            TAG,
+                            "Selected device TTS voice: ${preferredVoice.name}, locale=${preferredVoice.locale}, voiceResult=$voiceResult languageResult=$languageResult"
+                        )
                     } else {
-                        engine.setLanguage(java.util.Locale("en", "IN")).let { result ->
-                            if (result == TextToSpeech.LANG_MISSING_DATA ||
-                                result == TextToSpeech.LANG_NOT_SUPPORTED
-                            ) engine.setLanguage(java.util.Locale.US) else result
-                        }
-                    }
-
-                    if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
-                        languageResult == TextToSpeech.LANG_NOT_SUPPORTED
-                    ) {
-                        android.util.Log.e(TAG, "No usable English TTS language data; install an English voice in Android Text-to-speech settings")
-                        prefs.edit()
-                            .putBoolean(KEY_STARTED_ANNOUNCED, false)
-                            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                            .putBoolean(KEY_TTS_UNAVAILABLE, false)
-                            .apply()
-                        engine.shutdown()
-                        if (chargingTts === engine) chargingTts = null
-                        return@runCatching
+                        // Keep the TTS engine's configured default voice.
+                        android.util.Log.w(TAG, "No voice list returned; using the TTS engine's configured default")
                     }
 
                     engine.setAudioAttributes(
