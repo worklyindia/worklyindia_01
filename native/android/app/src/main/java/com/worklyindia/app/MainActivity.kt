@@ -3,6 +3,7 @@ package com.worklyindia.app
 import javax.crypto.Cipher
 import android.Manifest
 import android.app.Activity
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.IntentFilter
@@ -2971,10 +2972,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
 
-    companion object {
-        private const val PACKAGE_INSTALL_STATUS_REQUEST = 7441
-    }
-
     private fun isNativeDarkTheme(): Boolean =
         (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -3160,6 +3157,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     companion object {
+        private const val PACKAGE_INSTALL_STATUS_REQUEST = 7441
         private const val REQUEST_APP_UPDATE = 4104
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_CHARGING_ALERT_NOTIFICATIONS = 704
