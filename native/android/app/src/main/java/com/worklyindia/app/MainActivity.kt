@@ -2949,11 +2949,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         }
                     }
                     val statusIntent = Intent(this, PackageInstallStatusActivity::class.java)
+                    val statusPendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+                        if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
                     val statusPendingIntent = PendingIntent.getActivity(
                         this,
                         PACKAGE_INSTALL_STATUS_REQUEST,
                         statusIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                        statusPendingIntentFlags
                     )
                     session.commit(statusPendingIntent.intentSender)
                 }
