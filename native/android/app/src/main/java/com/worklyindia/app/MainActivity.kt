@@ -2398,9 +2398,17 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 clearPendingWebsiteInstall()
             } else if (waitingForWebsiteInstallPermission &&
                 (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls())) {
+                // Settings returns before the Activity is always fully interactive on every OEM.
+                // Defer the PackageInstaller session until the resumed window is ready, so the
+                // Android "Install update" confirmation appears immediately after permission is granted.
                 waitingForWebsiteInstallPermission = false
                 websiteUpdatePrefs.edit().putBoolean("waiting_permission", false).apply()
-                continueWebsiteInstallIfAllowed()
+                websiteInstallDialogVisible = false
+                window.decorView.post {
+                    if (!isFinishing && !isDestroyed && pendingWebsiteInstallUri != null) {
+                        continueWebsiteInstallIfAllowed()
+                    }
+                }
             } else if (waitingForWebsiteInstallPermission) {
                 showWebsiteInstallPermissionDialog()
             } else {
