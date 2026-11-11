@@ -287,8 +287,8 @@ class ChargingMonitorService : Service() {
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val stateText = if (charging) "Charging" else "Not charging"
-        val batteryText = if (percent in 0..100) "$stateText • $percent%" else stateText
+        val stateText = if (charging) "Charging" else "Battery"
+        val batteryText = if (percent in 0..100) "$stateText $percent% 🔋" else "$stateText 🔋"
         val notificationTitle = "Workly India Battery Protection"
         val notificationText = "Monitoring Your Battery 🔋 • $batteryText"
         val expandedText = "Monitoring Your Battery 🔋\n$batteryText\nSmart monitoring while charging. 😊"
