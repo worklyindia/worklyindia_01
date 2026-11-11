@@ -162,7 +162,7 @@ class ChargingMonitorService : Service() {
             chargingStartPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
@@ -262,6 +262,15 @@ class ChargingMonitorService : Service() {
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             alertRingtone = RingtoneManager.getRingtone(this, uri)?.apply {
+                // Alarm usage is independent of the normal ringtone/notification stream,
+                // so the alert can sound when the phone's ringer mode is Silent.
+                // Android Do Not Disturb policies may still suppress alarms.
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
                 play()
             }
