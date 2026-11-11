@@ -73,6 +73,12 @@
                 android:value="Monitors charging state and alerts once when the battery reaches full charge" />
         </service>
         <activity
+            android:name=".PackageInstallStatusActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
             android:name=".ChargingCompleteActivity"
             android:excludeFromRecents="true"
             android:exported="false"
