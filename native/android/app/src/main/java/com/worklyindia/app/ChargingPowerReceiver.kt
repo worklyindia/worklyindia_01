@@ -30,7 +30,6 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 if (!prefs.getBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)) {
                     prefs.edit()
                         .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, true)
-                        .putBoolean(ChargingMonitorService.KEY_TTS_UNAVAILABLE, false)
                         .apply()
                 }
                 startMonitor(context, "charger connected")
@@ -60,7 +59,6 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                     .putBoolean(ChargingMonitorService.KEY_ACKNOWLEDGED, false)
                     .putBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)
                     .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, false)
-                    .putBoolean(ChargingMonitorService.KEY_TTS_UNAVAILABLE, false)
                     .apply()
                 context.getSystemService(NotificationManager::class.java).cancel(ChargingMonitorService.MONITOR_NOTIFICATION_ID)
                 context.getSystemService(NotificationManager::class.java).cancel(ChargingMonitorService.ALERT_NOTIFICATION_ID)
