@@ -780,12 +780,24 @@ class MainActivity : FragmentActivity() {
         val explicitTarget = trustedInternalUrl(intent.getStringExtra("notification_url"))
             ?: trustedInternalUrl(intent.data?.toString())
             ?: if (intent.hasExtra("notification_type")) "https://$allowedHost/notifications" else null
-        val savedRoute = getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
-            .getString("last_route", null)
+        val navigationPrefs = getSharedPreferences("workly_navigation", Context.MODE_PRIVATE)
+        // A swipe-away from Android Recents is a deliberate full close. The
+        // foreground monitor service records this independently of Activity
+        // destruction, so the next normal app launch starts at Home. A simple
+        // background/resume never sets this flag and keeps the last route.
+        val forceHomeAfterTaskRemoval = navigationPrefs.getBoolean("force_home_next_launch", false)
+        if (forceHomeAfterTaskRemoval) {
+            navigationPrefs.edit()
+                .remove("force_home_next_launch")
+                .remove("last_route")
+                .commit()
+        }
+        val savedRoute = navigationPrefs.getString("last_route", null)
             ?.takeIf { it.startsWith("/") && !it.startsWith("//") }
         val target = when {
             openHomeFromQuickTile -> website
             explicitTarget != null -> explicitTarget
+            forceHomeAfterTaskRemoval -> website
             !savedRoute.isNullOrBlank() -> "https://$allowedHost$savedRoute"
             else -> website
         }
