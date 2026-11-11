@@ -31,13 +31,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 try {
                     val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(EXTRA_REPLY)?.toString()?.trim().orEmpty()
                     val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 5000 && conversationId.matches(Regex("[0-9a-fA-F-]{36}"))) {
-                        sendAuthenticatedChatReply(context, conversationId, reply)
-                        postReplyStatus(context, true, "Your reply was sent.")
+                    if (reply.isBlank() || reply.length > 5000 || !conversationId.matches(Regex("[0-9a-fA-F-]{36}"))) {
+                        throw IllegalArgumentException("Reply details are missing or invalid. Open the chat and try again.")
                     }
+                    sendAuthenticatedChatReply(context, conversationId, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyChatReply", "Inline reply failed", error)
-                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
+                    postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_REPLY)
                 } finally { pending.finish() }
             }.start()
             return
@@ -50,13 +50,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(EXTRA_WHATSAPP_REPLY)?.toString()?.trim().orEmpty()
                     val phone = intent.getStringExtra(EXTRA_WHATSAPP_PHONE).orEmpty()
                     val audience = intent.getStringExtra(EXTRA_WHATSAPP_AUDIENCE).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 4096 && phone.matches(Regex("[+0-9]{10,16}")) && audience == "customer_service") {
-                        sendAuthenticatedWhatsAppReply(context, phone, audience, reply)
-                        postReplyStatus(context, true, "Your reply was sent.")
+                    if (reply.isBlank() || reply.length > 4096 || !phone.matches(Regex("[+0-9]{10,16}")) || audience != "customer_service") {
+                        throw IllegalArgumentException("WhatsApp reply details are missing or invalid. Open the conversation and try again.")
                     }
+                    sendAuthenticatedWhatsAppReply(context, phone, audience, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyWhatsAppReply", "Inline WhatsApp reply failed", error)
-                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
+                    postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_WHATSAPP_REPLY)
                 } finally { pending.finish() }
             }.start()
             return
@@ -68,15 +68,15 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val reply = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(EXTRA_EMPLOYER_WA_REPLY)?.toString()?.trim().orEmpty()
                     val conversationId = intent.getStringExtra(EXTRA_EMPLOYER_WA_CONVERSATION_ID).orEmpty()
                     val phoneNumberId = intent.getStringExtra(EXTRA_EMPLOYER_WA_PHONE_NUMBER_ID).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 4096 &&
-                        conversationId.matches(Regex("[0-9a-fA-F-]{36}")) &&
-                        phoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}"))) {
-                        sendAuthenticatedEmployerWhatsAppReply(context, conversationId, phoneNumberId, reply)
-                        postReplyStatus(context, true, "Your reply was sent.")
+                    if (reply.isBlank() || reply.length > 4096 ||
+                        !conversationId.matches(Regex("[0-9a-fA-F-]{36}")) ||
+                        !phoneNumberId.matches(Regex("[A-Za-z0-9_-]{5,100}"))) {
+                        throw IllegalArgumentException("Employer WhatsApp reply details are missing or invalid. Open the conversation and try again.")
                     }
+                    sendAuthenticatedEmployerWhatsAppReply(context, conversationId, phoneNumberId, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyEmployerWhatsAppReply", "Inline employer WhatsApp reply failed", error)
-                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
+                    postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_EMPLOYER_WA_REPLY)
                 } finally { pending.finish() }
             }.start()
             return
@@ -90,17 +90,17 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     val accountId = intent.getStringExtra(EXTRA_META_ACCOUNT_ID).orEmpty()
                     val recipientId = intent.getStringExtra(EXTRA_META_RECIPIENT_ID).orEmpty()
                     val audience = intent.getStringExtra(EXTRA_META_AUDIENCE).orEmpty()
-                    if (reply.isNotBlank() && reply.length <= 2000 &&
-                        (platform == "instagram" || platform == "facebook") &&
-                        accountId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
-                        recipientId.matches(Regex("[A-Za-z0-9_-]{1,100}")) &&
-                        (audience.isEmpty() || audience == "support")) {
-                        sendAuthenticatedMetaReply(context, platform, accountId, recipientId, audience, reply)
-                        postReplyStatus(context, true, "Your reply was sent.")
+                    if (reply.isBlank() || reply.length > 2000 ||
+                        (platform != "instagram" && platform != "facebook") ||
+                        !accountId.matches(Regex("[A-Za-z0-9_-]{1,100}")) ||
+                        !recipientId.matches(Regex("[A-Za-z0-9_-]{1,100}")) ||
+                        (audience.isNotEmpty() && audience != "support")) {
+                        throw IllegalArgumentException("Instagram/Facebook reply details are missing or invalid. Open the conversation and try again.")
                     }
+                    sendAuthenticatedMetaReply(context, platform, accountId, recipientId, audience, reply)
                 } catch (error: Exception) {
                     android.util.Log.e("WorklyMetaReply", "Inline Meta reply failed", error)
-                    postReplyStatus(context, false, error.message ?: "Reply could not be sent. Please open the chat and try again.")
+                    postReplyFailure(context, error.message ?: "Reply could not be sent.", intent, EXTRA_META_REPLY)
                 } finally { pending.finish() }
             }.start()
             return
@@ -127,30 +127,43 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun postReplyStatus(context: Context, success: Boolean, detail: String) {
+    /** Show a retryable error only when sending fails; successful replies stay silent. */
+    private fun postReplyFailure(context: Context, detail: String, sourceIntent: Intent, replyKey: String) {
         runCatching {
             val channelId = "workly_reply_status_v1"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.createNotificationChannel(
-                    NotificationChannel(channelId, "Message reply status", NotificationManager.IMPORTANCE_DEFAULT)
+                    NotificationChannel(channelId, "Message reply errors", NotificationManager.IMPORTANCE_DEFAULT)
                 )
             }
+            val retryIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = sourceIntent.action
+                putExtras(sourceIntent)
+            }
+            val retryPendingIntent = PendingIntent.getBroadcast(
+                context,
+                (sourceIntent.action.orEmpty() + sourceIntent.getStringExtra(EXTRA_META_RECIPIENT_ID).orEmpty()
+                    + sourceIntent.getStringExtra(EXTRA_WHATSAPP_PHONE).orEmpty()).hashCode(),
+                retryIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_MUTABLE else 0
+            )
+            val retryInput = RemoteInput.Builder(replyKey).setLabel("Type your reply again").build()
+            val retryAction = NotificationCompat.Action.Builder(
+                android.R.drawable.ic_menu_send, "Retry reply", retryPendingIntent
+            ).addRemoteInput(retryInput).setAllowGeneratedReplies(true).build()
             val notification = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_stat_workly)
-                .setContentTitle(if (success) "Workly India · Reply sent" else "Workly India · Reply not sent")
-                .setContentText(detail.take(180))
-                .setStyle(NotificationCompat.BigTextStyle().bigText(detail.take(500)))
+                .setContentTitle("Reply not sent")
+                .setContentText(detail.take(150))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(detail.take(350) + "\nTap Retry reply to try again."))
+                .addAction(retryAction)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .build()
-            NotificationManagerCompat.from(context).notify(
-                "workly-reply-status",
-                if (success) 7401 else 7402,
-                notification
-            )
+            NotificationManagerCompat.from(context).notify("workly-reply-error", 7402, notification)
         }.onFailure {
-            android.util.Log.e("WorklyChatReply", "Could not show reply status notification", it)
+            android.util.Log.e("WorklyChatReply", "Could not show retry notification", it)
         }
     }
 

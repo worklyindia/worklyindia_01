@@ -240,7 +240,18 @@ object NativePushManager {
             ?: data["job_id"]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) }
                 ?.let { "https://worklyindia.devs.surf/job/${Uri.encode(it)}" }
             ?: "https://worklyindia.devs.surf/notifications"
-        val tag = data["tag"]?.takeIf { it.isNotBlank() } ?: "workly-${System.currentTimeMillis()}"
+        // Reuse one notification identity for every message in the same inbox thread.
+        // notify(tag, id, ...) then replaces the previous alert instead of stacking.
+        val sourceKey = listOf("platform", "source", "channel", "integration", "provider")
+            .firstNotNullOfOrNull { key -> data[key]?.takeIf { it.isNotBlank() }?.lowercase() }
+            ?: data["type"]?.substringBefore("_")?.lowercase()
+            ?: "workly"
+        val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId", "sender_id", "senderId", "phone", "phone_number")
+            .firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_+\\-]{1,120}")) } }
+        val stableConversationTag = conversationKey?.let { "workly-$sourceKey-$it" }
+        val tag = data["tag"]?.takeIf { it.isNotBlank() }
+            ?: stableConversationTag
+            ?: "workly-${System.currentTimeMillis()}"
 
         fun activityPendingIntent(url: String?, requestCode: Int): PendingIntent {
             val openIntent = Intent(context, MainActivity::class.java).apply {
@@ -393,13 +404,37 @@ object NativePushManager {
                     .onFailure { android.util.Log.w("WorklyPush", "Could not publish chat bubble shortcut", it) }
                 builder.setShortcutId(shortcutId).setBubbleMetadata(BubbleMetadata.Builder(shortcutId).setDesiredHeight(640).build())
             }
-            // Re-apply BigTextStyle after optional image handling so the expanded
-            // notification has a consistent readable body and visible action row.
-            builder.setStyle(
-                NotificationCompat.BigTextStyle()
-                    .bigText(body)
-                    .setBigContentTitle(title)
-            )
+            // Render inbox notifications as native Android conversations, not plain
+            // BigText cards. If the push includes recent message history, preserve it;
+            // otherwise show the current message as a single conversation entry.
+            val conversationStyle = NotificationCompat.MessagingStyle(
+                Person.Builder().setName("You").build()
+            ).setConversationTitle(title)
+            val history = data["messages"]?.let { raw ->
+                runCatching { org.json.JSONArray(raw) }.getOrNull()
+            }
+            if (history != null && history.length() > 0) {
+                for (index in 0 until history.length()) {
+                    val item = history.optJSONObject(index) ?: continue
+                    val text = item.optString("text", item.optString("message")).take(5000)
+                    if (text.isBlank()) continue
+                    val senderName = item.optString("sender_name", item.optString("sender", title))
+                    val isMe = item.optBoolean("is_me", item.optBoolean("from_me", false))
+                    val rawTimestamp = item.optLong("timestamp", System.currentTimeMillis())
+                    val timestamp = if (rawTimestamp in 1..9_999_999_999L) rawTimestamp * 1000L else rawTimestamp
+                    val person = Person.Builder().setName(if (isMe) "You" else senderName).build()
+                    conversationStyle.addMessage(text, timestamp, person)
+                }
+            }
+            if (history == null || history.length() == 0) {
+                val senderName = data["sender_name"] ?: data["sender"] ?: title
+                conversationStyle.addMessage(
+                    body,
+                    System.currentTimeMillis(),
+                    Person.Builder().setName(senderName).build()
+                )
+            }
+            builder.setStyle(conversationStyle)
             if (isInternalWorklyChat && internalConversationId != null) {
                 val remoteInput = androidx.core.app.RemoteInput.Builder("workly_chat_reply")
                     .setLabel("Type a reply")
