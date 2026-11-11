@@ -90,18 +90,24 @@ class ChargingMonitorService : Service() {
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
         val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
         val percent = if (level >= 0) (level * 100 / scale) else -1
+        val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-            status == BatteryManager.BATTERY_STATUS_FULL
+            status == BatteryManager.BATTERY_STATUS_FULL ||
+            (plugged && status != BatteryManager.BATTERY_STATUS_DISCHARGING)
+
+        // Keep the ongoing foreground notification current for the lock screen
+        // and notification shade, even while the app UI is closed.
+        getSystemService(NotificationManager::class.java)
+            .notify(MONITOR_NOTIFICATION_ID, buildMonitorNotification(percent, charging))
+
         if (charging && percent in 0..99) {
             playChargingStartAnnouncementOnce()
         }
         if (charging && percent >= 100) {
             showChargeCompleteAlert()
-        } else if (!charging) {
-            // A transient/stale BATTERY_CHANGED status must not kill the monitor.
-            // The explicit POWER_DISCONNECTED broadcast owns service shutdown.
-            resetChargeCycleAndStopAlert()
         }
+        // Do not reset the charge cycle from a possibly stale BATTERY_CHANGED
+        // snapshot. ACTION_POWER_DISCONNECTED is the authoritative unplug edge.
     }
 
     private fun resetChargeCycleAndStopAlert() {
@@ -296,18 +302,32 @@ class ChargingMonitorService : Service() {
         getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
     }
 
-    private fun buildMonitorNotification(): Notification {
+    private fun buildMonitorNotification(percent: Int = -1, charging: Boolean = true): Notification {
         val openIntent = PendingIntent.getActivity(
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val statusText = when {
+            percent in 0..100 && charging -> "Charging • $percent% • Monitoring active"
+            percent in 0..100 -> "Charger connected • $percent% • Monitoring active"
+            else -> "Monitoring battery while your phone is connected"
+        }
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
-            .setContentTitle("Workly battery protection")
-            .setContentText("Monitoring while your phone is charging")
+            .setContentTitle("Workly charging monitor")
+            .setContentText(statusText)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setPublicVersion(
+                NotificationCompat.Builder(this, MONITOR_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_workly)
+                    .setContentTitle("Workly charging monitor")
+                    .setContentText(statusText)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .build()
+            )
             .setContentIntent(openIntent)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
@@ -319,7 +339,8 @@ class ChargingMonitorService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
                 NotificationChannel(MONITOR_CHANNEL, "Charging monitor", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Keeps the battery completion monitor active while charging"
+                    description = "Shows live charging status on the lock screen and notification shade"
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     setShowBadge(false)
                     setSound(null, null)
                 }
