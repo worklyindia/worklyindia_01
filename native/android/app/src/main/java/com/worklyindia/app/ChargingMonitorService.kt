@@ -12,25 +12,20 @@ import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.Ringtone
 import android.media.RingtoneManager
-import android.media.MediaPlayer
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.os.BatteryManager
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import java.io.File
-import java.net.URL
-import java.util.concurrent.Executors
 
 class ChargingMonitorService : Service() {
     private var batteryReceiverRegistered = false
     private var alertRingtone: Ringtone? = null
-    private var chargingStartPlayer: MediaPlayer? = null
-    @Volatile private var chargingAudioAttemptInFlight = false
-    private val chargingAudioExecutor = Executors.newSingleThreadExecutor()
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private var chargingTts: TextToSpeech? = null
+    private var chargingTtsInitializing = false
     @Volatile private var serviceDestroyed = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
@@ -128,134 +123,154 @@ class ChargingMonitorService : Service() {
     }
 
     /**
-     * Plays the user's supplied charging-start MP3. The first successful
-     * download is cached in app-private storage; every later charge plays
-     * directly from that cache, including when the phone is offline.
-     *
-     * Only ACTION_POWER_CONNECTED arms this announcement. Boot/update
-     * restoration does not announce, and a failed attempt is not marked as
-     * played so the next physical plug-in can try again.
+     * Uses Android's own TextToSpeech engine. Prefer an installed offline
+     * English voice, but allow the engine's English fallback if needed.
+     * A transient initialization/speech error must never permanently disable
+     * TTS for future charging sessions.
      */
     private fun playChargingStartAnnouncementOnce() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) ||
             prefs.getBoolean(KEY_STARTED_ANNOUNCED, false) ||
-            chargingAudioAttemptInFlight
+            chargingTts != null || chargingTtsInitializing
         ) return
 
-        chargingAudioAttemptInFlight = true
-        chargingAudioExecutor.execute {
-            runCatching {
-                val cachedAudio = File(cacheDir, CHARGING_START_AUDIO_FILE)
-                if (!cachedAudio.isFile || cachedAudio.length() <= 0L) {
-                    val temporary = File(cacheDir, "$CHARGING_START_AUDIO_FILE.tmp")
-                    temporary.delete()
-                    URL(CHARGING_START_AUDIO_URL).openConnection().apply {
-                        connectTimeout = 10_000
-                        readTimeout = 20_000
-                        getInputStream().use { input ->
-                            temporary.outputStream().use { output -> input.copyTo(output) }
+        chargingTtsInitializing = true
+        try {
+            chargingTts = TextToSpeech(applicationContext) { status ->
+                chargingTtsInitializing = false
+                val engine = chargingTts
+                if (status != TextToSpeech.SUCCESS || engine == null || serviceDestroyed) {
+                    android.util.Log.e(TAG, "TextToSpeech initialization failed: status=$status")
+                    prefs.edit()
+                        .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                        .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                        .putBoolean(KEY_TTS_UNAVAILABLE, false)
+                        .apply()
+                    engine?.shutdown()
+                    if (chargingTts === engine) chargingTts = null
+                    return@TextToSpeech
+                }
+
+                runCatching {
+                    val englishVoices = engine.voices.orEmpty().filter {
+                        it.locale.language.equals("en", ignoreCase = true)
+                    }
+                    val preferredVoice = englishVoices.firstOrNull {
+                        it.locale.country.equals("IN", ignoreCase = true) &&
+                            !it.isNetworkConnectionRequired
+                    } ?: englishVoices.firstOrNull {
+                        !it.isNetworkConnectionRequired
+                    } ?: englishVoices.firstOrNull {
+                        it.locale.country.equals("IN", ignoreCase = true)
+                    } ?: englishVoices.firstOrNull()
+
+                    val languageResult = if (preferredVoice != null) {
+                        engine.setVoice(preferredVoice)
+                        engine.setLanguage(preferredVoice.locale)
+                    } else {
+                        engine.setLanguage(java.util.Locale("en", "IN")).let { result ->
+                            if (result == TextToSpeech.LANG_MISSING_DATA ||
+                                result == TextToSpeech.LANG_NOT_SUPPORTED
+                            ) engine.setLanguage(java.util.Locale.US) else result
                         }
                     }
-                    check(temporary.isFile && temporary.length() > 0L) {
-                        "Charging-start audio download was empty"
-                    }
-                    if (cachedAudio.exists()) cachedAudio.delete()
-                    check(temporary.renameTo(cachedAudio)) {
-                        "Could not move charging-start audio into the local cache"
-                    }
-                }
-                cachedAudio
-            }.onSuccess { audioFile ->
-                mainHandler.post {
-                    chargingAudioAttemptInFlight = false
-                    if (!serviceDestroyed &&
-                        prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) &&
-                        !prefs.getBoolean(KEY_STARTED_ANNOUNCED, false)
+
+                    if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                        languageResult == TextToSpeech.LANG_NOT_SUPPORTED
                     ) {
-                        startChargingStartPlayback(audioFile)
+                        android.util.Log.e(TAG, "No usable English TTS language data; install an English voice in Android Text-to-speech settings")
+                        prefs.edit()
+                            .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                            .putBoolean(KEY_TTS_UNAVAILABLE, false)
+                            .apply()
+                        engine.shutdown()
+                        if (chargingTts === engine) chargingTts = null
+                        return@runCatching
                     }
+
+                    engine.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build()
+                    )
+                    engine.setSpeechRate(1.0f)
+                    engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            prefs.edit()
+                                .putBoolean(KEY_STARTED_ANNOUNCED, true)
+                                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                                .putBoolean(KEY_TTS_UNAVAILABLE, false)
+                                .apply()
+                            android.util.Log.i(TAG, "Charging-start TTS speech started")
+                        }
+
+                        override fun onDone(utteranceId: String?) {
+                            android.util.Log.i(TAG, "Charging-start TTS completed")
+                            engine.shutdown()
+                            if (chargingTts === engine) chargingTts = null
+                        }
+
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) {
+                            handleChargingTtsError(engine, prefs, "TTS utterance failed")
+                        }
+
+                        override fun onError(utteranceId: String?, errorCode: Int) {
+                            handleChargingTtsError(engine, prefs, "TTS utterance failed: $errorCode")
+                        }
+                    })
+
+                    val result = engine.speak(
+                        "Charging started",
+                        TextToSpeech.QUEUE_FLUSH,
+                        Bundle(),
+                        "workly-charging-start"
+                    )
+                    if (result == TextToSpeech.ERROR) {
+                        handleChargingTtsError(engine, prefs, "TextToSpeech.speak returned ERROR")
+                    }
+                }.onFailure { error ->
+                    android.util.Log.e(TAG, "Could not configure or start charging TTS", error)
+                    handleChargingTtsError(engine, prefs, "TTS setup exception")
                 }
-            }.onFailure { error ->
-                android.util.Log.e(TAG, "Charging-start audio could not be downloaded/cached", error)
-                chargingAudioAttemptInFlight = false
-                // Avoid repeated network attempts on every battery percentage
-                // update. The next real plug-in edge will arm a fresh attempt.
-                prefs.edit().putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false).apply()
             }
+        } catch (error: Exception) {
+            chargingTtsInitializing = false
+            android.util.Log.e(TAG, "Could not create TextToSpeech engine", error)
+            prefs.edit()
+                .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                .putBoolean(KEY_TTS_UNAVAILABLE, false)
+                .apply()
+            chargingTts?.shutdown()
+            chargingTts = null
         }
     }
 
-    private fun startChargingStartPlayback(audioFile: File) {
-        runCatching {
-            chargingStartPlayer?.release()
-            chargingStartPlayer = MediaPlayer().apply {
-                setWakeMode(applicationContext, android.os.PowerManager.PARTIAL_WAKE_LOCK)
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        // Media usage remains audible in Silent mode; it follows
-                        // the media-volume control instead of notification volume.
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                setDataSource(audioFile.absolutePath)
-                setVolume(1.0f, 1.0f)
-                setOnPreparedListener { player ->
-                    if (!serviceDestroyed &&
-                        getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                            .getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                    ) {
-                        try {
-                            player.start()
-                            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                                .putBoolean(KEY_STARTED_ANNOUNCED, true)
-                                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                                .apply()
-                            android.util.Log.i(TAG, "Cached offline charging-start audio playback started")
-                        } catch (error: Exception) {
-                            android.util.Log.e(TAG, "Could not start charging-start audio playback", error)
-                            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                                .apply()
-                            player.release()
-                            if (chargingStartPlayer === player) chargingStartPlayer = null
-                        }
-                    } else {
-                        player.release()
-                        if (chargingStartPlayer === player) chargingStartPlayer = null
-                    }
-                }
-                setOnCompletionListener { player ->
-                    player.release()
-                    if (chargingStartPlayer === player) chargingStartPlayer = null
-                }
-                setOnErrorListener { player, what, extra ->
-                    android.util.Log.e(TAG, "Charging-start audio playback failed: what=$what extra=$extra")
-                    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                        .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                        .apply()
-                    player.release()
-                    if (chargingStartPlayer === player) chargingStartPlayer = null
-                    true
-                }
-                prepareAsync()
-            }
-        }.onFailure { error ->
-            android.util.Log.e(TAG, "Could not prepare charging-start audio", error)
-            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                .apply()
-            chargingStartPlayer?.release()
-            chargingStartPlayer = null
-        }
+    private fun handleChargingTtsError(
+        engine: TextToSpeech,
+        prefs: android.content.SharedPreferences,
+        reason: String
+    ) {
+        android.util.Log.e(TAG, reason)
+        prefs.edit()
+            .putBoolean(KEY_STARTED_ANNOUNCED, false)
+            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+            .putBoolean(KEY_TTS_UNAVAILABLE, false)
+            .apply()
+        runCatching { engine.stop() }
+        engine.shutdown()
+        if (chargingTts === engine) chargingTts = null
     }
 
     private fun stopChargingStartPlayback() {
-        runCatching { chargingStartPlayer?.stop() }
-        runCatching { chargingStartPlayer?.release() }
-        chargingStartPlayer = null
-        chargingAudioAttemptInFlight = false
+        runCatching { chargingTts?.stop() }
+        runCatching { chargingTts?.shutdown() }
+        chargingTts = null
+        chargingTtsInitializing = false
     }
 
     private fun showChargeCompleteAlert() {
@@ -420,7 +435,6 @@ class ChargingMonitorService : Service() {
 
     override fun onDestroy() {
         serviceDestroyed = true
-        chargingAudioExecutor.shutdownNow()
         stopChargingStartPlayback()
         stopAlertAlarm()
         if (batteryReceiverRegistered) runCatching { unregisterReceiver(batteryReceiver) }
@@ -448,8 +462,7 @@ class ChargingMonitorService : Service() {
         const val KEY_ACKNOWLEDGED = "alert_acknowledged"
         const val KEY_STARTED_ANNOUNCED = "charging_start_announced"
         const val KEY_START_ANNOUNCEMENT_PENDING = "charging_start_announcement_pending"
-        private const val CHARGING_START_AUDIO_URL = "https://pub-ee957862ecde456a8553e1cf5bae1852.r2.dev/hero-banners/ElevenLabs_2026-11-11T06_50_38_Ryan%20Kurk%20-%20Pleasant%20and%20Smooth_pvc_s50_sim75_v4.mp3"
-        private const val CHARGING_START_AUDIO_FILE = "workly-charging-started.mp3"
+        const val KEY_TTS_UNAVAILABLE = "charging_offline_tts_unavailable"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
         const val ACTION_ACKNOWLEDGE = "com.worklyindia.app.CHARGING_ALERT_ACKNOWLEDGE"
