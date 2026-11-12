@@ -1656,26 +1656,60 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 val generalSettings = Intent(
                     android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION
                 )
-                try {
-                    // Prefer the app-specific page. Some OEM Settings apps ignore
-                    // the package URI, so retry with the general overlay page.
-                    try {
-                        startActivity(packageSettings)
-                    } catch (packageSettingsError: Exception) {
-                        android.util.Log.w(
-                            "WorklyOverlay",
-                            "App-specific overlay settings unavailable; opening general page",
-                            packageSettingsError
+                val guidancePrefs = getSharedPreferences("workly_overlay_access", Context.MODE_PRIVATE)
+                val hasShownRestrictedSettingsGuide =
+                    guidancePrefs.getBoolean("restricted_settings_guide_seen", false)
+
+                // Android 13+ may block special permissions for sideloaded apps.
+                // There is no public API to read or bypass this restriction. Explain
+                // the required user action before opening the app-specific settings.
+                if (Build.VERSION.SDK_INT >= 33 && !hasShownRestrictedSettingsGuide) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Allow restricted settings")
+                        .setMessage(
+                            "Android has blocked this permission for Workly India. First open App info, tap the ⋮ menu, and choose \"Allow restricted settings\". Then return to Workly India and tap the permission button again to enable \"Display over other apps\". Android requires you to do this manually."
                         )
-                        startActivity(generalSettings)
+                        .setPositiveButton("Open app info") { _, _ ->
+                            guidancePrefs.edit().putBoolean("restricted_settings_guide_seen", true).apply()
+                            val appInfoIntent = Intent(
+                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.parse("package:" + packageName)
+                            )
+                            try {
+                                startActivity(appInfoIntent)
+                            } catch (error: Exception) {
+                                android.util.Log.w("WorklyOverlay", "Could not open app info settings", error)
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Open Settings > Apps > Workly India > tap ⋮ > Allow restricted settings.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                        .setNegativeButton("Not now", null)
+                        .show()
+                } else {
+                    try {
+                        // Prefer the app-specific page. Some OEM Settings apps ignore
+                        // the package URI, so retry with the general overlay page.
+                        try {
+                            startActivity(packageSettings)
+                        } catch (packageSettingsError: Exception) {
+                            android.util.Log.w(
+                                "WorklyOverlay",
+                                "App-specific overlay settings unavailable; opening general page",
+                                packageSettingsError
+                            )
+                            startActivity(generalSettings)
+                        }
+                    } catch (error: Exception) {
+                        android.util.Log.w("WorklyOverlay", "Could not open overlay permission settings", error)
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Open Settings > Apps > Special app access > Display over other apps. If access is restricted, open Workly India App info > ⋮ > Allow restricted settings first.",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
-                } catch (error: Exception) {
-                    android.util.Log.w("WorklyOverlay", "Could not open overlay permission settings", error)
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Open Settings > Apps > Special app access > Display over other apps. If Android says access is restricted, open Workly India App info > ⋮ > Allow restricted settings first.",
-                        Toast.LENGTH_LONG
-                    ).show()
                 }
             }
             return false
