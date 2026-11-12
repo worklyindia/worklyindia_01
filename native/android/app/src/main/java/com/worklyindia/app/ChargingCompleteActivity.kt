@@ -101,7 +101,7 @@ class ChargingCompleteActivity : Activity() {
         }
 
         val brand = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, px(42))
         }
@@ -110,15 +110,15 @@ class ChargingCompleteActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Workly India app logo"
         }
-        brand.addView(logo, LinearLayout.LayoutParams(px(42), px(42)).apply { rightMargin = px(11) })
+        brand.addView(logo, LinearLayout.LayoutParams(px(48), px(48)))
         brand.addView(TextView(this).apply {
             text = "Workly India"
             textSize = 20f
             letterSpacing = 0.015f
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(Color.WHITE)
-        })
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(8) })
         root.addView(brand)
 
         // Original battery ring + lightning bolt animation, with a transparent canvas.
