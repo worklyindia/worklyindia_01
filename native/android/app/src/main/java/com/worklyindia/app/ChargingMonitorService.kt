@@ -74,6 +74,7 @@ class ChargingMonitorService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_POWER_CONNECTED -> {
+                stopChargingStoppedPlayback()
                 val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 // Arm the start clip exactly once per physical plug-in edge.
                 // The receiver passes this explicit action so it cannot race
@@ -194,7 +195,7 @@ class ChargingMonitorService : Service() {
             chargingStartPlayer = player
             player.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
@@ -330,17 +331,23 @@ class ChargingMonitorService : Service() {
         fullChargeVoicePlayer = null
     }
 
+    private fun stopChargingStoppedPlayback() {
+        runCatching { chargingStoppedPlayer?.stop() }
+        runCatching { chargingStoppedPlayer?.release() }
+        chargingStoppedPlayer = null
+    }
+
     /** Plays the disconnect MP3 once after a genuine active charging session ends. */
     private fun playChargingStoppedAnnouncement() {
+        stopChargingStoppedPlayback()
         runCatching {
-            runCatching { chargingStoppedPlayer?.stop() }
-            runCatching { chargingStoppedPlayer?.release() }
+            stopChargingStoppedPlayback()
             val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped)
                 ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
             chargingStoppedPlayer = player
             player.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
@@ -478,9 +485,7 @@ class ChargingMonitorService : Service() {
     override fun onDestroy() {
         serviceDestroyed = true
         stopChargingStartPlayback()
-        runCatching { chargingStoppedPlayer?.stop() }
-        runCatching { chargingStoppedPlayer?.release() }
-        chargingStoppedPlayer = null
+        stopChargingStoppedPlayback()
         stopFullChargeVoice()
         stopAlertAlarm()
         if (batteryReceiverRegistered) runCatching { unregisterReceiver(batteryReceiver) }
