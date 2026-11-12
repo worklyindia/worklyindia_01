@@ -23,6 +23,8 @@ class ChargingMonitorService : Service() {
     private var batteryReceiverRegistered = false
     private var alertRingtone: Ringtone? = null
     private var chargingStartPlayer: MediaPlayer? = null
+    private var chargingStoppedPlayer: MediaPlayer? = null
+    private var fullChargeVoicePlayer: MediaPlayer? = null
     @Volatile private var serviceDestroyed = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
@@ -70,6 +72,11 @@ class ChargingMonitorService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_POWER_DISCONNECTED -> {
+                val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                val hadActiveChargingSession = prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false)
+                stopFullChargeVoice()
+                stopAlertAlarm()
+                if (hadActiveChargingSession) playChargingStoppedAnnouncement()
                 resetChargeCycleAndStopAlert()
                 readCurrentBatteryState()
                 return START_STICKY
@@ -136,6 +143,7 @@ class ChargingMonitorService : Service() {
 
     private fun resetChargeCycleAndStopAlert() {
         stopAlertAlarm()
+        stopFullChargeVoice()
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_ALERTED, false)
             .putBoolean(KEY_ACKNOWLEDGED, false)
@@ -262,6 +270,73 @@ class ChargingMonitorService : Service() {
         // Do not let a disabled notification channel suppress the independent alarm sound.
         prefs.edit().putBoolean(KEY_ALERTED, true).putBoolean(KEY_ACKNOWLEDGED, false).apply()
         startAlarmLoop()
+        startFullChargeVoice()
+    }
+
+    /** Repeats the bundled 100% voice together with the device alarm until stopped. */
+    private fun startFullChargeVoice() {
+        if (fullChargeVoicePlayer?.isPlaying == true) return
+        stopFullChargeVoice()
+        runCatching {
+            val player = MediaPlayer.create(applicationContext, R.raw.battery_fully_charged)
+                ?: throw IllegalStateException("Could not load bundled full-charge audio")
+            fullChargeVoicePlayer = player
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            player.isLooping = true
+            player.setOnErrorListener { failed, what, extra ->
+                android.util.Log.e(TAG, "Full-charge voice failed: what=$what extra=$extra")
+                failed.release()
+                if (fullChargeVoicePlayer === failed) fullChargeVoicePlayer = null
+                true
+            }
+            player.start()
+            android.util.Log.i(TAG, "Full-charge voice loop started")
+        }.onFailure { error ->
+            android.util.Log.e(TAG, "Could not play full-charge voice", error)
+            stopFullChargeVoice()
+        }
+    }
+
+    private fun stopFullChargeVoice() {
+        runCatching { fullChargeVoicePlayer?.stop() }
+        runCatching { fullChargeVoicePlayer?.release() }
+        fullChargeVoicePlayer = null
+    }
+
+    /** Plays the disconnect MP3 once after a genuine active charging session ends. */
+    private fun playChargingStoppedAnnouncement() {
+        runCatching {
+            runCatching { chargingStoppedPlayer?.stop() }
+            runCatching { chargingStoppedPlayer?.release() }
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped)
+                ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
+            chargingStoppedPlayer = player
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            player.setOnCompletionListener { completed ->
+                completed.release()
+                if (chargingStoppedPlayer === completed) chargingStoppedPlayer = null
+            }
+            player.setOnErrorListener { failed, what, extra ->
+                android.util.Log.e(TAG, "Charging-stopped audio failed: what=$what extra=$extra")
+                failed.release()
+                if (chargingStoppedPlayer === failed) chargingStoppedPlayer = null
+                true
+            }
+            player.start()
+            android.util.Log.i(TAG, "Charging-stopped MP3 playback started")
+        }.onFailure { error ->
+            android.util.Log.e(TAG, "Could not play charging-stopped MP3", error)
+        }
     }
 
     private fun startAlarmLoop() {
@@ -305,6 +380,7 @@ class ChargingMonitorService : Service() {
 
     private fun acknowledgeAlert() {
         stopAlertAlarm()
+        stopFullChargeVoice()
         getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putBoolean(KEY_ACKNOWLEDGED, true).apply()
         getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
@@ -379,6 +455,10 @@ class ChargingMonitorService : Service() {
     override fun onDestroy() {
         serviceDestroyed = true
         stopChargingStartPlayback()
+        runCatching { chargingStoppedPlayer?.stop() }
+        runCatching { chargingStoppedPlayer?.release() }
+        chargingStoppedPlayer = null
+        stopFullChargeVoice()
         stopAlertAlarm()
         if (batteryReceiverRegistered) runCatching { unregisterReceiver(batteryReceiver) }
         batteryReceiverRegistered = false
