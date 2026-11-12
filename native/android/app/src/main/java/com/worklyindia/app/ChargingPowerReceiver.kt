@@ -98,6 +98,7 @@ class ChargingPowerReceiver : BroadcastReceiver() {
             android.util.Log.i("WorklyCharging", "Starting foreground battery monitor: $reason")
         } catch (error: Exception) {
             android.util.Log.e("WorklyCharging", "Could not start battery monitor: $reason", error)
+            AppErrorReporter.capture(context, "charging_power_receiver", "error", error, source = reason)
         }
     }
 

@@ -59,6 +59,7 @@ class WorklyFestivalSyncWorker(context: Context, params: WorkerParameters) : Wor
                 Result.success()
             } else Result.retry()
         } catch (e: Exception) {
+            AppErrorReporter.capture(applicationContext, "festival_sync", "error", e)
             Log.w(TAG, "Background festival sync failed; keeping offline cache", e)
             Result.retry()
         } finally {

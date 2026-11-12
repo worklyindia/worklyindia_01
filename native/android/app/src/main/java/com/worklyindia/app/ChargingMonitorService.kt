@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.Ringtone
 import android.media.RingtoneManager
@@ -242,6 +243,7 @@ class ChargingMonitorService : Service() {
             }
             player.setOnErrorListener { failed, what, extra ->
                 android.util.Log.e(TAG, "Bundled charging-start audio failed: what=$what extra=$extra")
+                AppErrorReporter.capture(applicationContext, "charging_audio", "error", "MediaPlayerError", "Charging-start MP3 failed: what=$what extra=$extra", source = "charging_started.mp3")
                 prefs.edit()
                     .putBoolean(KEY_STARTED_ANNOUNCED, false)
                     .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
@@ -254,6 +256,7 @@ class ChargingMonitorService : Service() {
             android.util.Log.i(TAG, "Bundled charging-start MP3 playback started")
         }.onFailure { error ->
             android.util.Log.e(TAG, "Could not play bundled charging-start MP3", error)
+            AppErrorReporter.capture(applicationContext, "charging_audio", "error", error, source = "charging_started.mp3")
             prefs.edit()
                 .putBoolean(KEY_STARTED_ANNOUNCED, false)
                 .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
@@ -345,6 +348,7 @@ class ChargingMonitorService : Service() {
             player.isLooping = true
             player.setOnErrorListener { failed, what, extra ->
                 android.util.Log.e(TAG, "Full-charge voice failed: what=$what extra=$extra")
+                AppErrorReporter.capture(applicationContext, "charging_audio", "error", "MediaPlayerError", "Full-charge voice failed: what=$what extra=$extra", source = "battery_fully_charged.mp3")
                 failed.release()
                 if (fullChargeVoicePlayer === failed) fullChargeVoicePlayer = null
                 true
@@ -353,6 +357,7 @@ class ChargingMonitorService : Service() {
             android.util.Log.i(TAG, "Full-charge voice loop started")
         }.onFailure { error ->
             android.util.Log.e(TAG, "Could not play full-charge voice", error)
+            AppErrorReporter.capture(applicationContext, "charging_audio", "error", error, source = "battery_fully_charged.mp3")
             stopFullChargeVoice()
         }
     }
@@ -399,14 +404,29 @@ class ChargingMonitorService : Service() {
             }
             player.setOnErrorListener { failed, what, extra ->
                 android.util.Log.e(TAG, "Charging-stopped audio failed: what=$what extra=$extra")
+                AppErrorReporter.capture(
+                    applicationContext, "charging_audio", "error", "MediaPlayerError",
+                    "Charging-stopped MP3 failed: what=$what extra=$extra",
+                    source = "charging_stopped.mp3"
+                )
                 failed.release()
                 if (chargingStoppedPlayer === failed) chargingStoppedPlayer = null
                 true
+            }
+            val alarmVolume = (getSystemService(Context.AUDIO_SERVICE) as AudioManager)
+                .getStreamVolume(AudioManager.STREAM_ALARM)
+            if (alarmVolume == 0) {
+                AppErrorReporter.capture(
+                    applicationContext, "charging_audio", "warning", "AlarmVolumeMuted",
+                    "Alarm stream volume is zero; unplug audio may be inaudible",
+                    source = "charging_stopped.mp3"
+                )
             }
             player.start()
             android.util.Log.i(TAG, "Charging-stopped MP3 playback started")
         }.onFailure { error ->
             android.util.Log.e(TAG, "Could not play charging-stopped MP3", error)
+            AppErrorReporter.capture(applicationContext, "charging_audio", "error", error, source = "charging_stopped.mp3")
             prefs.edit().putBoolean(KEY_DISCONNECT_ANNOUNCED, false).apply()
         }
     }
@@ -435,7 +455,10 @@ class ChargingMonitorService : Service() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) isLooping = true
                 play()
             }
-        }.onFailure { android.util.Log.e(TAG, "Could not start repeating battery alarm", it) }
+        }.onFailure {
+            android.util.Log.e(TAG, "Could not start repeating battery alarm", it)
+            AppErrorReporter.capture(applicationContext, "charging_alarm", "error", it)
+        }
     }
 
     private fun resumeAlarmIfNeeded() {
