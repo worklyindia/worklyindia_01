@@ -48,6 +48,7 @@ class ChargingMonitorService : Service() {
         // notification and stop the service instead of silently continuing.
         if (!hasFullScreenAccess(this)) {
             stopChargingStartPlayback()
+            stopFullChargeVoice()
             stopAlertAlarm()
             getSystemService(NotificationManager::class.java).apply {
                 cancel(MONITOR_NOTIFICATION_ID)
@@ -61,6 +62,7 @@ class ChargingMonitorService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 stopChargingStartPlayback()
+                stopFullChargeVoice()
                 stopAlertAlarm()
                 getSystemService(NotificationManager::class.java).apply {
                     cancel(MONITOR_NOTIFICATION_ID)
