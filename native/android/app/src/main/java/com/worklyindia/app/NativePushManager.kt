@@ -399,7 +399,19 @@ object NativePushManager {
             "whatsapp_profile_picture_url", "facebook_profile_picture_url"
         ).firstNotNullOfOrNull { key -> data[key]?.takeIf { it.startsWith("https://") } }
         val ownAvatar = circularAvatar(loadAvatar(ownAvatarUrl) ?: defaultPersonAvatar(isSelf = true))
-        builder.setLargeIcon(incomingAvatar)
+        // Standard Workly update notifications use the app's launcher logo as the
+        // large icon (the right-side avatar in Android's notification card).
+        // Social/chat notifications switch back to the actual sender photo below.
+        val appLargeIcon = runCatching {
+            val drawable = context.packageManager.getApplicationIcon(context.packageName)
+            val size = (96 * context.resources.displayMetrics.density).toInt().coerceAtLeast(96)
+            Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bitmap ->
+                val canvas = android.graphics.Canvas(bitmap)
+                drawable.setBounds(0, 0, size, size)
+                drawable.draw(canvas)
+            }
+        }.getOrNull()
+        builder.setLargeIcon(appLargeIcon ?: incomingAvatar)
 
         // Download the optional rich-media image with strict time/size limits.
         val imageUrl = data["image"]?.takeIf { it.startsWith("https://") }
@@ -452,6 +464,9 @@ object NativePushManager {
         val isInternalWorklyChat = !isSocialInboxNotification && internalConversationId != null
 
         if (isSocialInboxNotification || isInternalWorklyChat) {
+            // Preserve sender-photo behavior for conversations; only ordinary
+            // Workly update notifications use the Workly launcher logo above.
+            builder.setLargeIcon(incomingAvatar)
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
