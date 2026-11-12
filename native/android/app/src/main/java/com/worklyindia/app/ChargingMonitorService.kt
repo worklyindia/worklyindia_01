@@ -93,8 +93,9 @@ class ChargingMonitorService : Service() {
                 return START_STICKY
             }
             ACTION_POWER_DISCONNECTED -> {
-                // Stop the full-charge alert and screen first, then play one
-                // disconnect clip for the completed physical session.
+                // Dismiss the full-charge screen immediately on the authoritative unplug edge.
+                sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
+                // Stop the full-charge alert first, then play one unplug clip for this session.
                 stopChargingStartPlayback()
                 stopFullChargeVoice()
                 stopAlertAlarm()
@@ -174,9 +175,15 @@ class ChargingMonitorService : Service() {
         } else {
             // Fallback for devices/OEM builds that omit or delay the manifest
             // POWER_DISCONNECTED broadcast: detect the live charging -> unplugged
-            // transition from ACTION_BATTERY_CHANGED and play the same MP3 once.
-            if (wasCharging) playChargingStoppedAnnouncementOnce()
-            prefs.edit().putBoolean(KEY_LAST_CHARGING_STATE, false).apply()
+            // transition from ACTION_BATTERY_CHANGED, dismiss the full-charge UI,
+            // and stop the alarm/voice as well as the alert notification.
+            if (wasCharging) {
+                sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
+                playChargingStoppedAnnouncementOnce()
+                resetChargeCycleAndStopAlert()
+            } else {
+                prefs.edit().putBoolean(KEY_LAST_CHARGING_STATE, false).apply()
+            }
         }
 
         // A charger connected at 100% (or Android's FULL status) must not

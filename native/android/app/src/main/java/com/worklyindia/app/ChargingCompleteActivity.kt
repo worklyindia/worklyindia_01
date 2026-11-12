@@ -16,6 +16,8 @@ import android.widget.TextView
 import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.view.animation.AccelerateDecelerateInterpolator
+import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieDrawable
 
 class ChargingCompleteActivity : Activity() {
     private val unplugReceiver = object : android.content.BroadcastReceiver() {
@@ -40,14 +42,28 @@ class ChargingCompleteActivity : Activity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // OEMs can delay or drop the close broadcast. Check the live battery
+        // state as a second, independent dismissal path whenever this screen resumes.
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val plugged = (battery?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+        val status = battery?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+            ?: android.os.BatteryManager.BATTERY_STATUS_UNKNOWN
+        val charging = plugged && status != android.os.BatteryManager.BATTERY_STATUS_DISCHARGING
+        if (!charging) {
+            acknowledgeAlarm()
+            finish()
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+        }
+    }
+
     override fun onStop() {
         runCatching { unregisterReceiver(unplugReceiver) }
         super.onStop()
     }
 
     private val navy = Color.rgb(7, 17, 38)
-    private val mint = Color.rgb(28, 174, 132)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockScreen()
@@ -85,7 +101,7 @@ class ChargingCompleteActivity : Activity() {
         }
 
         val brand = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, px(42))
         }
@@ -94,28 +110,25 @@ class ChargingCompleteActivity : Activity() {
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Workly India app logo"
         }
-        brand.addView(logo, LinearLayout.LayoutParams(px(42), px(42)).apply { rightMargin = px(11) })
+        brand.addView(logo, LinearLayout.LayoutParams(px(48), px(48)))
         brand.addView(TextView(this).apply {
             text = "Workly India"
             textSize = 20f
             letterSpacing = 0.015f
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             setTextColor(Color.WHITE)
-        })
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(8) })
         root.addView(brand)
 
-        val icon = TextView(this).apply {
-            text = "✓"
-            textSize = 76f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(mint)
-                setStroke(px(5), Color.argb(48, 255, 255, 255))
-            }
-            elevation = px(12).toFloat()
+        // Original battery ring + lightning bolt animation, with a transparent canvas.
+        val icon = LottieAnimationView(this).apply {
+            setAnimation(R.raw.battery_full_ring)
+            repeatCount = LottieDrawable.INFINITE
+            repeatMode = LottieDrawable.RESTART
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(Color.TRANSPARENT)
+            contentDescription = "Battery fully charged animation"
             alpha = 0f
             scaleX = 0.55f
             scaleY = 0.55f
@@ -179,13 +192,7 @@ class ChargingCompleteActivity : Activity() {
                 interpolator = AccelerateDecelerateInterpolator()
                 start()
             }
-            ObjectAnimator.ofFloat(icon, View.ALPHA, 1f, 0.82f, 1f).apply {
-                duration = 1900
-                repeatCount = ObjectAnimator.INFINITE
-                interpolator = AccelerateDecelerateInterpolator()
-                startDelay = 900
-                start()
-            }
+            icon.playAnimation()
         }
         root.alpha = 0f
         root.animate().alpha(1f).setDuration(420).start()
