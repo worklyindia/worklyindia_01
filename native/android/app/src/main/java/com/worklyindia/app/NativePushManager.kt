@@ -308,7 +308,10 @@ object NativePushManager {
         val source = listOf("source", "platform", "channel", "integration", "provider", "type")
             .mapNotNull { data[it]?.lowercase() }
             .joinToString(" ")
-        val platformIconUrl = data["platform_icon"]?.takeIf { it.startsWith("https://") }
+        val platformIconUrl = data["account_avatar_url"]?.takeIf { it.startsWith("https://") }
+            ?: data["profile_picture_url"]?.takeIf { it.startsWith("https://") }
+            ?: data["picture_url"]?.takeIf { it.startsWith("https://") }
+            ?: data["platform_icon"]?.takeIf { it.startsWith("https://") }
             ?: data["source_icon"]?.takeIf { it.startsWith("https://") }
             ?: when {
                 "whatsapp" in source -> "https://img.icons8.com/color/96/whatsapp--v1.png"
@@ -446,6 +449,15 @@ object NativePushManager {
                     Person.Builder().setName(senderName).build()
                 )
             }
+            // When the backend has sent an AI auto-reply, show that exact sent text
+            // as a separate "You" message in the expanded notification.
+            data["ai_reply"]?.takeIf { it.isNotBlank() }?.let { aiReply ->
+                conversationStyle.addMessage(
+                    aiReply.take(5000),
+                    System.currentTimeMillis() + 1,
+                    Person.Builder().setName("You").build()
+                )
+            }
             builder.setStyle(conversationStyle)
             if (isInternalWorklyChat && internalConversationId != null) {
                 val remoteInput = androidx.core.app.RemoteInput.Builder("workly_chat_reply")
@@ -518,9 +530,15 @@ object NativePushManager {
                     ).addRemoteInput(remoteInput).setAllowGeneratedReplies(true).build()
                     builder.addAction(replyAction)
                 }
+                val platformActionLabel = when {
+                    metaPlatform == "instagram" || notificationType.startsWith("instagram_") -> "Open Instagram"
+                    metaPlatform == "facebook" || notificationType.startsWith("facebook_") -> "Open Facebook"
+                    notificationType.startsWith("whatsapp_") -> "Open WhatsApp"
+                    else -> "Open chat"
+                }
                 builder.addAction(
                     android.R.drawable.ic_menu_view,
-                    "Open chat",
+                    platformActionLabel,
                     activityPendingIntent(chatUrl, tag.hashCode() + 1)
                 )
             }

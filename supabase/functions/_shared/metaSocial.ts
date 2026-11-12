@@ -710,7 +710,7 @@ async function resolveSenderName(platform: Platform, senderId: string, token: st
 }
 
 async function notifySocialPush(supabase: SupabaseClient, ev: {
-  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string;
+  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string; aiReply?: string;
 }, account: any, recipientUserId: string) {
   try {
     const isIg = ev.platform === 'instagram';
@@ -736,7 +736,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
         // Customer Service accounts use a synthetic, isolated account ID.
         // FCM tokens belong to the real signed-in owner, not that synthetic ID.
         userIds: [recipientUserId],
-        title, body, url, icon, image: ev.imageUrl,
+        title, body, url, icon: account.picture_url || icon, image: ev.imageUrl,
         actions: [
           { action: 'reply', title: 'Reply', url },
           { action: 'mark-read', title: 'Mark as read', url },
@@ -746,6 +746,8 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
           type: `${ev.platform}_${ev.kind}`, source: ev.platform, platform: ev.platform,
           sender_id: ev.senderId, sender_name: name, conversation_id: ev.senderId, event_id: ev.eventId,
           account_id: ev.accountId || '', audience: ev.audience || '',
+          account_avatar_url: account.picture_url || '',
+          ...(ev.aiReply ? { ai_reply: ev.aiReply } : {}),
         },
       }),
     });
@@ -868,6 +870,10 @@ async function processEvent(supabase: SupabaseClient, ev: {
       });
     }
     await finish({ status: 'sent', reply_text: reply });
+    // Update the existing conversation notification with the exact AI text that was sent.
+    if (ev.kind === 'message') {
+      await notifySocialPush(supabase, { ...ev, accountId: account.id, audience: supportUserId ? 'support' : '', aiReply: reply }, account, pushRecipientId);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[meta-social] send failed', msg);
