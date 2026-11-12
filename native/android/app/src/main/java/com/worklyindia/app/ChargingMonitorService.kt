@@ -36,31 +36,13 @@ class ChargingMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannels()
-        if (hasFullScreenAccess(this)) {
-            // Defer the sticky battery snapshot until onStartCommand has applied
-            // the explicit plug/unplug edge. Otherwise a 100% sticky snapshot can
-            // post the alert before POWER_CONNECTED resets the new session.
-            startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
-        }
+        // Battery monitoring and charging audio must run independently from
+        // Android's full-screen-intent permission. That permission only controls
+        // whether the 100% alert may launch a full-screen activity.
+        startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Monitoring is explicitly tied to Android's full-screen notification access.
-        // If the user turns it off in Settings, remove every battery-protection
-        // notification and stop the service instead of silently continuing.
-        if (!hasFullScreenAccess(this)) {
-            stopChargingStartPlayback()
-            stopFullChargeVoice()
-            stopAlertAlarm()
-            getSystemService(NotificationManager::class.java).apply {
-                cancel(MONITOR_NOTIFICATION_ID)
-                cancel(ALERT_NOTIFICATION_ID)
-                cancel(PROTECTION_NOTIFICATION_ID)
-            }
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return START_NOT_STICKY
-        }
         when (intent?.action) {
             ACTION_RESTORE_MONITOR_NOTIFICATION -> {
                 // Android/OEM notification shades may allow a foreground-service
@@ -172,12 +154,9 @@ class ChargingMonitorService : Service() {
         // Refresh the foreground-service notification itself on every battery
         // broadcast. This is more reliable than notify() alone across OEM skins.
         val monitorNotification = buildMonitorNotification(percent)
-        if (hasFullScreenAccess(this)) {
-            startForeground(MONITOR_NOTIFICATION_ID, monitorNotification)
-        } else {
-            getSystemService(NotificationManager::class.java)
-                .notify(MONITOR_NOTIFICATION_ID, monitorNotification)
-        }
+        // Keep the service in the foreground regardless of full-screen-intent
+        // permission. FSI access is checked only when posting the 100% alert.
+        startForeground(MONITOR_NOTIFICATION_ID, monitorNotification)
 
         // Record a live session from battery state too. This covers devices
         // that deliver a sticky charging snapshot before/without a plug edge.
