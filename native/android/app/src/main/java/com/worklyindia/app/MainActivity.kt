@@ -442,6 +442,55 @@ class MainActivity : FragmentActivity() {
                     }
                     if (hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_DEFAULT
                     syncWebsiteSession()
+                    // Capture JavaScript crashes and first-party/Supabase service failures without collecting request bodies or query strings.
+                    view.evaluateJavascript("""
+                        (function() {
+                          if (window.__worklyErrorTelemetryInstalled) return;
+                          window.__worklyErrorTelemetryInstalled = true;
+                          var recent = Object.create(null);
+                          function report(kind, message, source, status) {
+                            try {
+                              var parsed = new URL(source || location.href, location.href);
+                              var trusted = parsed.origin === location.origin || parsed.hostname.endsWith('.supabase.co');
+                              if (!trusted) return;
+                              var safePath = parsed.pathname || '/';
+                              var key = kind + '|' + safePath + '|' + status;
+                              if (recent[key] && Date.now() - recent[key] < 30000) return;
+                              recent[key] = Date.now();
+                              if (window.WorklyAndroid && window.WorklyAndroid.reportAppError) {
+                                window.WorklyAndroid.reportAppError(kind, String(message || kind).slice(0, 1000), safePath, Number(status) || 0);
+                              }
+                            } catch (_) {}
+                          }
+                          window.addEventListener('error', function(event) {
+                            report('JavaScriptError', event.message || 'JavaScript execution failed', event.filename || location.pathname, 0);
+                          });
+                          window.addEventListener('unhandledrejection', function(event) {
+                            var reason = event.reason;
+                            report('UnhandledPromiseRejection', reason && reason.message ? reason.message : 'Unhandled promise rejection', location.pathname, 0);
+                          });
+                          if (window.fetch) {
+                            var originalFetch = window.fetch;
+                            window.fetch = function() {
+                              var request = arguments[0];
+                              var rawUrl = typeof request === 'string' ? request : (request && request.url) || location.href;
+                              var parsed;
+                              try { parsed = new URL(rawUrl, location.href); }
+                              catch (_) { return originalFetch.apply(this, arguments); }
+                              var tracked = parsed.origin === location.origin || parsed.hostname.endsWith('.supabase.co');
+                              return originalFetch.apply(this, arguments).then(function(response) {
+                                if (tracked && (response.status >= 500 || response.status === 429)) {
+                                  report('HttpServiceError', 'HTTP ' + response.status, parsed.pathname, response.status);
+                                }
+                                return response;
+                              }).catch(function(error) {
+                                if (tracked) report('NetworkRequestError', error && error.message ? error.message : 'Network request failed', parsed.pathname, 0);
+                                throw error;
+                              });
+                            };
+                          }
+                        })();
+                    """.trimIndent(), null)
                     // Persist the current SPA route so a force-closed app resumes
                     // the same page instead of always returning to the homepage.
                     view.evaluateJavascript("""
@@ -1569,6 +1618,20 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun reportAppError(type: String, message: String, source: String, httpStatus: Int): Boolean {
+            AppErrorReporter.capture(
+                applicationContext,
+                "webview",
+                "error",
+                type,
+                message,
+                source = source,
+                httpStatus = httpStatus.takeIf { it > 0 }
+            )
+            return true
+        }
+
         @JavascriptInterface
         fun saveLastVisitedRoute(url: String): Boolean {
             val safeUrl = trustedInternalUrl(url) ?: return false
