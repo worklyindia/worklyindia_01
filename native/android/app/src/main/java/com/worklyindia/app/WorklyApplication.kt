@@ -8,15 +8,17 @@ class WorklyApplication : Application() {
         super.onCreate()
         // Install crash capture before starting background services.
         AppErrorReporter.initialize(this)
-        // Clear obsolete launcher shortcuts that may show a personal account name.
+        // Keep the launcher menu limited to the three supported static shortcuts.
+        // Remove stale dynamic entries and disable old pinned account shortcuts left
+        // behind by earlier app versions (for example duplicate personal-name entries).
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N_MR1) {
             runCatching {
                 val shortcuts = getSystemService(ShortcutManager::class.java)
-                val allowedIds = setOf("workly_jobs", "workly_activity", "workly_profile", "workly_secure_vault")
+                val allowedIds = setOf("workly_jobs", "workly_activity", "workly_profile")
                 val obsoleteIds = (shortcuts.dynamicShortcuts + shortcuts.pinnedShortcuts)
                     .map { it.id }.distinct().filterNot { it in allowedIds }
+                shortcuts.removeAllDynamicShortcuts()
                 if (obsoleteIds.isNotEmpty()) {
-                    shortcuts.removeDynamicShortcuts(obsoleteIds)
                     shortcuts.disableShortcuts(obsoleteIds, "This shortcut is no longer available")
                 }
             }
