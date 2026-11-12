@@ -746,6 +746,8 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
       }
     }
     const name = senderName || `${platformLabel} user`;
+    // Use the connected Page/Instagram account photo for the "You" avatar.
+    const ownAvatarUrl = typeof account?.picture_url === 'string' && account.picture_url.startsWith('https://') ? account.picture_url : '';
     const title = name;
     const body = (ev.text || (ev.kind === 'comment' ? 'New comment' : 'New message')).slice(0, 900);
     const url = `/ai-assistant/connect/${ev.platform}/replies`;
@@ -769,6 +771,8 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
           sender_id: ev.senderId, sender_name: name, conversation_id: ev.senderId, event_id: ev.eventId,
           account_id: ev.accountId || '', audience: ev.audience || '',
           sender_avatar_url: ev.senderAvatarUrl || '',
+          own_avatar_url: ownAvatarUrl,
+          account_avatar_url: ownAvatarUrl,
           ...(ev.aiReply ? { ai_reply: ev.aiReply } : {}),
         },
       }),
