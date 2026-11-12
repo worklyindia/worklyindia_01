@@ -346,8 +346,59 @@ object NativePushManager {
                 bitmap
             }.getOrNull()
         }
-        val incomingAvatar = senderAvatar ?: defaultPersonAvatar(isSelf = false)
-        val ownAvatar = defaultPersonAvatar(isSelf = true)
+        // Crop every real/fallback profile image into a true circle. Android's
+        // MessagingStyle does not guarantee circular masking for bitmap Person icons.
+        fun circularAvatar(source: Bitmap): Bitmap {
+            val diameter = minOf(source.width, source.height).coerceAtLeast(1)
+            val left = (source.width - diameter) / 2
+            val top = (source.height - diameter) / 2
+            val output = Bitmap.createBitmap(diameter, diameter, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(output)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+            val shader = android.graphics.BitmapShader(source, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
+            val matrix = android.graphics.Matrix()
+            matrix.setTranslate(-left.toFloat(), -top.toFloat())
+            shader.setLocalMatrix(matrix)
+            paint.shader = shader
+            canvas.drawCircle(diameter / 2f, diameter / 2f, diameter / 2f, paint)
+            return output
+        }
+        fun loadAvatar(url: String?): Bitmap? {
+            if (url.isNullOrBlank() || !url.startsWith("https://")) return null
+            return runCatching {
+                val connection = URL(url).openConnection() as HttpURLConnection
+                connection.connectTimeout = 4000
+                connection.readTimeout = 5000
+                connection.instanceFollowRedirects = true
+                connection.setRequestProperty("User-Agent", "WorklyIndia-Android")
+                val bytes = connection.inputStream.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(4096)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > 512 * 1024) throw IllegalStateException("Avatar exceeds 512 KB")
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                }
+                connection.disconnect()
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }.getOrNull()
+        }
+        val incomingAvatar = circularAvatar(senderAvatar ?: defaultPersonAvatar(isSelf = false))
+        // The account's own profile photo is distinct from the sender's photo.
+        // Payloads may include it for WhatsApp, Facebook or Instagram; otherwise
+        // retain the blue "You" person avatar (never a platform app icon).
+        val ownAvatarUrl = listOf(
+            "own_avatar_url", "account_avatar_url", "account_profile_picture_url",
+            "connected_account_picture_url", "business_profile_picture_url",
+            "page_profile_picture_url", "instagram_profile_picture_url",
+            "whatsapp_profile_picture_url", "facebook_profile_picture_url"
+        ).firstNotNullOfOrNull { key -> data[key]?.takeIf { it.startsWith("https://") } }
+        val ownAvatar = circularAvatar(loadAvatar(ownAvatarUrl) ?: defaultPersonAvatar(isSelf = true))
         builder.setLargeIcon(incomingAvatar)
 
         // Download the optional rich-media image with strict time/size limits.
