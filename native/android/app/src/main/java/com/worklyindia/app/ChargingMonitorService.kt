@@ -108,7 +108,11 @@ class ChargingMonitorService : Service() {
                 stopFullChargeVoice()
                 stopAlertAlarm()
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
-                if (hadActiveChargingSession) playChargingStoppedAnnouncement()
+                // POWER_DISCONNECTED is the physical unplug edge. Do not depend
+                // only on persisted session flags: some OEMs restart the service or
+                // deliver the battery snapshot out of order, which can lose that flag.
+                // This receiver is invoked once per unplug edge, so play the clip once.
+                playChargingStoppedAnnouncement()
                 resetChargeCycleAndStopAlert()
                 // Do not process the sticky BATTERY_CHANGED snapshot here: some
                 // devices briefly return the pre-unplug "charging" state. The
@@ -157,8 +161,15 @@ class ChargingMonitorService : Service() {
 
         // Keep the ongoing foreground notification current for the lock screen
         // and notification shade, even while the app UI is closed.
-        getSystemService(NotificationManager::class.java)
-            .notify(MONITOR_NOTIFICATION_ID, buildMonitorNotification(percent, charging))
+        // Refresh the foreground-service notification itself on every battery
+        // broadcast. This is more reliable than notify() alone across OEM skins.
+        val monitorNotification = buildMonitorNotification(percent, charging)
+        if (hasFullScreenAccess(this)) {
+            startForeground(MONITOR_NOTIFICATION_ID, monitorNotification)
+        } else {
+            getSystemService(NotificationManager::class.java)
+                .notify(MONITOR_NOTIFICATION_ID, monitorNotification)
+        }
 
         // Record a live session from battery state too. This covers devices
         // that deliver a sticky charging snapshot before/without a plug edge.
@@ -441,10 +452,15 @@ class ChargingMonitorService : Service() {
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val batteryText = if (percent in 0..100) "Monitoring Your Battery $percent%🔋" else "Monitoring Your Battery 🔋"
         val notificationTitle = "Workly India Battery Protection"
-        val notificationText = batteryText
-        val expandedText = batteryText
+        val notificationText = "Monitoring Your Battery 🔋"
+        val batteryState = when {
+            charging && percent in 0..100 -> "Battery: $percent% • Charging"
+            charging -> "Charging"
+            percent in 0..100 -> "Battery: $percent% • Not charging"
+            else -> "Battery status updating"
+        }
+        val expandedText = "Monitoring Your Battery 🔋\n$batteryState"
         val publicNotification = NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setContentTitle(notificationTitle)
