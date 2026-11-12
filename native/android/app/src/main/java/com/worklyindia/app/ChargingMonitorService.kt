@@ -98,10 +98,6 @@ class ChargingMonitorService : Service() {
                 return START_STICKY
             }
             ACTION_POWER_DISCONNECTED -> {
-                val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                val hadActiveChargingSession =
-                    prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false) ||
-                    prefs.getBoolean(KEY_ALERTED, false)
                 // Stop the full-charge alert and screen first, then play one
                 // disconnect clip for the completed physical session.
                 stopChargingStartPlayback()
@@ -453,7 +449,11 @@ class ChargingMonitorService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notificationTitle = "Workly India Battery Protection"
-        val notificationText = "Monitoring Your Battery 🔋"
+        val notificationText = if (percent in 0..100) {
+            "Monitoring Your Battery 🔋 • $percent%"
+        } else {
+            "Monitoring Your Battery 🔋"
+        }
         val batteryState = when {
             charging && percent in 0..100 -> "Battery: $percent% • Charging"
             charging -> "Charging"
