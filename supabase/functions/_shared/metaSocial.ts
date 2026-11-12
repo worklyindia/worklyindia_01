@@ -746,8 +746,37 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
       }
     }
     const name = senderName || `${platformLabel} user`;
-    // Use the connected Page/Instagram account photo for the "You" avatar.
-    const ownAvatarUrl = typeof account?.picture_url === 'string' && account.picture_url.startsWith('https://') ? account.picture_url : '';
+    // Resolve the connected Page/Instagram account photo for the "You" avatar.
+    // Cached picture_url can be absent or stale, so refresh it from the connected
+    // account's own Graph profile using its page access token before sending push.
+    let ownAvatarUrl = typeof account?.picture_url === 'string' && account.picture_url.startsWith('https://') ? account.picture_url : '';
+    if (!ownAvatarUrl) {
+      try {
+        const { data: ownToken } = await supabase.from('social_meta_tokens')
+          .select('page_access_token').eq('account_id', account.id).maybeSingle();
+        const token = ownToken?.page_access_token;
+        if (token) {
+          const igLogin = ev.platform === 'instagram' && token.startsWith('IG');
+          const profilePath = ev.platform === 'instagram'
+            ? (igLogin
+                ? `/me?fields=profile_picture_url`
+                : `/${encodeURIComponent(account.ig_user_id || account.page_id)}?fields=profile_picture_url`)
+            : `/${encodeURIComponent(account.page_id)}?fields=picture{url}`;
+          const profile = igLogin
+            ? await igGraph(profilePath + `&access_token=${encodeURIComponent(token)}`)
+            : await graph(profilePath + `&access_token=${encodeURIComponent(token)}`);
+          const candidate = ev.platform === 'facebook'
+            ? profile?.picture?.data?.url
+            : profile?.profile_picture_url;
+          if (typeof candidate === 'string' && candidate.startsWith('https://')) {
+            ownAvatarUrl = candidate;
+            await supabase.from('social_meta_accounts').update({ picture_url: candidate }).eq('id', account.id);
+          }
+        }
+      } catch (error) {
+        console.warn('[social-push] connected account avatar refresh unavailable', error instanceof Error ? error.message : String(error));
+      }
+    }
     const title = name;
     const body = (ev.text || (ev.kind === 'comment' ? 'New comment' : 'New message')).slice(0, 900);
     const url = `/ai-assistant/connect/${ev.platform}/replies`;
