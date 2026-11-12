@@ -308,7 +308,7 @@ object NativePushManager {
         val source = listOf("source", "platform", "channel", "integration", "provider", "type")
             .mapNotNull { data[it]?.lowercase() }
             .joinToString(" ")
-        val platformIconUrl = data["account_avatar_url"]?.takeIf { it.startsWith("https://") }
+        val platformIconUrl = data["sender_avatar_url"]?.takeIf { it.startsWith("https://") }
             ?: data["profile_picture_url"]?.takeIf { it.startsWith("https://") }
             ?: data["picture_url"]?.takeIf { it.startsWith("https://") }
             ?: data["platform_icon"]?.takeIf { it.startsWith("https://") }
@@ -531,9 +531,9 @@ object NativePushManager {
                     builder.addAction(replyAction)
                 }
                 val platformActionLabel = when {
-                    metaPlatform == "instagram" || notificationType.startsWith("instagram_") -> "Open Instagram"
-                    metaPlatform == "facebook" || notificationType.startsWith("facebook_") -> "Open Facebook"
-                    notificationType.startsWith("whatsapp_") -> "Open WhatsApp"
+                    metaPlatform == "instagram" || notificationType.startsWith("instagram_") -> "Instagram"
+                    metaPlatform == "facebook" || notificationType.startsWith("facebook_") -> "Facebook"
+                    notificationType.startsWith("whatsapp_") -> "WhatsApp"
                     else -> "Open chat"
                 }
                 builder.addAction(
