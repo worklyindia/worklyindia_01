@@ -139,6 +139,10 @@ class ChargingMonitorService : Service() {
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_ALERTED, false)
             .putBoolean(KEY_ACKNOWLEDGED, false)
+            // A new plug-in after this unplug is a fresh charging session.
+            .putBoolean(KEY_CHARGING_SESSION_ACTIVE, false)
+            .putBoolean(KEY_STARTED_ANNOUNCED, false)
+            .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
             .apply()
         getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
     }
@@ -406,6 +410,7 @@ class ChargingMonitorService : Service() {
         const val KEY_ACKNOWLEDGED = "alert_acknowledged"
         const val KEY_STARTED_ANNOUNCED = "charging_start_announced"
         const val KEY_START_ANNOUNCEMENT_PENDING = "charging_start_announcement_pending"
+        const val KEY_CHARGING_SESSION_ACTIVE = "charging_session_active"
         const val KEY_TTS_UNAVAILABLE = "charging_offline_tts_unavailable"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
