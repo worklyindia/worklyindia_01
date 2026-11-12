@@ -75,9 +75,8 @@
  <LinearLayout
   android:id="@+id/workly_festival_open"
   android:layout_width="match_parent"
-  android:layout_height="0dp"
-  android:layout_marginTop="10dp"
-  android:layout_weight="1"
+  android:layout_height="wrap_content"
+  android:layout_marginTop="12dp"
   android:gravity="center_vertical"
   android:orientation="vertical">
   <LinearLayout
@@ -86,7 +85,8 @@
    android:layout_height="wrap_content"
    android:gravity="center_vertical"
    android:minHeight="44dp"
-   android:orientation="horizontal">
+   android:orientation="horizontal"
+   android:visibility="gone">
    <TextView
     android:id="@+id/workly_festival_icon"
     android:layout_width="34dp"
@@ -119,14 +119,7 @@
      android:id="@+id/workly_festival_date"
      android:layout_width="match_parent"
      android:layout_height="wrap_content"
-     android:layout_marginTop="1dp"
-     android:text="10 Nov"
-     android:textColor="#FFFFFFFF"
-     android:shadowColor="#CC000000"
-     android:shadowRadius="2"
-     android:shadowDx="1"
-     android:shadowDy="1"
-     android:textSize="12sp" />
+     android:visibility="gone" />
    </LinearLayout>
   </LinearLayout>
   <LinearLayout
@@ -168,13 +161,7 @@
      android:id="@+id/workly_festival_date_2"
      android:layout_width="match_parent"
      android:layout_height="wrap_content"
-     android:layout_marginTop="1dp"
-     android:textColor="#FFFFFFFF"
-     android:shadowColor="#CC000000"
-     android:shadowRadius="2"
-     android:shadowDx="1"
-     android:shadowDy="1"
-     android:textSize="12sp" />
+     android:visibility="gone" />
    </LinearLayout>
   </LinearLayout>
  </LinearLayout>
