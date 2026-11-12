@@ -303,26 +303,28 @@ object NativePushManager {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
 
-        // Show the originating platform logo as the large notification icon,
-        // while keeping the Workly India monochrome app icon in the status bar.
-        val source = listOf("source", "platform", "channel", "integration", "provider", "type")
-            .mapNotNull { data[it]?.lowercase() }
-            .joinToString(" ")
-        val platformIconUrl = data["sender_avatar_url"]?.takeIf { it.startsWith("https://") }
+        // Show the actual sender's profile photo when supplied. If unavailable,
+        // use a neutral generic person avatar; never substitute a platform or
+        // connected business/account logo for the person who sent the message.
+        fun defaultPersonAvatar(): Bitmap {
+            val size = (96 * context.resources.displayMetrics.density).toInt().coerceAtLeast(96)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(bitmap)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            paint.color = android.graphics.Color.rgb(224, 228, 232)
+            canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+            paint.color = android.graphics.Color.rgb(112, 120, 128)
+            canvas.drawCircle(size / 2f, size * 0.36f, size * 0.16f, paint)
+            val body = android.graphics.RectF(size * 0.22f, size * 0.58f, size * 0.78f, size * 1.02f)
+            canvas.drawRoundRect(body, size * 0.28f, size * 0.28f, paint)
+            return bitmap
+        }
+        val senderAvatarUrl = data["sender_avatar_url"]?.takeIf { it.startsWith("https://") }
             ?: data["profile_picture_url"]?.takeIf { it.startsWith("https://") }
             ?: data["picture_url"]?.takeIf { it.startsWith("https://") }
-            ?: data["platform_icon"]?.takeIf { it.startsWith("https://") }
-            ?: data["source_icon"]?.takeIf { it.startsWith("https://") }
-            ?: when {
-                "whatsapp" in source -> "https://img.icons8.com/color/96/whatsapp--v1.png"
-                "instagram" in source -> "https://img.icons8.com/fluency/96/instagram-new.png"
-                "messenger" in source -> "https://img.icons8.com/color/96/facebook-messenger--v1.png"
-                "facebook" in source -> "https://img.icons8.com/color/96/facebook-new.png"
-                else -> null
-            }
-        if (platformIconUrl != null) {
+        val senderAvatar = senderAvatarUrl?.let { avatarUrl ->
             runCatching {
-                val connection = URL(platformIconUrl).openConnection() as HttpURLConnection
+                val connection = URL(avatarUrl).openConnection() as HttpURLConnection
                 connection.connectTimeout = 4000
                 connection.readTimeout = 5000
                 connection.instanceFollowRedirects = true
@@ -335,15 +337,16 @@ object NativePushManager {
                         val count = input.read(buffer)
                         if (count < 0) break
                         total += count
-                        if (total > 512 * 1024) throw IllegalStateException("Platform icon exceeds 512 KB")
+                        if (total > 512 * 1024) throw IllegalStateException("Sender avatar exceeds 512 KB")
                         output.write(buffer, 0, count)
                     }
                     BitmapFactory.decodeByteArray(output.toByteArray(), 0, total)
                 }
                 connection.disconnect()
                 bitmap
-            }.getOrNull()?.let { builder.setLargeIcon(it) }
+            }.getOrNull()
         }
+        builder.setLargeIcon(senderAvatar ?: defaultPersonAvatar())
 
         // Download the optional rich-media image with strict time/size limits.
         val imageUrl = data["image"]?.takeIf { it.startsWith("https://") }
