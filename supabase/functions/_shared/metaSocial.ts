@@ -709,8 +709,27 @@ async function resolveSenderName(platform: Platform, senderId: string, token: st
   return undefined;
 }
 
+/** Best-effort sender avatar lookup. Never use the connected business/page avatar as the sender. */
+async function resolveSenderAvatar(platform: Platform, senderId: string, token: string): Promise<string | undefined> {
+  const id = encodeURIComponent(senderId);
+  const t = encodeURIComponent(token);
+  const call = platform === 'instagram' && token.startsWith('IG') ? igGraph : graph;
+  for (const fields of ['profile_pic', 'picture']) {
+    try {
+      const p: any = await call(`/${id}?fields=${fields}&access_token=${t}`);
+      const candidate = typeof p?.profile_pic === 'string' ? p.profile_pic
+        : typeof p?.picture?.data?.url === 'string' ? p.picture.data.url
+        : typeof p?.picture === 'string' ? p.picture : undefined;
+      if (candidate?.startsWith('https://')) return candidate;
+    } catch (e) {
+      console.warn('[social-push] sender avatar lookup unavailable', platform, fields, String(e).slice(0, 160));
+    }
+  }
+  return undefined;
+}
+
 async function notifySocialPush(supabase: SupabaseClient, ev: {
-  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string;
+  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; senderAvatarUrl?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string; aiReply?: string;
 }, account: any, recipientUserId: string) {
   try {
     const isIg = ev.platform === 'instagram';
@@ -719,9 +738,12 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
       .eq('setting_key', isIg ? 'email_social_icon_instagram' : 'email_social_icon_facebook').maybeSingle();
     const icon = (iconRow as any)?.setting_value || '/whatsapp-notification-icon.png?v=2';
     let senderName = ev.senderName;
-    if (!senderName) {
+    if (!senderName || !ev.senderAvatarUrl) {
       const { data: tok } = await supabase.from('social_meta_tokens').select('page_access_token').eq('account_id', account.id).maybeSingle();
-      if (tok?.page_access_token) senderName = await resolveSenderName(ev.platform, ev.senderId, tok.page_access_token);
+      if (tok?.page_access_token) {
+        if (!senderName) senderName = await resolveSenderName(ev.platform, ev.senderId, tok.page_access_token);
+        if (!ev.senderAvatarUrl) ev.senderAvatarUrl = await resolveSenderAvatar(ev.platform, ev.senderId, tok.page_access_token);
+      }
     }
     const name = senderName || `${platformLabel} user`;
     const title = name;
@@ -736,7 +758,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
         // Customer Service accounts use a synthetic, isolated account ID.
         // FCM tokens belong to the real signed-in owner, not that synthetic ID.
         userIds: [recipientUserId],
-        title, body, url, icon, image: ev.imageUrl,
+        title, body, url, icon: ev.senderAvatarUrl || icon, image: ev.imageUrl,
         actions: [
           { action: 'reply', title: 'Reply', url },
           { action: 'mark-read', title: 'Mark as read', url },
@@ -746,6 +768,8 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
           type: `${ev.platform}_${ev.kind}`, source: ev.platform, platform: ev.platform,
           sender_id: ev.senderId, sender_name: name, conversation_id: ev.senderId, event_id: ev.eventId,
           account_id: ev.accountId || '', audience: ev.audience || '',
+          sender_avatar_url: ev.senderAvatarUrl || '',
+          ...(ev.aiReply ? { ai_reply: ev.aiReply } : {}),
         },
       }),
     });
@@ -759,7 +783,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
 }
 
 async function processEvent(supabase: SupabaseClient, ev: {
-  platform: Platform; kind: 'comment' | 'message'; ownerId: string; eventId: string; senderId: string; text: string; commentId?: string; postId?: string; senderName?: string; imageUrl?: string;
+  platform: Platform; kind: 'comment' | 'message'; ownerId: string; eventId: string; senderId: string; text: string; commentId?: string; postId?: string; senderName?: string; senderAvatarUrl?: string; imageUrl?: string;
 }) {
   if (!ev.text?.trim() || !ev.eventId) return;
   const col = ev.platform === 'instagram' ? 'ig_user_id' : 'page_id';
@@ -868,6 +892,10 @@ async function processEvent(supabase: SupabaseClient, ev: {
       });
     }
     await finish({ status: 'sent', reply_text: reply });
+    // Update the existing conversation notification with the exact AI text that was sent.
+    if (ev.kind === 'message') {
+      await notifySocialPush(supabase, { ...ev, accountId: account.id, audience: supportUserId ? 'support' : '', aiReply: reply }, account, pushRecipientId);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[meta-social] send failed', msg);
