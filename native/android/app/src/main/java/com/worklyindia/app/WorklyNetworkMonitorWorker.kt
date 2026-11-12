@@ -34,6 +34,7 @@ class WorklyNetworkMonitorWorker(
 ) : Worker(context, params) {
 
     override fun doWork(): Result {
+        return try {
         val connectivity = applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = connectivity.activeNetwork ?: return Result.success()
         val capabilities = connectivity.getNetworkCapabilities(network) ?: return Result.success()
@@ -67,7 +68,11 @@ class WorklyNetworkMonitorWorker(
             }
         }
 
-        return Result.success()
+        Result.success()
+        } catch (error: Exception) {
+            AppErrorReporter.capture(applicationContext, "network_monitor", "error", error)
+            Result.retry()
+        }
     }
 
     private fun showNetworkNotification(title: String, body: String) {
