@@ -23,7 +23,7 @@ class WorklyErrorReportWorker(context: Context, params: WorkerParameters) : Work
         if (pending.isEmpty()) return Result.success()
         var connection: HttpURLConnection? = null
         return try {
-            connection = (URL("$SUPABASE_URL/rest/v1/app_error_reports").openConnection() as HttpURLConnection).apply {
+            connection = (URL("$SUPABASE_URL/rest/v1/app_error_reports?on_conflict=event_id").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 12_000
                 readTimeout = 20_000
@@ -62,7 +62,7 @@ class WorklyErrorReportWorker(context: Context, params: WorkerParameters) : Work
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork("workly-error-report-upload", ExistingWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniqueWork("workly-error-report-upload", ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
 
         fun schedule(context: Context) {
