@@ -341,7 +341,6 @@ class ChargingMonitorService : Service() {
     private fun playChargingStoppedAnnouncement() {
         stopChargingStoppedPlayback()
         runCatching {
-            stopChargingStoppedPlayback()
             val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped)
                 ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
             chargingStoppedPlayer = player
@@ -523,7 +522,8 @@ class ChargingMonitorService : Service() {
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
         const val ACTION_ACKNOWLEDGE = "com.worklyindia.app.CHARGING_ALERT_ACKNOWLEDGE"
-        const val ACTION_POWER_CONNECTED = "com.worklyindia.app.CHARGING_POWER_CONNECTED"\n        const val ACTION_POWER_DISCONNECTED = "com.worklyindia.app.CHARGING_POWER_DISCONNECTED"
+        const val ACTION_POWER_CONNECTED = "com.worklyindia.app.CHARGING_POWER_CONNECTED"
+        const val ACTION_POWER_DISCONNECTED = "com.worklyindia.app.CHARGING_POWER_DISCONNECTED"
         private const val TAG = "WorklyCharging"
         private const val MONITOR_CHANNEL = "workly_charging_monitor"
         const val ALERT_CHANNEL = "workly_battery_full_alert"
