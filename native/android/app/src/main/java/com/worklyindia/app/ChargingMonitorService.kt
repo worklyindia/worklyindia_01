@@ -62,6 +62,15 @@ class ChargingMonitorService : Service() {
             return START_NOT_STICKY
         }
         when (intent?.action) {
+            ACTION_RESTORE_MONITOR_NOTIFICATION -> {
+                // Android/OEM notification shades may allow a foreground-service
+                // notification to be swiped away. Re-promote it immediately.
+                startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
+                registerBatteryReceiver()
+                resumeAlarmIfNeeded()
+                readCurrentBatteryState()
+                return START_STICKY
+            }
             ACTION_STOP -> {
                 stopChargingStartPlayback()
                 stopFullChargeVoice()
@@ -469,8 +478,16 @@ class ChargingMonitorService : Service() {
             "Monitoring Your Battery --% 🔋"
         }
         val expandedText = notificationText
+        val restoreIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_RESTORE_MONITOR_NOTIFICATION
+        }
+        val restorePendingIntent = PendingIntent.getBroadcast(
+            this, MONITOR_RESTORE_REQUEST_CODE, restoreIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val publicNotification = NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
+            .setDeleteIntent(restorePendingIntent)
             .setContentTitle(notificationTitle)
             .setContentText(notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
@@ -484,6 +501,7 @@ class ChargingMonitorService : Service() {
 
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
+            .setDeleteIntent(restorePendingIntent)
             .setContentTitle(notificationTitle)
             .setContentText(notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
@@ -590,6 +608,8 @@ class ChargingMonitorService : Service() {
             }
         }
         private const val MONITOR_REQUEST_CODE = 8212
+        private const val MONITOR_RESTORE_REQUEST_CODE = 8215
+        const val ACTION_RESTORE_MONITOR_NOTIFICATION = "com.worklyindia.app.CHARGING_MONITOR_RESTORE_NOTIFICATION"
         private const val ALERT_REQUEST_CODE = 8213
         private const val STOP_ALERT_REQUEST_CODE = 8214
     }
