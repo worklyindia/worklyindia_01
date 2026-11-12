@@ -16,7 +16,7 @@ import org.json.JSONObject
 
 class NotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ACTION_RESTORE_MONITOR_NOTIFICATION) {
+        if (intent.action == ChargingMonitorService.ACTION_RESTORE_MONITOR_NOTIFICATION) {
             val serviceIntent = Intent(context, ChargingMonitorService::class.java).apply {
                 action = ChargingMonitorService.ACTION_RESTORE_MONITOR_NOTIFICATION
             }
@@ -326,7 +326,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val ACTION_MARK_READ = "com.worklyindia.app.ACTION_MARK_READ"
         const val ACTION_MUTE = "com.worklyindia.app.ACTION_MUTE"
         const val ACTION_ACK_CHARGING_ALERT = "com.worklyindia.app.ACTION_ACK_CHARGING_ALERT"
-        const val ACTION_RESTORE_MONITOR_NOTIFICATION = ChargingMonitorService.ACTION_RESTORE_MONITOR_NOTIFICATION
         private const val EXTRA_TAG = "notification_tag"
         private const val EXTRA_ID = "notification_id"
 
