@@ -791,7 +791,11 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
     }
     const title = name;
     const body = (ev.text || (ev.kind === 'comment' ? 'New comment' : 'New message')).slice(0, 900);
-    const url = `/ai-assistant/connect/${ev.platform}/replies`;
+    // Open the signed-in user's correct chat surface and select this exact Meta contact.
+    // Customer Service accounts belong to the owner; personal AI Connect accounts belong to the employer.
+    const chatBase = ev.audience === 'support' ? '/owner-portal/whatsapp/chat' : '/employer/workly-chat';
+    const chatParams = new URLSearchParams({ channel: ev.platform, contact: ev.senderId, account: ev.accountId || account.id });
+    const url = chatBase + '?' + chatParams.toString();
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/email-api`, {
       method: 'POST',
@@ -814,6 +818,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
           sender_avatar_url: ev.senderAvatarUrl || '',
           own_avatar_url: ownAvatarUrl,
           account_avatar_url: ownAvatarUrl,
+          url,
           ...(ev.aiReply ? { ai_reply: ev.aiReply } : {}),
         },
       }),

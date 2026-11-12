@@ -175,7 +175,7 @@ export default function EmployerWhatsAppFullChat({ companyId, phoneNumberId = nu
     const c = searchParams.get("channel");
     return c === "instagram" || c === "facebook" ? c : "whatsapp";
   });
-  const chatProfile = useChatAccountProfile(channel, phoneNumberId);
+  const chatProfile = useChatAccountProfile(channel, phoneNumberId, searchParams.get("account"));
   const profilePath = channel === "whatsapp" ? "/employer/workly-chat/business-profile" : `/employer/${channel}/profile${chatProfile.account ? `?account=${encodeURIComponent(chatProfile.account.id)}` : ""}`;
   const [showSidebar, setShowSidebar] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);

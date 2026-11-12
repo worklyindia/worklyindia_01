@@ -2,6 +2,7 @@ import { metaChatRequest, metaChatScope } from "@/lib/metaChatScope";
 import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
 import { formatChatTime, startsChatDay } from '@/lib/chatTimestamp';
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useStackedComposer } from "@/hooks/useStackedComposer";
 import { useChatDictation } from "@/hooks/useChatDictation";
 import { WhatsAppAttachmentMenu } from "@/components/whatsapp/WhatsAppAttachmentMenu";
@@ -89,6 +90,8 @@ const when = (t?: string | null) => {
 /** Instagram / Facebook inbox for the Chat page, using the account linked in AI Connect. */
 export default function MetaSocialChat({ platform, audience, accountId }: { platform: MetaPlatform; audience?: "support"; accountId?: string | null }) {
   const metaSocialAction = scopedAction(audience);
+  const [searchParams] = useSearchParams();
+  const requestedContactId = searchParams.get("contact") || searchParams.get("contact_id") || searchParams.get("sender_id");
   const label = platform === "instagram" ? "Instagram" : "Facebook";
   const { account, loading } = useMetaSocialAccount(platform, true, accountId, audience);
   const [search, setSearch] = useState("");
@@ -106,6 +109,13 @@ export default function MetaSocialChat({ platform, audience, accountId }: { plat
     },
   });
 
+  // A push deep link carries the sender/contact ID. Once the account's inbox loads,
+  // open that exact thread instead of leaving the user on the chat list.
+  useEffect(() => {
+    if (!requestedContactId || !account || !convQ.data?.length) return;
+    const match = convQ.data.find((item) => item.contact_id === requestedContactId || item.id === requestedContactId);
+    if (match && open?.id !== match.id) setOpen(match);
+  }, [requestedContactId, account?.id, convQ.data, open?.id]);
   const connect = async () => {
     setConnecting(true);
     try {
