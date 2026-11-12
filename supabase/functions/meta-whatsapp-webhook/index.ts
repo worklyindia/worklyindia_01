@@ -391,8 +391,24 @@ async function notifyOwners(m: { phone: string; name: string | null; type: strin
     const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '');
     const { data: iconRow } = await supabase.from('app_settings').select('setting_value').eq('setting_key', 'whatsapp_notification_icon').maybeSingle();
     const waIcon = (iconRow as any)?.setting_value || '/whatsapp-notification-icon.png?v=2';
-    // WhatsApp Cloud API does not expose the sender's profile-photo URL here.
-    // Never substitute the connected business avatar for the person messaging us.
+    // Fetch the connected WhatsApp Business profile photo for the "You" avatar.
+    // This is intentionally separate from the incoming sender's profile photo.
+    let ownAvatarUrl = '';
+    if (m.phoneNumberId) {
+      const accountToken = await accessTokenForPhoneId(m.phoneNumberId);
+      if (accountToken) {
+        try {
+          const profileResponse = await fetch(`https://graph.facebook.com/v21.0/${m.phoneNumberId}/whatsapp_business_profile?fields=profile_picture_url`, {
+            headers: { Authorization: `Bearer ${accountToken}` },
+          });
+          const profileData = profileResponse.ok ? await profileResponse.json() : null;
+          const candidate = profileData?.data?.[0]?.profile_picture_url;
+          if (typeof candidate === 'string' && candidate.startsWith('https://')) ownAvatarUrl = candidate;
+        } catch (error) {
+          console.warn('[wa-push] connected account avatar unavailable', error instanceof Error ? error.message : String(error));
+        }
+      }
+    }
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/email-api`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, apikey: key, 'Content-Type': 'application/json' },
@@ -405,7 +421,7 @@ async function notifyOwners(m: { phone: string; name: string | null; type: strin
           { action: 'mark-read', title: 'Mark as read', url },
         ],
         tag: `whatsapp-${m.audience ?? 'x'}-${m.phone}`,
-        data: { type: 'whatsapp_message', source: 'whatsapp', platform: 'whatsapp', sender_avatar_url: '', ...(m.aiReply ? { ai_reply: m.aiReply } : {}), phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.phoneNumberId ?? '' },
+        data: { type: 'whatsapp_message', source: 'whatsapp', platform: 'whatsapp', sender_avatar_url: '', own_avatar_url: ownAvatarUrl, account_avatar_url: ownAvatarUrl, ...(m.aiReply ? { ai_reply: m.aiReply } : {}), phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.phoneNumberId ?? '' },
       }),
     });
     if (!res.ok) console.error('[wa-push] hub failed', res.status, await res.text());
