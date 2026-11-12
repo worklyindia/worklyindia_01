@@ -2761,10 +2761,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     private fun monitorWebsiteDownloadProgress() {
         activityScope.launch {
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            var previousBytes: Long? = null
-            var previousSampleTime = android.os.SystemClock.elapsedRealtime()
-            var currentSpeed = 0.0
-            var lastProgressTime = previousSampleTime
+            // Keep a short rolling window over DownloadManager's actual byte counter.
+            // This avoids the lag introduced by the old EMA smoothing, which made the
+            // in-app speed disagree with Android's own download notification.
+            val samples = java.util.ArrayDeque<Pair<Long, Long>>()
+            var lastDisplayedSpeed = 0L
+            var lastProgressTime = android.os.SystemClock.elapsedRealtime()
             while (websiteDownloadId != -1L && websiteDownloadDialog?.isShowing == true) {
                 try {
                     manager.query(DownloadManager.Query().setFilterById(websiteDownloadId)).use { cursor ->
@@ -2772,29 +2774,27 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
                             val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
                             val now = android.os.SystemClock.elapsedRealtime()
-                            val elapsed = now - previousSampleTime
-                            if (elapsed >= 1000L) {
-                                val previous = previousBytes
-                                if (previous == null) {
-                                    previousBytes = downloaded
-                                } else {
-                                    val delta = (downloaded - previous).coerceAtLeast(0L)
-                                    if (delta > 0L) {
-                                        val instantSpeed = delta.toDouble() * 1000.0 / elapsed.toDouble()
-                                        // Smooth short DownloadManager reporting gaps instead of
-                                        // flashing 0 B/s between network chunks.
-                                        currentSpeed = if (currentSpeed <= 0.0) instantSpeed
-                                            else currentSpeed * 0.70 + instantSpeed * 0.30
-                                        lastProgressTime = now
-                                    }
-                                    previousBytes = downloaded
-                                }
-                                previousSampleTime = now
+
+                            samples.addLast(now to downloaded)
+                            // Retain about two seconds of samples to reduce bursty 0 B/s
+                            // readings while keeping the displayed rate close to Android's.
+                            while (samples.size > 1 && now - samples.peekFirst().first > 2000L) {
+                                samples.removeFirst()
                             }
+                            val first = samples.peekFirst()
+                            val elapsed = first?.let { now - it.first } ?: 0L
+                            if (first != null && elapsed >= 900L) {
+                                val delta = (downloaded - first.second).coerceAtLeast(0L)
+                                if (delta > 0L) {
+                                    lastDisplayedSpeed = (delta * 1000L / elapsed).coerceAtLeast(1L)
+                                    lastProgressTime = now
+                                }
+                            }
+
                             val speedText = when {
-                                currentSpeed > 0.0 && now - lastProgressTime <= 5000L ->
-                                    "${android.text.format.Formatter.formatShortFileSize(this@MainActivity, currentSpeed.toLong().coerceAtLeast(1L))}/s"
-                                currentSpeed > 0.0 -> "Waiting for data…"
+                                lastDisplayedSpeed > 0L && now - lastProgressTime <= 4000L ->
+                                    "${android.text.format.Formatter.formatShortFileSize(this@MainActivity, lastDisplayedSpeed)}/s"
+                                lastDisplayedSpeed > 0L -> "Waiting for data…"
                                 else -> "Calculating…"
                             }
                             val downloadedText = android.text.format.Formatter.formatShortFileSize(this@MainActivity, downloaded)
@@ -2811,11 +2811,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 } catch (error: Exception) {
                     android.util.Log.w("WorklyAppUpdate", "Could not read APK download progress", error)
                 }
-                delay(500)
+                delay(1000)
             }
         }
     }
-
 
     private fun downloadWebsiteUpdate(release: JSONObject) {
         if (websiteDownloadId != -1L) {
