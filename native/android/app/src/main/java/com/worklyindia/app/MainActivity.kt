@@ -352,6 +352,16 @@ class MainActivity : FragmentActivity() {
             ) {
                 super.onReceivedError(view, request, error)
                 if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost) {
+                    AppErrorReporter.capture(
+                        applicationContext,
+                        "webview_navigation",
+                        "error",
+                        "WebViewNetworkError",
+                        "Main page request failed with Android error code ${error.errorCode}",
+                        source = request.url.encodedPath ?: "/"
+                    )
+                }
+                if (request.isForMainFrame && Uri.parse(request.url.toString()).host == allowedHost) {
                     runOnUiThread {
                         if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
                         pendingOfflineUrl = request.url.toString()
@@ -365,6 +375,26 @@ class MainActivity : FragmentActivity() {
                             showOfflineScreen()
                         }
                     }
+                }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: WebResourceRequest,
+                errorResponse: android.webkit.WebResourceResponse
+            ) {
+                super.onReceivedHttpError(view, request, errorResponse)
+                val host = request.url.host.orEmpty()
+                if (errorResponse.statusCode >= 500 && (host == allowedHost || host.endsWith(".supabase.co"))) {
+                    AppErrorReporter.capture(
+                        applicationContext,
+                        "webview_http",
+                        "error",
+                        "HttpServiceError",
+                        "HTTP ${errorResponse.statusCode}",
+                        source = request.url.encodedPath ?: "/",
+                        httpStatus = errorResponse.statusCode
+                    )
                 }
             }
 
