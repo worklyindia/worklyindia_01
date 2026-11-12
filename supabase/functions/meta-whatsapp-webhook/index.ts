@@ -362,6 +362,7 @@ async function aiAutoReply(employer: Omit<NonNullable<Awaited<ReturnType<typeof 
     metadata: { provider: 'cloud_api', ai_auto_reply: true } as any,
   });
   await supabase.from('whatsapp_conversations').update({ last_message_at: now, last_message_preview: reply.slice(0, 100) }).eq('id', conversationId);
+  return reply;
 }
 
 const PUSH_PREVIEW: Record<string, string> = {
@@ -390,19 +391,33 @@ async function notifyOwners(m: { phone: string; name: string | null; type: strin
     const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '');
     const { data: iconRow } = await supabase.from('app_settings').select('setting_value').eq('setting_key', 'whatsapp_notification_icon').maybeSingle();
     const waIcon = (iconRow as any)?.setting_value || '/whatsapp-notification-icon.png?v=2';
+    let accountAvatarUrl: string | undefined;
+    if (m.phoneNumberId) {
+      try {
+        const accessToken = await accessTokenForPhoneId(m.phoneNumberId);
+        if (accessToken) {
+          const profileResponse = await fetch(`https://graph.facebook.com/v21.0/${m.phoneNumberId}/whatsapp_business_profile?fields=profile_picture_url`, { headers: { Authorization: `Bearer ${accessToken}` } });
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json();
+            const profile = Array.isArray(profileData?.data) ? profileData.data[0] : profileData;
+            if (typeof profile?.profile_picture_url === 'string' && profile.profile_picture_url.startsWith('https://')) accountAvatarUrl = profile.profile_picture_url;
+          }
+        }
+      } catch (error) { console.warn('[wa-push] connected profile photo unavailable', error instanceof Error ? error.message : String(error)); }
+    }
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/email-api`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, apikey: key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'send_push_raw', userIds, title, body: body.slice(0, 900), url,
-        icon: waIcon,
+        icon: accountAvatarUrl || waIcon,
         image: m.type === 'image' || m.type === 'sticker' ? m.image : undefined,
         actions: [
           { action: 'reply', title: 'Reply', url },
           { action: 'mark-read', title: 'Mark as read', url },
         ],
         tag: `whatsapp-${m.audience ?? 'x'}-${m.phone}`,
-        data: { type: 'whatsapp_message', phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.employerUserId ? (m.phoneNumberId ?? '') : '' },
+        data: { type: 'whatsapp_message', source: 'whatsapp', platform: 'whatsapp', account_avatar_url: accountAvatarUrl ?? '', ...(m.aiReply ? { ai_reply: m.aiReply } : {}), phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.phoneNumberId ?? '' },
       }),
     });
     if (!res.ok) console.error('[wa-push] hub failed', res.status, await res.text());
