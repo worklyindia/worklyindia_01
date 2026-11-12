@@ -159,7 +159,7 @@ class ChargingMonitorService : Service() {
         // and notification shade, even while the app UI is closed.
         // Refresh the foreground-service notification itself on every battery
         // broadcast. This is more reliable than notify() alone across OEM skins.
-        val monitorNotification = buildMonitorNotification(percent, charging)
+        val monitorNotification = buildMonitorNotification(percent)
         if (hasFullScreenAccess(this)) {
             startForeground(MONITOR_NOTIFICATION_ID, monitorNotification)
         } else {
@@ -443,24 +443,32 @@ class ChargingMonitorService : Service() {
         getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
     }
 
-    private fun buildMonitorNotification(percent: Int = -1, charging: Boolean = true): Notification {
+    private fun buildMonitorNotification(percent: Int = -1): Notification {
         val openIntent = PendingIntent.getActivity(
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notificationTitle = "Workly India Battery Protection"
-        val notificationText = if (percent in 0..100) {
-            "Monitoring Your Battery 🔋 • $percent%"
+        // Resolve a current percentage even when the service first starts
+        // before its first ACTION_BATTERY_CHANGED callback is delivered.
+        val livePercent = if (percent in 0..100) {
+            percent
         } else {
-            "Monitoring Your Battery 🔋"
+            val capacity = getSystemService(BatteryManager::class.java)
+                .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (capacity in 0..100) capacity else {
+                val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                val level = sticky?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                val scale = sticky?.getIntExtra(BatteryManager.EXTRA_SCALE, 100)?.coerceAtLeast(1) ?: 100
+                if (level >= 0) (level * 100 / scale) else -1
+            }
         }
-        val batteryState = when {
-            charging && percent in 0..100 -> "Battery: $percent% • Charging"
-            charging -> "Charging"
-            percent in 0..100 -> "Battery: $percent% • Not charging"
-            else -> "Battery status updating"
+        val notificationText = if (livePercent in 0..100) {
+            "Monitoring Your Battery $livePercent% 🔋"
+        } else {
+            "Monitoring Your Battery --% 🔋"
         }
-        val expandedText = "Monitoring Your Battery 🔋\n$batteryState"
+        val expandedText = notificationText
         val publicNotification = NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setContentTitle(notificationTitle)
