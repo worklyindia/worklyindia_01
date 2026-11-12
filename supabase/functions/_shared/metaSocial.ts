@@ -710,7 +710,7 @@ async function resolveSenderName(platform: Platform, senderId: string, token: st
 }
 
 async function notifySocialPush(supabase: SupabaseClient, ev: {
-  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string; aiReply?: string;
+  platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; senderAvatarUrl?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string; aiReply?: string;
 }, account: any, recipientUserId: string) {
   try {
     const isIg = ev.platform === 'instagram';
@@ -736,7 +736,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
         // Customer Service accounts use a synthetic, isolated account ID.
         // FCM tokens belong to the real signed-in owner, not that synthetic ID.
         userIds: [recipientUserId],
-        title, body, url, icon: account.picture_url || icon, image: ev.imageUrl,
+        title, body, url, icon: ev.senderAvatarUrl || icon, image: ev.imageUrl,
         actions: [
           { action: 'reply', title: 'Reply', url },
           { action: 'mark-read', title: 'Mark as read', url },
@@ -746,7 +746,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
           type: `${ev.platform}_${ev.kind}`, source: ev.platform, platform: ev.platform,
           sender_id: ev.senderId, sender_name: name, conversation_id: ev.senderId, event_id: ev.eventId,
           account_id: ev.accountId || '', audience: ev.audience || '',
-          account_avatar_url: account.picture_url || '',
+          sender_avatar_url: ev.senderAvatarUrl || '',
           ...(ev.aiReply ? { ai_reply: ev.aiReply } : {}),
         },
       }),
@@ -761,7 +761,7 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
 }
 
 async function processEvent(supabase: SupabaseClient, ev: {
-  platform: Platform; kind: 'comment' | 'message'; ownerId: string; eventId: string; senderId: string; text: string; commentId?: string; postId?: string; senderName?: string; imageUrl?: string;
+  platform: Platform; kind: 'comment' | 'message'; ownerId: string; eventId: string; senderId: string; text: string; commentId?: string; postId?: string; senderName?: string; senderAvatarUrl?: string; imageUrl?: string;
 }) {
   if (!ev.text?.trim() || !ev.eventId) return;
   const col = ev.platform === 'instagram' ? 'ig_user_id' : 'page_id';
