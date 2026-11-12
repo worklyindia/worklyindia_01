@@ -100,6 +100,9 @@ class ChargingMonitorService : Service() {
                     .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
                     .putBoolean(KEY_ALERTED, false)
                     .putBoolean(KEY_ACKNOWLEDGED, false)
+                    // Reset the one-shot unplug guard for this new physical session.
+                    .putBoolean(KEY_DISCONNECT_ANNOUNCED, false)
+                    .putBoolean(KEY_LAST_CHARGING_STATE, false)
                     .commit()
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
                 registerBatteryReceiver()
@@ -117,7 +120,7 @@ class ChargingMonitorService : Service() {
                 // only on persisted session flags: some OEMs restart the service or
                 // deliver the battery snapshot out of order, which can lose that flag.
                 // This receiver is invoked once per unplug edge, so play the clip once.
-                playChargingStoppedAnnouncement()
+                playChargingStoppedAnnouncementOnce()
                 resetChargeCycleAndStopAlert()
                 // Do not process the sticky BATTERY_CHANGED snapshot here: some
                 // devices briefly return the pre-unplug "charging" state. The
@@ -179,8 +182,21 @@ class ChargingMonitorService : Service() {
         // Record a live session from battery state too. This covers devices
         // that deliver a sticky charging snapshot before/without a plug edge.
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val wasCharging = prefs.getBoolean(KEY_LAST_CHARGING_STATE, false)
         if (charging) {
-            prefs.edit().putBoolean(KEY_CHARGING_SESSION_ACTIVE, true).apply()
+            prefs.edit()
+                .putBoolean(KEY_CHARGING_SESSION_ACTIVE, true)
+                .putBoolean(KEY_LAST_CHARGING_STATE, true)
+                .apply()
+            if (!wasCharging) {
+                prefs.edit().putBoolean(KEY_DISCONNECT_ANNOUNCED, false).apply()
+            }
+        } else {
+            // Fallback for devices/OEM builds that omit or delay the manifest
+            // POWER_DISCONNECTED broadcast: detect the live charging -> unplugged
+            // transition from ACTION_BATTERY_CHANGED and play the same MP3 once.
+            if (wasCharging) playChargingStoppedAnnouncementOnce()
+            prefs.edit().putBoolean(KEY_LAST_CHARGING_STATE, false).apply()
         }
 
         // A charger connected at 100% (or Android's FULL status) must not
@@ -374,8 +390,19 @@ class ChargingMonitorService : Service() {
         chargingStoppedPlayer = null
     }
 
-    /** Plays the disconnect MP3 once after a genuine active charging session ends. */
-    private fun playChargingStoppedAnnouncement() {
+    /** Plays the disconnect MP3 once, whether the power-edge or battery-state path fires first. */
+    private fun playChargingStoppedAnnouncementOnce() {
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_DISCONNECT_ANNOUNCED, false)) {
+            android.util.Log.i(TAG, "Charging-stopped audio skipped: already announced for this unplug")
+            return
+        }
+        // Commit before starting playback so duplicate Android broadcasts cannot
+        // start the same clip twice. A load/start failure re-arms it for retry.
+        prefs.edit()
+            .putBoolean(KEY_DISCONNECT_ANNOUNCED, true)
+            .putBoolean(KEY_LAST_CHARGING_STATE, false)
+            .commit()
         stopChargingStoppedPlayback()
         runCatching {
             val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped)
@@ -401,6 +428,7 @@ class ChargingMonitorService : Service() {
             android.util.Log.i(TAG, "Charging-stopped MP3 playback started")
         }.onFailure { error ->
             android.util.Log.e(TAG, "Could not play charging-stopped MP3", error)
+            prefs.edit().putBoolean(KEY_DISCONNECT_ANNOUNCED, false).apply()
         }
     }
 
@@ -581,6 +609,8 @@ class ChargingMonitorService : Service() {
         const val KEY_STARTED_ANNOUNCED = "charging_start_announced"
         const val KEY_START_ANNOUNCEMENT_PENDING = "charging_start_announcement_pending"
         const val KEY_CHARGING_SESSION_ACTIVE = "charging_session_active"
+        const val KEY_LAST_CHARGING_STATE = "last_charging_state"
+        const val KEY_DISCONNECT_ANNOUNCED = "charging_disconnect_announced"
         const val KEY_TTS_UNAVAILABLE = "charging_offline_tts_unavailable"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
