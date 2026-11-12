@@ -200,32 +200,40 @@ class ChargingMonitorService : Service() {
                     .build()
             )
             player.setOnCompletionListener { completed ->
-                prefs.edit()
-                    .putBoolean(KEY_STARTED_ANNOUNCED, true)
-                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                    .apply()
                 android.util.Log.i(TAG, "Bundled charging-start audio completed")
                 completed.release()
                 if (chargingStartPlayer === completed) chargingStartPlayer = null
             }
             player.setOnErrorListener { failed, what, extra ->
                 android.util.Log.e(TAG, "Bundled charging-start audio failed: what=$what extra=$extra")
-                prefs.edit()
-                    .putBoolean(KEY_STARTED_ANNOUNCED, false)
-                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                    .apply()
+                // Keep the persisted at-most-once flag: an error can occur after
+                // part of the clip has already been heard, so replaying could duplicate speech.
                 failed.release()
                 if (chargingStartPlayer === failed) chargingStartPlayer = null
                 true
             }
+
+            // Persist the per-charge-cycle guard before playback starts. If Android
+            // restarts this service while the clip is playing, the pending flag is
+            // already consumed and the same charging session cannot replay it.
+            if (!prefs.edit()
+                    .putBoolean(KEY_STARTED_ANNOUNCED, true)
+                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                    .commit()
+            ) {
+                throw IllegalStateException("Could not persist charging-start playback guard")
+            }
+
             player.start()
             android.util.Log.i(TAG, "Bundled charging-start MP3 playback started")
         }.onFailure { error ->
             android.util.Log.e(TAG, "Could not play bundled charging-start MP3", error)
+            // If setup/start failed before playback could begin, allow a retry
+            // from the still-active charging session.
             prefs.edit()
                 .putBoolean(KEY_STARTED_ANNOUNCED, false)
                 .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                .apply()
+                .commit()
             stopChargingStartPlayback()
         }
     }

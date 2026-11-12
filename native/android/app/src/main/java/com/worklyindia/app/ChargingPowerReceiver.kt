@@ -37,10 +37,15 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                     ChargingMonitorService.ACTION_POWER_CONNECTED
                 )
             }
-            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_BOOT_COMPLETED -> {
+                // A boot is not a fresh plug-in event. Suppress any pending start
+                // clip while restoring the live battery monitor.
+                prepareBootChargeState(context)
+                startMonitor(context, "boot")
+            }
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                // Keep exactly one ongoing monitor notification across reboot and app updates.
-                startMonitor(context, "boot/update")
+                // Preserve an unconsumed real plug-in event across an app update.
+                startMonitor(context, "app update")
             }
             Intent.ACTION_POWER_DISCONNECTED -> {
                 // Keep the same foreground service and notification; only change its state to Battery.
@@ -49,6 +54,39 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 android.util.Log.i("WorklyCharging", "Charger disconnected; persistent Workly notification changed to Battery")
             }
         }
+    }
+
+    private fun prepareBootChargeState(context: Context) {
+        val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val status = sticky?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val plugged = sticky?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+        val charging = sticky != null && (
+            status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL ||
+                (plugged && status != BatteryManager.BATTERY_STATUS_DISCHARGING)
+            )
+
+        val prefs = context.getSharedPreferences(
+            ChargingMonitorService.PREFS,
+            Context.MODE_PRIVATE
+        )
+        val editor = prefs.edit()
+            .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, false)
+
+        if (charging) {
+            // The device was already charging at boot; never play a start clip
+            // just because the foreground monitor is being restored.
+            editor
+                .putBoolean(ChargingMonitorService.KEY_CHARGING_SESSION_ACTIVE, true)
+                .putBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, true)
+        } else {
+            // No active charge at boot: the next real POWER_CONNECTED edge may
+            // arm a new per-cycle announcement.
+            editor
+                .putBoolean(ChargingMonitorService.KEY_CHARGING_SESSION_ACTIVE, false)
+                .putBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)
+        }
+        editor.commit()
     }
 
     private fun showProtectionNotification(context: Context) {
