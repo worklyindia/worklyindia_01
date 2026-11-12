@@ -2527,9 +2527,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         val versionName = release.optString("version_name", "New version")
         val notes = release.optString("release_notes", "").trim()
         val mandatory = getInstalledAppVersionCode() < release.optInt("min_supported_version_code", 1).toLong()
-        val snoozeKey = "update_later_until_$versionCode"
-        val snoozedUntil = websiteUpdatePrefs.getLong(snoozeKey, 0L)
-        if (!mandatory && (websiteUpdateDeferredForSession || System.currentTimeMillis() < snoozedUntil)) return
+        if (!mandatory && websiteUpdateDeferredForSession) return
         websiteUpdateDialogVisible = true
         val content = buildWebsiteUpdateCard(
             versionName,
