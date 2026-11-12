@@ -62,6 +62,15 @@ class ChargingMonitorService : Service() {
             return START_NOT_STICKY
         }
         when (intent?.action) {
+            ACTION_RESTORE_MONITOR_NOTIFICATION -> {
+                // Android/OEM notification shades may allow a foreground-service
+                // notification to be swiped away. Re-promote it immediately.
+                startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
+                registerBatteryReceiver()
+                resumeAlarmIfNeeded()
+                readCurrentBatteryState()
+                return START_STICKY
+            }
             ACTION_STOP -> {
                 stopChargingStartPlayback()
                 stopFullChargeVoice()
@@ -98,17 +107,17 @@ class ChargingMonitorService : Service() {
                 return START_STICKY
             }
             ACTION_POWER_DISCONNECTED -> {
-                val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                val hadActiveChargingSession =
-                    prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false) ||
-                    prefs.getBoolean(KEY_ALERTED, false)
                 // Stop the full-charge alert and screen first, then play one
                 // disconnect clip for the completed physical session.
                 stopChargingStartPlayback()
                 stopFullChargeVoice()
                 stopAlertAlarm()
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
-                if (hadActiveChargingSession) playChargingStoppedAnnouncement()
+                // POWER_DISCONNECTED is the physical unplug edge. Do not depend
+                // only on persisted session flags: some OEMs restart the service or
+                // deliver the battery snapshot out of order, which can lose that flag.
+                // This receiver is invoked once per unplug edge, so play the clip once.
+                playChargingStoppedAnnouncement()
                 resetChargeCycleAndStopAlert()
                 // Do not process the sticky BATTERY_CHANGED snapshot here: some
                 // devices briefly return the pre-unplug "charging" state. The
@@ -157,8 +166,15 @@ class ChargingMonitorService : Service() {
 
         // Keep the ongoing foreground notification current for the lock screen
         // and notification shade, even while the app UI is closed.
-        getSystemService(NotificationManager::class.java)
-            .notify(MONITOR_NOTIFICATION_ID, buildMonitorNotification(percent, charging))
+        // Refresh the foreground-service notification itself on every battery
+        // broadcast. This is more reliable than notify() alone across OEM skins.
+        val monitorNotification = buildMonitorNotification(percent)
+        if (hasFullScreenAccess(this)) {
+            startForeground(MONITOR_NOTIFICATION_ID, monitorNotification)
+        } else {
+            getSystemService(NotificationManager::class.java)
+                .notify(MONITOR_NOTIFICATION_ID, monitorNotification)
+        }
 
         // Record a live session from battery state too. This covers devices
         // that deliver a sticky charging snapshot before/without a plug edge.
@@ -436,17 +452,42 @@ class ChargingMonitorService : Service() {
         getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
     }
 
-    private fun buildMonitorNotification(percent: Int = -1, charging: Boolean = true): Notification {
+    private fun buildMonitorNotification(percent: Int = -1): Notification {
         val openIntent = PendingIntent.getActivity(
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val batteryText = if (percent in 0..100) "Monitoring Your Battery $percent%🔋" else "Monitoring Your Battery 🔋"
         val notificationTitle = "Workly India Battery Protection"
-        val notificationText = batteryText
-        val expandedText = batteryText
+        // Resolve a current percentage even when the service first starts
+        // before its first ACTION_BATTERY_CHANGED callback is delivered.
+        val livePercent = if (percent in 0..100) {
+            percent
+        } else {
+            val capacity = getSystemService(BatteryManager::class.java)
+                .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (capacity in 0..100) capacity else {
+                val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                val level = sticky?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                val scale = sticky?.getIntExtra(BatteryManager.EXTRA_SCALE, 100)?.coerceAtLeast(1) ?: 100
+                if (level >= 0) (level * 100 / scale) else -1
+            }
+        }
+        val notificationText = if (livePercent in 0..100) {
+            "Monitoring Your Battery $livePercent% 🔋"
+        } else {
+            "Monitoring Your Battery --% 🔋"
+        }
+        val expandedText = notificationText
+        val restoreIntent = Intent(this, NotificationActionReceiver::class.java).apply {
+            action = ACTION_RESTORE_MONITOR_NOTIFICATION
+        }
+        val restorePendingIntent = PendingIntent.getBroadcast(
+            this, MONITOR_RESTORE_REQUEST_CODE, restoreIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val publicNotification = NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
+            .setDeleteIntent(restorePendingIntent)
             .setContentTitle(notificationTitle)
             .setContentText(notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
@@ -460,6 +501,7 @@ class ChargingMonitorService : Service() {
 
         return NotificationCompat.Builder(this, MONITOR_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_workly)
+            .setDeleteIntent(restorePendingIntent)
             .setContentTitle(notificationTitle)
             .setContentText(notificationText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
@@ -566,6 +608,8 @@ class ChargingMonitorService : Service() {
             }
         }
         private const val MONITOR_REQUEST_CODE = 8212
+        private const val MONITOR_RESTORE_REQUEST_CODE = 8215
+        const val ACTION_RESTORE_MONITOR_NOTIFICATION = "com.worklyindia.app.CHARGING_MONITOR_RESTORE_NOTIFICATION"
         private const val ALERT_REQUEST_CODE = 8213
         private const val STOP_ALERT_REQUEST_CODE = 8214
     }

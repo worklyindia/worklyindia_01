@@ -16,6 +16,17 @@ import org.json.JSONObject
 
 class NotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ChargingMonitorService.ACTION_RESTORE_MONITOR_NOTIFICATION) {
+            val serviceIntent = Intent(context, ChargingMonitorService::class.java).apply {
+                action = ChargingMonitorService.ACTION_RESTORE_MONITOR_NOTIFICATION
+            }
+            runCatching {
+                androidx.core.content.ContextCompat.startForegroundService(context, serviceIntent)
+            }.onFailure {
+                android.util.Log.e("WorklyCharging", "Could not restore battery monitor notification", it)
+            }
+            return
+        }
         if (intent.action == ACTION_ACK_CHARGING_ALERT) {
             val serviceIntent = Intent(context, ChargingMonitorService::class.java).apply {
                 action = ChargingMonitorService.ACTION_ACKNOWLEDGE
