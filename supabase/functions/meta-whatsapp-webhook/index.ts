@@ -386,7 +386,7 @@ async function notifyOwners(m: { phone: string; name: string | null; type: strin
     const displayPhone = m.phone.startsWith('+') ? m.phone : `+${m.phone}`;
     const title = m.name || displayPhone;
     const url = m.employerUserId
-      ? `/employer/whatsapp?phone=${encodeURIComponent(m.phone)}`
+      ? `/employer/workly-chat/chat/${encodeURIComponent(m.phone)}?channel=whatsapp`
       : `/owner-portal/whatsapp/chat/${encodeURIComponent(m.phone)}${m.audience ? `?audience=${m.audience}` : ''}`;
     const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '');
     const { data: iconRow } = await supabase.from('app_settings').select('setting_value').eq('setting_key', 'whatsapp_notification_icon').maybeSingle();
@@ -421,7 +421,7 @@ async function notifyOwners(m: { phone: string; name: string | null; type: strin
           { action: 'mark-read', title: 'Mark as read', url },
         ],
         tag: `whatsapp-${m.audience ?? 'x'}-${m.phone}`,
-        data: { type: 'whatsapp_message', source: 'whatsapp', platform: 'whatsapp', sender_avatar_url: '', own_avatar_url: ownAvatarUrl, account_avatar_url: ownAvatarUrl, ...(m.aiReply ? { ai_reply: m.aiReply } : {}), phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.phoneNumberId ?? '' },
+        data: { type: 'whatsapp_message', source: 'whatsapp', platform: 'whatsapp', sender_avatar_url: '', own_avatar_url: ownAvatarUrl, account_avatar_url: ownAvatarUrl, url, ...(m.aiReply ? { ai_reply: m.aiReply } : {}), phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.conversationId ?? '', phone_number_id: m.phoneNumberId ?? '' },
       }),
     });
     if (!res.ok) console.error('[wa-push] hub failed', res.status, await res.text());
