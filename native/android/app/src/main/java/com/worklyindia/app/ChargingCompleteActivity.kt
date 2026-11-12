@@ -21,7 +21,8 @@ class ChargingCompleteActivity : Activity() {
     private val unplugReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
             if (intent?.action == ACTION_CLOSE_ON_UNPLUG) {
-                acknowledgeAlarm()
+                // The monitor service owns audio shutdown on the unplug edge.
+                // Do not send a second asynchronous ACK that could race a rapid re-plug.
                 finish()
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
             }
