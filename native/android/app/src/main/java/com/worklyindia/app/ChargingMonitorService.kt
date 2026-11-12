@@ -479,7 +479,7 @@ class ChargingMonitorService : Service() {
         }
         val expandedText = notificationText
         val restoreIntent = Intent(this, NotificationActionReceiver::class.java).apply {
-            action = NotificationActionReceiver.ACTION_RESTORE_MONITOR_NOTIFICATION
+            action = ACTION_RESTORE_MONITOR_NOTIFICATION
         }
         val restorePendingIntent = PendingIntent.getBroadcast(
             this, MONITOR_RESTORE_REQUEST_CODE, restoreIntent,
