@@ -37,8 +37,10 @@ class ChargingMonitorService : Service() {
         super.onCreate()
         createChannels()
         if (hasFullScreenAccess(this)) {
+            // Defer the sticky battery snapshot until onStartCommand has applied
+            // the explicit plug/unplug edge. Otherwise a 100% sticky snapshot can
+            // post the alert before POWER_CONNECTED resets the new session.
             startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
-            registerBatteryReceiver()
         }
     }
 
@@ -79,29 +81,39 @@ class ChargingMonitorService : Service() {
                 // Arm the start clip exactly once per physical plug-in edge.
                 // The receiver passes this explicit action so it cannot race
                 // the sticky BATTERY_CHANGED snapshot during service startup.
-                if (!prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false)) {
-                    prefs.edit()
-                        .putBoolean(KEY_CHARGING_SESSION_ACTIVE, true)
-                        .putBoolean(KEY_STARTED_ANNOUNCED, false)
-                        .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
-                        .putBoolean(KEY_ALERTED, false)
-                        .putBoolean(KEY_ACKNOWLEDGED, false)
-                        .commit()
-                }
+                // POWER_CONNECTED is a fresh physical edge. Always re-arm the
+                // session, even if an earlier disconnect write was interrupted.
+                stopFullChargeVoice()
+                stopAlertAlarm()
+                prefs.edit()
+                    .putBoolean(KEY_CHARGING_SESSION_ACTIVE, true)
+                    .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                    .putBoolean(KEY_ALERTED, false)
+                    .putBoolean(KEY_ACKNOWLEDGED, false)
+                    .commit()
+                getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
+                registerBatteryReceiver()
                 readCurrentBatteryState()
                 return START_STICKY
             }
             ACTION_POWER_DISCONNECTED -> {
                 val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                val hadActiveChargingSession = prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false)
+                val hadActiveChargingSession =
+                    prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false) ||
+                    prefs.getBoolean(KEY_ALERTED, false)
                 // Stop the full-charge alert and screen first, then play one
                 // disconnect clip for the completed physical session.
+                stopChargingStartPlayback()
                 stopFullChargeVoice()
                 stopAlertAlarm()
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
                 if (hadActiveChargingSession) playChargingStoppedAnnouncement()
                 resetChargeCycleAndStopAlert()
-                readCurrentBatteryState()
+                // Do not process the sticky BATTERY_CHANGED snapshot here: some
+                // devices briefly return the pre-unplug "charging" state. The
+                // next live battery broadcast will update the monitor safely.
+                registerBatteryReceiver(processSticky = false)
                 return START_STICKY
             }
             ACTION_ACKNOWLEDGE -> {
@@ -109,12 +121,13 @@ class ChargingMonitorService : Service() {
                 return START_STICKY
             }
         }
+        registerBatteryReceiver()
         resumeAlarmIfNeeded()
         readCurrentBatteryState()
         return START_STICKY
     }
 
-    private fun registerBatteryReceiver() {
+    private fun registerBatteryReceiver(processSticky: Boolean = true) {
         if (batteryReceiverRegistered) return
         val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         val sticky = if (Build.VERSION.SDK_INT >= 33) {
@@ -124,7 +137,7 @@ class ChargingMonitorService : Service() {
             registerReceiver(batteryReceiver, filter)
         }
         batteryReceiverRegistered = true
-        sticky?.let(::handleBatteryChanged)
+        if (processSticky) sticky?.let(::handleBatteryChanged)
     }
 
     private fun readCurrentBatteryState() {
@@ -147,6 +160,13 @@ class ChargingMonitorService : Service() {
         getSystemService(NotificationManager::class.java)
             .notify(MONITOR_NOTIFICATION_ID, buildMonitorNotification(percent, charging))
 
+        // Record a live session from battery state too. This covers devices
+        // that deliver a sticky charging snapshot before/without a plug edge.
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (charging) {
+            prefs.edit().putBoolean(KEY_CHARGING_SESSION_ACTIVE, true).apply()
+        }
+
         // A charger connected at 100% (or Android's FULL status) must not
         // trigger the charging-start voice. Consume the pending announcement
         // so a later battery snapshot cannot play it unexpectedly.
@@ -167,6 +187,7 @@ class ChargingMonitorService : Service() {
     private fun resetChargeCycleAndStopAlert() {
         stopAlertAlarm()
         stopFullChargeVoice()
+        stopChargingStartPlayback()
         getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_ALERTED, false)
             .putBoolean(KEY_ACKNOWLEDGED, false)
