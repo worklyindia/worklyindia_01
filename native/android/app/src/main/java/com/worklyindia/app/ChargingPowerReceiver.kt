@@ -29,17 +29,13 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 // still report the previous (not charging) sticky status for a short time.
                 // Starting the foreground service here makes it independent of screen
                 // state, app visibility and lock-screen state.
-                val prefs = context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE)
-                // Arm one announcement for each new physical charging session.
-                // Ignore duplicate POWER_CONNECTED broadcasts during the same session.
-                if (!prefs.getBoolean(ChargingMonitorService.KEY_CHARGING_SESSION_ACTIVE, false)) {
-                    prefs.edit()
-                        .putBoolean(ChargingMonitorService.KEY_CHARGING_SESSION_ACTIVE, true)
-                        .putBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)
-                        .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, true)
-                        .apply()
-                }
-                startMonitor(context, "charger connected")
+                // Pass the physical edge to the service itself. It commits the
+                // session state before reading Android's sticky battery snapshot.
+                startMonitor(
+                    context,
+                    "charger connected",
+                    ChargingMonitorService.ACTION_POWER_CONNECTED
+                )
             }
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
