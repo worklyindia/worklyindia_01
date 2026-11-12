@@ -749,7 +749,19 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
     // Resolve the connected Page/Instagram account photo for the "You" avatar.
     // Cached picture_url can be absent or stale, so refresh it from the connected
     // account's own Graph profile using its page access token before sending push.
-    let ownAvatarUrl = typeof account?.picture_url === 'string' && account.picture_url.startsWith('https://') ? account.picture_url : '';
+    const accountPictureCandidates = [
+      account?.picture_url,
+      account?.profile_picture_url,
+      account?.avatar_url,
+      account?.picture?.data?.url,
+      account?.profile?.picture_url,
+      account?.profile?.profile_picture_url,
+      account?.metadata?.picture_url,
+      account?.metadata?.profile_picture_url,
+    ];
+    let ownAvatarUrl = accountPictureCandidates.find((value) =>
+      typeof value === 'string' && value.startsWith('https://')
+    ) || '';
     if (!ownAvatarUrl) {
       try {
         const { data: ownToken } = await supabase.from('social_meta_tokens')
