@@ -41,6 +41,7 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
             if (WorklyOfflineDataStore.savePublicJobs(applicationContext, rows)) Result.success()
             else Result.retry()
         } catch (error: Exception) {
+            AppErrorReporter.capture(applicationContext, "offline_jobs_sync", "error", error)
             Log.w(TAG, "Offline jobs sync failed; retaining the previous snapshot", error)
             Result.retry()
         } finally {
