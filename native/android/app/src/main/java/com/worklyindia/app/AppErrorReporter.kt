@@ -67,6 +67,7 @@ object AppErrorReporter {
         .replace(Regex("(?i)(access_token|refresh_token|password|authorization|api[_-]?key)\\s*[:=]\\s*[^\\s,;]+"), "$1=[REDACTED]")
         .replace(Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE), "[EMAIL]")
         .replace(Regex("\\+?\\d[\\d\\s().-]{7,}\\d"), "[PHONE]")
+        .replace(Regex("(https?://[^\\\\s?]+)\\\\?[^\\\\s]+", RegexOption.IGNORE_CASE), "$1?[REDACTED]")
         .take(max)
 
     private class WorklyUncaughtExceptionHandler(
@@ -74,7 +75,12 @@ object AppErrorReporter {
     ) : Thread.UncaughtExceptionHandler {
         override fun uncaughtException(thread: Thread, error: Throwable) {
             capture(context, "android_process", "fatal", error)
-            previous?.uncaughtException(thread, error)
+            try {
+                previous?.uncaughtException(thread, error)
+            } finally {
+                android.os.Process.killProcess(android.os.Process.myPid())
+                kotlin.system.exitProcess(10)
+            }
         }
     }
 }
