@@ -306,14 +306,14 @@ object NativePushManager {
         // Show the actual sender's profile photo when supplied. If unavailable,
         // use a neutral generic person avatar; never substitute a platform or
         // connected business/account logo for the person who sent the message.
-        fun defaultPersonAvatar(): Bitmap {
+        fun defaultPersonAvatar(isSelf: Boolean): Bitmap {
             val size = (96 * context.resources.displayMetrics.density).toInt().coerceAtLeast(96)
             val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = android.graphics.Canvas(bitmap)
             val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-            paint.color = android.graphics.Color.rgb(224, 228, 232)
+            paint.color = if (isSelf) android.graphics.Color.rgb(222, 232, 248) else android.graphics.Color.rgb(244, 228, 216)
             canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
-            paint.color = android.graphics.Color.rgb(112, 120, 128)
+            paint.color = if (isSelf) android.graphics.Color.rgb(62, 105, 168) else android.graphics.Color.rgb(160, 105, 72)
             canvas.drawCircle(size / 2f, size * 0.36f, size * 0.16f, paint)
             val body = android.graphics.RectF(size * 0.22f, size * 0.58f, size * 0.78f, size * 1.02f)
             canvas.drawRoundRect(body, size * 0.28f, size * 0.28f, paint)
@@ -346,7 +346,9 @@ object NativePushManager {
                 bitmap
             }.getOrNull()
         }
-        builder.setLargeIcon(senderAvatar ?: defaultPersonAvatar())
+        val incomingAvatar = senderAvatar ?: defaultPersonAvatar(isSelf = false)
+        val ownAvatar = defaultPersonAvatar(isSelf = true)
+        builder.setLargeIcon(incomingAvatar)
 
         // Download the optional rich-media image with strict time/size limits.
         val imageUrl = data["image"]?.takeIf { it.startsWith("https://") }
@@ -440,7 +442,10 @@ object NativePushManager {
                     val isMe = item.optBoolean("is_me", item.optBoolean("from_me", false))
                     val rawTimestamp = item.optLong("timestamp", System.currentTimeMillis())
                     val timestamp = if (rawTimestamp in 1..9_999_999_999L) rawTimestamp * 1000L else rawTimestamp
-                    val person = Person.Builder().setName(if (isMe) "You" else senderName).build()
+                    val person = Person.Builder()
+                        .setName(if (isMe) "You" else senderName)
+                        .setIcon(IconCompat.createWithBitmap(if (isMe) ownAvatar else incomingAvatar))
+                        .build()
                     conversationStyle.addMessage(text, timestamp, person)
                 }
             }
@@ -449,7 +454,7 @@ object NativePushManager {
                 conversationStyle.addMessage(
                     body,
                     System.currentTimeMillis(),
-                    Person.Builder().setName(senderName).build()
+                    Person.Builder().setName(senderName).setIcon(IconCompat.createWithBitmap(incomingAvatar)).build()
                 )
             }
             // When the backend has sent an AI auto-reply, show that exact sent text
@@ -458,7 +463,7 @@ object NativePushManager {
                 conversationStyle.addMessage(
                     aiReply.take(5000),
                     System.currentTimeMillis() + 1,
-                    Person.Builder().setName("You").build()
+                    Person.Builder().setName("You").setIcon(IconCompat.createWithBitmap(ownAvatar)).build()
                 )
             }
             builder.setStyle(conversationStyle)
