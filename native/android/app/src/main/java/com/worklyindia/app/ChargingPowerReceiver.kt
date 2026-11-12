@@ -15,13 +15,8 @@ import androidx.core.app.NotificationCompat
 
 class ChargingPowerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        // Charger, reboot and package-update broadcasts must not restart monitoring
-        // after the user has disabled full-screen notification access.
-        if (!ChargingMonitorService.hasFullScreenAccess(context)) {
-            ChargingMonitorService.stopMonitoring(context)
-            android.util.Log.i("WorklyCharging", "Monitoring remains stopped: full-screen notification access is off")
-            return
-        }
+        // Battery monitoring/audio do not require full-screen-intent access.
+        // The service checks that permission only before launching the 100% screen.
         when (intent.action) {
             Intent.ACTION_POWER_CONNECTED -> {
                 // POWER_CONNECTED is the authoritative edge-trigger. Do not gate this
