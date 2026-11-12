@@ -116,6 +116,9 @@ class MainActivity : FragmentActivity() {
     private var websiteDownloadRelease: JSONObject? = null
     private var websiteDownloadDialog: android.app.Dialog? = null
     private var websiteInstallDialogVisible = false
+    // Defer update prompts and cancelled installer hand-offs until a fresh app launch.
+    private var websiteUpdateDeferredForSession = false
+    private var websiteInstallDeferredForSession = false
     private var biometricAuthenticatedForForeground = false
     private var biometricPromptShowing = false
     // Native call lifecycle bridge: keep the display awake and allow Android PiP while an interview video is active.
@@ -200,6 +203,19 @@ class MainActivity : FragmentActivity() {
     @Deprecated("Android WebView file chooser result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_WEBSITE_INSTALL) {
+            websiteInstallLaunchPending = false
+            val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
+            if (resultCode == RESULT_OK || (targetCode > 0L && getInstalledAppVersionCode() >= targetCode)) {
+                clearPendingWebsiteInstall()
+            } else {
+                // Keep the downloaded APK, but do not reopen Android's installer
+                // again during this app session after the user presses Cancel.
+                websiteInstallDeferredForSession = true
+                android.util.Log.i("WorklyAppUpdate", "Installer was cancelled; retry will wait for the next app launch")
+            }
+            return
+        }
         if (requestCode == REQUEST_APP_UPDATE) {
             if (resultCode != RESULT_OK) {
                 android.util.Log.i("WorklyAppUpdate", "In-app update flow was cancelled or failed: $resultCode")
@@ -2384,8 +2400,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         if (isBiometricLockEnabled() && !biometricAuthenticatedForForeground) showBiometricLockPrompt(false)
         if (::webView.isInitialized) syncWebsiteSession()
         if (pendingWebsiteInstallUri != null) {
-            resumePendingWebsiteInstall()
-        } else if (::appUpdateManager.isInitialized) {
+            if (!websiteInstallDeferredForSession) resumePendingWebsiteInstall()
+        } else if (::appUpdateManager.isInitialized && !websiteUpdateDeferredForSession) {
             if (isPlayStoreInstall) checkForPlayStoreUpdate() else {
                 // Check once when the app returns to the foreground; no background polling.
                 checkForWebsiteRelease()
@@ -2398,12 +2414,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     // "Allow from this source" settings, so the system confirmation opens at once.
     override fun onPostResume() {
         super.onPostResume()
-        resumePendingWebsiteInstall()
+        if (!websiteInstallDeferredForSession) resumePendingWebsiteInstall()
         resumeActiveWebsiteDownload()
     }
 
     private fun resumePendingWebsiteInstall() {
-        if (pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
+        if (websiteInstallDeferredForSession || websiteInstallLaunchPending || pendingWebsiteInstallUri == null || isFinishing || isDestroyed) return
 
         val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
         if (targetCode > 0L && getInstalledAppVersionCode() >= targetCode) {
@@ -2511,9 +2527,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         val versionName = release.optString("version_name", "New version")
         val notes = release.optString("release_notes", "").trim()
         val mandatory = getInstalledAppVersionCode() < release.optInt("min_supported_version_code", 1).toLong()
-        val snoozeKey = "update_later_until_$versionCode"
-        val snoozedUntil = websiteUpdatePrefs.getLong(snoozeKey, 0L)
-        if (!mandatory && System.currentTimeMillis() < snoozedUntil) return
+        if (!mandatory && websiteUpdateDeferredForSession) return
         websiteUpdateDialogVisible = true
         val content = buildWebsiteUpdateCard(
             versionName,
@@ -2527,9 +2541,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             secondaryLabel = if (mandatory) null else "Later",
             onPrimary = { downloadWebsiteUpdate(release) },
             onSecondary = {
-                websiteUpdatePrefs.edit()
-                    .putLong(snoozeKey, System.currentTimeMillis() + 24L * 60L * 60L * 1000L)
-                    .apply()
+                // Later means keep this prompt hidden until Workly India is fully
+                // closed and opened again; no timer-based re-prompt in this session.
+                websiteUpdateDeferredForSession = true
             },
             // Keep the update prompt visible while Android queues the download.
             // It is replaced by the progress sheet only after enqueue succeeds.
@@ -2661,9 +2675,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     private fun monitorWebsiteDownloadProgress() {
         activityScope.launch {
             val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            var previousBytes = 0L
+            var previousBytes: Long? = null
             var previousSampleTime = android.os.SystemClock.elapsedRealtime()
-            var currentSpeed = 0L
+            var currentSpeed = 0.0
+            var lastProgressTime = previousSampleTime
             while (websiteDownloadId != -1L && websiteDownloadDialog?.isShowing == true) {
                 try {
                     manager.query(DownloadManager.Query().setFilterById(websiteDownloadId)).use { cursor ->
@@ -2672,12 +2687,30 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
                             val now = android.os.SystemClock.elapsedRealtime()
                             val elapsed = now - previousSampleTime
-                            if (elapsed >= 500L) {
-                                currentSpeed = (((downloaded - previousBytes).coerceAtLeast(0L) * 1000L) / elapsed)
-                                previousBytes = downloaded
+                            if (elapsed >= 1000L) {
+                                val previous = previousBytes
+                                if (previous == null) {
+                                    previousBytes = downloaded
+                                } else {
+                                    val delta = (downloaded - previous).coerceAtLeast(0L)
+                                    if (delta > 0L) {
+                                        val instantSpeed = delta.toDouble() * 1000.0 / elapsed.toDouble()
+                                        // Smooth short DownloadManager reporting gaps instead of
+                                        // flashing 0 B/s between network chunks.
+                                        currentSpeed = if (currentSpeed <= 0.0) instantSpeed
+                                            else currentSpeed * 0.70 + instantSpeed * 0.30
+                                        lastProgressTime = now
+                                    }
+                                    previousBytes = downloaded
+                                }
                                 previousSampleTime = now
                             }
-                            val speedText = "${android.text.format.Formatter.formatShortFileSize(this@MainActivity, currentSpeed)}/s"
+                            val speedText = when {
+                                currentSpeed > 0.0 && now - lastProgressTime <= 5000L ->
+                                    "${android.text.format.Formatter.formatShortFileSize(this@MainActivity, currentSpeed.toLong().coerceAtLeast(1L))}/s"
+                                currentSpeed > 0.0 -> "Waiting for data…"
+                                else -> "Calculating…"
+                            }
                             val downloadedText = android.text.format.Formatter.formatShortFileSize(this@MainActivity, downloaded)
                             if (total > 0L) {
                                 val percent = ((downloaded * 100L) / total).toInt().coerceIn(0, 100)
@@ -2948,10 +2981,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             android.util.Log.i("WorklyAppUpdate", "Launching Android package installer for $apkUri")
-            startActivity(installIntent)
+            websiteInstallLaunchPending = true
+            startActivityForResult(installIntent, REQUEST_WEBSITE_INSTALL)
             waitingForWebsiteInstallPermission = false
             websiteUpdatePrefs.edit().remove("waiting_permission").commit()
-            websiteInstallLaunchPending = false
             websiteDownloadId = -1L
         } catch (error: Exception) {
             websiteInstallLaunchPending = false
@@ -3207,6 +3240,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     companion object {
         private const val PACKAGE_INSTALL_STATUS_REQUEST = 7441
         private const val REQUEST_APP_UPDATE = 4104
+        private const val REQUEST_WEBSITE_INSTALL = 4106
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_CHARGING_ALERT_NOTIFICATIONS = 704
         private const val REQUEST_FILE_CHOOSER = 4103
