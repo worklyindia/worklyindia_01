@@ -30,10 +30,12 @@ class ChargingPowerReceiver : BroadcastReceiver() {
                 // Starting the foreground service here makes it independent of screen
                 // state, app visibility and lock-screen state.
                 val prefs = context.getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE)
-                // Arm one announcement for this physical plug-in edge only.
-                // Duplicate broadcasts cannot replay after the first announcement.
-                if (!prefs.getBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)) {
+                // Arm one announcement for each new physical charging session.
+                // Ignore duplicate POWER_CONNECTED broadcasts during the same session.
+                if (!prefs.getBoolean(ChargingMonitorService.KEY_CHARGING_SESSION_ACTIVE, false)) {
                     prefs.edit()
+                        .putBoolean(ChargingMonitorService.KEY_CHARGING_SESSION_ACTIVE, true)
+                        .putBoolean(ChargingMonitorService.KEY_STARTED_ANNOUNCED, false)
                         .putBoolean(ChargingMonitorService.KEY_START_ANNOUNCEMENT_PENDING, true)
                         .apply()
                 }
