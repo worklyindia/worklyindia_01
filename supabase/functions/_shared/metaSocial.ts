@@ -709,6 +709,25 @@ async function resolveSenderName(platform: Platform, senderId: string, token: st
   return undefined;
 }
 
+/** Best-effort sender avatar lookup. Never use the connected business/page avatar as the sender. */
+async function resolveSenderAvatar(platform: Platform, senderId: string, token: string): Promise<string | undefined> {
+  const id = encodeURIComponent(senderId);
+  const t = encodeURIComponent(token);
+  const call = platform === 'instagram' && token.startsWith('IG') ? igGraph : graph;
+  for (const fields of ['profile_pic', 'picture']) {
+    try {
+      const p: any = await call(`/${id}?fields=${fields}&access_token=${t}`);
+      const candidate = typeof p?.profile_pic === 'string' ? p.profile_pic
+        : typeof p?.picture?.data?.url === 'string' ? p.picture.data.url
+        : typeof p?.picture === 'string' ? p.picture : undefined;
+      if (candidate?.startsWith('https://')) return candidate;
+    } catch (e) {
+      console.warn('[social-push] sender avatar lookup unavailable', platform, fields, String(e).slice(0, 160));
+    }
+  }
+  return undefined;
+}
+
 async function notifySocialPush(supabase: SupabaseClient, ev: {
   platform: Platform; kind: 'comment' | 'message'; senderId: string; text: string; senderName?: string; senderAvatarUrl?: string; eventId: string; imageUrl?: string; accountId?: string; audience?: string; aiReply?: string;
 }, account: any, recipientUserId: string) {
@@ -719,9 +738,12 @@ async function notifySocialPush(supabase: SupabaseClient, ev: {
       .eq('setting_key', isIg ? 'email_social_icon_instagram' : 'email_social_icon_facebook').maybeSingle();
     const icon = (iconRow as any)?.setting_value || '/whatsapp-notification-icon.png?v=2';
     let senderName = ev.senderName;
-    if (!senderName) {
+    if (!senderName || !ev.senderAvatarUrl) {
       const { data: tok } = await supabase.from('social_meta_tokens').select('page_access_token').eq('account_id', account.id).maybeSingle();
-      if (tok?.page_access_token) senderName = await resolveSenderName(ev.platform, ev.senderId, tok.page_access_token);
+      if (tok?.page_access_token) {
+        if (!senderName) senderName = await resolveSenderName(ev.platform, ev.senderId, tok.page_access_token);
+        if (!ev.senderAvatarUrl) ev.senderAvatarUrl = await resolveSenderAvatar(ev.platform, ev.senderId, tok.page_access_token);
+      }
     }
     const name = senderName || `${platformLabel} user`;
     const title = name;
