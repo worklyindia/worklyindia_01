@@ -73,11 +73,32 @@ class ChargingMonitorService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_POWER_CONNECTED -> {
+                stopChargingStoppedPlayback()
+                val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                // Arm the start clip exactly once per physical plug-in edge.
+                // The receiver passes this explicit action so it cannot race
+                // the sticky BATTERY_CHANGED snapshot during service startup.
+                if (!prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false)) {
+                    prefs.edit()
+                        .putBoolean(KEY_CHARGING_SESSION_ACTIVE, true)
+                        .putBoolean(KEY_STARTED_ANNOUNCED, false)
+                        .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
+                        .putBoolean(KEY_ALERTED, false)
+                        .putBoolean(KEY_ACKNOWLEDGED, false)
+                        .commit()
+                }
+                readCurrentBatteryState()
+                return START_STICKY
+            }
             ACTION_POWER_DISCONNECTED -> {
                 val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 val hadActiveChargingSession = prefs.getBoolean(KEY_CHARGING_SESSION_ACTIVE, false)
+                // Stop the full-charge alert and screen first, then play one
+                // disconnect clip for the completed physical session.
                 stopFullChargeVoice()
                 stopAlertAlarm()
+                getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
                 if (hadActiveChargingSession) playChargingStoppedAnnouncement()
                 resetChargeCycleAndStopAlert()
                 readCurrentBatteryState()
@@ -174,7 +195,7 @@ class ChargingMonitorService : Service() {
             chargingStartPlayer = player
             player.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
@@ -310,17 +331,22 @@ class ChargingMonitorService : Service() {
         fullChargeVoicePlayer = null
     }
 
+    private fun stopChargingStoppedPlayback() {
+        runCatching { chargingStoppedPlayer?.stop() }
+        runCatching { chargingStoppedPlayer?.release() }
+        chargingStoppedPlayer = null
+    }
+
     /** Plays the disconnect MP3 once after a genuine active charging session ends. */
     private fun playChargingStoppedAnnouncement() {
+        stopChargingStoppedPlayback()
         runCatching {
-            runCatching { chargingStoppedPlayer?.stop() }
-            runCatching { chargingStoppedPlayer?.release() }
             val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped)
                 ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
             chargingStoppedPlayer = player
             player.setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
@@ -458,9 +484,7 @@ class ChargingMonitorService : Service() {
     override fun onDestroy() {
         serviceDestroyed = true
         stopChargingStartPlayback()
-        runCatching { chargingStoppedPlayer?.stop() }
-        runCatching { chargingStoppedPlayer?.release() }
-        chargingStoppedPlayer = null
+        stopChargingStoppedPlayback()
         stopFullChargeVoice()
         stopAlertAlarm()
         if (batteryReceiverRegistered) runCatching { unregisterReceiver(batteryReceiver) }
@@ -498,6 +522,7 @@ class ChargingMonitorService : Service() {
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
         const val ACTION_ACKNOWLEDGE = "com.worklyindia.app.CHARGING_ALERT_ACKNOWLEDGE"
+        const val ACTION_POWER_CONNECTED = "com.worklyindia.app.CHARGING_POWER_CONNECTED"
         const val ACTION_POWER_DISCONNECTED = "com.worklyindia.app.CHARGING_POWER_DISCONNECTED"
         private const val TAG = "WorklyCharging"
         private const val MONITOR_CHANNEL = "workly_charging_monitor"
