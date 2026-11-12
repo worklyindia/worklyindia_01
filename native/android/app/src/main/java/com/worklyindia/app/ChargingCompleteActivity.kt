@@ -17,6 +17,47 @@ import android.animation.ObjectAnimator
 import android.animation.PropertyValuesHolder
 import android.view.animation.AccelerateDecelerateInterpolator
 
+/** Native vector recreation of src/components/icons/AIChipIcon.tsx. */
+private class AIChipMarkView(context: android.content.Context) : View(context) {
+    private val stroke = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(28, 174, 132)
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 2f * resources.displayMetrics.density
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+    private val label = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(28, 174, 132)
+        textAlign = android.graphics.Paint.Align.CENTER
+        textSize = 6.5f
+        typeface = Typeface.create("sans-serif", Typeface.BOLD)
+    }
+    override fun onDraw(canvas: android.graphics.Canvas) {
+        super.onDraw(canvas)
+        val scale = minOf(width, height) / 24f
+        val save = canvas.save()
+        canvas.translate((width - 24f * scale) / 2f, (height - 24f * scale) / 2f)
+        canvas.scale(scale, scale)
+        canvas.drawRoundRect(android.graphics.RectF(6f, 6f, 18f, 18f), 2.6f, 2.6f, stroke)
+        canvas.drawText("AI", 12f, 14.3f, label)
+        val lines = arrayOf(
+            floatArrayOf(9.5f,6f,9.5f,3.9f), floatArrayOf(14.5f,6f,14.5f,3.9f),
+            floatArrayOf(9.5f,18f,9.5f,20.1f), floatArrayOf(14.5f,18f,14.5f,20.1f),
+            floatArrayOf(6f,9.5f,3.9f,9.5f), floatArrayOf(6f,14.5f,3.9f,14.5f),
+            floatArrayOf(18f,9.5f,20.1f,9.5f), floatArrayOf(18f,14.5f,20.1f,14.5f)
+        )
+        lines.forEach { canvas.drawLine(it[0], it[1], it[2], it[3], stroke) }
+        val nodes = arrayOf(
+            floatArrayOf(9.5f,2.7f), floatArrayOf(14.5f,2.7f),
+            floatArrayOf(9.5f,21.3f), floatArrayOf(14.5f,21.3f),
+            floatArrayOf(2.7f,9.5f), floatArrayOf(2.7f,14.5f),
+            floatArrayOf(21.3f,9.5f), floatArrayOf(21.3f,14.5f)
+        )
+        nodes.forEach { canvas.drawCircle(it[0], it[1], 1.05f, stroke) }
+        canvas.restoreToCount(save)
+    }
+}
+
 class ChargingCompleteActivity : Activity() {
     private val unplugReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
@@ -119,18 +160,13 @@ class ChargingCompleteActivity : Activity() {
         })
         root.addView(brand)
 
-        // Minimal JSON/code glyph matching the website's AI JSON icon:
-        // transparent background, same 164dp icon area as the previous check mark.
-        val icon = TextView(this).apply {
-            text = "{ }"
-            textSize = 66f
-            typeface = Typeface.create("monospace", Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(28, 174, 132))
+        // Match the website AI page's custom AIChipIcon: outline-only,
+        // transparent background, centered in the same 164dp icon area.
+        val icon = AIChipMarkView(this).apply {
             alpha = 0f
             scaleX = 0.55f
             scaleY = 0.55f
-            contentDescription = "JSON"
+            contentDescription = "Workly AI"
         }
         root.addView(icon, LinearLayout.LayoutParams(px(164), px(164)).apply { bottomMargin = px(28) })
 
