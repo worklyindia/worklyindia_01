@@ -1392,14 +1392,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     private fun ensureChargingAlertAccess() {
-        // Android 14+ exposes the user's full-screen notification choice.
-        // Monitoring is enabled only while this access is granted.
+        // Full-screen access is optional for battery monitoring and MP3 alerts.
+        // Ask for it only to enable the 100% full-screen activity experience.
         if (Build.VERSION.SDK_INT >= 34) {
             val notificationManager = getSystemService(android.app.NotificationManager::class.java)
             if (!notificationManager.canUseFullScreenIntent()) {
                 showChargingAccessSettings(
                     "Enable full-screen notifications",
-                    "Turn on Send full-screen notifications to enable Workly battery monitoring and charging alerts.",
+                    "Allow Send full-screen notifications if you want Workly to open the 100% battery alert over other screens. Charging monitoring and audio continue without it.",
                     Intent(
                         android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
                         Uri.parse("package:$packageName")
@@ -1411,18 +1411,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     /**
-     * Start monitoring only when Android full-screen notification access is ON.
-     * Returning from Settings re-checks the actual OS setting and starts/stops
-     * the service accordingly.
+     * Always keep battery monitoring active. Android full-screen-intent access
+     * controls only whether the 100% alert can open as a full-screen activity;
+     * it must never stop charger edge handling or charging audio.
      */
     private fun ensureChargingBackgroundAccess() {
-        if (!ChargingMonitorService.hasFullScreenAccess(this)) {
-            ChargingMonitorService.stopMonitoring(this)
-            return
-        }
-
-        // Keep the service ready in both states: it shows "Battery" while
-        // unplugged and switches to the charging state immediately on plug-in.
         ensureChargingMonitorRunning()
     }
 
