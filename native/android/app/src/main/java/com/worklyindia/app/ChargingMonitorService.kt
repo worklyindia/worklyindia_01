@@ -110,8 +110,10 @@ class ChargingMonitorService : Service() {
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
                 if (hadActiveChargingSession) playChargingStoppedAnnouncement()
                 resetChargeCycleAndStopAlert()
-                registerBatteryReceiver()
-                readCurrentBatteryState()
+                // Do not process the sticky BATTERY_CHANGED snapshot here: some
+                // devices briefly return the pre-unplug "charging" state. The
+                // next live battery broadcast will update the monitor safely.
+                registerBatteryReceiver(processSticky = false)
                 return START_STICKY
             }
             ACTION_ACKNOWLEDGE -> {
@@ -125,7 +127,7 @@ class ChargingMonitorService : Service() {
         return START_STICKY
     }
 
-    private fun registerBatteryReceiver() {
+    private fun registerBatteryReceiver(processSticky: Boolean = true) {
         if (batteryReceiverRegistered) return
         val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         val sticky = if (Build.VERSION.SDK_INT >= 33) {
@@ -135,7 +137,7 @@ class ChargingMonitorService : Service() {
             registerReceiver(batteryReceiver, filter)
         }
         batteryReceiverRegistered = true
-        sticky?.let(::handleBatteryChanged)
+        if (processSticky) sticky?.let(::handleBatteryChanged)
     }
 
     private fun readCurrentBatteryState() {
