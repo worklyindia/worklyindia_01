@@ -8,8 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 object WorklyErrorReportStore {
     private const val DB_NAME = "workly_error_outbox.db"
     private const val TABLE = "pending_reports"
-    private const val MAX_PENDING = 200
-    private const val MAX_LOCAL_AGE_MS = 7L * 24 * 60 * 60 * 1000
+    private const val MAX_PENDING = 1000
 
     private class Helper(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, 1) {
         override fun onCreate(db: SQLiteDatabase) {
@@ -25,9 +24,10 @@ object WorklyErrorReportStore {
         val now = System.currentTimeMillis()
         db.beginTransaction()
         try {
+            db.rawQuery("SELECT COUNT(*) FROM $TABLE", null).use { cursor ->
+                if (cursor.moveToFirst() && cursor.getInt(0) >= MAX_PENDING) return
+            }
             db.execSQL("INSERT OR IGNORE INTO $TABLE(event_id,payload,created_at) VALUES(?,?,?)", arrayOf(eventId, payload, now))
-            db.delete(TABLE, "created_at < ?", arrayOf((now - MAX_LOCAL_AGE_MS).toString()))
-            db.execSQL("DELETE FROM $TABLE WHERE event_id NOT IN (SELECT event_id FROM $TABLE ORDER BY created_at DESC LIMIT $MAX_PENDING)")
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
     }
