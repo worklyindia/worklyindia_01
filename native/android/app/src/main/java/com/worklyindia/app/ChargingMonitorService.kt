@@ -372,6 +372,7 @@ class ChargingMonitorService : Service() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_ALERTED, false) && !prefs.getBoolean(KEY_ACKNOWLEDGED, false)) {
             startAlarmLoop()
+            startFullChargeVoice()
         }
     }
 
