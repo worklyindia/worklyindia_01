@@ -40,14 +40,28 @@ class ChargingCompleteActivity : Activity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // OEMs can delay or drop the close broadcast. Check the live battery
+        // state as a second, independent dismissal path whenever this screen resumes.
+        val battery = registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val plugged = (battery?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+        val status = battery?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+            ?: android.os.BatteryManager.BATTERY_STATUS_UNKNOWN
+        val charging = plugged && status != android.os.BatteryManager.BATTERY_STATUS_DISCHARGING
+        if (!charging) {
+            acknowledgeAlarm()
+            finish()
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+        }
+    }
+
     override fun onStop() {
         runCatching { unregisterReceiver(unplugReceiver) }
         super.onStop()
     }
 
     private val navy = Color.rgb(7, 17, 38)
-    private val mint = Color.rgb(28, 174, 132)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         showOverLockScreen()
@@ -105,20 +119,18 @@ class ChargingCompleteActivity : Activity() {
         })
         root.addView(brand)
 
+        // Minimal JSON/code glyph matching the website's AI JSON icon:
+        // transparent background, same 164dp icon area as the previous check mark.
         val icon = TextView(this).apply {
-            text = "✓"
-            textSize = 76f
+            text = "{ }"
+            textSize = 66f
+            typeface = Typeface.create("monospace", Typeface.BOLD)
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(mint)
-                setStroke(px(5), Color.argb(48, 255, 255, 255))
-            }
-            elevation = px(12).toFloat()
+            setTextColor(Color.rgb(28, 174, 132))
             alpha = 0f
             scaleX = 0.55f
             scaleY = 0.55f
+            contentDescription = "JSON"
         }
         root.addView(icon, LinearLayout.LayoutParams(px(164), px(164)).apply { bottomMargin = px(28) })
 
