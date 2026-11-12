@@ -479,7 +479,9 @@ object NativePushManager {
             // BigText cards. If the push includes recent message history, preserve it;
             // otherwise show the current message as a single conversation entry.
             val conversationStyle = NotificationCompat.MessagingStyle(
-                Person.Builder().setName("You").build()
+                // The conversation's local user is the connected Instagram/Facebook
+                // business account. Use its resolved profile photo for the "You" identity.
+                Person.Builder().setName("You").setIcon(IconCompat.createWithBitmap(ownAvatar)).build()
             ).setConversationTitle(title)
             val history = data["messages"]?.let { raw ->
                 runCatching { org.json.JSONArray(raw) }.getOrNull()
