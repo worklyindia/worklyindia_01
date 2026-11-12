@@ -259,6 +259,7 @@ async function handleInbound(value: any) {
     await log('message_received', msg, msg.id);
     if (employer) await forwardToCustomerWebhooks(supabase, employer.user_id, 'whatsapp.message.received', { phone_number_id: phoneNumberId, from: phone, name, type, text: content, message_id: msg.id ?? null, timestamp: msg.timestamp ?? null, media_url: (mediaMetadata as any)?.media_url ?? null, context: msg.context?.id ? { id: msg.context.id, from: msg.context.from ?? null } : null, raw: msg });
     await forwardSubAccount(phoneNumberId, 'whatsapp.message.received', { phone_number_id: phoneNumberId, from: phone, name, type, text: content, message_id: msg.id ?? null, timestamp: msg.timestamp ?? null, media_url: (mediaMetadata as any)?.media_url ?? null, context: msg.context?.id ? { id: msg.context.id, from: msg.context.from ?? null } : null, raw: msg });
+    let aiReplyText: string | undefined;
     let profileAiOn = false;
     if (employer && !employer.ai_auto_reply && !audience && type === 'text') {
       const { data: prof } = await supabase.from('ai_platform_business_profiles').select('enabled')
@@ -266,7 +267,7 @@ async function handleInbound(value: any) {
       profileAiOn = !!prof?.length;
     }
     if (employer && (employer.ai_auto_reply || profileAiOn) && type === 'text' && conv?.id) {
-      try { await aiAutoReply(employer, conv.id, phone, phoneNumberId); }
+      try { aiReplyText = (await aiAutoReply(employer, conv.id, phone, phoneNumberId)) || undefined; }
       catch (e) { console.error('[wa-ai] auto reply failed', e instanceof Error ? e.message : e); }
     }
     if (audience === 'customer_service' && type === 'text' && conv?.id) {
@@ -281,11 +282,11 @@ async function handleInbound(value: any) {
         }
         if (enabledOwners.length === 1) {
           const { owner, settings } = enabledOwners[0];
-          await aiAutoReply({ company_id: null, user_id: owner.user_id, ai_tone: settings.tone, ai_language: settings.language, ai_business_info: settings.business_info, ai_custom_instructions: settings.custom_instructions, ai_signature: settings.signature }, conv.id, phone, phoneNumberId, 'customer_service');
+          aiReplyText = (await aiAutoReply({ company_id: null, user_id: owner.user_id, ai_tone: settings.tone, ai_language: settings.language, ai_business_info: settings.business_info, ai_custom_instructions: settings.custom_instructions, ai_signature: settings.signature }, conv.id, phone, phoneNumberId, 'customer_service')) || undefined;
         } else if (enabledOwners.length > 1) await log('ai_support_ambiguous_owner', { phoneNumberId });
       } catch (e) { console.error('[wa-ai] support reply failed', e instanceof Error ? e.message : e); }
     }
-    await notifyOwners({ phone, name: name || (conv as any)?.contact_name || null, type, content, audience, image: (mediaMetadata as any)?.media_url, employerUserId: employer?.user_id, conversationId: employer?.user_id ? conv.id : undefined, phoneNumberId: employer?.user_id ? phoneNumberId : undefined });
+    await notifyOwners({ phone, name: name || (conv as any)?.contact_name || null, type, content, audience, aiReply: aiReplyText, image: (mediaMetadata as any)?.media_url, employerUserId: employer?.user_id, conversationId: employer?.user_id ? conv.id : undefined, phoneNumberId });
   }
 }
 
@@ -327,12 +328,12 @@ async function whatsappAccountContext(phoneNumberId: string, token: string, conv
   return sections.join('\n');
 }
 
-async function aiAutoReply(employer: Omit<NonNullable<Awaited<ReturnType<typeof employerForPhoneId>>>, 'company_id'> & { company_id: string | null }, conversationId: string, phone: string, phoneNumberId: string, audience: 'customer_service' | null = null) {
+async function aiAutoReply(employer: Omit<NonNullable<Awaited<ReturnType<typeof employerForPhoneId>>>, 'company_id'> & { company_id: string | null }, conversationId: string, phone: string, phoneNumberId: string, audience: 'customer_service' | null = null): Promise<string | null> {
   const companyId = employer.company_id;
   const quota = await reserveAiChatMessage(supabase, employer.user_id, 'whatsapp');
   if (!quota.allowed) {
     await log('ai_auto_reply_limit_reached', { conversationId, reason: quota.reason });
-    return;
+    return null;
   }
   const [{ data: company }, { data: rows }, token] = await Promise.all([
     companyId ? supabase.from('companies').select('name').eq('id', companyId).maybeSingle() : Promise.resolve({ data: { name: 'Workly India Customer Service' } }),
@@ -340,12 +341,12 @@ async function aiAutoReply(employer: Omit<NonNullable<Awaited<ReturnType<typeof 
       .eq('conversation_id', conversationId).order('sent_at', { ascending: false }).limit(12),
     accessTokenForPhoneId(phoneNumberId),
   ]);
-  if (!token) return;
+  if (!token) return null;
   const history = (rows || []).reverse().map((r: any) => ({ direction: r.direction, content: r.message_content || '' }));
   const accountContext = await whatsappAccountContext(phoneNumberId, token, conversationId, phone);
   const reply = await generateEmployerReply({ companyName: (company as any)?.name || 'our company', history, settings: employer, businessContext: await getBusinessContext(employer.user_id, audience ? 'customer_service' : 'whatsapp', audience ? null : phoneNumberId), accountContext });
-  if (!reply) return;
-  if (audience && !(await loadSupportAccountSettings(supabase, employer.user_id, 'whatsapp', phoneNumberId)).enabled) return;
+  if (!reply) return null;
+  if (audience && !(await loadSupportAccountSettings(supabase, employer.user_id, 'whatsapp', phoneNumberId)).enabled) return null;
   const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -369,7 +370,7 @@ const PUSH_PREVIEW: Record<string, string> = {
 };
 
 /** WhatsApp-style push to owners/admins through the single notification hub. Never throws. */
-async function notifyOwners(m: { phone: string; name: string | null; type: string; content: string; audience: Audience | null; image?: string; employerUserId?: string; conversationId?: string; phoneNumberId?: string }) {
+async function notifyOwners(m: { phone: string; name: string | null; type: string; content: string; audience: Audience | null; aiReply?: string; image?: string; employerUserId?: string; conversationId?: string; phoneNumberId?: string }) {
   try {
     let userIds: string[] = [];
     if (m.employerUserId) userIds = [m.employerUserId];
@@ -389,35 +390,19 @@ async function notifyOwners(m: { phone: string; name: string | null; type: strin
     const key = (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '');
     const { data: iconRow } = await supabase.from('app_settings').select('setting_value').eq('setting_key', 'whatsapp_notification_icon').maybeSingle();
     const waIcon = (iconRow as any)?.setting_value || '/whatsapp-notification-icon.png?v=2';
-    let accountAvatarUrl: string | undefined;
-    if (m.phoneNumberId) {
-      try {
-        const accessToken = await accessTokenForPhoneId(m.phoneNumberId);
-        if (accessToken) {
-          const profileResponse = await fetch(`https://graph.facebook.com/v21.0/${m.phoneNumberId}/whatsapp_business_profile?fields=profile_picture_url`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          if (profileResponse.ok) {
-            const profileData = await profileResponse.json();
-            const profile = Array.isArray(profileData?.data) ? profileData.data[0] : profileData;
-            if (typeof profile?.profile_picture_url === 'string' && profile.profile_picture_url.startsWith('https://')) accountAvatarUrl = profile.profile_picture_url;
-          }
-        }
-      } catch (error) { console.warn('[wa-push] connected profile photo unavailable', error instanceof Error ? error.message : String(error)); }
-    }
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/email-api`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, apikey: key, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'send_push_raw', userIds, title, body: body.slice(0, 900), url,
-        icon: accountAvatarUrl || waIcon,
+        icon: waIcon,
         image: m.type === 'image' || m.type === 'sticker' ? m.image : undefined,
         actions: [
           { action: 'reply', title: 'Reply', url },
           { action: 'mark-read', title: 'Mark as read', url },
         ],
         tag: `whatsapp-${m.audience ?? 'x'}-${m.phone}`,
-        data: { type: 'whatsapp_message', source: 'whatsapp', platform: 'whatsapp', account_avatar_url: accountAvatarUrl ?? '', phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.employerUserId ? (m.phoneNumberId ?? '') : '' },
+        data: { type: 'whatsapp_message', phone: m.phone, audience: m.audience ?? '', employer_notification: m.employerUserId ? 'true' : 'false', conversation_id: m.employerUserId ? (m.conversationId ?? '') : '', phone_number_id: m.employerUserId ? (m.phoneNumberId ?? '') : '' },
       }),
     });
     if (!res.ok) console.error('[wa-push] hub failed', res.status, await res.text());
