@@ -313,47 +313,165 @@ const EmailAutoTriggers = lazyRetry(() => import("./pages/owner-portal/email/Aut
 const CareerTricks = lazyRetry(() => import("./pages/CareerTricks"));
 const InstallApp = lazyRetry(() => import("./pages/InstallApp"));
 
-/** Lightweight native-feeling route placeholder. Never leave the WebView blank
- * while a lazy page chunk is being fetched or evaluated. */
-const RouteLoadingFallback = () => (
-  <div
-    className="fixed inset-0 z-[60] flex min-h-[100dvh] flex-col bg-background"
-    role="status"
-    aria-live="polite"
-    aria-label="Loading Workly India page"
-  >
-    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border/50 px-4">
-      <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <div className="h-3 w-32 animate-pulse rounded-full bg-muted" />
-        <div className="h-2.5 w-20 animate-pulse rounded-full bg-muted/70" />
-      </div>
-      <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
-    </div>
-    <div className="flex-1 space-y-5 px-4 py-6">
-      <div className="h-7 w-2/5 animate-pulse rounded-lg bg-muted" />
-      <div className="h-3 w-4/5 animate-pulse rounded-full bg-muted/80" />
-      <div className="h-36 animate-pulse rounded-2xl border border-border/50 bg-muted/40" />
-      <div className="grid grid-cols-2 gap-3">
-        <div className="h-24 animate-pulse rounded-2xl bg-muted/60" />
-        <div className="h-24 animate-pulse rounded-2xl bg-muted/60" />
-      </div>
-      <div className="space-y-3">
-        <div className="h-16 animate-pulse rounded-xl bg-muted/50" />
-        <div className="h-16 animate-pulse rounded-xl bg-muted/50" />
-      </div>
-    </div>
-    <div className="grid h-[68px] shrink-0 grid-cols-4 border-t border-border/50 bg-background/95 px-2">
-      {["Home", "Jobs", "Activity", "More"].map((item) => (
-        <div key={item} className="flex flex-col items-center justify-center gap-1.5">
-          <div className="h-5 w-5 animate-pulse rounded-md bg-muted" />
-          <div className="h-2 w-10 animate-pulse rounded-full bg-muted/70" />
+/** Route-aware loading UI. Match the structure of the destination page instead
+ * of showing the same dashboard-shaped placeholder for every route. */
+const RouteLoadingFallback = () => {
+  const location = useLocation();
+  const [stalled, setStalled] = useState(false);
+
+  useEffect(() => {
+    setStalled(false);
+    const routeKey = `workly-route-recovery:${location.pathname}`;
+    const timer = window.setTimeout(() => {
+      try {
+        const lastRecovery = Number(sessionStorage.getItem(routeKey) || 0);
+        if (!lastRecovery || Date.now() - lastRecovery > 3 * 60_000) {
+          sessionStorage.setItem(routeKey, String(Date.now()));
+          // A hung lazy chunk can leave Suspense pending forever. Reload the same
+          // route once; if it still hangs, show a real retry action instead of looping.
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // If storage is unavailable, do not start an automatic reload loop.
+      }
+      setStalled(true);
+    }, 25_000);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname, location.search]);
+
+  const path = location.pathname.toLowerCase();
+  const isChat = /chat|inbox|messenger|whatsapp|instagram|facebook|conversation|email-chat/.test(path);
+  const isJobs = /jobs|job-detail|job\\//.test(path);
+  const isProfile = /profile|resume|cover-letter|developer/.test(path);
+  const isDashboard = /dashboard|owner-portal|employer|admin|analytics|team-management/.test(path);
+  const isForm = /auth|signup|login|settings|post-job|create|edit|checkout|payment/.test(path);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex min-h-[100dvh] flex-col overflow-y-auto bg-background"
+      role="status"
+      aria-live="polite"
+      aria-label={`Loading ${isChat ? "conversation" : isJobs ? "jobs" : isProfile ? "profile" : isDashboard ? "dashboard" : "page"}`}
+    >
+      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border/50 px-4">
+        <div className="h-10 w-10 animate-pulse rounded-full bg-muted" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-3 w-32 animate-pulse rounded-full bg-muted" />
+          <div className="h-2.5 w-20 animate-pulse rounded-full bg-muted/70" />
         </div>
-      ))}
+        <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
+      </div>
+
+      <div className="mx-auto w-full max-w-7xl flex-1 space-y-5 px-4 py-6">
+        {isChat ? (
+          <>
+            <div className="h-8 w-2/5 animate-pulse rounded-lg bg-muted" />
+            <div className="flex min-h-[45vh] flex-col justify-end gap-4 rounded-2xl border border-border/50 p-4">
+              <div className="h-12 w-3/5 animate-pulse self-start rounded-2xl bg-muted/60" />
+              <div className="h-16 w-4/5 animate-pulse self-end rounded-2xl bg-muted/60" />
+              <div className="h-12 w-2/5 animate-pulse self-start rounded-2xl bg-muted/60" />
+            </div>
+            <div className="h-14 animate-pulse rounded-full bg-muted/60" />
+          </>
+        ) : isJobs ? (
+          <>
+            <div className="h-9 w-2/5 animate-pulse rounded-lg bg-muted" />
+            <div className="h-12 animate-pulse rounded-xl bg-muted/50" />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {[1, 2, 3, 4].map((item) => (
+                <div key={item} className="space-y-3 rounded-2xl border border-border/50 p-4">
+                  <div className="h-5 w-3/4 animate-pulse rounded bg-muted" />
+                  <div className="h-4 w-1/2 animate-pulse rounded bg-muted/70" />
+                  <div className="h-4 w-full animate-pulse rounded bg-muted/50" />
+                  <div className="h-9 w-28 animate-pulse rounded-lg bg-muted/60" />
+                </div>
+              ))}
+            </div>
+          </>
+        ) : isProfile ? (
+          <>
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-20 animate-pulse rounded-full bg-muted" />
+              <div className="flex-1 space-y-3">
+                <div className="h-6 w-2/3 animate-pulse rounded bg-muted" />
+                <div className="h-4 w-1/2 animate-pulse rounded bg-muted/60" />
+              </div>
+            </div>
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="space-y-3 rounded-2xl border border-border/50 p-5">
+                <div className="h-5 w-1/3 animate-pulse rounded bg-muted" />
+                <div className="h-4 w-full animate-pulse rounded bg-muted/60" />
+                <div className="h-4 w-4/5 animate-pulse rounded bg-muted/60" />
+              </div>
+            ))}
+          </>
+        ) : isDashboard ? (
+          <>
+            <div className="h-8 w-2/5 animate-pulse rounded-lg bg-muted" />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[1, 2, 3, 4].map((item) => <div key={item} className="h-24 animate-pulse rounded-2xl bg-muted/60" />)}
+            </div>
+            <div className="h-48 animate-pulse rounded-2xl border border-border/50 bg-muted/40" />
+            {[1, 2, 3].map((item) => <div key={item} className="h-16 animate-pulse rounded-xl bg-muted/50" />)}
+          </>
+        ) : isForm ? (
+          <>
+            <div className="h-8 w-2/5 animate-pulse rounded-lg bg-muted" />
+            {[1, 2, 3, 4].map((item) => (
+              <div key={item} className="space-y-2">
+                <div className="h-4 w-1/4 animate-pulse rounded bg-muted/70" />
+                <div className="h-12 animate-pulse rounded-xl bg-muted/50" />
+              </div>
+            ))}
+            <div className="h-12 w-36 animate-pulse rounded-xl bg-muted/60" />
+          </>
+        ) : (
+          <>
+            <div className="h-8 w-2/5 animate-pulse rounded-lg bg-muted" />
+            <div className="h-3 w-4/5 animate-pulse rounded-full bg-muted/80" />
+            <div className="h-36 animate-pulse rounded-2xl border border-border/50 bg-muted/40" />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-24 animate-pulse rounded-2xl bg-muted/60" />
+              <div className="h-24 animate-pulse rounded-2xl bg-muted/60" />
+            </div>
+            <div className="space-y-3">
+              <div className="h-16 animate-pulse rounded-xl bg-muted/50" />
+              <div className="h-16 animate-pulse rounded-xl bg-muted/50" />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="grid h-[68px] shrink-0 grid-cols-4 border-t border-border/50 bg-background/95 px-2">
+        {["Home", "Jobs", "Activity", "More"].map((item) => (
+          <div key={item} className="flex flex-col items-center justify-center gap-1.5">
+            <div className="h-5 w-5 animate-pulse rounded-md bg-muted" />
+            <div className="h-2 w-10 animate-pulse rounded-full bg-muted/70" />
+          </div>
+        ))}
+      </div>
+
+      {stalled && (
+        <div className="fixed inset-x-4 bottom-20 z-[70] mx-auto max-w-md rounded-2xl border border-border bg-card p-4 text-center shadow-xl">
+          <p className="text-sm font-medium">Page is taking longer than expected.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Your current page is safe. Try loading it again.</p>
+          <button
+            type="button"
+            className="mt-3 min-h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground"
+            onClick={() => {
+              try { sessionStorage.removeItem(`workly-route-recovery:${location.pathname}`); } catch { /* ignore */ }
+              window.location.reload();
+            }}
+          >
+            Retry page
+          </button>
+        </div>
+      )}
+      <span className="sr-only">Loading page content…</span>
     </div>
-    <span className="sr-only">Loading page content…</span>
-  </div>
-);
+  );
+};
 
 const AppContent = () => {
   const navigate = useNavigate();
