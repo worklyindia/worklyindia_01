@@ -165,7 +165,7 @@ export default function AppDownloadPage() {
               <img
                 src="/icons/icon-512x512.png"
                 alt="Workly India app icon"
-                className="h-24 w-24 shrink-0 rounded-[1.35rem] border border-[#2b3440] object-cover shadow-sm sm:h-32 sm:w-32"
+                className="h-24 w-24 shrink-0 aspect-square rounded-[1.35rem] border border-[#2b3440] bg-[#151c25] object-contain p-1 shadow-sm sm:h-32 sm:w-32"
               />
               <div className="min-w-0 flex-1">
                 <h1 className="text-[25px] font-semibold leading-tight tracking-tight sm:text-3xl">Workly India</h1>
