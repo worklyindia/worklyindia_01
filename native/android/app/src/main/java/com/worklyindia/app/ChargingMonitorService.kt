@@ -100,11 +100,18 @@ class ChargingMonitorService : Service() {
                 stopFullChargeVoice()
                 stopAlertAlarm()
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
-                // POWER_DISCONNECTED is the physical unplug edge. Do not depend
-                // only on persisted session flags: some OEMs restart the service or
-                // deliver the battery snapshot out of order, which can lose that flag.
-                // This receiver is invoked once per unplug edge, so play the clip once.
-                playChargingStoppedAnnouncementOnce()
+                // Only announce unplug when the live battery level is below 100%.
+                // A full battery is intentionally silent when the charger is removed.
+                val unplugPercent = getCurrentBatteryPercent()
+                if (unplugPercent in 0..99) {
+                    playChargingStoppedAnnouncementOnce(unplugPercent)
+                } else {
+                    android.util.Log.i(TAG, "Charging-stopped audio skipped at unplug: battery=$unplugPercent%")
+                    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                        .putBoolean(KEY_DISCONNECT_ANNOUNCED, true)
+                        .putBoolean(KEY_LAST_CHARGING_STATE, false)
+                        .commit()
+                }
                 resetChargeCycleAndStopAlert()
                 // Do not process the sticky BATTERY_CHANGED snapshot here: some
                 // devices briefly return the pre-unplug "charging" state. The
@@ -179,7 +186,12 @@ class ChargingMonitorService : Service() {
             // and stop the alarm/voice as well as the alert notification.
             if (wasCharging) {
                 sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
-                playChargingStoppedAnnouncementOnce()
+                if (percent in 0..99) {
+                    playChargingStoppedAnnouncementOnce(percent)
+                } else {
+                    android.util.Log.i(TAG, "Charging-stopped audio skipped on battery-state transition: battery=$percent%")
+                    prefs.edit().putBoolean(KEY_DISCONNECT_ANNOUNCED, true).commit()
+                }
                 resetChargeCycleAndStopAlert()
             } else {
                 prefs.edit().putBoolean(KEY_LAST_CHARGING_STATE, false).apply()
@@ -194,7 +206,7 @@ class ChargingMonitorService : Service() {
                 .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
                 .apply()
         } else if (charging && percent in 0..99) {
-            playChargingStartAnnouncementOnce()
+            playChargingStartAnnouncementOnce(percent)
         }
         if (charging && percent >= 100) {
             showChargeCompleteAlert()
@@ -222,7 +234,16 @@ class ChargingMonitorService : Service() {
      * Plays the bundled charging-start MP3 directly. No device TTS engine,
      * language pack, or network connection is required.
      */
-    private fun playChargingStartAnnouncementOnce() {
+    private fun playChargingStartAnnouncementOnce(percent: Int) {
+        // Defense in depth: never start the charging voice at 100% or when
+        // Android reports FULL, even if another caller reaches this method.
+        if (percent !in 0..99) {
+            android.util.Log.i(TAG, "Charging-start audio skipped: battery=$percent%")
+            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                .apply()
+            return
+        }
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) ||
             prefs.getBoolean(KEY_STARTED_ANNOUNCED, false) ||
@@ -381,8 +402,23 @@ class ChargingMonitorService : Service() {
         chargingStoppedPlayer = null
     }
 
-    /** Plays the disconnect MP3 once, whether the power-edge or battery-state path fires first. */
-    private fun playChargingStoppedAnnouncementOnce() {
+    /** Reads the current battery percentage at the physical unplug edge. Unknown stays silent. */
+    private fun getCurrentBatteryPercent(): Int {
+        val capacity = getSystemService(BatteryManager::class.java)
+            .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        if (capacity in 0..100) return capacity
+        val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = sticky?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = sticky?.getIntExtra(BatteryManager.EXTRA_SCALE, 100)?.coerceAtLeast(1) ?: 100
+        return if (level >= 0) (level * 100 / scale) else -1
+    }
+
+    /** Plays the disconnect MP3 once only when the unplug battery level is 0–99%. */
+    private fun playChargingStoppedAnnouncementOnce(percent: Int) {
+        if (percent !in 0..99) {
+            android.util.Log.i(TAG, "Charging-stopped audio skipped: battery=$percent%")
+            return
+        }
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_DISCONNECT_ANNOUNCED, false)) {
             android.util.Log.i(TAG, "Charging-stopped audio skipped: already announced for this unplug")
