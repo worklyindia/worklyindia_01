@@ -29,6 +29,8 @@ class WorklyErrorReportWorker(context: Context, params: WorkerParameters) : Work
                 readTimeout = 20_000
                 doOutput = true
                 setRequestProperty("apikey", SUPABASE_PUBLISHABLE_KEY)
+                // Send the publishable key in Authorization too so PostgREST resolves the anon role.
+                setRequestProperty("Authorization", "Bearer $SUPABASE_PUBLISHABLE_KEY")
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Prefer", "resolution=ignore-duplicates,return=minimal")
             }
@@ -42,7 +44,8 @@ class WorklyErrorReportWorker(context: Context, params: WorkerParameters) : Work
                 Log.i(TAG, "Uploaded ${pending.size} technical error report(s)")
                 Result.success()
             } else {
-                Log.w(TAG, "Supabase error-report upload returned HTTP $status")
+                val responseBody = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                Log.w(TAG, "Supabase error-report upload returned HTTP $status: ${responseBody.take(500)}")
                 Result.retry()
             }
         } catch (error: Exception) {
