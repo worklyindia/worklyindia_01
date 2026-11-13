@@ -50,6 +50,8 @@ const BrandManagement = () => {
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [downloadAppIcon, setDownloadAppIcon] = useState<{ url: string; key: string } | null>(null);
   const [downloadAppIconBusy, setDownloadAppIconBusy] = useState(false);
+  const [downloadScreenshots, setDownloadScreenshots] = useState<Array<{ slot: number; url: string; key: string }>>([]);
+  const [downloadScreenshotBusy, setDownloadScreenshotBusy] = useState<number | null>(null);
   const [brandAssets, setBrandAssets] = useState<BrandAssets>({
     brand_name: BRAND_CONFIG.name,
     brand_tagline: BRAND_CONFIG.tagline,
@@ -70,7 +72,28 @@ const BrandManagement = () => {
     fetchBrandAssets();
     fetchPwaSettings();
     void loadDownloadAppIcon();
+    void loadDownloadScreenshots();
   }, []);
+
+  const loadDownloadScreenshots = async () => {
+    const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'get-app-download-screenshots' } });
+    if (error) { toast.error('Download screenshots could not be loaded: ' + error.message); return; }
+    setDownloadScreenshots(data?.success && Array.isArray(data.screenshots) ? data.screenshots : []);
+  };
+
+  const deleteDownloadScreenshot = async (slot: number) => {
+    if (!window.confirm(`Delete screenshot ${slot} from Cloudflare? It will also disappear from the download page.`)) return;
+    setDownloadScreenshotBusy(slot);
+    try {
+      const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'delete-app-download-screenshot', slot } });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Screenshot delete failed.');
+      toast.success(`Screenshot ${slot} deleted from Cloudflare.`);
+      await loadDownloadScreenshots();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Screenshot delete failed.');
+    } finally { setDownloadScreenshotBusy(null); }
+  };
 
   const loadDownloadAppIcon = async () => {
     const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'get-app-download-icon' } });
@@ -242,18 +265,28 @@ const BrandManagement = () => {
     const toastId = toast.loading(`Uploading ${fieldName.replace(/_/g, ' ')}…`);
 
     try {
-      if (pwaField === 'download_app_icon') {
+      if (pwaField === 'download_app_icon' || pwaField?.startsWith('download_screenshot_')) {
         const dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Cropped app icon could not be read.'));
           reader.onerror = () => reject(new Error('Cropped app icon could not be read.'));
           reader.readAsDataURL(croppedFile);
         });
-        const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'set-app-download-icon', file: dataUrl } });
-        if (error) throw error;
-        if (!data?.success || !data.icon?.url) throw new Error(data?.error || 'Cloudflare app icon upload failed.');
-        setDownloadAppIcon(data.icon);
-        toast.success('Download app icon uploaded to Cloudflare and saved.', { id: toastId });
+        if (pwaField === 'download_app_icon') {
+          const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'set-app-download-icon', file: dataUrl } });
+          if (error) throw error;
+          if (!data?.success || !data.icon?.url) throw new Error(data?.error || 'Cloudflare app icon upload failed.');
+          setDownloadAppIcon(data.icon);
+          toast.success('Download app icon uploaded to Cloudflare and saved.', { id: toastId });
+        } else {
+          const slot = Number(pwaField.slice('download_screenshot_'.length));
+          if (![1, 2, 3].includes(slot)) throw new Error('Invalid download screenshot slot.');
+          const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'set-app-download-screenshot', slot, file: dataUrl } });
+          if (error) throw error;
+          if (!data?.success) throw new Error(data?.error || 'Cloudflare screenshot upload failed.');
+          await loadDownloadScreenshots();
+          toast.success(`Download screenshot ${slot} uploaded to Cloudflare and saved.`, { id: toastId });
+        }
       } else {
       const fileToUpload = pwaField === 'notification_badge_icon'
         ? await toNotificationSilhouette(croppedFile)
@@ -835,6 +868,38 @@ const BrandManagement = () => {
                 </div>
               </div>
 
+              {/* Website Android download-page screenshots — stored in Cloudflare R2 */}
+              <div className="mb-6 rounded-xl border p-4 sm:p-5">
+                <div className="mb-3">
+                  <Label className="text-sm font-semibold">Website Android Download Page Screenshots</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">Manage all 3 screenshots shown on the public /download page. Upload or replace any slot; images are cropped to portrait 540 × 960 and stored in Cloudflare R2.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {[1, 2, 3].map((slot) => {
+                    const shot = downloadScreenshots.find((item) => item.slot === slot);
+                    const busy = downloadScreenshotBusy === slot || uploadingField === `download_screenshot_${slot}`;
+                    return (
+                      <div key={slot} className="min-w-0 space-y-3 rounded-xl border p-3">
+                        <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold">Screenshot {slot}</p><span className="text-xs text-muted-foreground">{shot ? 'Uploaded' : 'Empty'}</span></div>
+                        {shot ? <img src={shot.url} alt={`Download page screenshot ${slot}`} className="aspect-[9/16] w-full rounded-lg border bg-muted object-contain" /> : <div className="flex aspect-[9/16] items-center justify-center rounded-lg border border-dashed bg-muted/40 text-sm text-muted-foreground">No screenshot</div>}
+                        <Button type="button" size="sm" className="w-full" disabled={busy || !!uploadingField} onClick={() => {
+                          const picker = document.createElement('input');
+                          picker.type = 'file';
+                          picker.accept = 'image/png,image/jpeg,image/webp,image/avif';
+                          picker.onchange = () => { const file = picker.files?.[0]; if (file) handlePwaImageSelect(file, `download_screenshot_${slot}`); };
+                          picker.click();
+                        }}>
+                          {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                          {shot ? 'Replace screenshot' : 'Upload screenshot'}
+                        </Button>
+                        {shot && <Button type="button" size="sm" variant="destructive" className="w-full" disabled={busy || !!uploadingField} onClick={() => void deleteDownloadScreenshot(slot)}><X className="mr-2 h-4 w-4" />Delete screenshot</Button>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">PNG, JPG, WebP or AVIF · Maximum 10 MB · Upload, replace and delete are handled through Cloudflare.</p>
+              </div>
+
               {/* App Icon Upload */}
               <div>
                 <Label className="text-sm font-medium">App Icon (512x512)</Label>
@@ -1025,7 +1090,7 @@ const BrandManagement = () => {
           currentFieldType === 'og_image_url' ? 1.91 :
           currentPwaField === 'pwa_app_icon' || currentPwaField === 'download_app_icon' ? 1 :
           currentPwaField === 'pwa_feature_graphic' ? 16/9 :
-          currentPwaField?.includes('screenshot') ? 9/16 :
+          currentPwaField?.includes('screenshot') || currentPwaField?.startsWith('download_screenshot_') ? 9/16 :
           undefined
         }
         circularCrop={currentFieldType === 'logo_url' || currentFieldType === 'favicon_url' || currentPwaField === 'notification_badge_icon'}
@@ -1036,7 +1101,7 @@ const BrandManagement = () => {
           currentFieldType === 'favicon_url' ? { width: 192, height: 192 } :
           currentPwaField === 'notification_badge_icon' ? { width: 144, height: 144 } :
           currentPwaField === 'pwa_app_icon' || currentPwaField === 'download_app_icon' ? { width: 512, height: 512 } :
-          currentPwaField?.includes('screenshot') ? { width: 540, height: 960 } :
+          currentPwaField?.includes('screenshot') || currentPwaField?.startsWith('download_screenshot_') ? { width: 540, height: 960 } :
           currentPwaField === 'pwa_feature_graphic' ? { width: 1024, height: 576 } :
           undefined
         }
@@ -1047,6 +1112,7 @@ const BrandManagement = () => {
           currentPwaField === 'download_app_icon' ? 'Crop Download App Icon (512x512)' :
           currentPwaField === 'pwa_app_icon' ? 'Crop App Icon (512x512)' :
           currentPwaField === 'pwa_feature_graphic' ? 'Crop Feature Graphic (1024x576)' :
+          currentPwaField?.startsWith('download_screenshot_') ? `Crop Download Screenshot ${currentPwaField.slice(-1)} (540x960)` :
           currentPwaField?.includes('screenshot') ? 'Crop Screenshot (540x960)' :
           'Crop Logo'
         }
