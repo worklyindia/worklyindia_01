@@ -295,7 +295,7 @@ const More = () => {
           <div className="mt-8">
             <div className="border-y border-border/60 divide-y divide-border/60">
             {[
-              { label: "App Settings", path: "/settings" },
+              { label: "App Settings", path: "/settings?tab=app" },
               { label: "Website Pricing", path: "/pricing" },
               { label: "About Us", path: "/about-us" },
               { label: "Mission", path: "/mission" },
