@@ -69,7 +69,7 @@ class NativeChatBubbleActivity : Activity() {
 
     private val pageBackground get() = if (dark) Color.rgb(10, 16, 28) else Color.rgb(248, 250, 252)
     private val surface get() = if (dark) Color.rgb(20, 29, 43) else Color.WHITE
-    private val foreground get() = if (dark) Color.rgb(241, 245, 249) else Color.rgb(15, 23, 42)
+    private val textPrimary get() = if (dark) Color.rgb(241, 245, 249) else Color.rgb(15, 23, 42)
     private val muted get() = if (dark) Color.rgb(157, 170, 190) else Color.rgb(100, 116, 139)
     private val accent get() = if (dark) Color.rgb(34, 197, 94) else Color.rgb(22, 163, 74)
 
@@ -107,7 +107,7 @@ class NativeChatBubbleActivity : Activity() {
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    private fun text(value: String, size: Float = 14f, bold: Boolean = false, color: Int = foreground): TextView =
+    private fun text(value: String, size: Float = 14f, bold: Boolean = false, color: Int = textPrimary): TextView =
         TextView(this).apply {
             this.text = value
             textSize = size
@@ -127,7 +127,7 @@ class NativeChatBubbleActivity : Activity() {
             setBackgroundColor(surface)
         }
         if (back) {
-            val backView = text("‹", 32f, false, foreground).apply {
+            val backView = text("‹", 32f, false, textPrimary).apply {
                 gravity = Gravity.CENTER
                 setOnClickListener {
                     selectedConversation = null
@@ -261,7 +261,7 @@ class NativeChatBubbleActivity : Activity() {
         composer = EditText(this).apply {
             hint = "Type a message…"
             textSize = 15f
-            setTextColor(foreground)
+            setTextColor(textPrimary)
             setHintTextColor(muted)
             maxLines = 4
             minLines = 1
@@ -322,7 +322,7 @@ class NativeChatBubbleActivity : Activity() {
             val bubble = TextView(this).apply {
                 text = item.optString("message")
                 textSize = 14f
-                setTextColor(if (mine) Color.WHITE else foreground)
+                setTextColor(if (mine) Color.WHITE else textPrimary)
                 setPadding(dp(12), dp(9), dp(12), dp(9))
                 background = rounded(if (mine) accent else surface, 16f)
                 maxWidth = (resources.displayMetrics.widthPixels * 0.78f).toInt()
