@@ -166,7 +166,7 @@ export default function AppDownloadPage() {
                 src="/icons/icon-512x512.png"
                 alt="Workly India app icon"
                 className="h-24 w-24 shrink-0 aspect-square overflow-hidden rounded-[1.35rem] border border-border !bg-white object-contain p-0 shadow-sm sm:h-32 sm:w-32"
-                style={{ backgroundColor: "#ffffff" }}
+                style={{ backgroundColor: "#ffffff", colorScheme: "only light" }}
               />
               <div className="min-w-0 flex-1">
                 <h1 className="text-[25px] font-semibold leading-tight tracking-tight sm:text-3xl">Workly India</h1>
