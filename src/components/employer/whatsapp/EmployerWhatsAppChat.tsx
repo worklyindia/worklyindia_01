@@ -8,6 +8,7 @@ import { ArrowLeft, Check, CheckCheck, Loader2, Search, Send } from "lucide-reac
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { employerWhatsAppAction } from "./useEmployerWhatsApp";
+import { useSelectedNumber } from "./selectedNumber";
 
 interface Conversation {
   id: string; phone_number: string; contact_name: string | null; last_message_at: string | null;
@@ -22,6 +23,7 @@ const fmtTime = (d?: string | null) => d ? new Date(d).toLocaleTimeString([], { 
 
 export default function EmployerWhatsAppChat({ companyId }: { companyId: string }) {
   const [params, setParams] = useSearchParams();
+  const selectedNumberId = useSelectedNumber();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [search, setSearch] = useState("");
@@ -32,9 +34,14 @@ export default function EmployerWhatsAppChat({ companyId }: { companyId: string 
   const selected = useMemo(() => convs.find((c) => c.phone_number === selectedPhone) ?? null, [convs, selectedPhone]);
 
   const loadConvs = async () => {
-    const { data } = await (supabase.from("whatsapp_conversations" as any) as any)
+    // Never mix conversations from two WhatsApp Business numbers owned by the same company.
+    if (!selectedNumberId) { setConvs([]); return; }
+    const { data, error } = await (supabase.from("whatsapp_conversations" as any) as any)
       .select("id, phone_number, contact_name, last_message_at, last_message_preview, unread_count, session_expires_at")
-      .eq("company_id" as any, companyId).order("last_message_at", { ascending: false, nullsFirst: false });
+      .eq("company_id" as any, companyId)
+      .eq("whatsapp_phone_number_id" as any, selectedNumberId)
+      .order("last_message_at", { ascending: false, nullsFirst: false });
+    if (error) { toast.error(error.message); return; }
     setConvs((data as any) ?? []);
   };
   const loadMessages = async (convId: string) => {
@@ -55,7 +62,7 @@ export default function EmployerWhatsAppChat({ companyId }: { companyId: string 
       .subscribe();
     return () => { supabase.removeChannel(ch); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId]);
+  }, [companyId, selectedNumberId]);
 
   const selectedRef = useRef<string | null>(null);
   useEffect(() => {
