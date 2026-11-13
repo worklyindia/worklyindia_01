@@ -197,7 +197,7 @@ class NativeSocialChatBubbleActivity : Activity() {
         if (history.isEmpty()) {
             messagesView.addView(label("No message preview was included with this notification.", 13f, false, secondaryText).apply {
                 gravity = Gravity.CENTER
-                setPadding(dp(20))
+                setPadding(dp(20), dp(20), dp(20), dp(20))
             })
             return
         }
