@@ -67,7 +67,7 @@ class NativeChatBubbleActivity : Activity() {
     private fun isDarkMode(): Boolean =
         (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
-    private val background get() = if (dark) Color.rgb(10, 16, 28) else Color.rgb(248, 250, 252)
+    private val pageBackground get() = if (dark) Color.rgb(10, 16, 28) else Color.rgb(248, 250, 252)
     private val surface get() = if (dark) Color.rgb(20, 29, 43) else Color.WHITE
     private val foreground get() = if (dark) Color.rgb(241, 245, 249) else Color.rgb(15, 23, 42)
     private val muted get() = if (dark) Color.rgb(157, 170, 190) else Color.rgb(100, 116, 139)
@@ -99,7 +99,7 @@ class NativeChatBubbleActivity : Activity() {
     private fun buildBase() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(background)
+            setBackgroundColor(pageBackground)
             layoutParams = ViewGroup.LayoutParams(-1, -1)
         }
         setContentView(root)
@@ -267,7 +267,7 @@ class NativeChatBubbleActivity : Activity() {
             minLines = 1
             imeOptions = EditorInfo.IME_ACTION_SEND
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            background = rounded(background, 22f)
+            background = rounded(pageBackground, 22f)
             setOnEditorActionListener { _, action, _ ->
                 if (action == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else false
             }
