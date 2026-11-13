@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
+import android.content.pm.ShortcutInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
@@ -576,13 +577,28 @@ object NativePushManager {
                     .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
                     .setIntent(bubbleIntent)
                     .setPerson(Person.Builder().setName(title).build())
+                    // Android 11+ only accepts a conversation shortcut as a Bubble target
+                    // when it is explicitly categorized as a conversation.
+                    .setCategories(setOf(ShortcutInfo.SHORTCUT_CATEGORY_CONVERSATION))
                     // Associate the dynamic shortcut with the actual resizable bubble Activity.
                     // Without this, Android may publish the shortcut but fail to open its chat surface.
                     .setActivity(android.content.ComponentName(context, bubbleActivityClass))
                     .setLongLived(true)
                     .build()
-                runCatching { ShortcutManagerCompat.pushDynamicShortcut(context, shortcut) }
-                    .onFailure { android.util.Log.w("WorklyPush", "Could not publish chat bubble shortcut", it) }
+                runCatching {
+                    ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+                    android.util.Log.i("WorklyPush", "Published conversation shortcut id=$shortcutId activity=${bubbleActivityClass.simpleName}")
+                }.onFailure { android.util.Log.e("WorklyPush", "Could not publish chat bubble shortcut id=$shortcutId", it) }
+                val channelState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    context.getSystemService(NotificationManager::class.java)
+                        .getNotificationChannel(CHANNEL_ID)?.let { "canBubble=${it.canBubble()}, importance=${it.importance}" }
+                } else "pre-Android-10"
+                android.util.Log.i(
+                    "WorklyPush",
+                    "Bubble decision: social=$isSocialInboxNotification internal=$isInternalWorklyChat " +
+                        "chatEvent=$isChatMessageEvent destination=$hasConversationDestination " +
+                        "publish=$shouldPublishBubble channel={$channelState} sdk=${Build.VERSION.SDK_INT}"
+                )
                 builder.setShortcutId(shortcutId).setBubbleMetadata(BubbleMetadata.Builder(shortcutId).setDesiredHeight(640).build())
             }
             // Render inbox notifications as native Android conversations, not plain
