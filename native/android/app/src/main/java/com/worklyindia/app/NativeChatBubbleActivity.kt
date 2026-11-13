@@ -300,7 +300,6 @@ class NativeChatBubbleActivity : Activity() {
                     lastMessageId = newest
                     renderMessages()
                 }
-                markMessagesRead(id, current.userId)
             }.onFailure {
                 if (!silent) showError("Could not load messages.")
             }
