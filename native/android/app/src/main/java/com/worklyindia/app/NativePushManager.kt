@@ -246,7 +246,7 @@ object NativePushManager {
             }.getOrNull()
             return parsed
         }
-        val notificationUrl = sequenceOf("url", "action_url", "actionUrl", "deep_link", "deepLink", "link")
+        val notificationUrl = sequenceOf("chat_url", "chatUrl", "conversation_url", "conversationUrl", "url", "action_url", "actionUrl", "deep_link", "deepLink", "link")
             .mapNotNull { key -> trustedNotificationUrl(data[key]) }
             .firstOrNull()
             ?: data["job_id"]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) }
@@ -462,8 +462,24 @@ object NativePushManager {
 
         val internalConversationId = data["conversation_id"]?.takeIf { it.matches(Regex("[0-9a-fA-F-]{36}")) }
         val isInternalWorklyChat = !isSocialInboxNotification && internalConversationId != null
+        // Route every conversation-style message through the same Android Bubble surface:
+        // Workly owner/employee chats, employer chats, and connected social inboxes.
+        // Keep ordinary job, billing, and account notifications as regular notifications.
+        val chatEventText = listOf(
+            "type", "notification_type", "category", "event", "kind", "message_type"
+        ).mapNotNull { key -> data[key]?.takeIf { it.isNotBlank() }?.lowercase() }
+            .joinToString(" ")
+        val isChatMessageEvent = listOf(
+            "chat_message", "message_received", "new_message", "employee_message",
+            "employer_message", "owner_message", "conversation_message", "whatsapp_message",
+            "instagram_message", "facebook_message", "messenger_message"
+        ).any { marker -> marker in chatEventText } ||
+            (("chat" in chatEventText || "message" in chatEventText) &&
+                ("job" !in chatEventText && "billing" !in chatEventText))
 
-        if (isSocialInboxNotification || isInternalWorklyChat) {
+        val isChatNotification = isSocialInboxNotification || isInternalWorklyChat || isChatMessageEvent
+
+        if (isChatNotification) {
             // Preserve sender-photo behavior for conversations; only ordinary
             // Workly update notifications use the Workly launcher logo above.
             builder.setLargeIcon(incomingAvatar)
