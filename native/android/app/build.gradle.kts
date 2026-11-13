@@ -19,7 +19,16 @@ android {
     flavorDimensions += "distribution"
     productFlavors {
         create("playStore") { dimension = "distribution" }
-        create("website") { dimension = "distribution" }
+        create("website") {
+            dimension = "distribution"
+            // Most Android phones use ARM. Keep both 64-bit and 32-bit ARM
+            // for broad phone compatibility, but omit x86/x86_64 from the
+            // directly downloadable website APK to avoid bundling unused JNI
+            // copies of the video/OCR SDKs. Play Store flavor remains unchanged.
+            ndk {
+                abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+            }
+        }
     }
 
     defaultConfig {
@@ -60,7 +69,7 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     // Native GA4/Firebase Analytics: app installs, opens, sessions and screen views.
     implementation("com.google.firebase:firebase-analytics")
-    // Official Google Play in-app update flow (flexible updates). 
+    // Official Google Play in-app update flow (flexible updates).
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.17.0")
     // Native pull-to-refresh gesture for the embedded Workly WebView.
