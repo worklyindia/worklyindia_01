@@ -2,6 +2,11 @@
 <!-- Workly India website pages -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
+    <loc>https://worklyindia.devs.surf/download</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://worklyindia.devs.surf/pricing</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
