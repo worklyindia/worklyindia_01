@@ -26,7 +26,7 @@ import { DeleteAccountSection } from "@/components/DeleteAccountSection";
 import { DeleteAccountCountdown } from "@/components/DeleteAccountCountdown";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { isWorklyAndroidApp, getWorklyAndroidBridge } from "@/lib/nativeAppBridge";
 import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
@@ -38,6 +38,8 @@ const Settings = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [chargingAlertSettings, setChargingAlertSettings] = useState({ chargingStart: true, chargerDisconnect: true, batteryFull: true, silentMode: false });
   const [passwordChangedAt, setPasswordChangedAt] = useState<string | null>(null);
   const [biometricLockEnabled, setBiometricLockEnabled] = useState(false);
   const [dataSaverEnabled, setDataSaverEnabled] = useState(() => {
@@ -63,6 +65,36 @@ const Settings = () => {
     setBiometricLockEnabled(getWorklyAndroidBridge()?.isBiometricLockEnabled?.() ?? false);
   }, []);
 
+  useEffect(() => {
+    if (!isWorklyAndroidApp()) return;
+    const raw = getWorklyAndroidBridge()?.getChargingAlertSettings?.();
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw);
+      setChargingAlertSettings({
+        chargingStart: saved.chargingStart !== false,
+        chargerDisconnect: saved.chargerDisconnect !== false,
+        batteryFull: saved.batteryFull !== false,
+        silentMode: saved.silentMode === true,
+      });
+    } catch {
+      toast({ title: "Could not load charging settings", description: "Please reopen App Settings and try again.", variant: "destructive" });
+    }
+  }, [toast]);
+
+  const updateChargingAlertSetting = (key: keyof typeof chargingAlertSettings, enabled: boolean) => {
+    const next = { ...chargingAlertSettings, [key]: enabled };
+    setChargingAlertSettings(next);
+    const bridge = getWorklyAndroidBridge();
+    if (!bridge?.saveChargingAlertSettings?.(next.chargingStart, next.chargerDisconnect, next.batteryFull, next.silentMode)) {
+      toast({ title: "Settings could not be saved", description: "Please reopen the app and try again.", variant: "destructive" });
+      const raw = bridge?.getChargingAlertSettings?.();
+      if (raw) {
+        try { setChargingAlertSettings(JSON.parse(raw)); } catch { /* Keep the last visible state. */ }
+      }
+    }
+  };
+
   const handleBiometricLockChange = (enabled: boolean) => {
     const bridge = getWorklyAndroidBridge();
     if (!bridge?.setBiometricLockEnabled || !bridge.setBiometricLockEnabled(enabled)) {
@@ -74,7 +106,7 @@ const Settings = () => {
 
   // Persist active tab across page refreshes
   const [activeTab, setActiveTab] = useState(() => {
-    return sessionStorage.getItem('settings-active-tab') || 'notifications';
+    return searchParams.get('tab') === 'app' ? 'app' : (sessionStorage.getItem('settings-active-tab') || 'notifications');
   });
 
   useEffect(() => {
@@ -200,11 +232,61 @@ const Settings = () => {
         <DeleteAccountCountdown userId={user?.id} variant="banner" />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-4 h-auto p-1">
+            <TabsTrigger value="app" className="text-xs sm:text-sm px-1 sm:px-3 py-2">App Settings</TabsTrigger>
             <TabsTrigger value="notifications" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Notifications</TabsTrigger>
             <TabsTrigger value="privacy" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Privacy</TabsTrigger>
             <TabsTrigger value="account" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Account</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="app" className="space-y-6">
+            <Card className="p-4 sm:p-6">
+              <div className="mb-5">
+                <h2 className="text-xl font-semibold text-foreground">Battery Protection Alerts</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Choose which sounds play when your charger is connected, disconnected, or the battery reaches 100%.</p>
+              </div>
+              {isWorklyAndroidApp() ? (
+                <div className="space-y-5">
+                  {([
+                    { key: "chargingStart", title: "Charging Start Alert", description: "Play an audio alert when charging starts." },
+                    { key: "chargerDisconnect", title: "Charger Disconnect Alert", description: "Play an audio alert when the charger is unplugged." },
+                    { key: "batteryFull", title: "100% Battery Alert", description: "Play the repeating alarm and voice when the battery is fully charged." },
+                  ] as const).map((setting) => (
+                    <div key={setting.key} className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="font-medium text-foreground">{setting.title}</h3>
+                        <p className="text-sm text-muted-foreground">{setting.description}</p>
+                      </div>
+                      <Switch
+                        checked={chargingAlertSettings.silentMode ? false : chargingAlertSettings[setting.key]}
+                        disabled={chargingAlertSettings.silentMode}
+                        onCheckedChange={(enabled) => updateChargingAlertSetting(setting.key, enabled)}
+                        aria-label={setting.title}
+                      />
+                    </div>
+                  ))}
+                  <div className="border-t border-border pt-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-foreground">Silent Charging Mode</h3>
+                        <p className="text-sm text-muted-foreground">Disable all alerts while keeping battery monitoring active.</p>
+                      </div>
+                      <Switch
+                        checked={chargingAlertSettings.silentMode}
+                        onCheckedChange={(enabled) => updateChargingAlertSetting("silentMode", enabled)}
+                        aria-label="Silent Charging Mode"
+                      />
+                    </div>
+                    {chargingAlertSettings.silentMode && (
+                      <p className="mt-3 text-sm text-muted-foreground" role="status">Silent Mode is on. All three charging sounds are muted. Battery monitoring, notifications and the 100% charging screen will continue.</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Charging audio controls are available in the Workly India Android app.</p>
+              )}
+            </Card>
+          </TabsContent>
 
           <TabsContent value="notifications" className="space-y-6">
             <NotificationChannelsCard
