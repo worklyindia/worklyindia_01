@@ -620,12 +620,62 @@ object NativePushManager {
                     .setActivity(android.content.ComponentName(context, bubbleActivityClass))
                     .setLongLived(true)
                     .build()
-                runCatching {
+                val shortcutPublished = runCatching {
                     ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
                     android.util.Log.i("WorklyPush", "Published conversation shortcut id=$shortcutId activity=${bubbleActivityClass.simpleName}")
+                    true
                 }.onFailure {
                     android.util.Log.e("WorklyPush", "Could not publish chat bubble shortcut id=$shortcutId", it)
                     AppErrorReporter.capture(context, "bubble", "error", it, source = "bubble")
+                }.getOrDefault(false)
+
+                // Android 11+ needs a conversation channel associated with the same
+                // parent channel and long-lived shortcut referenced by BubbleMetadata.
+                // Version the child ID so devices receive a fresh correctly-linked channel.
+                val conversationChannelId = "workly_chat_v1_${shortcutId.hashCode().toUInt().toString(16)}"
+                val conversationChannelReady = if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && shortcutPublished
+                ) {
+                    runCatching {
+                        val conversationChannel = NotificationChannel(
+                            conversationChannelId,
+                            title.take(80).ifBlank { "Workly conversation" },
+                            NotificationManager.IMPORTANCE_HIGH
+                        ).apply {
+                            description = "Messages from this Workly conversation"
+                            setConversationId(CHANNEL_ID, shortcutId)
+                            setAllowBubbles(true)
+                            setShowBadge(true)
+                            enableVibration(true)
+                        }
+                        notificationManager.createNotificationChannel(conversationChannel)
+                        val createdChannel = notificationManager.getNotificationChannel(conversationChannelId)
+                        val validConversationChannel = createdChannel != null &&
+                            createdChannel.isConversation &&
+                            createdChannel.conversationId == shortcutId &&
+                            createdChannel.canBubble()
+                        android.util.Log.i(
+                            "WorklyPush",
+                            "Conversation channel id=$conversationChannelId valid=$validConversationChannel " +
+                                "conversation=${createdChannel?.isConversation} canBubble=${createdChannel?.canBubble()}"
+                        )
+                        if (!validConversationChannel) {
+                            AppErrorReporter.capture(
+                                context, "bubble", "warning", "ConversationChannelInvalid",
+                                "created=${createdChannel != null} conversation=${createdChannel?.isConversation} " +
+                                    "canBubble=${createdChannel?.canBubble()} sdk=${Build.VERSION.SDK_INT}",
+                                source = "bubble"
+                            )
+                        }
+                        validConversationChannel
+                    }.onFailure {
+                        android.util.Log.e("WorklyPush", "Could not create conversation channel id=$conversationChannelId", it)
+                        AppErrorReporter.capture(context, "bubble", "error", it, source = "bubble")
+                    }.getOrDefault(false)
+                } else false
+
+                if (conversationChannelReady) {
+                    builder.setChannelId(conversationChannelId)
                 }
                 builder.setShortcutId(shortcutId).setBubbleMetadata(
                     BubbleMetadata.Builder(shortcutId)
