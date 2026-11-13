@@ -342,7 +342,7 @@ const RouteLoadingFallback = () => {
 
   const path = location.pathname.toLowerCase();
   const isChat = /chat|inbox|messenger|whatsapp|instagram|facebook|conversation|email-chat/.test(path);
-  const isJobs = /jobs|job-detail|job\\//.test(path);
+  const isJobs = /jobs|job-detail/.test(path) || path.includes("/job/");
   const isProfile = /profile|resume|cover-letter|developer/.test(path);
   const isDashboard = /dashboard|owner-portal|employer|admin|analytics|team-management/.test(path);
   const isForm = /auth|signup|login|settings|post-job|create|edit|checkout|payment/.test(path);
