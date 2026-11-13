@@ -246,7 +246,12 @@ object NativePushManager {
             }.getOrNull()
             return parsed
         }
-        val notificationUrl = sequenceOf("chat_url", "chatUrl", "conversation_url", "conversationUrl", "url", "action_url", "actionUrl", "deep_link", "deepLink", "link")
+        // Prefer explicit conversation destinations over generic notification URLs.
+        val notificationUrl = sequenceOf(
+            "chat_url", "chatUrl", "conversation_url", "conversationUrl",
+            "chat_path", "chatPath", "conversation_path", "conversationPath",
+            "deep_link", "deepLink", "action_url", "actionUrl", "link", "url", "route", "path"
+        )
             .mapNotNull { key -> trustedNotificationUrl(data[key]) }
             .firstOrNull()
             ?: data["job_id"]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) }
@@ -505,13 +510,19 @@ object NativePushManager {
             // A bubble is only for a real, deep-linked conversation notification.
             // The notification card tap remains MainActivity -> website chat route.
             // Only Android's dedicated bubble affordance launches ChatBubbleActivity.
-            val chatPath = runCatching { Uri.parse(chatUrl).path.orEmpty() }.getOrDefault("")
+            val chatPath = runCatching { Uri.parse(chatUrl).path.orEmpty().lowercase() }.getOrDefault("")
+            // Support role-specific Workly chats and connected social inbox routes.
+            // Only explicit chat/message/inbox paths are eligible; generic notification,
+            // jobs, billing and account pages must never become conversation bubbles.
             val hasConversationDestination =
                 notificationUrl != null &&
                 (chatPath.startsWith("/employer/workly-chat") ||
                  chatPath.startsWith("/owner-portal/whatsapp/chat") ||
-                 chatPath.startsWith("/chat/") ||
-                 chatPath.startsWith("/messages/"))
+                 chatPath.contains("/chat/") ||
+                 chatPath.endsWith("/chat") ||
+                 chatPath.contains("/messages/") ||
+                 chatPath.contains("/inbox/") ||
+                 chatPath.contains("/social-inbox"))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasConversationDestination) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
@@ -520,7 +531,7 @@ object NativePushManager {
                     this.data = Uri.parse(chatUrl)
                     putExtra("chat_url", chatUrl)
                     putExtra("chat_title", title)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
                 }
                 val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
                     .setShortLabel(title.take(25).ifBlank { "Workly chat" })
@@ -528,6 +539,9 @@ object NativePushManager {
                     .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
                     .setIntent(bubbleIntent)
                     .setPerson(Person.Builder().setName(title).build())
+                    // Associate the dynamic shortcut with the actual resizable bubble Activity.
+                    // Without this, Android may publish the shortcut but fail to open its chat surface.
+                    .setActivity(android.content.ComponentName(context, ChatBubbleActivity::class.java))
                     .setLongLived(true)
                     .build()
                 runCatching { ShortcutManagerCompat.pushDynamicShortcut(context, shortcut) }
