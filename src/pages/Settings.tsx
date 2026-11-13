@@ -42,23 +42,6 @@ const Settings = () => {
   const [chargingAlertSettings, setChargingAlertSettings] = useState({ chargingStart: true, chargerDisconnect: true, batteryFull: true, silentMode: false, monitorEnabled: true });
   const [passwordChangedAt, setPasswordChangedAt] = useState<string | null>(null);
   const [biometricLockEnabled, setBiometricLockEnabled] = useState(false);
-  const [dataSaverEnabled, setDataSaverEnabled] = useState(() => {
-    try {
-      return localStorage.getItem('workly-data-saver') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const handleDataSaverChange = (enabled: boolean) => {
-    setDataSaverEnabled(enabled);
-    try {
-      localStorage.setItem('workly-data-saver', String(enabled));
-    } catch {
-      // Keep the current session setting even when browser storage is unavailable.
-    }
-    window.dispatchEvent(new Event('workly-data-saver-change'));
-  };
   
   useEffect(() => {
     if (!isWorklyAndroidApp()) return;
@@ -297,8 +280,6 @@ const Settings = () => {
                     )}
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Charging audio controls are available in the Workly India Android app.</p>
               )}
             </Card>
           </TabsContent>}
@@ -367,24 +348,6 @@ const Settings = () => {
 
                 <DeleteAccountSection userId={user?.id} userType="employee" />
               </div>
-            </Card>
-            <Card className="p-4 sm:p-6">
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-foreground">Data Saver</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Reduce mobile data use by stopping automatic background page preloading.
-                  </p>
-                </div>
-                <Switch
-                  checked={dataSaverEnabled}
-                  onCheckedChange={handleDataSaverChange}
-                  aria-label="Enable Data Saver"
-                />
-              </div>
-              <p className="mt-3 text-xs text-muted-foreground" role="status">
-                {dataSaverEnabled ? 'Data Saver is on. Pages load when you open them.' : 'Data Saver is off. Frequently used pages may preload in the background.'}
-              </p>
             </Card>
           </TabsContent>
 
