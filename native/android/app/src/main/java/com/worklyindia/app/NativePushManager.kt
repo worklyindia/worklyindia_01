@@ -277,6 +277,24 @@ object NativePushManager {
             )
         }
 
+        // Chat notifications must open the compact native bubble activity, not
+        // MainActivity's general website notification handler. Keep the exact
+        // trusted conversation URL and its role-specific route.
+        fun bubbleActivityPendingIntent(url: String, requestCode: Int): PendingIntent {
+            val openIntent = Intent(context, ChatBubbleActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                this.data = Uri.parse(url)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("chat_url", url)
+                putExtra("chat_title", title)
+                putExtra("notification_type", data["type"])
+            }
+            return PendingIntent.getActivity(
+                context, requestCode, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
         // Android launchers derive the app-icon badge from active notifications.
         // setNumber supplies the aggregate count on launchers that support numeric badges.
         val notificationManager = NotificationManagerCompat.from(context)
@@ -485,7 +503,8 @@ object NativePushManager {
             builder.setLargeIcon(incomingAvatar)
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
             // A bubble is only for a real, deep-linked conversation notification.
-            // Never turn generic/ambiguous alerts into a bubble that opens the site home page.
+            // The notification card tap remains MainActivity -> website chat route.
+            // Only Android's dedicated bubble affordance launches ChatBubbleActivity.
             val chatPath = runCatching { Uri.parse(chatUrl).path.orEmpty() }.getOrDefault("")
             val hasConversationDestination =
                 notificationUrl != null &&
