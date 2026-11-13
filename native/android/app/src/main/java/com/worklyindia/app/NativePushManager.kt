@@ -484,7 +484,16 @@ object NativePushManager {
             // Workly update notifications use the Workly launcher logo above.
             builder.setLargeIcon(incomingAvatar)
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // A bubble is only for a real, deep-linked conversation notification.
+            // Never turn generic/ambiguous alerts into a bubble that opens the site home page.
+            val chatPath = runCatching { Uri.parse(chatUrl).path.orEmpty() }.getOrDefault("")
+            val hasConversationDestination =
+                notificationUrl != null &&
+                (chatPath.startsWith("/employer/workly-chat") ||
+                 chatPath.startsWith("/owner-portal/whatsapp/chat") ||
+                 chatPath.startsWith("/chat/") ||
+                 chatPath.startsWith("/messages/"))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasConversationDestination) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
                 val bubbleIntent = Intent(context, ChatBubbleActivity::class.java).apply {
