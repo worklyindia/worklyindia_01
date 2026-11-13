@@ -8,7 +8,6 @@ on:
       - 'native/android/**'
       - 'android-release.properties'
       - '.github/workflows/native-android.yml'
-      - '.github/workflows/vercel-deploy.yml'
       - '**.md'
   pull_request:
     branches: [main]
@@ -17,7 +16,6 @@ on:
       - 'native/android/**'
       - 'android-release.properties'
       - '.github/workflows/native-android.yml'
-      - '.github/workflows/vercel-deploy.yml'
       - '**.md'
   workflow_dispatch:
 
@@ -25,9 +23,11 @@ concurrency:
   group: vercel-${{ github.ref }}
   cancel-in-progress: true
 
+# These are public Vercel resource identifiers, not credentials.
+# Keep the access token in GitHub Secrets only.
 env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_ORG_ID: team_sxJ9DY1112UOtdJ3AJxULBzC
+  VERCEL_PROJECT_ID: prj_pYQUi0twSlDwyf1axz1j3by85NmI
 
 jobs:
   deploy:
@@ -38,8 +38,8 @@ jobs:
         env:
           T: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          if [ -z "$T" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-            echo "Vercel secrets (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID) not set — skipping deploy." >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$T" ]; then
+            echo "VERCEL_TOKEN is not set — skipping deploy." >> "$GITHUB_STEP_SUMMARY"
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
@@ -55,12 +55,18 @@ jobs:
         run: npm install --global vercel@latest
       - name: Pull Vercel settings
         if: steps.guard.outputs.ok == 'true'
-        run: vercel pull --yes --environment=${{ github.event_name == 'pull_request' && 'preview' || 'production' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=${{ github.event_name == 'pull_request' && 'preview' || 'production' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       - name: Build
         if: steps.guard.outputs.ok == 'true'
-        run: vercel build ${{ github.event_name != 'pull_request' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build ${{ github.event_name != 'pull_request' && '--prod' || '' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       - name: Deploy
         if: steps.guard.outputs.ok == 'true'
         run: |
-          url=$(vercel deploy --prebuilt --archive=tgz ${{ github.event_name != 'pull_request' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          url=$(vercel deploy --prebuilt --archive=tgz ${{ github.event_name != 'pull_request' && '--prod' || '' }})
           echo "Deployed: $url" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
