@@ -735,6 +735,7 @@ class ChargingMonitorService : Service() {
         const val KEY_FULL_ALERT_ENABLED = "battery_full_alert_enabled"
         const val KEY_SILENT_MODE = "silent_charging_mode"
         const val KEY_MONITOR_ENABLED = "charging_monitor_enabled"
+        const val KEY_MONITOR_NOTIFICATION_HIDDEN = "charging_monitor_notification_hidden" // Retained for compatibility with older installs.
         const val ACTION_SETTINGS_CHANGED = "com.worklyindia.app.CHARGING_SETTINGS_CHANGED"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
