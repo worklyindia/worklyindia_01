@@ -254,16 +254,16 @@ const Settings = () => {
                   <div className="border-t border-border pt-5">
                     <div className="mb-5 flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <h3 className="font-semibold text-foreground">Charging Monitor</h3>
-                        <p className="text-sm text-muted-foreground">Turn battery monitoring and its notification on or off.</p>
+                        <h3 className="font-semibold text-foreground">Charging Monitor and Hide Notification</h3>
+                        <p className="text-sm text-muted-foreground">Turn monitoring on or off. When off, battery monitoring stops and its notification is removed from the notification panel.</p>
                       </div>
                       <Switch
                         checked={chargingAlertSettings.monitorEnabled}
                         onCheckedChange={(enabled) => updateChargingAlertSetting("monitorEnabled", enabled)}
-                        aria-label="Charging Monitor"
+                        aria-label="Charging Monitor and Hide Notification"
                       />
                     </div>
-                    {!chargingAlertSettings.monitorEnabled && <p className="mb-5 text-sm text-muted-foreground" role="status">Charging Monitor is off. Battery monitoring, charging alerts and the monitor notification are stopped.</p>}
+                    {!chargingAlertSettings.monitorEnabled && <p className="mb-5 text-sm text-muted-foreground" role="status">Charging Monitor is off. Battery monitoring and charging alerts are stopped, and its notification has been removed.</p>}
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
                         <h3 className="font-semibold text-foreground">Silent Charging Mode</h3>
