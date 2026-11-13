@@ -45,6 +45,10 @@ class ChargingMonitorService : Service() {
         // Always allow the explicit stop action. Any other start is rejected
         // while the master switch is OFF, including boot and charger broadcasts.
         if (intent?.action != ACTION_STOP && !getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_MONITOR_ENABLED, true)) {
+            // If an OS receiver used startForegroundService while disabled, satisfy
+            // Android's foreground-start deadline and immediately remove the entry.
+            startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
+            stopForeground(STOP_FOREGROUND_REMOVE)
             getSystemService(NotificationManager::class.java).apply {
                 cancel(MONITOR_NOTIFICATION_ID)
                 cancel(ALERT_NOTIFICATION_ID)
