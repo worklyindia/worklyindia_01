@@ -1830,6 +1830,37 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
 
         @JavascriptInterface
+        fun getChargingAlertSettings(): String {
+            val prefs = getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE)
+            return JSONObject()
+                .put("chargingStart", prefs.getBoolean(ChargingMonitorService.KEY_START_ALERT_ENABLED, true))
+                .put("chargerDisconnect", prefs.getBoolean(ChargingMonitorService.KEY_DISCONNECT_ALERT_ENABLED, true))
+                .put("batteryFull", prefs.getBoolean(ChargingMonitorService.KEY_FULL_ALERT_ENABLED, true))
+                .put("silentMode", prefs.getBoolean(ChargingMonitorService.KEY_SILENT_MODE, false))
+                .toString()
+        }
+
+        @JavascriptInterface
+        fun saveChargingAlertSettings(
+            chargingStart: Boolean,
+            chargerDisconnect: Boolean,
+            batteryFull: Boolean,
+            silentMode: Boolean
+        ): Boolean {
+            val saved = getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(ChargingMonitorService.KEY_START_ALERT_ENABLED, chargingStart)
+                .putBoolean(ChargingMonitorService.KEY_DISCONNECT_ALERT_ENABLED, chargerDisconnect)
+                .putBoolean(ChargingMonitorService.KEY_FULL_ALERT_ENABLED, batteryFull)
+                .putBoolean(ChargingMonitorService.KEY_SILENT_MODE, silentMode)
+                .commit()
+            if (!saved) return false
+            return runCatching {
+                startService(Intent(this@MainActivity, ChargingMonitorService::class.java).setAction(ChargingMonitorService.ACTION_SETTINGS_CHANGED))
+                true
+            }.getOrDefault(false)
+        }
+
+        @JavascriptInterface
         fun isBiometricLockEnabled(): Boolean = this@MainActivity.isBiometricLockEnabled()
 
         @JavascriptInterface
