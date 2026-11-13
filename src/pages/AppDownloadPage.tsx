@@ -234,10 +234,18 @@ export default function AppDownloadPage() {
                 <h2 className="text-xl font-semibold">Screenshots</h2>
                 <span className="text-xs text-muted-foreground">App preview</span>
               </div>
-              <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0">
+              <div className="-mx-4 flex snap-x snap-mandatory items-start gap-4 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0">
                 {screenshots.map((shot) => (
-                  <figure key={shot.slot} className="w-[min(70vw,245px)] shrink-0 snap-start">
-                    <img src={shot.url} alt={`Workly India app screenshot ${shot.slot}`} loading="lazy" className="aspect-[9/16] w-full rounded-2xl border border-border bg-card object-cover" />
+                  <figure
+                    key={shot.slot}
+                    className="flex w-[min(82vw,340px)] shrink-0 snap-center items-start justify-center sm:w-[min(36vw,340px)]"
+                  >
+                    <img
+                      src={shot.url}
+                      alt={`Workly India app screenshot ${shot.slot}`}
+                      loading="lazy"
+                      className="block h-auto w-auto max-w-full max-h-[min(76svh,820px)] rounded-2xl border border-border bg-card object-contain"
+                    />
                   </figure>
                 ))}
               </div>
