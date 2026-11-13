@@ -26,6 +26,7 @@ const CHUNK_ERROR_PATTERNS = [
   "chunkloaderror",
   "loading chunk",
   "loading css chunk",
+  "page chunk load timed out",
 ];
 
 export function isChunkLoadError(error: unknown): boolean {
@@ -170,8 +171,14 @@ export function lazyRetry<T extends ComponentType<unknown>>(
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       try {
-        return await factory();
+        // A stalled import can otherwise leave React.Suspense on its skeleton
+        // forever without ever rejecting. Bound each attempt and run recovery.
+        const timeout = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error("Page chunk load timed out")), 15_000);
+        });
+        return await Promise.race([factory(), timeout]);
       } catch (error) {
         lastError = error;
         if (!isChunkLoadError(error)) throw error;
@@ -182,6 +189,8 @@ export function lazyRetry<T extends ComponentType<unknown>>(
           await new Promise(() => {});
         }
         await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
       }
     }
 
