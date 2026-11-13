@@ -631,7 +631,7 @@ object NativePushManager {
                     BubbleMetadata.Builder(shortcutId)
                         .setDesiredHeight(640)
                         // Android only auto-expands a bubble when the posting app is foreground.
-                        // Background message notifications still publish a collapsed bubble.
+                        // Background message notifications remain eligible for a collapsed bubble.
                         .build()
                 )
             }
