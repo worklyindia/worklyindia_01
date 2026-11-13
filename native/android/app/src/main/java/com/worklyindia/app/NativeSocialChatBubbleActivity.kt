@@ -256,7 +256,7 @@ class NativeSocialChatBubbleActivity : Activity() {
     private fun sendReply() {
         val message = composer.text.toString().trim()
         if (message.isBlank() || sending) return
-        if (message.length > if (platform == "whatsapp") 4096 else 2000) {
+        if (message.length > (if (platform == "whatsapp") 4096 else 2000)) {
             Toast.makeText(this, "Message is too long.", Toast.LENGTH_SHORT).show()
             return
         }
