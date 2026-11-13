@@ -627,7 +627,14 @@ object NativePushManager {
                     android.util.Log.e("WorklyPush", "Could not publish chat bubble shortcut id=$shortcutId", it)
                     AppErrorReporter.capture(context, "bubble", "error", it, source = "bubble")
                 }
-                builder.setShortcutId(shortcutId).setBubbleMetadata(BubbleMetadata.Builder(shortcutId).setDesiredHeight(640).build())
+                builder.setShortcutId(shortcutId).setBubbleMetadata(
+                    BubbleMetadata.Builder(shortcutId)
+                        .setDesiredHeight(640)
+                        // Open the conversation as a Bubble when Android permits it;
+                        // users can still collapse or dismiss it from the system UI.
+                        .setAutoExpandBubble(true)
+                        .build()
+                )
             }
             // Render inbox notifications as native Android conversations, not plain
             // BigText cards. If the push includes recent message history, preserve it;
