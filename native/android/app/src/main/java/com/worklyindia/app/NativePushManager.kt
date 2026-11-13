@@ -483,7 +483,15 @@ object NativePushManager {
             "whatsapp_message", "instagram_message", "facebook_message"
         ).any { marker -> marker in socialSourceText }
 
-        val internalConversationId = data["conversation_id"]?.takeIf { it.matches(Regex("[0-9a-fA-F-]{36}")) }
+        // Native app chat and website chat can serialize the same conversation
+        // identifier with different key casing. Normalize all supported aliases
+        // before deciding whether this is a Workly conversation notification.
+        val internalConversationId = listOf(
+            "conversation_id", "conversationId", "thread_id", "threadId",
+            "chat_id", "chatId", "room_id", "roomId"
+        ).firstNotNullOfOrNull { key ->
+            data[key]?.takeIf { it.matches(Regex("(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")) }
+        }
         val isInternalWorklyChat = !isSocialInboxNotification && internalConversationId != null
         // Route every conversation-style message through the same Android Bubble surface:
         // Workly owner/employee chats, employer chats, and connected social inboxes.
