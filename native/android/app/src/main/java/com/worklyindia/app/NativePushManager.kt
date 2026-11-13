@@ -283,7 +283,7 @@ object NativePushManager {
         fun bubbleActivityPendingIntent(url: String, requestCode: Int): PendingIntent {
             val openIntent = Intent(context, ChatBubbleActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
-                data = Uri.parse(url)
+                this.data = Uri.parse(url)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("chat_url", url)
                 putExtra("chat_title", title)
