@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import ReactCrop, { centerCrop, makeAspectCrop, convertToPixelCrop, type Crop as CropType } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +61,11 @@ export default function AndroidAppUpdates() {
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [downloadShots, setDownloadShots] = useState<Array<{slot:number;url:string;key:string}>>([]);
   const [shotBusy, setShotBusy] = useState<number | null>(null);
+  const [appIcon, setAppIcon] = useState<{ url: string; key: string } | null>(null);
+  const [iconBusy, setIconBusy] = useState(false);
+  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [iconCrop, setIconCrop] = useState<CropType>({ unit: "%", x: 10, y: 10, width: 80, height: 80 });
+  const cropImageRef = useRef<HTMLImageElement | null>(null);
 
   const loadDownloadShots = useCallback(async () => {
     const { data, error } = await supabase.functions.invoke("egress-optimizer", { body: { action: "get-app-download-screenshots" } });
@@ -67,6 +74,55 @@ export default function AndroidAppUpdates() {
   }, []);
 
   useEffect(() => { void loadDownloadShots(); }, [loadDownloadShots]);
+
+  const loadAppIcon = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("egress-optimizer", { body: { action: "get-app-download-icon" } });
+    if (error) { toast.error("App icon could not be loaded: " + error.message); return; }
+    setAppIcon(data?.success && data.icon?.url ? data.icon : null);
+  }, []);
+  useEffect(() => { void loadAppIcon(); }, [loadAppIcon]);
+  const openIconCrop = (file?: File) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp", "image/avif"].includes(file.type)) { toast.error("Please select a PNG, JPG, WEBP or AVIF image."); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("App icon must be 10 MB or smaller."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === "string") { setIconCrop({ unit: "%", x: 10, y: 10, width: 80, height: 80 }); setCropSource(reader.result); } };
+    reader.onerror = () => toast.error("Image could not be read.");
+    reader.readAsDataURL(file);
+  };
+  const handleCropImageLoad = (event: { currentTarget: HTMLImageElement }) => {
+    const { width, height } = event.currentTarget;
+    setIconCrop(centerCrop(makeAspectCrop({ unit: "%", width: 80 }, 1, width, height), width, height));
+  };
+  const saveCroppedIcon = async () => {
+    const image = cropImageRef.current;
+    if (!image || !cropSource || !iconCrop.width || !iconCrop.height) return;
+    setIconBusy(true);
+    try {
+      const pixelCrop = convertToPixelCrop(iconCrop, image.width, image.height);
+      const canvas = document.createElement("canvas"); canvas.width = 512; canvas.height = 512;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Image crop could not be prepared.");
+      context.imageSmoothingQuality = "high";
+      context.drawImage(image, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, 512, 512);
+      const { data, error } = await supabase.functions.invoke("egress-optimizer", { body: { action: "set-app-download-icon", file: canvas.toDataURL("image/png") } });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "App icon upload failed.");
+      setAppIcon(data.icon); setCropSource(null); toast.success("App icon cropped and uploaded to Cloudflare R2.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "App icon upload failed."); }
+    finally { setIconBusy(false); }
+  };
+  const removeAppIcon = async () => {
+    if (!appIcon || !window.confirm("Remove the custom app icon from Cloudflare? The download page will use its default icon.")) return;
+    setIconBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("egress-optimizer", { body: { action: "delete-app-download-icon" } });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "App icon removal failed.");
+      setAppIcon(null); toast.success("Custom app icon removed from Cloudflare.");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "App icon removal failed."); }
+    finally { setIconBusy(false); }
+  };
 
   const uploadDownloadShot = async (slot: number, file?: File) => {
     if (!file) return;
@@ -359,6 +415,43 @@ export default function AndroidAppUpdates() {
           </Button>
         </header>
 
+        <Card className="w-full min-w-0 overflow-hidden">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-lg"><ImageIcon className="h-5 w-5" />Download page app icon</CardTitle>
+            <CardDescription>Upload ya replace karte waqt square (1:1) crop select karein. Cropped icon Cloudflare R2 par save hoga aur download page par rounded-corner square mein dikhega.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-start gap-4 p-4 pt-0 sm:flex-row sm:items-center sm:p-6 sm:pt-0">
+            <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-[1.5rem] border border-border bg-white shadow-sm" style={{ backgroundColor: "#fff", colorScheme: "only light" }}>
+              <img src={appIcon?.url || "/icons/icon-512x512.png"} alt="Workly India app icon preview" className="h-full w-full rounded-[1.25rem] object-cover" />
+            </div>
+            <div className="w-full min-w-0 space-y-2">
+              <Badge variant={appIcon ? "default" : "secondary"}>{appIcon ? "Custom icon uploaded" : "Using default icon"}</Badge>
+              <label className="flex min-h-11 w-full cursor-pointer items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 sm:w-auto">
+                {iconBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+                {appIcon ? "Replace app icon" : "Upload app icon"}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={iconBusy} onChange={(ev) => { const file = ev.currentTarget.files?.[0]; ev.currentTarget.value = ""; openIconCrop(file); }} />
+              </label>
+              {appIcon && <Button type="button" variant="destructive" className="w-full sm:w-auto" disabled={iconBusy} onClick={() => void removeAppIcon()}><Trash2 className="mr-2 h-4 w-4" />Remove app icon</Button>}
+              <p className="text-xs text-muted-foreground">PNG, JPG, WEBP or AVIF · Max 10 MB · Saved as 512 × 512 PNG.</p>
+            </div>
+          </CardContent>
+        </Card>
+        {cropSource && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Crop app icon">
+            <div className="w-full max-w-lg space-y-4 rounded-2xl bg-background p-4 text-foreground shadow-2xl sm:p-6">
+              <div><h2 className="text-lg font-semibold">Crop app icon</h2><p className="text-sm text-muted-foreground">Square crop select karein. Logo circle mein nahi, rounded-corner square mein show hoga.</p></div>
+              <div className="max-h-[60vh] overflow-auto rounded-xl bg-muted p-2">
+                <ReactCrop crop={iconCrop} onChange={(_, percentCrop) => setIconCrop(percentCrop)} aspect={1} keepSelection>
+                  <img ref={cropImageRef} src={cropSource} onLoad={handleCropImageLoad} alt="Crop app icon" className="block max-h-[55vh] max-w-full" />
+                </ReactCrop>
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="outline" disabled={iconBusy} onClick={() => setCropSource(null)}>Cancel</Button>
+                <Button type="button" disabled={iconBusy || !iconCrop.width} onClick={() => void saveCroppedIcon()}>{iconBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Crop & upload</Button>
+              </div>
+            </div>
+          </div>
+        )}
         <Card className="w-full min-w-0 overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
             <CardTitle className="flex items-center gap-2 text-lg"><ImageIcon className="h-5 w-5" />Download page screenshots</CardTitle>
