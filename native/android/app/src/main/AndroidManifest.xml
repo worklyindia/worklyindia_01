@@ -110,6 +110,14 @@
                 android:resource="@xml/workly_datetime_widget_info" />
         </receiver>
         <activity
+            android:name=".NativeChatBubbleActivity"
+            android:allowEmbedded="true"
+            android:documentLaunchMode="always"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:configChanges="uiMode|screenSize|smallestScreenSize"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity
             android:name=".ChatBubbleActivity"
             android:allowEmbedded="true"
             android:documentLaunchMode="always"
