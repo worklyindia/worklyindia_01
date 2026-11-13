@@ -231,7 +231,7 @@ const Settings = () => {
                 <h2 className="text-xl font-semibold text-foreground">Battery Protection Alerts</h2>
                 <p className="mt-1 text-sm text-muted-foreground">Choose which sounds play when your charger is connected, disconnected, or the battery reaches 100%.</p>
               </div>
-              {isWorklyAndroidApp() ? (
+              {isWorklyAndroidApp() && (
                 <div className="space-y-5">
                   {([
                     { key: "chargingStart", title: "Charging Start Alert", description: "Play an audio alert when charging starts." },
