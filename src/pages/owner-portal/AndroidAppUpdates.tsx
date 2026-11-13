@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send, Activity, CheckCircle2, XCircle, Clock3, ExternalLink } from "lucide-react";
+import { ArrowLeft, Copy, Download, Loader2, Package, RefreshCw, Send, Activity, CheckCircle2, XCircle, Clock3, ExternalLink, Image as ImageIcon, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Release = {
@@ -57,6 +57,52 @@ export default function AndroidAppUpdates() {
   const [workflowJobs, setWorkflowJobs] = useState<any[]>([]);
   const [workflowLoading, setWorkflowLoading] = useState(true);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [downloadShots, setDownloadShots] = useState<Array<{slot:number;url:string;key:string}>>([]);
+  const [shotBusy, setShotBusy] = useState<number | null>(null);
+
+  const loadDownloadShots = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke("egress-optimizer", { body: { action: "get-app-download-screenshots" } });
+    if (error) { toast.error("Download screenshots could not be loaded: " + error.message); return; }
+    if (data?.success && Array.isArray(data.screenshots)) setDownloadShots(data.screenshots);
+  }, []);
+
+  useEffect(() => { void loadDownloadShots(); }, [loadDownloadShots]);
+
+  const uploadDownloadShot = async (slot: number, file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file."); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error("Each screenshot must be 10 MB or smaller."); return; }
+    setShotBusy(slot);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Image could not be read."));
+        reader.onerror = () => reject(new Error("Image could not be read."));
+        reader.readAsDataURL(file);
+      });
+      const { data, error } = await supabase.functions.invoke("egress-optimizer", { body: { action: "set-app-download-screenshot", slot, file: dataUrl } });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Screenshot upload failed.");
+      toast.success("Screenshot " + slot + " uploaded to Cloudflare.");
+      await loadDownloadShots();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Screenshot upload failed.");
+    } finally { setShotBusy(null); }
+  };
+
+  const deleteDownloadShot = async (slot: number) => {
+    if (!window.confirm("Delete screenshot " + slot + " from Cloudflare? It will also disappear from the download page.")) return;
+    setShotBusy(slot);
+    try {
+      const { data, error } = await supabase.functions.invoke("egress-optimizer", { body: { action: "delete-app-download-screenshot", slot } });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Screenshot delete failed.");
+      toast.success("Screenshot " + slot + " deleted from Cloudflare.");
+      await loadDownloadShots();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Screenshot delete failed.");
+    } finally { setShotBusy(null); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,6 +358,31 @@ export default function AndroidAppUpdates() {
             <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           </Button>
         </header>
+
+        <Card className="w-full min-w-0 overflow-hidden">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="flex items-center gap-2 text-lg"><ImageIcon className="h-5 w-5" />Download page screenshots</CardTitle>
+            <CardDescription>Yahan se maximum 3 app screenshots upload karein. Images Cloudflare R2 mein save hoti hain. Naya upload usi slot ki purani image ko replace karke Cloudflare se delete karega. Koi image upload nahi hogi to public download page par screenshot section nahi dikhega.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 p-4 pt-0 sm:grid-cols-3 sm:p-6 sm:pt-0">
+            {[1, 2, 3].map((slot) => {
+              const shot = downloadShots.find((item) => item.slot === slot);
+              const busy = shotBusy === slot;
+              return (
+                <div key={slot} className="min-w-0 space-y-3 rounded-xl border p-3">
+                  <div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold">Screenshot {slot}</p><Badge variant={shot ? "default" : "secondary"}>{shot ? "Uploaded" : "Empty"}</Badge></div>
+                  {shot ? <img src={shot.url} alt={"Download page screenshot " + slot} className="aspect-[9/16] w-full rounded-lg border bg-muted object-contain" /> : <div className="flex aspect-[9/16] items-center justify-center rounded-lg border border-dashed bg-muted/40 text-sm text-muted-foreground">No screenshot</div>}
+                  <label className="flex min-h-11 cursor-pointer items-center justify-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+                    {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+                    {shot ? "Replace screenshot" : "Upload screenshot"}
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; e.currentTarget.value = ""; void uploadDownloadShot(slot, file); }} />
+                  </label>
+                  {shot && <Button type="button" variant="destructive" className="w-full" disabled={busy} onClick={() => void deleteDownloadShot(slot)}><Trash2 className="mr-2 h-4 w-4" />Delete screenshot</Button>}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
 
         <Card className="w-full min-w-0 overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
