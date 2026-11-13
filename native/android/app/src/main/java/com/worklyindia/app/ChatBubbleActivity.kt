@@ -94,6 +94,23 @@ class ChatBubbleActivity : Activity() {
         webView.loadUrl(safeUrl)
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val rawUrl = intent.getStringExtra("chat_url") ?: intent.data?.toString().orEmpty()
+        val safeUrl = runCatching { Uri.parse(rawUrl) }.getOrNull()?.takeIf {
+            it.scheme == "https" &&
+                it.host.equals("worklyindia.devs.surf", ignoreCase = true) &&
+                it.userInfo == null
+        }?.toString()
+        if (safeUrl != null) {
+            android.util.Log.i("WorklyChatBubble", "Opening conversation route: ${Uri.parse(safeUrl).path}")
+            chatWebView?.loadUrl(safeUrl)
+        } else {
+            android.util.Log.w("WorklyChatBubble", "Ignored an invalid conversation URL")
+        }
+    }
+
     override fun onDestroy() {
         chatWebView?.apply {
             stopLoading()
