@@ -90,6 +90,13 @@ class ChargingMonitorService : Service() {
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
                 registerBatteryReceiver()
                 readCurrentBatteryState()
+                // POWER_CONNECTED is authoritative even if Android's sticky
+                // battery snapshot still says "not charging". Read the live
+                // capacity and play the pending start clip immediately below 100%.
+                val connectedPercent = getCurrentBatteryPercent()
+                if (connectedPercent in 0..99) {
+                    playChargingStartAnnouncementOnce(connectedPercent)
+                }
                 return START_STICKY
             }
             ACTION_POWER_DISCONNECTED -> {
@@ -240,15 +247,12 @@ class ChargingMonitorService : Service() {
         ) return
 
         runCatching {
-            val player = MediaPlayer.create(applicationContext, R.raw.charging_started)
-                ?: throw IllegalStateException("Could not load bundled charging-start audio")
-            chargingStartPlayer = player
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_started, AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+                    .build(), 0)
+                ?: throw IllegalStateException("Could not load bundled charging-start audio")
+            chargingStartPlayer = player
             player.setOnCompletionListener { completed ->
                 android.util.Log.i(TAG, "Bundled charging-start audio completed")
                 completed.release()
@@ -358,15 +362,12 @@ class ChargingMonitorService : Service() {
         if (fullChargeVoicePlayer?.isPlaying == true) return
         stopFullChargeVoice()
         runCatching {
-            val player = MediaPlayer.create(applicationContext, R.raw.battery_fully_charged)
-                ?: throw IllegalStateException("Could not load bundled full-charge audio")
-            fullChargeVoicePlayer = player
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
+            val player = MediaPlayer.create(applicationContext, R.raw.battery_fully_charged, AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+                    .build(), 0)
+                ?: throw IllegalStateException("Could not load bundled full-charge audio")
+            fullChargeVoicePlayer = player
             player.isLooping = true
             player.setOnErrorListener { failed, what, extra ->
                 android.util.Log.e(TAG, "Full-charge voice failed: what=$what extra=$extra")
@@ -423,15 +424,12 @@ class ChargingMonitorService : Service() {
             .commit()
         stopChargingStoppedPlayback()
         runCatching {
-            val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped)
-                ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
-            chargingStoppedPlayer = player
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped, AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+                    .build(), 0)
+                ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
+            chargingStoppedPlayer = player
             player.setOnCompletionListener { completed ->
                 completed.release()
                 if (chargingStoppedPlayer === completed) chargingStoppedPlayer = null
