@@ -611,7 +611,7 @@ object NativePushManager {
                     .setLongLabel(title.take(100).ifBlank { "Workly India conversation" })
                     .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
                     .setIntent(bubbleIntent)
-                    .setPerson(Person.Builder().setName(title).build())
+                    .setPerson(Person.Builder().setName(data["sender_name"] ?: data["sender"] ?: title).setIcon(IconCompat.createWithBitmap(incomingAvatar)).build())
                     // Android 11+ only accepts a conversation shortcut as a Bubble target
                     // when it is explicitly categorized as a conversation.
                     .setCategories(setOf(ShortcutInfo.SHORTCUT_CATEGORY_CONVERSATION))
@@ -630,9 +630,8 @@ object NativePushManager {
                 builder.setShortcutId(shortcutId).setBubbleMetadata(
                     BubbleMetadata.Builder(shortcutId)
                         .setDesiredHeight(640)
-                        // Open the conversation as a Bubble when Android permits it;
-                        // users can still collapse or dismiss it from the system UI.
-                        .setAutoExpandBubble(true)
+                        // Android only auto-expands a bubble when the posting app is foreground.
+                        // Background message notifications remain eligible for a collapsed bubble.
                         .build()
                 )
             }
@@ -681,6 +680,15 @@ object NativePushManager {
                 )
             }
             builder.setStyle(conversationStyle)
+            // Explicitly attach the remote participant to the notification itself.
+            // Android's bubble eligibility checks MessagingStyle + Person + a published
+            // long-lived conversation shortcut on Android 11+.
+            builder.addPerson(
+                Person.Builder()
+                    .setName(data["sender_name"] ?: data["sender"] ?: title)
+                    .setIcon(IconCompat.createWithBitmap(incomingAvatar))
+                    .build()
+            )
             if (isInternalWorklyChat && internalConversationId != null) {
                 val remoteInput = androidx.core.app.RemoteInput.Builder("workly_chat_reply")
                     .setLabel("Type a reply")
