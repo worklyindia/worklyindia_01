@@ -78,9 +78,9 @@ const Settings = () => {
         silentMode: saved.silentMode === true,
       });
     } catch {
-      toast({ title: "Could not load charging settings", description: "Please reopen App Settings and try again.", variant: "destructive" });
+      console.warn("Could not parse saved native charging alert settings");
     }
-  }, [toast]);
+  }, []);
 
   const updateChargingAlertSetting = (key: keyof typeof chargingAlertSettings, enabled: boolean) => {
     const next = { ...chargingAlertSettings, [key]: enabled };
