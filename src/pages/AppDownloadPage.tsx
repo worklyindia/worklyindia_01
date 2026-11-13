@@ -174,12 +174,15 @@ export default function AppDownloadPage() {
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <section className="pt-7 sm:pt-10">
             <div className="flex items-start gap-4 sm:gap-6">
-              <img
-                src={appIconUrl || "/icons/icon-512x512.png"}
-                alt="Workly India app icon"
-                className="h-24 w-24 shrink-0 aspect-square overflow-hidden rounded-[1.35rem] border border-border !bg-white object-cover p-0 shadow-sm sm:h-32 sm:w-32"
-                style={{ backgroundColor: "#ffffff", colorScheme: "only light" }}
-              />
+              {appIconUrl ? (
+                <div className="h-24 w-24 shrink-0 aspect-square overflow-hidden rounded-[1.35rem] border border-border bg-muted shadow-sm sm:h-32 sm:w-32">
+                  <img
+                    src={appIconUrl}
+                    alt="Workly India app icon"
+                    className="h-full w-full rounded-[1.2rem] object-contain"
+                  />
+                </div>
+              ) : null}
               <div className="min-w-0 flex-1">
                 <h1 className="text-[25px] font-semibold leading-tight tracking-tight sm:text-3xl">Workly India</h1>
                 <a href="/" className="mt-1 inline-block text-sm font-medium text-[#65d99a] hover:underline">Workly India</a>

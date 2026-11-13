@@ -102,7 +102,7 @@ const BrandManagement = () => {
   };
 
   const removeDownloadAppIcon = async () => {
-    if (!downloadAppIcon || !window.confirm('Remove the custom download app icon from Cloudflare? The website will use its default app icon.')) return;
+    if (!downloadAppIcon || !window.confirm('Remove the custom download app icon? The download page will show no app icon until you upload one again.')) return;
     setDownloadAppIconBusy(true);
     try {
       const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'delete-app-download-icon' } });
@@ -844,8 +844,12 @@ const BrandManagement = () => {
               {/* Website Android download icon — stored in Cloudflare R2 */}
               <div className="mb-6 rounded-xl border p-4 sm:p-5">
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-white shadow-sm" style={{ backgroundColor: '#fff', colorScheme: 'only light' }}>
-                    <img src={downloadAppIcon?.url || '/icons/icon-512x512.png'} alt="Website Android download app icon" className="h-full w-full rounded-xl object-cover" />
+                  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-muted shadow-sm">
+                    {downloadAppIcon?.url ? (
+                      <img src={downloadAppIcon.url} alt="Website Android download app icon" className="h-full w-full rounded-xl object-contain" />
+                    ) : (
+                      <span className="px-2 text-center text-[10px] leading-tight text-muted-foreground">No app icon uploaded</span>
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <Label className="text-sm font-semibold">Website Android Download App Icon</Label>
