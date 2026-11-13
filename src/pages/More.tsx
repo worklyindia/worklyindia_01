@@ -14,8 +14,7 @@ import {
   Sunrise,
   Sun,
   Sunset,
-  Moon,
-  Settings as SettingsIcon
+  Moon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -296,7 +295,7 @@ const More = () => {
           <div className="mt-8">
             <div className="border-y border-border/60 divide-y divide-border/60">
             {[
-              { label: "App Settings", path: "/settings", icon: SettingsIcon },
+              { label: "App Settings", path: "/settings" },
               { label: "Website Pricing", path: "/pricing" },
               { label: "About Us", path: "/about-us" },
               { label: "Mission", path: "/mission" },
