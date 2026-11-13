@@ -542,6 +542,28 @@ object NativePushManager {
             val shouldPublishBubble =
                 hasBubbleConversationIdentity || (isChatMessageEvent && hasConversationDestination)
 
+            // Capture the eligibility decision even when Android rejects the bubble
+            // before a shortcut or bubble metadata can be published. Never include
+            // message text, sender details, URLs, or conversation identifiers.
+            val notificationManager = context.getSystemService(NotificationManager::class.java)
+            val appNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            val appBubblesAllowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                notificationManager.areBubblesAllowed()
+            } else false
+            val channelState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                notificationManager.getNotificationChannel(CHANNEL_ID)?.let {
+                    "canBubble=${it.canBubble()},importance=${it.importance}"
+                } ?: "missing"
+            } else "pre-Android-10"
+            val bubbleDiagnostic = "social=$isSocialInboxNotification internal=$isInternalWorklyChat " +
+                "chatEvent=$isChatMessageEvent destination=$hasConversationDestination " +
+                "publish=$shouldPublishBubble appNotificationsEnabled=$appNotificationsEnabled " +
+                "appBubblesAllowed=$appBubblesAllowed channel={$channelState} sdk=${Build.VERSION.SDK_INT}"
+            android.util.Log.i("WorklyPush", "Bubble decision: $bubbleDiagnostic")
+            AppErrorReporter.capture(
+                context, "bubble", "warning", "BubbleDiagnostic", bubbleDiagnostic, source = "bubble"
+            )
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && shouldPublishBubble) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
@@ -588,17 +610,10 @@ object NativePushManager {
                 runCatching {
                     ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
                     android.util.Log.i("WorklyPush", "Published conversation shortcut id=$shortcutId activity=${bubbleActivityClass.simpleName}")
-                }.onFailure { android.util.Log.e("WorklyPush", "Could not publish chat bubble shortcut id=$shortcutId", it) }
-                val channelState = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    context.getSystemService(NotificationManager::class.java)
-                        .getNotificationChannel(CHANNEL_ID)?.let { "canBubble=${it.canBubble()}, importance=${it.importance}" }
-                } else "pre-Android-10"
-                android.util.Log.i(
-                    "WorklyPush",
-                    "Bubble decision: social=$isSocialInboxNotification internal=$isInternalWorklyChat " +
-                        "chatEvent=$isChatMessageEvent destination=$hasConversationDestination " +
-                        "publish=$shouldPublishBubble channel={$channelState} sdk=${Build.VERSION.SDK_INT}"
-                )
+                }.onFailure {
+                    android.util.Log.e("WorklyPush", "Could not publish chat bubble shortcut id=$shortcutId", it)
+                    AppErrorReporter.capture(context, "bubble", "error", it, source = "bubble")
+                }
                 builder.setShortcutId(shortcutId).setBubbleMetadata(BubbleMetadata.Builder(shortcutId).setDesiredHeight(640).build())
             }
             // Render inbox notifications as native Android conversations, not plain
