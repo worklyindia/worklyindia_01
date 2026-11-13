@@ -526,11 +526,30 @@ object NativePushManager {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasConversationDestination) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
-                val bubbleIntent = Intent(context, ChatBubbleActivity::class.java).apply {
+                // Social inbox bubbles use a fully native Activity. Normal notification
+                // card taps above still open MainActivity and its regular website chat.
+                val bubbleActivityClass = if (isSocialInboxNotification) {
+                    NativeSocialChatBubbleActivity::class.java
+                } else {
+                    ChatBubbleActivity::class.java
+                }
+                val bubbleIntent = Intent(context, bubbleActivityClass).apply {
                     action = Intent.ACTION_VIEW
                     this.data = Uri.parse(chatUrl)
                     putExtra("chat_url", chatUrl)
                     putExtra("chat_title", title)
+                    if (isSocialInboxNotification) {
+                        putExtra("platform", data["platform"] ?: data["source"] ?: data["channel"])
+                        putExtra("type", data["type"] ?: data["notification_type"])
+                        putExtra("chat_body", body)
+                        listOf(
+                            "employer_notification", "phone", "phone_number", "sender_phone",
+                            "audience", "conversation_id", "phone_number_id", "account_id",
+                            "sender_id", "messages", "sender_name", "ai_reply"
+                        ).forEach { key -> data[key]?.let { putExtra(key, it) } }
+                    } else if (isInternalWorklyChat) {
+                        putExtra("conversation_id", internalConversationId)
+                    }
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK
                 }
                 val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
@@ -541,7 +560,7 @@ object NativePushManager {
                     .setPerson(Person.Builder().setName(title).build())
                     // Associate the dynamic shortcut with the actual resizable bubble Activity.
                     // Without this, Android may publish the shortcut but fail to open its chat surface.
-                    .setActivity(android.content.ComponentName(context, ChatBubbleActivity::class.java))
+                    .setActivity(android.content.ComponentName(context, bubbleActivityClass))
                     .setLongLived(true)
                     .build()
                 runCatching { ShortcutManagerCompat.pushDynamicShortcut(context, shortcut) }
