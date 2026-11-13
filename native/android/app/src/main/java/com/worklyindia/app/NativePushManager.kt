@@ -503,7 +503,8 @@ object NativePushManager {
             builder.setLargeIcon(incomingAvatar)
             val chatUrl = notificationUrl ?: "https://worklyindia.devs.surf/"
             // A bubble is only for a real, deep-linked conversation notification.
-            // Never turn generic/ambiguous alerts into a bubble that opens the site home page.
+            // The notification card tap remains MainActivity -> website chat route.
+            // Only Android's dedicated bubble affordance launches ChatBubbleActivity.
             val chatPath = runCatching { Uri.parse(chatUrl).path.orEmpty() }.getOrDefault("")
             val hasConversationDestination =
                 notificationUrl != null &&
@@ -511,11 +512,6 @@ object NativePushManager {
                  chatPath.startsWith("/owner-portal/whatsapp/chat") ||
                  chatPath.startsWith("/chat/") ||
                  chatPath.startsWith("/messages/"))
-            if (hasConversationDestination) {
-                // Tapping the notification card or its Open chat action should
-                // enter the same in-app conversation surface as the bubble.
-                builder.setContentIntent(bubbleActivityPendingIntent(chatUrl, tag.hashCode()))
-            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasConversationDestination) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
@@ -663,11 +659,7 @@ object NativePushManager {
                 builder.addAction(
                     android.R.drawable.ic_menu_view,
                     platformActionLabel,
-                    if (hasConversationDestination) {
-                        bubbleActivityPendingIntent(chatUrl, tag.hashCode() + 1)
-                    } else {
-                        activityPendingIntent(chatUrl, tag.hashCode() + 1)
-                    }
+                    activityPendingIntent(chatUrl, tag.hashCode() + 1)
                 )
             }
             builder.addAction(
