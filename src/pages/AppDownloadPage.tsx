@@ -49,6 +49,7 @@ export default function AppDownloadPage() {
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [screenshots, setScreenshots] = useState<DownloadScreenshot[]>([]);
+  const [appIconUrl, setAppIconUrl] = useState("");
 
   const loadPublicRelease = async () => {
     setLoading(true);
@@ -88,6 +89,17 @@ export default function AppDownloadPage() {
   };
 
   useEffect(() => { void loadPublicRelease(); }, []);
+
+  useEffect(() => {
+    let active = true;
+    supabase.functions.invoke("egress-optimizer", { body: { action: "get-app-download-icon" } })
+      .then(({ data, error: fetchError }) => {
+        if (fetchError) throw fetchError;
+        if (active && data?.success && data.icon?.url) setAppIconUrl(data.icon.url);
+      })
+      .catch((err) => console.warn("Custom app icon is not available:", err));
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -163,9 +175,9 @@ export default function AppDownloadPage() {
           <section className="pt-7 sm:pt-10">
             <div className="flex items-start gap-4 sm:gap-6">
               <img
-                src="/icons/icon-512x512.png"
+                src={appIconUrl || "/icons/icon-512x512.png"}
                 alt="Workly India app icon"
-                className="h-24 w-24 shrink-0 aspect-square overflow-hidden rounded-[1.35rem] border border-border !bg-white object-contain p-0 shadow-sm sm:h-32 sm:w-32"
+                className="h-24 w-24 shrink-0 aspect-square overflow-hidden rounded-[1.35rem] border border-border !bg-white object-cover p-0 shadow-sm sm:h-32 sm:w-32"
                 style={{ backgroundColor: "#ffffff", colorScheme: "only light" }}
               />
               <div className="min-w-0 flex-1">

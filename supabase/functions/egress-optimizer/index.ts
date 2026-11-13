@@ -514,6 +514,49 @@ async function handleAppDownloadScreenshots(req: Request, body: any): Promise<Re
   return json({ success: false, error: "Unknown screenshot action." }, 400);
 }
 
+
+/* Owner-managed square app icon stored in Cloudflare R2. */
+const APP_DOWNLOAD_ICON_KEY = "app_download_icon";
+async function handleAppDownloadIcon(req: Request, body: any): Promise<Response> {
+  const admin = adminClient();
+  const readCurrent = async () => {
+    const { data, error } = await admin.from("app_settings").select("setting_value").eq("setting_key", APP_DOWNLOAD_ICON_KEY).maybeSingle();
+    if (error) throw error;
+    if (!data?.setting_value) return null;
+    try { const parsed = typeof data.setting_value === "string" ? JSON.parse(data.setting_value) : data.setting_value; return parsed && typeof parsed.url === "string" && typeof parsed.key === "string" ? parsed : null; } catch { return null; }
+  };
+  if (body.action === "get-app-download-icon") return json({ success: true, icon: await readCurrent() });
+  if (!(await isOwnerOrAdmin(req))) return json({ success: false, error: "Unauthorized" }, 401);
+  const previous = await readCurrent();
+  const r2 = await r2Client();
+  const objectUrl = (key: string) => `https://${r2.accountId}.r2.cloudflarestorage.com/${r2.bucket}/${key}`;
+  const removeOld = async (item: any) => {
+    if (!item?.key || !String(item.key).startsWith("app-download-icons/")) return;
+    const res = await r2.client.fetch(new Request(objectUrl(item.key), { method: "DELETE" }));
+    if (!res.ok && res.status !== 404) throw new Error("Old app icon could not be deleted from Cloudflare R2.");
+  };
+  if (body.action === "set-app-download-icon") {
+    if (typeof body.file !== "string") return json({ success: false, error: "Cropped app icon is required." }, 400);
+    const image = decodeBannerImage(body.file);
+    if (image.bytes.length > 5 * 1024 * 1024) return json({ success: false, error: "Cropped app icon is too large." }, 400);
+    const key = `app-download-icons/icon-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${image.extension}`;
+    const uploaded = await r2.client.fetch(new Request(objectUrl(key), { method: "PUT", body: new Blob([image.bytes], { type: image.contentType }), headers: { "Content-Type": image.contentType, "Cache-Control": "public, max-age=31536000, immutable" } }));
+    if (!uploaded.ok) throw new Error(`Cloudflare R2 app icon upload failed [${uploaded.status}].`);
+    const next = { key, url: `${r2.publicUrl}/${key}` };
+    const { error } = await admin.from("app_settings").upsert({ setting_key: APP_DOWNLOAD_ICON_KEY, setting_value: JSON.stringify(next), description: "Square-cropped app icon displayed on the public Android app download page" }, { onConflict: "setting_key" });
+    if (error) { await r2.client.fetch(new Request(objectUrl(key), { method: "DELETE" })); throw error; }
+    if (previous) await removeOld(previous);
+    return json({ success: true, icon: next });
+  }
+  if (body.action === "delete-app-download-icon") {
+    const { error } = await admin.from("app_settings").delete().eq("setting_key", APP_DOWNLOAD_ICON_KEY);
+    if (error) throw error;
+    if (previous) await removeOld(previous);
+    return json({ success: true, icon: null });
+  }
+  return json({ success: false, error: "Unknown app icon action." }, 400);
+}
+
 // ===================== egress analysis (original) =====================
 interface EgressAnalysis {
   category: string;
@@ -1471,6 +1514,10 @@ Deno.serve(async (req) => {
       if (body && typeof body === 'object' && ['get-app-download-screenshots', 'set-app-download-screenshot', 'delete-app-download-screenshot'].includes(String(body.action))) {
         try { return await handleAppDownloadScreenshots(req, body); }
         catch (e) { return json({ success: false, error: e instanceof Error ? e.message : 'Screenshot operation failed' }, (e as any)?.status || 500); }
+      }
+      if (body && typeof body === 'object' && ['get-app-download-icon', 'set-app-download-icon', 'delete-app-download-icon'].includes(String(body.action))) {
+        try { return await handleAppDownloadIcon(req, body); }
+        catch (err) { return json({ success: false, error: err instanceof Error ? err.message : 'App icon operation failed' }, (err as any)?.status || 500); }
       }
       if (body && typeof body === 'object' && (['r2-upload-media', 'r2-delete-media'].includes(String(body.action)) || String(body.action).startsWith('r2-media-upload-'))) {
         return await handleR2Media(req, body);
