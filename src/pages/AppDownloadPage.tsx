@@ -192,7 +192,7 @@ export default function AppDownloadPage() {
               <div className="px-2">
                 <Globe2 className="mx-auto h-5 w-5 text-[#aab4c0]" />
                 <p className="mt-1 text-sm font-semibold">India</p>
-                <p className="text-xs text-[#aab4c0]">Focus</p>
+                <p className="text-xs text-[#aab4c0]">Country</p>
               </div>
             </div>
 
@@ -209,7 +209,7 @@ export default function AppDownloadPage() {
             {release && downloadUrl && (
               <div className="mt-3 flex w-full min-w-0 items-center justify-between gap-1 overflow-hidden whitespace-nowrap border-y border-[#2b3440] py-3 text-[10px] text-[#c0cad5] sm:text-sm">
                 <span className="shrink-0 font-semibold text-[#f1f5f9]">Version {release.version_name}</span>
-                <span className="shrink-0">{formatSize(release.apk_size_bytes)}</span>
+                <span className="shrink-0">Size {formatSize(release.apk_size_bytes)}</span>
                 {release.published_at && <span className="shrink-0">Updated {new Date(release.published_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>}
               </div>
             )}
