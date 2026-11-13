@@ -487,11 +487,17 @@ object NativePushManager {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
-                val bubbleIntent = Intent(context, ChatBubbleActivity::class.java).apply {
+                val isNativeWorklyConversation = isInternalWorklyChat &&
+                    data["conversation_id"]?.matches(Regex("(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")) == true
+                val bubbleIntent = Intent(
+                    context,
+                    if (isNativeWorklyConversation) NativeChatBubbleActivity::class.java else ChatBubbleActivity::class.java
+                ).apply {
                     action = Intent.ACTION_VIEW
                     this.data = Uri.parse(chatUrl)
                     putExtra("chat_url", chatUrl)
                     putExtra("chat_title", title)
+                    if (isNativeWorklyConversation) putExtra("conversation_id", data["conversation_id"])
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
                 val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
