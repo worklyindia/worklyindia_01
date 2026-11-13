@@ -48,6 +48,8 @@ const BrandManagement = () => {
   const [currentPwaField, setCurrentPwaField] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [downloadAppIcon, setDownloadAppIcon] = useState<{ url: string; key: string } | null>(null);
+  const [downloadAppIconBusy, setDownloadAppIconBusy] = useState(false);
   const [brandAssets, setBrandAssets] = useState<BrandAssets>({
     brand_name: BRAND_CONFIG.name,
     brand_tagline: BRAND_CONFIG.tagline,
@@ -67,7 +69,28 @@ const BrandManagement = () => {
   useEffect(() => {
     fetchBrandAssets();
     fetchPwaSettings();
+    void loadDownloadAppIcon();
   }, []);
+
+  const loadDownloadAppIcon = async () => {
+    const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'get-app-download-icon' } });
+    if (error) { toast.error('Download app icon could not be loaded: ' + error.message); return; }
+    setDownloadAppIcon(data?.success && data.icon?.url ? data.icon : null);
+  };
+
+  const removeDownloadAppIcon = async () => {
+    if (!downloadAppIcon || !window.confirm('Remove the custom download app icon from Cloudflare? The website will use its default app icon.')) return;
+    setDownloadAppIconBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'delete-app-download-icon' } });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'App icon removal failed.');
+      setDownloadAppIcon(null);
+      toast.success('Download app icon removed from Cloudflare.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'App icon removal failed.');
+    } finally { setDownloadAppIconBusy(false); }
+  };
 
   // If the browser remounted this page while the photo picker was open,
   // restore the image the user already selected instead of losing it.
@@ -219,6 +242,19 @@ const BrandManagement = () => {
     const toastId = toast.loading(`Uploading ${fieldName.replace(/_/g, ' ')}…`);
 
     try {
+      if (pwaField === 'download_app_icon') {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Cropped app icon could not be read.'));
+          reader.onerror = () => reject(new Error('Cropped app icon could not be read.'));
+          reader.readAsDataURL(croppedFile);
+        });
+        const { data, error } = await supabase.functions.invoke('egress-optimizer', { body: { action: 'set-app-download-icon', file: dataUrl } });
+        if (error) throw error;
+        if (!data?.success || !data.icon?.url) throw new Error(data?.error || 'Cloudflare app icon upload failed.');
+        setDownloadAppIcon(data.icon);
+        toast.success('Download app icon uploaded to Cloudflare and saved.', { id: toastId });
+      } else {
       const fileToUpload = pwaField === 'notification_badge_icon'
         ? await toNotificationSilhouette(croppedFile)
         : await compressForUpload(croppedFile);
@@ -251,8 +287,10 @@ const BrandManagement = () => {
         toast.success(`${pwaField.replace(/_/g, ' ')} updated & saved`, { id: toastId });
       }
 
+      }
+
       // Only now remove the previous file (best effort — never block the update)
-      if (oldUrl) {
+      if (oldUrl && pwaField !== 'download_app_icon') {
         try { await cleanupBrandAsset(oldUrl); } catch { /* ignore */ }
       }
 
@@ -770,6 +808,33 @@ const BrandManagement = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Website Android download icon — stored in Cloudflare R2 */}
+              <div className="mb-6 rounded-xl border p-4 sm:p-5">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-white shadow-sm" style={{ backgroundColor: '#fff', colorScheme: 'only light' }}>
+                    <img src={downloadAppIcon?.url || '/icons/icon-512x512.png'} alt="Website Android download app icon" className="h-full w-full rounded-xl object-cover" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Label className="text-sm font-semibold">Website Android Download App Icon</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Public website download page par dikhne wala app icon. Square crop (1:1) select karein; 512 × 512 PNG Cloudflare R2 par save hoga aur rounded-square white tile mein dikhega.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button type="button" size="sm" disabled={downloadAppIconBusy || !!uploadingField} onClick={() => {
+                        const picker = document.createElement('input');
+                        picker.type = 'file';
+                        picker.accept = 'image/png,image/jpeg,image/webp,image/avif';
+                        picker.onchange = () => { const file = picker.files?.[0]; if (file) handlePwaImageSelect(file, 'download_app_icon'); };
+                        picker.click();
+                      }}>
+                        {downloadAppIconBusy || uploadingField === 'download_app_icon' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                        {downloadAppIcon ? 'Replace App Icon' : 'Upload App Icon'}
+                      </Button>
+                      {downloadAppIcon && <Button type="button" size="sm" variant="destructive" disabled={downloadAppIconBusy || !!uploadingField} onClick={() => void removeDownloadAppIcon()}><X className="mr-2 h-4 w-4" />Remove</Button>}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">PNG, JPG, WEBP or AVIF · Maximum 10 MB · Upload, replace and remove are handled through Cloudflare.</p>
+                  </div>
+                </div>
+              </div>
+
               {/* App Icon Upload */}
               <div>
                 <Label className="text-sm font-medium">App Icon (512x512)</Label>
@@ -958,7 +1023,7 @@ const BrandManagement = () => {
         aspectRatio={
           currentFieldType === 'logo_url' || currentFieldType === 'favicon_url' || currentPwaField === 'notification_badge_icon' ? 1 :
           currentFieldType === 'og_image_url' ? 1.91 :
-          currentPwaField === 'pwa_app_icon' ? 1 :
+          currentPwaField === 'pwa_app_icon' || currentPwaField === 'download_app_icon' ? 1 :
           currentPwaField === 'pwa_feature_graphic' ? 16/9 :
           currentPwaField?.includes('screenshot') ? 9/16 :
           undefined
@@ -970,7 +1035,7 @@ const BrandManagement = () => {
           currentFieldType === 'logo_url' ? { width: 512, height: 512 } :
           currentFieldType === 'favicon_url' ? { width: 192, height: 192 } :
           currentPwaField === 'notification_badge_icon' ? { width: 144, height: 144 } :
-          currentPwaField === 'pwa_app_icon' ? { width: 512, height: 512 } :
+          currentPwaField === 'pwa_app_icon' || currentPwaField === 'download_app_icon' ? { width: 512, height: 512 } :
           currentPwaField?.includes('screenshot') ? { width: 540, height: 960 } :
           currentPwaField === 'pwa_feature_graphic' ? { width: 1024, height: 576 } :
           undefined
@@ -979,6 +1044,7 @@ const BrandManagement = () => {
           currentFieldType === 'favicon_url' ? 'Crop Favicon' :
           currentPwaField === 'notification_badge_icon' ? 'Crop Notification Icon' :
           currentFieldType === 'og_image_url' ? 'Crop for Social Media (1.91:1)' :
+          currentPwaField === 'download_app_icon' ? 'Crop Download App Icon (512x512)' :
           currentPwaField === 'pwa_app_icon' ? 'Crop App Icon (512x512)' :
           currentPwaField === 'pwa_feature_graphic' ? 'Crop Feature Graphic (1024x576)' :
           currentPwaField?.includes('screenshot') ? 'Crop Screenshot (540x960)' :
