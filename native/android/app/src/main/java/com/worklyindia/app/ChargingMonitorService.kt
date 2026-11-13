@@ -90,6 +90,13 @@ class ChargingMonitorService : Service() {
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
                 registerBatteryReceiver()
                 readCurrentBatteryState()
+                // POWER_CONNECTED is authoritative even if Android's sticky
+                // battery snapshot still says "not charging". Read the live
+                // capacity and play the pending start clip immediately below 100%.
+                val connectedPercent = getCurrentBatteryPercent()
+                if (connectedPercent in 0..99) {
+                    playChargingStartAnnouncementOnce(connectedPercent)
+                }
                 return START_STICKY
             }
             ACTION_POWER_DISCONNECTED -> {
@@ -100,18 +107,10 @@ class ChargingMonitorService : Service() {
                 stopFullChargeVoice()
                 stopAlertAlarm()
                 getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
-                // Only announce unplug when the live battery level is below 100%.
-                // A full battery is intentionally silent when the charger is removed.
+                // Every genuine unplug edge plays the disconnect clip once,
+                // including when the battery reached 100% before unplugging.
                 val unplugPercent = getCurrentBatteryPercent()
-                if (unplugPercent in 0..99) {
-                    playChargingStoppedAnnouncementOnce(unplugPercent)
-                } else {
-                    android.util.Log.i(TAG, "Charging-stopped audio skipped at unplug: battery=$unplugPercent%")
-                    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                        .putBoolean(KEY_DISCONNECT_ANNOUNCED, true)
-                        .putBoolean(KEY_LAST_CHARGING_STATE, false)
-                        .commit()
-                }
+                playChargingStoppedAnnouncementOnce(unplugPercent)
                 resetChargeCycleAndStopAlert()
                 // Do not process the sticky BATTERY_CHANGED snapshot here: some
                 // devices briefly return the pre-unplug "charging" state. The
@@ -186,12 +185,9 @@ class ChargingMonitorService : Service() {
             // and stop the alarm/voice as well as the alert notification.
             if (wasCharging) {
                 sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
-                if (percent in 0..99) {
-                    playChargingStoppedAnnouncementOnce(percent)
-                } else {
-                    android.util.Log.i(TAG, "Charging-stopped audio skipped on battery-state transition: battery=$percent%")
-                    prefs.edit().putBoolean(KEY_DISCONNECT_ANNOUNCED, true).commit()
-                }
+                // Fallback for OEMs that omit POWER_DISCONNECTED: keep the
+                // same one-shot disconnect announcement at every battery level.
+                playChargingStoppedAnnouncementOnce(percent)
                 resetChargeCycleAndStopAlert()
             } else {
                 prefs.edit().putBoolean(KEY_LAST_CHARGING_STATE, false).apply()
@@ -208,7 +204,7 @@ class ChargingMonitorService : Service() {
         } else if (charging && percent in 0..99) {
             playChargingStartAnnouncementOnce(percent)
         }
-        if (charging && percent >= 100) {
+        if (charging && (percent >= 100 || status == BatteryManager.BATTERY_STATUS_FULL)) {
             showChargeCompleteAlert()
         }
         // Do not reset the charge cycle from a possibly stale BATTERY_CHANGED
@@ -251,20 +247,13 @@ class ChargingMonitorService : Service() {
         ) return
 
         runCatching {
-            val player = MediaPlayer.create(applicationContext, R.raw.charging_started)
-                ?: throw IllegalStateException("Could not load bundled charging-start audio")
-            chargingStartPlayer = player
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_started, AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+                    .build(), 0)
+                ?: throw IllegalStateException("Could not load bundled charging-start audio")
+            chargingStartPlayer = player
             player.setOnCompletionListener { completed ->
-                prefs.edit()
-                    .putBoolean(KEY_STARTED_ANNOUNCED, true)
-                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
-                    .apply()
                 android.util.Log.i(TAG, "Bundled charging-start audio completed")
                 completed.release()
                 if (chargingStartPlayer === completed) chargingStartPlayer = null
@@ -279,6 +268,15 @@ class ChargingMonitorService : Service() {
                 failed.release()
                 if (chargingStartPlayer === failed) chargingStartPlayer = null
                 true
+            }
+            // Persist the per-charge-cycle guard before playback starts. If Android
+            // restarts the service while the clip is playing, it cannot replay it.
+            if (!prefs.edit()
+                    .putBoolean(KEY_STARTED_ANNOUNCED, true)
+                    .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                    .commit()
+            ) {
+                throw IllegalStateException("Could not persist charging-start playback guard")
             }
             player.start()
             android.util.Log.i(TAG, "Bundled charging-start MP3 playback started")
@@ -364,15 +362,12 @@ class ChargingMonitorService : Service() {
         if (fullChargeVoicePlayer?.isPlaying == true) return
         stopFullChargeVoice()
         runCatching {
-            val player = MediaPlayer.create(applicationContext, R.raw.battery_fully_charged)
-                ?: throw IllegalStateException("Could not load bundled full-charge audio")
-            fullChargeVoicePlayer = player
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
+            val player = MediaPlayer.create(applicationContext, R.raw.battery_fully_charged, AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+                    .build(), 0)
+                ?: throw IllegalStateException("Could not load bundled full-charge audio")
+            fullChargeVoicePlayer = player
             player.isLooping = true
             player.setOnErrorListener { failed, what, extra ->
                 android.util.Log.e(TAG, "Full-charge voice failed: what=$what extra=$extra")
@@ -413,12 +408,9 @@ class ChargingMonitorService : Service() {
         return if (level >= 0) (level * 100 / scale) else -1
     }
 
-    /** Plays the disconnect MP3 once only when the unplug battery level is 0–99%. */
+    /** Plays the disconnect MP3 once for every genuine unplug, at any battery level. */
     private fun playChargingStoppedAnnouncementOnce(percent: Int) {
-        if (percent !in 0..99) {
-            android.util.Log.i(TAG, "Charging-stopped audio skipped: battery=$percent%")
-            return
-        }
+        android.util.Log.i(TAG, "Handling charging-stopped audio at unplug battery=$percent%")
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_DISCONNECT_ANNOUNCED, false)) {
             android.util.Log.i(TAG, "Charging-stopped audio skipped: already announced for this unplug")
@@ -432,15 +424,12 @@ class ChargingMonitorService : Service() {
             .commit()
         stopChargingStoppedPlayback()
         runCatching {
-            val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped)
-                ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
-            chargingStoppedPlayer = player
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_stopped, AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
+                    .build(), 0)
+                ?: throw IllegalStateException("Could not load bundled charging-stopped audio")
+            chargingStoppedPlayer = player
             player.setOnCompletionListener { completed ->
                 completed.release()
                 if (chargingStoppedPlayer === completed) chargingStoppedPlayer = null
