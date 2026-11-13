@@ -8,8 +8,6 @@ import android.webkit.WebViewClient
 import android.graphics.Color
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.TextView
-import android.view.Gravity
 import android.view.View
 import android.net.Uri
 
@@ -27,7 +25,14 @@ class ChatBubbleActivity : Activity() {
                 it.userInfo == null
         }?.toString() ?: "https://worklyindia.devs.surf/notifications"
 
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
+        val density = resources.displayMetrics.density
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.WHITE)
+            // Keep the bottom of the web page clear of the bubble's rounded edge/system controls.
+            // Shrinking the WebView viewport also moves fixed-position message composers upward.
+            setPadding(0, 0, 0, (16 * density).toInt())
+            clipToPadding = true
+        }
         val webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
