@@ -99,7 +99,7 @@ export default function AndroidAppUpdates() {
     if (!image || !cropSource || !iconCrop.width || !iconCrop.height) return;
     setIconBusy(true);
     try {
-      const pixelCrop = convertToPixelCrop(iconCrop, image.width, image.height);
+      const pixelCrop = convertToPixelCrop(iconCrop, image.naturalWidth, image.naturalHeight);
       const canvas = document.createElement("canvas"); canvas.width = 512; canvas.height = 512;
       const context = canvas.getContext("2d");
       if (!context) throw new Error("Image crop could not be prepared.");
