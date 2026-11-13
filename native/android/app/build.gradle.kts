@@ -19,16 +19,7 @@ android {
     flavorDimensions += "distribution"
     productFlavors {
         create("playStore") { dimension = "distribution" }
-        create("website") {
-            dimension = "distribution"
-            // Most Android phones use ARM. Keep both 64-bit and 32-bit ARM
-            // for broad phone compatibility, but omit x86/x86_64 from the
-            // directly downloadable website APK to avoid bundling unused JNI
-            // copies of the video/OCR SDKs. Play Store flavor remains unchanged.
-            ndk {
-                abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
-            }
-        }
+        create("website") { dimension = "distribution" }
     }
 
     defaultConfig {
