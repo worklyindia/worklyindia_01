@@ -434,6 +434,86 @@ async function handleMediaCdn(body: any): Promise<Response> {
   }
 }
 
+
+/* App download screenshots are served from Cloudflare R2. The public action is read-only;
+   every upload/delete is verified against the signed-in Owner/Admin account. */
+const APP_DOWNLOAD_SHOTS_KEY = "app_download_screenshots";
+async function handleAppDownloadScreenshots(req: Request, body: any): Promise<Response> {
+  const admin = adminClient();
+  const readCurrent = async () => {
+    const { data, error } = await admin.from("app_settings").select("setting_value")
+      .eq("setting_key", APP_DOWNLOAD_SHOTS_KEY).maybeSingle();
+    if (error) throw error;
+    const raw = data?.setting_value;
+    if (!raw) return [];
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed)
+        ? parsed.filter((x: any) => x && [1, 2, 3].includes(Number(x.slot)) && typeof x.url === "string" && typeof x.key === "string")
+        : [];
+    } catch { return []; }
+  };
+
+  if (body.action === "get-app-download-screenshots") {
+    return json({ success: true, screenshots: (await readCurrent()).sort((a: any, b: any) => a.slot - b.slot) });
+  }
+
+  if (!(await isOwnerOrAdmin(req))) return json({ success: false, error: "Unauthorized" }, 401);
+  const slot = Number(body.slot);
+  if (![1, 2, 3].includes(slot)) return json({ success: false, error: "Screenshot slot must be 1, 2 or 3." }, 400);
+
+  const current = await readCurrent();
+  const previous = current.find((item: any) => Number(item.slot) === slot);
+  const r2 = await r2Client();
+  const objectUrl = (key: string) => `https://${r2.accountId}.r2.cloudflarestorage.com/${r2.bucket}/${key}`;
+  const removeOld = async (item: any) => {
+    if (!item?.key || !String(item.key).startsWith("app-download-screenshots/")) return;
+    const res = await r2.client.fetch(new Request(objectUrl(item.key), { method: "DELETE" }));
+    if (!res.ok && res.status !== 404) throw new Error("Old screenshot could not be deleted from Cloudflare R2.");
+  };
+
+  if (body.action === "set-app-download-screenshot") {
+    if (typeof body.file !== "string") return json({ success: false, error: "Image file is required." }, 400);
+    const image = decodeBannerImage(body.file);
+    const key = `app-download-screenshots/screenshot-${slot}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${image.extension}`;
+    const uploaded = await r2.client.fetch(new Request(objectUrl(key), {
+      method: "PUT",
+      body: new Blob([image.bytes], { type: image.contentType }),
+      headers: { "Content-Type": image.contentType, "Cache-Control": "public, max-age=31536000, immutable" },
+    }));
+    if (!uploaded.ok) throw new Error(`Cloudflare R2 upload failed [${uploaded.status}].`);
+
+    const next = [...current.filter((item: any) => Number(item.slot) !== slot), { slot, key, url: `${r2.publicUrl}/${key}` }]
+      .sort((a: any, b: any) => a.slot - b.slot);
+    const { error } = await admin.from("app_settings").upsert({
+      setting_key: APP_DOWNLOAD_SHOTS_KEY,
+      setting_value: JSON.stringify(next),
+      description: "Cloudflare R2 screenshots displayed on the public Android app download page",
+    }, { onConflict: "setting_key" });
+    if (error) {
+      await r2.client.fetch(new Request(objectUrl(key), { method: "DELETE" }));
+      throw error;
+    }
+    if (previous) await removeOld(previous);
+    return json({ success: true, screenshots: next });
+  }
+
+  if (body.action === "delete-app-download-screenshot") {
+    if (!previous) return json({ success: true, screenshots: current });
+    const next = current.filter((item: any) => Number(item.slot) !== slot);
+    const { error } = await admin.from("app_settings").upsert({
+      setting_key: APP_DOWNLOAD_SHOTS_KEY,
+      setting_value: JSON.stringify(next),
+      description: "Cloudflare R2 screenshots displayed on the public Android app download page",
+    }, { onConflict: "setting_key" });
+    if (error) throw error;
+    await removeOld(previous);
+    return json({ success: true, screenshots: next });
+  }
+
+  return json({ success: false, error: "Unknown screenshot action." }, 400);
+}
+
 // ===================== egress analysis (original) =====================
 interface EgressAnalysis {
   category: string;
@@ -1387,6 +1467,10 @@ Deno.serve(async (req) => {
         if (!(await isOwnerOrAdmin(req))) return json({ success: false, error: 'Unauthorized' }, 401);
         try { return await runLoginImages(body); }
         catch (e) { return json({ ok: false, error: e instanceof Error ? e.message : 'Login image failed' }, (e as any)?.status || 500); }
+      }
+      if (body && typeof body === 'object' && ['get-app-download-screenshots', 'set-app-download-screenshot', 'delete-app-download-screenshot'].includes(String(body.action))) {
+        try { return await handleAppDownloadScreenshots(req, body); }
+        catch (e) { return json({ success: false, error: e instanceof Error ? e.message : 'Screenshot operation failed' }, (e as any)?.status || 500); }
       }
       if (body && typeof body === 'object' && (['r2-upload-media', 'r2-delete-media'].includes(String(body.action)) || String(body.action).startsWith('r2-media-upload-'))) {
         return await handleR2Media(req, body);
