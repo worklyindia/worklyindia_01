@@ -1511,7 +1511,7 @@ Deno.serve(async (req) => {
         try { return await runLoginImages(body); }
         catch (e) { return json({ ok: false, error: e instanceof Error ? e.message : 'Login image failed' }, (e as any)?.status || 500); }
       }
-      if (body && typeof body === 'object' && ['get-app-download-screenshots', 'set-app-download-screenshot', 'delete-app-download-screenshot', 'get-app-download-icon', 'set-app-download-icon', 'delete-app-download-icon'].includes(String(body.action))) {
+      if (body && typeof body === 'object' && ['get-app-download-screenshots', 'set-app-download-screenshot', 'delete-app-download-screenshot'].includes(String(body.action))) {
         try { return await handleAppDownloadScreenshots(req, body); }
         catch (e) { return json({ success: false, error: e instanceof Error ? e.message : 'Screenshot operation failed' }, (e as any)?.status || 500); }
       }
