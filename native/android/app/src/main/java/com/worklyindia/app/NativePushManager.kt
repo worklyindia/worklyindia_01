@@ -511,6 +511,19 @@ object NativePushManager {
 
         val isChatNotification = isSocialInboxNotification || isInternalWorklyChat || isChatMessageEvent
 
+        // If the payload is misclassified as an ordinary notification, record that
+        // reason too; otherwise the exact failure path would never reach Bubble code.
+        if (!isChatNotification) {
+            val skippedDiagnostic = "social=$isSocialInboxNotification internal=$isInternalWorklyChat " +
+                "chatEvent=$isChatMessageEvent eventTypes=${chatEventText.take(160)} " +
+                "urlPresent=${!notificationUrl.isNullOrBlank()} sdk=${Build.VERSION.SDK_INT}"
+            android.util.Log.i("WorklyPush", "Bubble skipped before chat branch: $skippedDiagnostic")
+            AppErrorReporter.capture(
+                context, "bubble", "warning", "BubbleClassificationSkipped",
+                skippedDiagnostic, source = "bubble"
+            )
+        }
+
         if (isChatNotification) {
             // Preserve sender-photo behavior for conversations; only ordinary
             // Workly update notifications use the Workly launcher logo above.
