@@ -523,7 +523,17 @@ object NativePushManager {
                  chatPath.contains("/messages/") ||
                  chatPath.contains("/inbox/") ||
                  chatPath.contains("/social-inbox"))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasConversationDestination) {
+            // Social inbox and authenticated Workly conversations already carry
+            // enough identity to open their native conversation surface. Do not
+            // suppress their Android bubble merely because the push payload's
+            // website URL points to a generic notifications page or another
+            // valid route. Keep path validation for generic chat-like events.
+            val hasBubbleConversationIdentity =
+                isSocialInboxNotification || isInternalWorklyChat
+            val shouldPublishBubble =
+                hasBubbleConversationIdentity || (isChatMessageEvent && hasConversationDestination)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && shouldPublishBubble) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
                 // Social inbox bubbles use a fully native Activity. Normal notification
