@@ -18,6 +18,8 @@ export interface WorklyAndroidBridge {
   showExitHint?(): void;
   isBiometricLockEnabled?(): boolean;
   setBiometricLockEnabled?(enabled: boolean): boolean;
+  getChargingAlertSettings?(): string;
+  saveChargingAlertSettings?(chargingStart: boolean, chargerDisconnect: boolean, batteryFull: boolean, silentMode: boolean): boolean;
   scanResumeImage?(dataUrl: string): boolean;
 }
 

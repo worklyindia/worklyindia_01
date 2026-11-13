@@ -118,6 +118,10 @@ class ChargingMonitorService : Service() {
                 registerBatteryReceiver(processSticky = false)
                 return START_STICKY
             }
+            ACTION_SETTINGS_CHANGED -> {
+                applyAudioPreferences()
+                return START_STICKY
+            }
             ACTION_ACKNOWLEDGE -> {
                 acknowledgeAlert()
                 return START_STICKY
@@ -241,6 +245,11 @@ class ChargingMonitorService : Service() {
             return
         }
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!isSoundEnabled(KEY_START_ALERT_ENABLED)) {
+            prefs.edit().putBoolean(KEY_STARTED_ANNOUNCED, true)
+                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false).apply()
+            return
+        }
         if (!prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) ||
             prefs.getBoolean(KEY_STARTED_ANNOUNCED, false) ||
             chargingStartPlayer != null
@@ -351,14 +360,17 @@ class ChargingMonitorService : Service() {
             }
         }
 
-        // Do not let a disabled notification channel suppress the independent alarm sound.
+        // The full-charge notification/screen remains available even when its sound is disabled.
         prefs.edit().putBoolean(KEY_ALERTED, true).putBoolean(KEY_ACKNOWLEDGED, false).apply()
-        startAlarmLoop()
-        startFullChargeVoice()
+        if (isSoundEnabled(KEY_FULL_ALERT_ENABLED)) {
+            startAlarmLoop()
+            startFullChargeVoice()
+        }
     }
 
     /** Repeats the bundled 100% voice together with the device alarm until stopped. */
     private fun startFullChargeVoice() {
+        if (!isSoundEnabled(KEY_FULL_ALERT_ENABLED)) return
         if (fullChargeVoicePlayer?.isPlaying == true) return
         stopFullChargeVoice()
         runCatching {
@@ -412,6 +424,11 @@ class ChargingMonitorService : Service() {
     private fun playChargingStoppedAnnouncementOnce(percent: Int) {
         android.util.Log.i(TAG, "Handling charging-stopped audio at unplug battery=$percent%")
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!isSoundEnabled(KEY_DISCONNECT_ALERT_ENABLED)) {
+            prefs.edit().putBoolean(KEY_DISCONNECT_ANNOUNCED, true)
+                .putBoolean(KEY_LAST_CHARGING_STATE, false).apply()
+            return
+        }
         if (prefs.getBoolean(KEY_DISCONNECT_ANNOUNCED, false)) {
             android.util.Log.i(TAG, "Charging-stopped audio skipped: already announced for this unplug")
             return
@@ -464,6 +481,7 @@ class ChargingMonitorService : Service() {
     }
 
     private fun startAlarmLoop() {
+        if (!isSoundEnabled(KEY_FULL_ALERT_ENABLED)) return
         if (alertRingtone?.isPlaying == true) return
         stopAlertAlarm()
         runCatching {
@@ -495,9 +513,28 @@ class ChargingMonitorService : Service() {
 
     private fun resumeAlarmIfNeeded() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(KEY_ALERTED, false) && !prefs.getBoolean(KEY_ACKNOWLEDGED, false)) {
+        if (prefs.getBoolean(KEY_ALERTED, false) && !prefs.getBoolean(KEY_ACKNOWLEDGED, false) &&
+            isSoundEnabled(KEY_FULL_ALERT_ENABLED)
+        ) {
             startAlarmLoop()
             startFullChargeVoice()
+        }
+    }
+
+    private fun isSoundEnabled(key: String): Boolean {
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return !prefs.getBoolean(KEY_SILENT_MODE, false) && prefs.getBoolean(key, true)
+    }
+
+    /** Apply changed switches immediately without stopping battery monitoring or the full-charge UI. */
+    private fun applyAudioPreferences() {
+        if (!isSoundEnabled(KEY_START_ALERT_ENABLED)) stopChargingStartPlayback()
+        if (!isSoundEnabled(KEY_DISCONNECT_ALERT_ENABLED)) stopChargingStoppedPlayback()
+        if (!isSoundEnabled(KEY_FULL_ALERT_ENABLED)) {
+            stopAlertAlarm()
+            stopFullChargeVoice()
+        } else {
+            resumeAlarmIfNeeded()
         }
     }
 
@@ -646,6 +683,11 @@ class ChargingMonitorService : Service() {
         const val KEY_LAST_CHARGING_STATE = "last_charging_state"
         const val KEY_DISCONNECT_ANNOUNCED = "charging_disconnect_announced"
         const val KEY_TTS_UNAVAILABLE = "charging_offline_tts_unavailable"
+        const val KEY_START_ALERT_ENABLED = "charging_start_alert_enabled"
+        const val KEY_DISCONNECT_ALERT_ENABLED = "charging_disconnect_alert_enabled"
+        const val KEY_FULL_ALERT_ENABLED = "battery_full_alert_enabled"
+        const val KEY_SILENT_MODE = "silent_charging_mode"
+        const val ACTION_SETTINGS_CHANGED = "com.worklyindia.app.CHARGING_SETTINGS_CHANGED"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
         const val ACTION_ACKNOWLEDGE = "com.worklyindia.app.CHARGING_ALERT_ACKNOWLEDGE"
