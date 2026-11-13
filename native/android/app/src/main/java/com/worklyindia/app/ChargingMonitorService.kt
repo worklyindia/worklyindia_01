@@ -206,7 +206,7 @@ class ChargingMonitorService : Service() {
                 .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
                 .apply()
         } else if (charging && percent in 0..99) {
-            playChargingStartAnnouncementOnce()
+            playChargingStartAnnouncementOnce(percent)
         }
         if (charging && percent >= 100) {
             showChargeCompleteAlert()
@@ -234,7 +234,16 @@ class ChargingMonitorService : Service() {
      * Plays the bundled charging-start MP3 directly. No device TTS engine,
      * language pack, or network connection is required.
      */
-    private fun playChargingStartAnnouncementOnce() {
+    private fun playChargingStartAnnouncementOnce(percent: Int) {
+        // Defense in depth: never start the charging voice at 100% or when
+        // Android reports FULL, even if another caller reaches this method.
+        if (percent !in 0..99) {
+            android.util.Log.i(TAG, "Charging-start audio skipped: battery=$percent%")
+            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, false)
+                .apply()
+            return
+        }
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_START_ANNOUNCEMENT_PENDING, false) ||
             prefs.getBoolean(KEY_STARTED_ANNOUNCED, false) ||
