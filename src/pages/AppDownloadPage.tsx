@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Download, ShieldCheck, BriefcaseBusiness, MessageCircle, Video,
   RefreshCw, Smartphone, ChevronRight, ExternalLink, Globe2,
-  FileText, Users, CheckCircle2, Info
+  FileText, Users, Info
 } from "lucide-react";
 
 type PublicRelease = {
@@ -20,11 +20,8 @@ type PublicRelease = {
   is_published: boolean;
 };
 
-const screenshots = [
-  { src: "/screenshots/screenshot-1.webp", alt: "Workly India app job discovery screen", label: "Discover opportunities" },
-  { src: "/screenshots/screenshot-2.webp", alt: "Workly India career paths screen", label: "Explore career paths" },
-  { src: "/screenshots/feature-graphic.webp", alt: "Workly India app feature graphic", label: "Build your career" },
-];
+type DownloadScreenshot = { slot: number; url: string; key: string };
+
 
 const formatSize = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "Not provided";
@@ -51,6 +48,7 @@ export default function AppDownloadPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [preparing, setPreparing] = useState(false);
+  const [screenshots, setScreenshots] = useState<DownloadScreenshot[]>([]);
 
   const loadPublicRelease = async () => {
     setLoading(true);
@@ -90,6 +88,19 @@ export default function AppDownloadPage() {
   };
 
   useEffect(() => { void loadPublicRelease(); }, []);
+
+  useEffect(() => {
+    let active = true;
+    supabase.functions.invoke("egress-optimizer", { body: { action: "get-app-download-screenshots" } })
+      .then(({ data, error: fetchError }) => {
+        if (fetchError) throw fetchError;
+        if (active && data?.success && Array.isArray(data.screenshots)) {
+          setScreenshots(data.screenshots.filter((shot: DownloadScreenshot | null) => shot?.url));
+        }
+      })
+      .catch((e) => console.warn("App download screenshots are not available:", e));
+    return () => { active = false; };
+  }, []);
 
   const startDownload = () => {
     if (!downloadUrl || preparing) return;
@@ -132,19 +143,19 @@ export default function AppDownloadPage() {
         <meta property="og:description" content="Explore opportunities, connect with employers and manage your job search with Workly India." />
         <meta property="og:url" content="https://worklyindia.devs.surf/download" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://worklyindia.devs.surf/screenshots/feature-graphic.webp" />
+        <meta property="og:image" content="https://worklyindia.devs.surf/icons/icon-512x512.png" />
         <meta name="robots" content="index,follow" />
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
-      <main className="min-h-screen bg-white pb-24 text-[#202124] sm:pb-12">
-        <header className="border-b border-[#dadce0] bg-white">
+      <main className="min-h-screen bg-[#0b0f14] pb-24 text-[#f1f5f9] sm:pb-12">
+        <header className="border-b border-[#2b3440] bg-white">
           <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3 sm:px-6">
             <a href="/" aria-label="Workly India home" className="flex min-h-11 items-center gap-2">
               <img src="/icons/icon-192x192.png" alt="" className="h-8 w-8 rounded-lg object-cover" />
               <span className="text-lg font-semibold tracking-tight">Workly India</span>
             </a>
-            <span className="ml-auto text-sm text-[#5f6368]">App details</span>
+            <span className="ml-auto text-sm text-[#aab4c0]">App details</span>
           </div>
         </header>
 
@@ -154,78 +165,78 @@ export default function AppDownloadPage() {
               <img
                 src="/icons/icon-512x512.png"
                 alt="Workly India app icon"
-                className="h-24 w-24 shrink-0 rounded-[1.35rem] border border-[#dadce0] object-cover shadow-sm sm:h-32 sm:w-32"
+                className="h-24 w-24 shrink-0 rounded-[1.35rem] border border-[#2b3440] object-cover shadow-sm sm:h-32 sm:w-32"
               />
               <div className="min-w-0 flex-1">
                 <h1 className="text-[25px] font-semibold leading-tight tracking-tight sm:text-3xl">Workly India</h1>
-                <a href="/" className="mt-1 inline-block text-sm font-medium text-[#137c43] hover:underline">Workly India</a>
-                <p className="mt-1 text-sm text-[#5f6368]">Jobs, careers and employer connections</p>
+                <a href="/" className="mt-1 inline-block text-sm font-medium text-[#65d99a] hover:underline">Workly India</a>
+                <p className="mt-1 text-sm text-[#aab4c0]">Jobs, careers and employer connections</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="rounded-md border-[#dadce0] bg-white font-medium text-[#5f6368]">Official website</Badge>
-                  <Badge variant="outline" className="rounded-md border-[#dadce0] bg-white font-medium text-[#5f6368]">Android</Badge>
+                  <Badge variant="outline" className="rounded-md border-[#2b3440] bg-white font-medium text-[#aab4c0]">Official website</Badge>
+                  <Badge variant="outline" className="rounded-md border-[#2b3440] bg-white font-medium text-[#aab4c0]">Android</Badge>
                 </div>
               </div>
             </div>
 
-            <div className="mt-7 grid grid-cols-3 divide-x divide-[#dadce0] border-y border-[#dadce0] py-4 text-center">
+            <div className="mt-7 grid grid-cols-3 divide-x divide-[#dadce0] border-y border-[#2b3440] py-4 text-center">
               <div className="px-2">
-                <Smartphone className="mx-auto h-5 w-5 text-[#5f6368]" />
+                <Smartphone className="mx-auto h-5 w-5 text-[#aab4c0]" />
                 <p className="mt-1 text-sm font-semibold">Android</p>
-                <p className="text-xs text-[#5f6368]">Platform</p>
+                <p className="text-xs text-[#aab4c0]">Platform</p>
               </div>
               <div className="px-2">
-                <BriefcaseBusiness className="mx-auto h-5 w-5 text-[#5f6368]" />
+                <BriefcaseBusiness className="mx-auto h-5 w-5 text-[#aab4c0]" />
                 <p className="mt-1 text-sm font-semibold">Jobs</p>
-                <p className="text-xs text-[#5f6368]">App category</p>
+                <p className="text-xs text-[#aab4c0]">App category</p>
               </div>
               <div className="px-2">
-                <Globe2 className="mx-auto h-5 w-5 text-[#5f6368]" />
+                <Globe2 className="mx-auto h-5 w-5 text-[#aab4c0]" />
                 <p className="mt-1 text-sm font-semibold">India</p>
-                <p className="text-xs text-[#5f6368]">Focus</p>
+                <p className="text-xs text-[#aab4c0]">Focus</p>
               </div>
             </div>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="w-full sm:w-auto">{installButton}</div>
-              <p className="text-xs leading-5 text-[#5f6368]">Download is provided by the official Workly India website.</p>
+              
             </div>
-            {error && <div role="alert" className="mt-3 rounded-xl bg-[#fce8e6] p-3 text-sm text-[#b3261e]">{error}</div>}
+            {error && <div role="alert" className="mt-3 rounded-xl bg-[#3a1d20] p-3 text-sm text-[#ffb4ab]">{error}</div>}
             {!loading && !error && !release && (
-              <div className="mt-3 rounded-xl border border-[#f9ab00] bg-[#fef7e0] p-3 text-sm text-[#5f4b00]">
+              <div className="mt-3 rounded-xl border border-[#f9ab00] bg-[#332a12] p-3 text-sm text-[#f5d98e]">
                 The next Android release is not public yet. Please check again later.
               </div>
             )}
             {release && downloadUrl && (
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#5f6368]">
-                <span className="font-medium text-[#202124]">Version {release.version_name}</span>
-                <span>{formatSize(release.apk_size_bytes)}</span>
-                {release.published_at && <span>Updated {new Date(release.published_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>}
-                <span className="inline-flex items-center gap-1 text-[#137c43]"><CheckCircle2 className="h-3.5 w-3.5" />Public release</span>
+              <div className="mt-3 flex w-full min-w-0 items-center justify-between gap-1 overflow-hidden whitespace-nowrap border-y border-[#2b3440] py-3 text-[10px] text-[#c0cad5] sm:text-sm">
+                <span className="shrink-0 font-semibold text-[#f1f5f9]">Version {release.version_name}</span>
+                <span className="shrink-0">{formatSize(release.apk_size_bytes)}</span>
+                {release.published_at && <span className="shrink-0">Updated {new Date(release.published_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>}
               </div>
             )}
           </section>
 
-          <section className="mt-9">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Screenshots</h2>
-              <span className="text-xs text-[#5f6368]">App preview</span>
-            </div>
-            <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0">
-              {screenshots.map((shot) => (
-                <figure key={shot.src} className="w-[min(70vw,245px)] shrink-0 snap-start">
-                  <img src={shot.src} alt={shot.alt} loading="lazy" className="aspect-[9/16] w-full rounded-2xl border border-[#dadce0] bg-[#f8f9fa] object-cover" />
-                  <figcaption className="mt-2 text-sm text-[#5f6368]">{shot.label}</figcaption>
-                </figure>
-              ))}
-            </div>
-          </section>
+          {screenshots.length > 0 && (
+            <section className="mt-9">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-xl font-semibold">Screenshots</h2>
+                <span className="text-xs text-[#aab4c0]">App preview</span>
+              </div>
+              <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0">
+                {screenshots.map((shot) => (
+                  <figure key={shot.slot} className="w-[min(70vw,245px)] shrink-0 snap-start">
+                    <img src={shot.url} alt={`Workly India app screenshot ${shot.slot}`} loading="lazy" className="aspect-[9/16] w-full rounded-2xl border border-[#2b3440] bg-[#151c25] object-cover" />
+                  </figure>
+                ))}
+              </div>
+            </section>
+          )}
 
-          <section className="mt-8 border-t border-[#dadce0] pt-6">
+          <section className="mt-8 border-t border-[#2b3440] pt-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">About this app</h2>
-              <Info className="h-5 w-5 text-[#5f6368]" />
+              <Info className="h-5 w-5 text-[#aab4c0]" />
             </div>
-            <p className="mt-3 text-sm leading-7 text-[#3c4043]">
+            <p className="mt-3 text-sm leading-7 text-[#d3dbe5]">
               Workly India helps job seekers explore opportunities and stay connected with employers. Use the app to discover jobs, manage your job-search activity and communicate with employers from your Android device.
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -235,55 +246,49 @@ export default function AppDownloadPage() {
                 { icon: Video, title: "Interview conversations", detail: "Use supported video interview features when available." },
                 { icon: Users, title: "Manage your activity", detail: "Keep track of your job-search journey." },
               ].map(({ icon: Icon, title, detail }) => (
-                <div key={title} className="flex gap-3 rounded-xl bg-[#f8f9fa] p-3">
-                  <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#137c43]" />
-                  <div><h3 className="text-sm font-semibold">{title}</h3><p className="mt-1 text-xs leading-5 text-[#5f6368]">{detail}</p></div>
+                <div key={title} className="flex gap-3 rounded-xl bg-[#151c25] p-3">
+                  <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#65d99a]" />
+                  <div><h3 className="text-sm font-semibold">{title}</h3><p className="mt-1 text-xs leading-5 text-[#aab4c0]">{detail}</p></div>
                 </div>
               ))}
             </div>
             {release?.release_notes && (
-              <div className="mt-5 rounded-xl border border-[#dadce0] p-4">
+              <div className="mt-5 rounded-xl border border-[#2b3440] p-4">
                 <h3 className="text-sm font-semibold">What’s new</h3>
-                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#5f6368]">{release.release_notes}</p>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#aab4c0]">{release.release_notes}</p>
               </div>
             )}
           </section>
 
-          <section className="mt-8 border-t border-[#dadce0] pt-6">
+          <section className="mt-8 border-t border-[#2b3440] pt-6">
             <h2 className="text-xl font-semibold">App support and information</h2>
-            <div className="mt-3 divide-y divide-[#dadce0] rounded-xl border border-[#dadce0]">
-              <a href="/privacy" className="flex min-h-14 items-center gap-3 px-4 text-sm hover:bg-[#f8f9fa]">
-                <ShieldCheck className="h-5 w-5 text-[#5f6368]" /><span className="flex-1">Privacy policy</span><ExternalLink className="h-4 w-4 text-[#5f6368]" />
+            <div className="mt-3 divide-y divide-[#dadce0] rounded-xl border border-[#2b3440]">
+              <a href="/privacy" className="flex min-h-14 items-center gap-3 px-4 text-sm hover:bg-[#151c25]">
+                <ShieldCheck className="h-5 w-5 text-[#aab4c0]" /><span className="flex-1">Privacy policy</span><ExternalLink className="h-4 w-4 text-[#aab4c0]" />
               </a>
-              <a href="/terms-conditions" className="flex min-h-14 items-center gap-3 px-4 text-sm hover:bg-[#f8f9fa]">
-                <FileText className="h-5 w-5 text-[#5f6368]" /><span className="flex-1">Terms and conditions</span><ExternalLink className="h-4 w-4 text-[#5f6368]" />
+              <a href="/terms-conditions" className="flex min-h-14 items-center gap-3 px-4 text-sm hover:bg-[#151c25]">
+                <FileText className="h-5 w-5 text-[#aab4c0]" /><span className="flex-1">Terms and conditions</span><ExternalLink className="h-4 w-4 text-[#aab4c0]" />
               </a>
-              <a href="/" className="flex min-h-14 items-center gap-3 px-4 text-sm hover:bg-[#f8f9fa]">
-                <Globe2 className="h-5 w-5 text-[#5f6368]" /><span className="flex-1">Developer website</span><ChevronRight className="h-4 w-4 text-[#5f6368]" />
+              <a href="/" className="flex min-h-14 items-center gap-3 px-4 text-sm hover:bg-[#151c25]">
+                <Globe2 className="h-5 w-5 text-[#aab4c0]" /><span className="flex-1">Developer website</span><ChevronRight className="h-4 w-4 text-[#aab4c0]" />
               </a>
             </div>
           </section>
 
-          <section className="mt-8 rounded-xl bg-[#f8f9fa] p-4">
+          <section className="mt-8 rounded-xl bg-[#151c25] p-4">
             <h2 className="text-sm font-semibold">Install the Android app</h2>
-            <ol className="mt-2 space-y-2 text-sm leading-6 text-[#5f6368]">
+            <ol className="mt-2 space-y-2 text-sm leading-6 text-[#aab4c0]">
               <li>1. Download the APK using the button above.</li>
               <li>2. If Android asks, allow your browser to install apps from this source.</li>
               <li>3. Review Android’s installation prompt, then install and open Workly India.</li>
             </ol>
-            <p className="mt-3 text-xs leading-5 text-[#5f6368]">For your safety, install only the APK served from the official Workly India download page. Android may show a standard confirmation before installation.</p>
+            <p className="mt-3 text-xs leading-5 text-[#aab4c0]">For your safety, install only the APK served from the official Workly India download page. Android may show a standard confirmation before installation.</p>
           </section>
 
-          <footer className="mt-8 border-t border-[#dadce0] py-6 text-xs text-[#5f6368]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span>© {new Date().getFullYear()} Workly India</span>
-              <nav className="flex gap-4"><a href="/privacy" className="hover:underline">Privacy</a><a href="/terms-conditions" className="hover:underline">Terms</a><a href="/" className="hover:underline">Home</a></nav>
-            </div>
-            <p className="mt-3">This is the official Workly India website download page. It is not a Google Play Store listing.</p>
-          </footer>
+
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#dadce0] bg-white/95 p-3 backdrop-blur sm:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#2b3440] bg-white/95 p-3 backdrop-blur sm:hidden">
           <div className="mx-auto max-w-4xl">{installButton}</div>
         </div>
       </main>
