@@ -133,6 +133,9 @@ class ChargingMonitorService : Service() {
             }
             ACTION_SETTINGS_CHANGED -> {
                 applyAudioPreferences()
+                registerBatteryReceiver()
+                resumeAlarmIfNeeded()
+                readCurrentBatteryState()
                 startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
                 return START_STICKY
             }
