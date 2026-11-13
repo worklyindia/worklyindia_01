@@ -39,7 +39,7 @@ const Settings = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [chargingAlertSettings, setChargingAlertSettings] = useState({ chargingStart: true, chargerDisconnect: true, batteryFull: true, silentMode: false, monitorNotificationHidden: false });
+  const [chargingAlertSettings, setChargingAlertSettings] = useState({ chargingStart: true, chargerDisconnect: true, batteryFull: true, silentMode: false, monitorEnabled: true });
   const [passwordChangedAt, setPasswordChangedAt] = useState<string | null>(null);
   const [biometricLockEnabled, setBiometricLockEnabled] = useState(false);
   const [dataSaverEnabled, setDataSaverEnabled] = useState(() => {
@@ -76,7 +76,7 @@ const Settings = () => {
         chargerDisconnect: saved.chargerDisconnect !== false,
         batteryFull: saved.batteryFull !== false,
         silentMode: saved.silentMode === true,
-        monitorNotificationHidden: saved.monitorNotificationHidden === true,
+        monitorEnabled: saved.monitorEnabled !== false,
       });
     } catch {
       console.warn("Could not parse saved native charging alert settings");
@@ -87,7 +87,7 @@ const Settings = () => {
     const next = { ...chargingAlertSettings, [key]: enabled };
     setChargingAlertSettings(next);
     const bridge = getWorklyAndroidBridge();
-    if (!bridge?.saveChargingAlertSettings?.(next.chargingStart, next.chargerDisconnect, next.batteryFull, next.silentMode, next.monitorNotificationHidden)) {
+    if (!bridge?.saveChargingAlertSettings?.(next.chargingStart, next.chargerDisconnect, next.batteryFull, next.silentMode, next.monitorEnabled)) {
       toast({ title: "Settings could not be saved", description: "Please reopen the app and try again.", variant: "destructive" });
       const raw = bridge?.getChargingAlertSettings?.();
       if (raw) {
@@ -261,8 +261,8 @@ const Settings = () => {
                         <p className="text-sm text-muted-foreground">{setting.description}</p>
                       </div>
                       <Switch
-                        checked={chargingAlertSettings.silentMode ? false : chargingAlertSettings[setting.key]}
-                        disabled={chargingAlertSettings.silentMode}
+                        checked={chargingAlertSettings.monitorEnabled && !chargingAlertSettings.silentMode ? chargingAlertSettings[setting.key] : false}
+                        disabled={!chargingAlertSettings.monitorEnabled || chargingAlertSettings.silentMode}
                         onCheckedChange={(enabled) => updateChargingAlertSetting(setting.key, enabled)}
                         aria-label={setting.title}
                       />
@@ -271,20 +271,20 @@ const Settings = () => {
                   <div className="border-t border-border pt-5">
                     <div className="mb-5 flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <h3 className="font-semibold text-foreground">Hide Charging Monitor Notification</h3>
-                        <p className="text-sm text-muted-foreground">Minimize the notification and hide its battery details.</p>
+                        <h3 className="font-semibold text-foreground">Charging Monitor</h3>
+                        <p className="text-sm text-muted-foreground">Turn battery monitoring and its notification on or off.</p>
                       </div>
                       <Switch
-                        checked={chargingAlertSettings.monitorNotificationHidden}
-                        onCheckedChange={(enabled) => updateChargingAlertSetting("monitorNotificationHidden", enabled)}
-                        aria-label="Hide Charging Monitor Notification"
+                        checked={chargingAlertSettings.monitorEnabled}
+                        onCheckedChange={(enabled) => updateChargingAlertSetting("monitorEnabled", enabled)}
+                        aria-label="Charging Monitor"
                       />
                     </div>
-                    <p className="mb-5 text-xs text-muted-foreground">Android may still show a small foreground-service entry while battery monitoring is running.</p>
+                    {!chargingAlertSettings.monitorEnabled && <p className="mb-5 text-sm text-muted-foreground" role="status">Charging Monitor is off. Battery monitoring, charging alerts and the monitor notification are stopped.</p>}
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
                         <h3 className="font-semibold text-foreground">Silent Charging Mode</h3>
-                        <p className="text-sm text-muted-foreground">Disable all alerts while keeping battery monitoring active.</p>
+                        <p className="text-sm text-muted-foreground">Disable all charging sounds while keeping battery monitoring active.</p>
                       </div>
                       <Switch
                         checked={chargingAlertSettings.silentMode}
@@ -292,8 +292,8 @@ const Settings = () => {
                         aria-label="Silent Charging Mode"
                       />
                     </div>
-                    {chargingAlertSettings.silentMode && (
-                      <p className="mt-3 text-sm text-muted-foreground" role="status">Silent Mode is on. All three charging sounds are muted. Battery monitoring, notifications and the 100% charging screen will continue.</p>
+                    {chargingAlertSettings.monitorEnabled && chargingAlertSettings.silentMode && (
+                      <p className="mt-3 text-sm text-muted-foreground" role="status">Silent Mode is on. Charging sounds are muted while battery monitoring continues.</p>
                     )}
                   </div>
                 </div>
