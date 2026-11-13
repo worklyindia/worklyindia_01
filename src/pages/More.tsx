@@ -24,6 +24,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { supabase } from "@/integrations/supabase/client";
 import { getLocalApplications, getLocalFavorites } from "@/lib/localDataStorage";
 import { expandFestivalDays, selectFestivalDay } from "@/lib/festivals";
+import { isWorklyAndroidApp } from "@/lib/nativeAppBridge";
 
 
 const More = () => {
@@ -295,7 +296,7 @@ const More = () => {
           <div className="mt-8">
             <div className="border-y border-border/60 divide-y divide-border/60">
             {[
-              { label: "App Settings", path: "/settings?tab=app" },
+              ...(isWorklyAndroidApp() ? [{ label: "App Settings", path: "/settings?tab=app" }] : []),
               { label: "Website Pricing", path: "/pricing" },
               { label: "About Us", path: "/about-us" },
               { label: "Mission", path: "/mission" },

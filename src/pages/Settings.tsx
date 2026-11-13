@@ -39,7 +39,7 @@ const Settings = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [chargingAlertSettings, setChargingAlertSettings] = useState({ chargingStart: true, chargerDisconnect: true, batteryFull: true, silentMode: false });
+  const [chargingAlertSettings, setChargingAlertSettings] = useState({ chargingStart: true, chargerDisconnect: true, batteryFull: true, silentMode: false, monitorNotificationHidden: false });
   const [passwordChangedAt, setPasswordChangedAt] = useState<string | null>(null);
   const [biometricLockEnabled, setBiometricLockEnabled] = useState(false);
   const [dataSaverEnabled, setDataSaverEnabled] = useState(() => {
@@ -76,6 +76,7 @@ const Settings = () => {
         chargerDisconnect: saved.chargerDisconnect !== false,
         batteryFull: saved.batteryFull !== false,
         silentMode: saved.silentMode === true,
+        monitorNotificationHidden: saved.monitorNotificationHidden === true,
       });
     } catch {
       console.warn("Could not parse saved native charging alert settings");
@@ -86,7 +87,7 @@ const Settings = () => {
     const next = { ...chargingAlertSettings, [key]: enabled };
     setChargingAlertSettings(next);
     const bridge = getWorklyAndroidBridge();
-    if (!bridge?.saveChargingAlertSettings?.(next.chargingStart, next.chargerDisconnect, next.batteryFull, next.silentMode)) {
+    if (!bridge?.saveChargingAlertSettings?.(next.chargingStart, next.chargerDisconnect, next.batteryFull, next.silentMode, next.monitorNotificationHidden)) {
       toast({ title: "Settings could not be saved", description: "Please reopen the app and try again.", variant: "destructive" });
       const raw = bridge?.getChargingAlertSettings?.();
       if (raw) {
@@ -106,7 +107,9 @@ const Settings = () => {
 
   // Persist active tab across page refreshes
   const [activeTab, setActiveTab] = useState(() => {
-    return searchParams.get('tab') === 'app' ? 'app' : (sessionStorage.getItem('settings-active-tab') || 'notifications');
+    if (isWorklyAndroidApp() && searchParams.get('tab') === 'app') return 'app';
+    const savedTab = sessionStorage.getItem('settings-active-tab') || 'notifications';
+    return !isWorklyAndroidApp() && savedTab === 'app' ? 'notifications' : savedTab;
   });
 
   useEffect(() => {
@@ -232,14 +235,14 @@ const Settings = () => {
         <DeleteAccountCountdown userId={user?.id} variant="banner" />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 h-auto p-1">
-            <TabsTrigger value="app" className="text-xs sm:text-sm px-1 sm:px-3 py-2">App Settings</TabsTrigger>
+          <TabsList className={`grid w-full ${isWorklyAndroidApp() ? 'grid-cols-4' : 'grid-cols-3'} h-auto p-1`}>
+            {isWorklyAndroidApp() && <TabsTrigger value="app" className="text-xs sm:text-sm px-1 sm:px-3 py-2">App Settings</TabsTrigger>}
             <TabsTrigger value="notifications" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Notifications</TabsTrigger>
             <TabsTrigger value="privacy" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Privacy</TabsTrigger>
             <TabsTrigger value="account" className="text-xs sm:text-sm px-1 sm:px-3 py-2">Account</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="app" className="space-y-6">
+          {isWorklyAndroidApp() && <TabsContent value="app" className="space-y-6">
             <Card className="p-4 sm:p-6">
               <div className="mb-5">
                 <h2 className="text-xl font-semibold text-foreground">Battery Protection Alerts</h2>
@@ -266,6 +269,18 @@ const Settings = () => {
                     </div>
                   ))}
                   <div className="border-t border-border pt-5">
+                    <div className="mb-5 flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-foreground">Hide Charging Monitor Notification</h3>
+                        <p className="text-sm text-muted-foreground">Minimize the notification and hide its battery details.</p>
+                      </div>
+                      <Switch
+                        checked={chargingAlertSettings.monitorNotificationHidden}
+                        onCheckedChange={(enabled) => updateChargingAlertSetting("monitorNotificationHidden", enabled)}
+                        aria-label="Hide Charging Monitor Notification"
+                      />
+                    </div>
+                    <p className="mb-5 text-xs text-muted-foreground">Android may still show a small foreground-service entry while battery monitoring is running.</p>
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
                         <h3 className="font-semibold text-foreground">Silent Charging Mode</h3>
@@ -286,7 +301,7 @@ const Settings = () => {
                 <p className="text-sm text-muted-foreground">Charging audio controls are available in the Workly India Android app.</p>
               )}
             </Card>
-          </TabsContent>
+          </TabsContent>}
 
           <TabsContent value="notifications" className="space-y-6">
             <NotificationChannelsCard

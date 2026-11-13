@@ -1837,6 +1837,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 .put("chargerDisconnect", prefs.getBoolean(ChargingMonitorService.KEY_DISCONNECT_ALERT_ENABLED, true))
                 .put("batteryFull", prefs.getBoolean(ChargingMonitorService.KEY_FULL_ALERT_ENABLED, true))
                 .put("silentMode", prefs.getBoolean(ChargingMonitorService.KEY_SILENT_MODE, false))
+                .put("monitorNotificationHidden", prefs.getBoolean(ChargingMonitorService.KEY_MONITOR_NOTIFICATION_HIDDEN, false))
                 .toString()
         }
 
@@ -1845,13 +1846,15 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             chargingStart: Boolean,
             chargerDisconnect: Boolean,
             batteryFull: Boolean,
-            silentMode: Boolean
+            silentMode: Boolean,
+            monitorNotificationHidden: Boolean
         ): Boolean {
             val saved = getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE).edit()
                 .putBoolean(ChargingMonitorService.KEY_START_ALERT_ENABLED, chargingStart)
                 .putBoolean(ChargingMonitorService.KEY_DISCONNECT_ALERT_ENABLED, chargerDisconnect)
                 .putBoolean(ChargingMonitorService.KEY_FULL_ALERT_ENABLED, batteryFull)
                 .putBoolean(ChargingMonitorService.KEY_SILENT_MODE, silentMode)
+                .putBoolean(ChargingMonitorService.KEY_MONITOR_NOTIFICATION_HIDDEN, monitorNotificationHidden)
                 .commit()
             if (!saved) return false
             return runCatching {
