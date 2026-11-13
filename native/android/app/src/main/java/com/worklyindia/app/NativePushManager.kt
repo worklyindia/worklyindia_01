@@ -277,6 +277,24 @@ object NativePushManager {
             )
         }
 
+        // Chat notifications must open the compact native bubble activity, not
+        // MainActivity's general website notification handler. Keep the exact
+        // trusted conversation URL and its role-specific route.
+        fun bubbleActivityPendingIntent(url: String, requestCode: Int): PendingIntent {
+            val openIntent = Intent(context, ChatBubbleActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("chat_url", url)
+                putExtra("chat_title", title)
+                putExtra("notification_type", data["type"])
+            }
+            return PendingIntent.getActivity(
+                context, requestCode, openIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
         // Android launchers derive the app-icon badge from active notifications.
         // setNumber supplies the aggregate count on launchers that support numeric badges.
         val notificationManager = NotificationManagerCompat.from(context)
@@ -493,6 +511,11 @@ object NativePushManager {
                  chatPath.startsWith("/owner-portal/whatsapp/chat") ||
                  chatPath.startsWith("/chat/") ||
                  chatPath.startsWith("/messages/"))
+            if (hasConversationDestination) {
+                // Tapping the notification card or its Open chat action should
+                // enter the same in-app conversation surface as the bubble.
+                builder.setContentIntent(bubbleActivityPendingIntent(chatUrl, tag.hashCode()))
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && hasConversationDestination) {
                 val conversationKey = listOf("conversation_id", "conversationId", "thread_id", "threadId", "contact_id", "contactId").firstNotNullOfOrNull { key -> data[key]?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,100}")) } } ?: tag
                 val shortcutId = "workly-chat-$conversationKey"
@@ -640,7 +663,11 @@ object NativePushManager {
                 builder.addAction(
                     android.R.drawable.ic_menu_view,
                     platformActionLabel,
-                    activityPendingIntent(chatUrl, tag.hashCode() + 1)
+                    if (hasConversationDestination) {
+                        bubbleActivityPendingIntent(chatUrl, tag.hashCode() + 1)
+                    } else {
+                        activityPendingIntent(chatUrl, tag.hashCode() + 1)
+                    }
                 )
             }
             builder.addAction(
