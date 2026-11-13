@@ -67,6 +67,7 @@ class ChargingMonitorService : Service() {
                 return START_STICKY
             }
             ACTION_STOP -> {
+                sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
                 stopChargingStartPlayback()
                 stopFullChargeVoice()
                 stopAlertAlarm()
