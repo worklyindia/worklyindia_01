@@ -282,6 +282,7 @@ const InterviewAnalytics = lazyRetry(() => import("./pages/owner-portal/Intervie
 const SupabaseUsageMonitor = lazyRetry(() => import("./pages/owner-portal/SupabaseUsageMonitor"));
 const StorageManager = lazyRetry(() => import("./pages/owner-portal/StorageManager"));
 const AndroidAppUpdates = lazyRetry(() => import("./pages/owner-portal/AndroidAppUpdates"));
+const AppDownloadPage = lazyRetry(() => import("./pages/AppDownloadPage"));
 const SecretsManager = lazyRetry(() => import("./pages/owner-portal/SecretsManager"));
 
 const GoogleIntegrations = lazyRetry(() => import("./pages/owner-portal/GoogleIntegrations"));
@@ -555,6 +556,7 @@ const AppContent = () => {
         <AIOnlyModeGuard>
         <OnboardingGuard>
         <Routes>
+          <Route path="/download" element={<AppDownloadPage />} />
         <Route path="/" element={<Index />} />
         <Route path="/index" element={<Navigate to="/" replace />} />
         <Route path="/ai-assistant" element={<AICareerAssistant />} />
