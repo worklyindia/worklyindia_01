@@ -120,6 +120,7 @@ class ChargingMonitorService : Service() {
             }
             ACTION_SETTINGS_CHANGED -> {
                 applyAudioPreferences()
+                startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
                 return START_STICKY
             }
             ACTION_ACKNOWLEDGE -> {
@@ -309,6 +310,13 @@ class ChargingMonitorService : Service() {
     private fun showChargeCompleteAlert() {
         val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_ALERTED, false)) return
+        // OFF means no 100% screen, alert notification, alarm or voice.
+        if (!prefs.getBoolean(KEY_FULL_ALERT_ENABLED, true)) {
+            prefs.edit().putBoolean(KEY_ALERTED, true).putBoolean(KEY_ACKNOWLEDGED, true).apply()
+            sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
+            getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
+            return
+        }
 
         val notificationManager = getSystemService(NotificationManager::class.java)
         val notificationsEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
@@ -341,7 +349,7 @@ class ChargingMonitorService : Service() {
                 .setContentText("Your battery is fully charged!")
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setVisibility(if (hideDetails) NotificationCompat.VISIBILITY_SECRET else NotificationCompat.VISIBILITY_PUBLIC)
                 .setContentIntent(alertActivityPendingIntent)
                 .addAction(R.drawable.ic_stat_workly, "OK, GOT IT", stopPendingIntent)
                 .setAutoCancel(false)
@@ -536,6 +544,11 @@ class ChargingMonitorService : Service() {
         } else {
             resumeAlarmIfNeeded()
         }
+        if (!getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_FULL_ALERT_ENABLED, true)) {
+            sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
+            getSystemService(NotificationManager::class.java).cancel(ALERT_NOTIFICATION_ID)
+            getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ACKNOWLEDGED, true).apply()
+        }
     }
 
     private fun stopAlertAlarm() {
@@ -556,7 +569,10 @@ class ChargingMonitorService : Service() {
             this, MONITOR_REQUEST_CODE, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notificationTitle = "Workly India Battery Protection"
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val hideDetails = prefs.getBoolean(KEY_MONITOR_NOTIFICATION_HIDDEN, false)
+        val notificationChannel = if (hideDetails) MONITOR_QUIET_CHANNEL else MONITOR_CHANNEL
+        val notificationTitle = if (hideDetails) "Workly India" else "Workly India Battery Protection"
         // Resolve a current percentage even when the service first starts
         // before its first ACTION_BATTERY_CHANGED callback is delivered.
         val livePercent = if (percent in 0..100) {
@@ -571,7 +587,9 @@ class ChargingMonitorService : Service() {
                 if (level >= 0) (level * 100 / scale) else -1
             }
         }
-        val notificationText = if (livePercent in 0..100) {
+        val notificationText = if (hideDetails) {
+            "Battery monitoring is active"
+        } else if (livePercent in 0..100) {
             "Monitoring Your Battery $livePercent% 🔋"
         } else {
             "Monitoring Your Battery --% 🔋"
@@ -584,7 +602,7 @@ class ChargingMonitorService : Service() {
             this, MONITOR_RESTORE_REQUEST_CODE, restoreIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val publicNotification = NotificationCompat.Builder(this, MONITOR_CHANNEL)
+        val publicNotification = NotificationCompat.Builder(this, notificationChannel)
             .setSmallIcon(R.drawable.ic_stat_workly)
             .setDeleteIntent(restorePendingIntent)
             .setContentTitle(notificationTitle)
@@ -608,7 +626,7 @@ class ChargingMonitorService : Service() {
             .setPublicVersion(publicNotification)
             .setContentIntent(openIntent)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(if (hideDetails) NotificationCompat.PRIORITY_MIN else NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
@@ -627,6 +645,14 @@ class ChargingMonitorService : Service() {
                 NotificationChannel(MONITOR_CHANNEL, "Charging monitor", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "Shows live charging status on the lock screen and notification shade"
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    setShowBadge(false)
+                    setSound(null, null)
+                }
+            )
+            manager.createNotificationChannel(
+                NotificationChannel(MONITOR_QUIET_CHANNEL, "Charging monitor (minimized)", NotificationManager.IMPORTANCE_MIN).apply {
+                    description = "Keeps the required battery-monitoring foreground service notification minimized"
+                    lockscreenVisibility = Notification.VISIBILITY_SECRET
                     setShowBadge(false)
                     setSound(null, null)
                 }
@@ -687,6 +713,7 @@ class ChargingMonitorService : Service() {
         const val KEY_DISCONNECT_ALERT_ENABLED = "charging_disconnect_alert_enabled"
         const val KEY_FULL_ALERT_ENABLED = "battery_full_alert_enabled"
         const val KEY_SILENT_MODE = "silent_charging_mode"
+        const val KEY_MONITOR_NOTIFICATION_HIDDEN = "charging_monitor_notification_hidden"
         const val ACTION_SETTINGS_CHANGED = "com.worklyindia.app.CHARGING_SETTINGS_CHANGED"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
@@ -695,6 +722,7 @@ class ChargingMonitorService : Service() {
         const val ACTION_POWER_DISCONNECTED = "com.worklyindia.app.CHARGING_POWER_DISCONNECTED"
         private const val TAG = "WorklyCharging"
         private const val MONITOR_CHANNEL = "workly_charging_monitor"
+        private const val MONITOR_QUIET_CHANNEL = "workly_charging_monitor_quiet"
         const val ALERT_CHANNEL = "workly_battery_full_alert"
         const val MONITOR_NOTIFICATION_ID = 8210
         const val ALERT_NOTIFICATION_ID = 8211
