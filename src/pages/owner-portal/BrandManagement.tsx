@@ -770,6 +770,33 @@ const BrandManagement = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Website Android download icon — stored in Cloudflare R2 */}
+              <div className="mb-6 rounded-xl border p-4 sm:p-5">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border bg-white shadow-sm" style={{ backgroundColor: '#fff', colorScheme: 'only light' }}>
+                    <img src={downloadAppIcon?.url || '/icons/icon-512x512.png'} alt="Website Android download app icon" className="h-full w-full rounded-xl object-cover" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <Label className="text-sm font-semibold">Website Android Download App Icon</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Public website download page par dikhne wala app icon. Square crop (1:1) select karein; 512 × 512 PNG Cloudflare R2 par save hoga aur rounded-square white tile mein dikhega.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button type="button" size="sm" disabled={downloadAppIconBusy || !!uploadingField} onClick={() => {
+                        const picker = document.createElement('input');
+                        picker.type = 'file';
+                        picker.accept = 'image/png,image/jpeg,image/webp,image/avif';
+                        picker.onchange = () => { const file = picker.files?.[0]; if (file) handlePwaImageSelect(file, 'download_app_icon'); };
+                        picker.click();
+                      }}>
+                        {downloadAppIconBusy || uploadingField === 'download_app_icon' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                        {downloadAppIcon ? 'Replace App Icon' : 'Upload App Icon'}
+                      </Button>
+                      {downloadAppIcon && <Button type="button" size="sm" variant="destructive" disabled={downloadAppIconBusy || !!uploadingField} onClick={() => void removeDownloadAppIcon()}><X className="mr-2 h-4 w-4" />Remove</Button>}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">PNG, JPG, WEBP or AVIF · Maximum 10 MB · Upload, replace and remove are handled through Cloudflare.</p>
+                  </div>
+                </div>
+              </div>
+
               {/* App Icon Upload */}
               <div>
                 <Label className="text-sm font-medium">App Icon (512x512)</Label>
