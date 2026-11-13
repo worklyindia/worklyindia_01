@@ -169,7 +169,7 @@ export default function AppDownloadPage() {
               />
               <div className="min-w-0 flex-1">
                 <h1 className="text-[25px] font-semibold leading-tight tracking-tight sm:text-3xl">Workly India</h1>
-                <a href="/" className="mt-1 inline-block text-sm font-medium text-[#137c43] hover:underline">Workly India</a>
+                <a href="/" className="mt-1 inline-block text-sm font-medium text-[#65d99a] hover:underline">Workly India</a>
                 <p className="mt-1 text-sm text-[#aab4c0]">Jobs, careers and employer connections</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="rounded-md border-[#2b3440] bg-white font-medium text-[#aab4c0]">Official website</Badge>
@@ -247,7 +247,7 @@ export default function AppDownloadPage() {
                 { icon: Users, title: "Manage your activity", detail: "Keep track of your job-search journey." },
               ].map(({ icon: Icon, title, detail }) => (
                 <div key={title} className="flex gap-3 rounded-xl bg-[#151c25] p-3">
-                  <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#137c43]" />
+                  <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#65d99a]" />
                   <div><h3 className="text-sm font-semibold">{title}</h3><p className="mt-1 text-xs leading-5 text-[#aab4c0]">{detail}</p></div>
                 </div>
               ))}
