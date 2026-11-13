@@ -200,9 +200,9 @@ export default function AppDownloadPage() {
               <div className="w-full sm:w-auto">{installButton}</div>
               
             </div>
-            {error && <div role="alert" className="mt-3 rounded-xl bg-[#3a1d20] p-3 text-sm text-[#ffb4ab]">{error}</div>}
+            {error && <div role="alert" className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
             {!loading && !error && !release && (
-              <div className="mt-3 rounded-xl border border-[#f9ab00] bg-[#332a12] p-3 text-sm text-[#f5d98e]">
+              <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
                 The next Android release is not public yet. Please check again later.
               </div>
             )}
