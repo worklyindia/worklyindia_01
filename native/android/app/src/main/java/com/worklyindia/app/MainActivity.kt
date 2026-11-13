@@ -1837,7 +1837,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 .put("chargerDisconnect", prefs.getBoolean(ChargingMonitorService.KEY_DISCONNECT_ALERT_ENABLED, true))
                 .put("batteryFull", prefs.getBoolean(ChargingMonitorService.KEY_FULL_ALERT_ENABLED, true))
                 .put("silentMode", prefs.getBoolean(ChargingMonitorService.KEY_SILENT_MODE, false))
-                .put("monitorNotificationHidden", prefs.getBoolean(ChargingMonitorService.KEY_MONITOR_NOTIFICATION_HIDDEN, false))
+                .put("monitorEnabled", prefs.getBoolean(ChargingMonitorService.KEY_MONITOR_ENABLED, true))
                 .toString()
         }
 
@@ -1847,18 +1847,29 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
             chargerDisconnect: Boolean,
             batteryFull: Boolean,
             silentMode: Boolean,
-            monitorNotificationHidden: Boolean
+            monitorEnabled: Boolean
         ): Boolean {
             val saved = getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE).edit()
                 .putBoolean(ChargingMonitorService.KEY_START_ALERT_ENABLED, chargingStart)
                 .putBoolean(ChargingMonitorService.KEY_DISCONNECT_ALERT_ENABLED, chargerDisconnect)
                 .putBoolean(ChargingMonitorService.KEY_FULL_ALERT_ENABLED, batteryFull)
                 .putBoolean(ChargingMonitorService.KEY_SILENT_MODE, silentMode)
-                .putBoolean(ChargingMonitorService.KEY_MONITOR_NOTIFICATION_HIDDEN, monitorNotificationHidden)
+                .putBoolean(ChargingMonitorService.KEY_MONITOR_ENABLED, monitorEnabled)
                 .commit()
             if (!saved) return false
             return runCatching {
-                startService(Intent(this@MainActivity, ChargingMonitorService::class.java).setAction(ChargingMonitorService.ACTION_SETTINGS_CHANGED))
+                val monitorIntent = Intent(this@MainActivity, ChargingMonitorService::class.java)
+                if (monitorEnabled) {
+                    monitorIntent.action = ChargingMonitorService.ACTION_SETTINGS_CHANGED
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        ContextCompat.startForegroundService(this@MainActivity, monitorIntent)
+                    } else {
+                        startService(monitorIntent)
+                    }
+                } else {
+                    monitorIntent.action = ChargingMonitorService.ACTION_STOP
+                    startService(monitorIntent)
+                }
                 true
             }.getOrDefault(false)
         }
@@ -2470,6 +2481,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     // Start a persistent foreground monitor on the user's first app launch.
     // It continues monitoring after the UI is closed and across charge cycles.
     private fun ensureChargingMonitorRunning() {
+        val monitorPrefs = getSharedPreferences(ChargingMonitorService.PREFS, Context.MODE_PRIVATE)
+        if (!monitorPrefs.getBoolean(ChargingMonitorService.KEY_MONITOR_ENABLED, true)) {
+            stopService(Intent(this, ChargingMonitorService::class.java))
+            return
+        }
         val monitor = Intent(this, ChargingMonitorService::class.java)
             .setAction(ChargingMonitorService.ACTION_START)
         runCatching {

@@ -37,13 +37,29 @@ class ChargingMonitorService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannels()
-        // Battery monitoring and charging audio must run independently from
-        // Android's full-screen-intent permission. That permission only controls
-        // whether the 100% alert may launch a full-screen activity.
-        startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
+        // Foreground promotion happens in onStartCommand only after checking
+        // the user's Charging Monitor master switch.
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Always allow the explicit stop action. Any other start is rejected
+        // while the master switch is OFF, including boot and charger broadcasts.
+        if (intent?.action != ACTION_STOP && !getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_MONITOR_ENABLED, true)) {
+            // If an OS receiver used startForegroundService while disabled, satisfy
+            // Android's foreground-start deadline and immediately remove the entry.
+            startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            getSystemService(NotificationManager::class.java).apply {
+                cancel(MONITOR_NOTIFICATION_ID)
+                cancel(ALERT_NOTIFICATION_ID)
+                cancel(PROTECTION_NOTIFICATION_ID)
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent?.action != ACTION_STOP) {
+            startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
+        }
         when (intent?.action) {
             ACTION_RESTORE_MONITOR_NOTIFICATION -> {
                 // Android/OEM notification shades may allow a foreground-service
@@ -55,6 +71,7 @@ class ChargingMonitorService : Service() {
                 return START_STICKY
             }
             ACTION_STOP -> {
+                sendBroadcast(Intent(ChargingCompleteActivity.ACTION_CLOSE_ON_UNPLUG).setPackage(packageName))
                 stopChargingStartPlayback()
                 stopFullChargeVoice()
                 stopAlertAlarm()
@@ -120,6 +137,9 @@ class ChargingMonitorService : Service() {
             }
             ACTION_SETTINGS_CHANGED -> {
                 applyAudioPreferences()
+                registerBatteryReceiver()
+                resumeAlarmIfNeeded()
+                readCurrentBatteryState()
                 startForeground(MONITOR_NOTIFICATION_ID, buildMonitorNotification())
                 return START_STICKY
             }
@@ -714,7 +734,7 @@ class ChargingMonitorService : Service() {
         const val KEY_DISCONNECT_ALERT_ENABLED = "charging_disconnect_alert_enabled"
         const val KEY_FULL_ALERT_ENABLED = "battery_full_alert_enabled"
         const val KEY_SILENT_MODE = "silent_charging_mode"
-        const val KEY_MONITOR_NOTIFICATION_HIDDEN = "charging_monitor_notification_hidden"
+        const val KEY_MONITOR_ENABLED = "charging_monitor_enabled"
         const val ACTION_SETTINGS_CHANGED = "com.worklyindia.app.CHARGING_SETTINGS_CHANGED"
         const val ACTION_START = "com.worklyindia.app.CHARGING_MONITOR_START"
         const val ACTION_STOP = "com.worklyindia.app.CHARGING_MONITOR_STOP"
