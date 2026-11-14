@@ -503,7 +503,7 @@ const AppContent = () => {
   // A distinct UUID per account avoids RLS conflicts when multiple users sign in
   // on the same phone (the native installation UUID is device-wide).
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !isWorklyAndroidApp()) return;
     const accountId = user.id;
     const nativeDeviceInfo = getNativeDeviceInfo();
     let installationId = "";
@@ -562,7 +562,7 @@ const AppContent = () => {
           ...queued,
           installation_id: installationId,
           user_id: accountId,
-          platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
+          platform: "android_app",
           device_model: androidModel.slice(0, 120) || "Unknown device",
           os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"))).slice(0, 80),
           app_version: appVersion.slice(0, 80),
@@ -602,6 +602,111 @@ const AppContent = () => {
       window.removeEventListener("online", retry);
       window.removeEventListener("focus", retry);
       document.removeEventListener("visibilitychange", retry);
+    };
+  }, [user?.id]);
+
+  // Android-app-only foreground session tracking. Browser/website sessions are
+  // deliberately excluded by requiring the native WebView bridge.
+  useEffect(() => {
+    if (!isWorklyAndroidApp()) return;
+    const accountId = user?.id || "anonymous";
+    const device = getNativeDeviceInfo();
+    const installationKey = "workly-app-installation-id:v2:" + accountId;
+    let installationId = "";
+    let sessionId = "";
+    try {
+      if (accountId === "anonymous") {
+        installationId = device?.installationId || crypto.randomUUID();
+      } else {
+        installationId = localStorage.getItem(installationKey) || crypto.randomUUID();
+        localStorage.setItem(installationKey, installationId);
+      }
+      sessionId = sessionStorage.getItem("workly-app-session-id:v1:" + accountId) || crypto.randomUUID();
+      sessionStorage.setItem("workly-app-session-id:v1:" + accountId, sessionId);
+    } catch {
+      console.warn("[App session] Could not initialize the local session queue");
+      return;
+    }
+
+    const queueKey = "workly-pending-session:" + sessionId;
+    let cancelled = false;
+    let inFlight = false;
+    type SessionPayload = {
+      p_event_id: string;
+      p_session_id: string;
+      p_installation_id: string;
+      p_native_installation_id: string;
+      p_device_model: string;
+      p_os_version: string;
+      p_app_version: string;
+      p_end_session: boolean;
+    };
+
+    const makePayload = (endedAt: string | null): SessionPayload => ({
+      p_event_id: crypto.randomUUID(),
+      p_session_id: sessionId,
+      p_installation_id: installationId,
+      p_native_installation_id: device?.installationId || installationId,
+      p_device_model: [device?.manufacturer, device?.model].filter(Boolean).join(" ").slice(0, 120) || "Android device",
+      p_os_version: (device?.androidVersion || "Unknown").slice(0, 80),
+      p_app_version: (device ? `${device.appVersion} (${device.appVersionCode})` : "Unknown").slice(0, 80),
+      p_end_session: endedAt !== null,
+    });
+
+    const flushQueuedSession = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      let sentSnapshot = "";
+      try {
+        sentSnapshot = localStorage.getItem(queueKey) || "";
+        if (!sentSnapshot) return;
+        const payload = JSON.parse(sentSnapshot) as SessionPayload;
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { error } = await (supabase.rpc as any)("record_android_app_session", payload);
+        if (error) throw error;
+        if (localStorage.getItem(queueKey) === sentSnapshot) localStorage.removeItem(queueKey);
+      } catch (error) {
+        console.warn("[App session] Sync failed; queued session retained", error);
+      } finally {
+        inFlight = false;
+        // If a foreground/background transition updated the queue mid-request,
+        // immediately send that newer state rather than losing the end marker.
+        if (!cancelled && sentSnapshot && localStorage.getItem(queueKey) && localStorage.getItem(queueKey) !== sentSnapshot) {
+          void flushQueuedSession();
+        }
+      }
+    };
+
+    const queueSession = (endedAt: string | null) => {
+      if (cancelled) return;
+      try {
+        localStorage.setItem(queueKey, JSON.stringify(makePayload(endedAt)));
+        void flushQueuedSession();
+      } catch (error) {
+        console.warn("[App session] Could not persist session state", error);
+      }
+    };
+    const sync = () => {
+      if (document.visibilityState === "visible") queueSession(null);
+    };
+    const end = () => queueSession(new Date().toISOString());
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") sync();
+      else end();
+    };
+    sync();
+    const heartbeat = window.setInterval(sync, 45 * 1000);
+    window.addEventListener("online", sync);
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", end);
+    return () => {
+      cancelled = true;
+      window.clearInterval(heartbeat);
+      window.removeEventListener("online", sync);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", end);
     };
   }, [user?.id]);
   useTrackWorklyChatReturn();
