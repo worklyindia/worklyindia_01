@@ -20,6 +20,13 @@ export const useWebOTP = (
   useEffect(() => {
     if (!enabled) return;
     if (typeof window === 'undefined') return;
+    const nativeBridge = (window as Window & { WorklyAndroid?: { startSmsUserConsent?: () => boolean } }).WorklyAndroid;
+    try { nativeBridge?.startSmsUserConsent?.(); } catch { /* browser/manual fallback */ }
+    const onNativeOtp = (event: Event) => {
+      const code = (event as CustomEvent<{ code?: string }>).detail?.code?.replace(/\D/g, '');
+      if (code && code.length >= 4) handlerRef.current(code.slice(0, 6));
+    };
+    window.addEventListener('workly-sms-otp', onNativeOtp as EventListener);
     if (!('OTPCredential' in window)) return;
     if (!window.isSecureContext) return;
 
@@ -39,7 +46,10 @@ export const useWebOTP = (
         /* aborted or denied — silently ignore */
       });
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.removeEventListener('workly-sms-otp', onNativeOtp as EventListener);
+    };
   }, [enabled]);
 };
 
