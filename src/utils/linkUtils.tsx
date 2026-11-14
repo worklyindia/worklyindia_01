@@ -893,6 +893,20 @@ const FormattedMessage = React.memo(function FormattedMessage({
               (c: any) => !(typeof c === 'string' && c.trim() === '')
             );
 
+            // Empty Markdown list items still receive a decorative CSS marker,
+            // which appears as a floating green star. Skip entries with no content.
+            const hasVisibleContent = (node: React.ReactNode): boolean =>
+              React.Children.toArray(node).some((child: any) => {
+                if (typeof child === 'string') return child.trim().length > 0;
+                if (typeof child === 'number') return true;
+                if (!React.isValidElement(child)) return false;
+                const childProps = child.props as Record<string, unknown>;
+                if (child.type === 'input' || childProps.src || childProps.href || childProps.alt) return true;
+                if (child.type === 'br') return false;
+                return hasVisibleContent(childProps.children as React.ReactNode);
+              });
+            if (!hasVisibleContent(children)) return null;
+
             // Detect "wrapper" li whose content is ONLY a nested list (ul/ol).
             // In that case, render the nested list directly without the number badge,
             // and signal CSS to skip counter-increment.
