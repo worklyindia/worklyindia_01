@@ -79,8 +79,44 @@ serve(async (req) => {
   }
 });
 
+
+async function generateTTS(text: string, preferred = 'cartesia', language = 'hi'): Promise<{audio: ArrayBuffer; provider: string}> {
+  const order = [preferred, 'cartesia', 'minimax', 'elevenlabs'].filter((p, i, a) => ['cartesia','minimax','elevenlabs'].includes(p) && a.indexOf(p) === i);
+  const errors: string[] = [];
+  for (const p of order) {
+    try {
+      if (p === 'cartesia') {
+        const key = Deno.env.get('CARTESIA_API_KEY');
+        if (!key) throw new Error('CARTESIA_API_KEY missing');
+        const r = await fetch('https://api.cartesia.ai/tts/bytes', {method:'POST', headers:{'X-API-Key':key,'Cartesia-Version':'2026-08-14','Content-Type':'application/json'}, body:JSON.stringify({model_id:'sonic-3.6',transcript:text,voice:{mode:'id',id:'56e35e2d-6eb6-4226-ab8b-9776515a7094'},language,output_format:{container:'mp3',bit_rate:128000,sample_rate:44100}})});
+        if (!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,350));
+        const audio=await r.arrayBuffer(); if (!audio.byteLength) throw new Error('Empty audio'); return {audio,provider:p};
+      }
+      if (p === 'minimax') {
+        const key=Deno.env.get('MINIMAX_API_KEY'); if(!key) throw new Error('MINIMAX_API_KEY missing');
+        const group=Deno.env.get('MINIMAX_GROUP_ID');
+        const url='https://api.minimax.io/v1/t2a_v2'+(group?'?GroupId='+encodeURIComponent(group):'');
+        const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({model:'speech-2.8-turbo',text,stream:false,voice_setting:{voice_id:'English_Trustworth_Man',speed:1,vol:1,pitch:0},audio_setting:{sample_rate:32000,bitrate:128000,format:'mp3',channel:1}})});
+        if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,350));
+        const j=await r.json(); if(j.base_resp?.status_code && j.base_resp.status_code!==0) throw new Error(j.base_resp.status_msg||'MiniMax error');
+        const hex=j.data?.audio; if(!hex || hex.length%2) throw new Error('MiniMax returned invalid audio');
+        const bytes=new Uint8Array(hex.length/2); for(let i=0;i<bytes.length;i++) bytes[i]=parseInt(hex.slice(i*2,i*2+2),16);
+        return {audio:bytes.buffer,provider:p};
+      }
+      if (p === 'elevenlabs') {
+        const key=Deno.env.get('ELEVENLABS_API_KEY'); if(!key) throw new Error('ELEVENLABS_API_KEY missing');
+        const voice=Deno.env.get('ELEVENLABS_VOICE_ID')||'JBFqnCBsd6RMkjVDRZzb';
+        const r=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+encodeURIComponent(voice)+'?output_format=mp3_44100_128',{method:'POST',headers:{'xi-api-key':key,'Content-Type':'application/json','Accept':'audio/mpeg'},body:JSON.stringify({text,model_id:'eleven_multilingual_v2'})});
+        if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,350));
+        const audio=await r.arrayBuffer(); if(!audio.byteLength) throw new Error('Empty audio'); return {audio,provider:p};
+      }
+    } catch(e) { const m=e instanceof Error?e.message:String(e); errors.push(p+': '+m); console.error('[unified-voice] '+p+' failed; fallback next: '+m); }
+  }
+  throw new Error('All TTS providers failed. '+errors.join(' | '));
+}
+
 // =============================================
-// TEXT TO SPEECH (Cartesia or MiniMax)
+// TEXT TO SPEECH (Cartesia → MiniMax → ElevenLabs)
 // =============================================
 
 async function handleTextToSpeech(supabase: any, params: any, req: Request) {
@@ -98,25 +134,8 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
       return new Response(JSON.stringify({ audioUrl, cached: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Generate audio with Cartesia
-    const apiKey = Deno.env.get('CARTESIA_API_KEY');
-    if (!apiKey) throw new Error('CARTESIA_API_KEY not configured');
-
-    const response = await fetch('https://api.cartesia.ai/tts/bytes', {
-      method: 'POST',
-      headers: { 'X-API-Key': apiKey, 'Cartesia-Version': '2024-11-13', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model_id: 'sonic-2',
-        transcript: text,
-        voice: { mode: 'id', id: '56e35e2d-6eb6-4226-ab8b-9776515a7094' },
-        language: 'hi',
-        output_format: { container: 'mp3', bit_rate: 128000, sample_rate: 44100 },
-      }),
-    });
-
-    if (!response.ok) throw new Error(`Cartesia API error: ${await response.text()}`);
-
-    const arrayBuffer = await response.arrayBuffer();
+    const generated = await generateTTS(text, params.provider || 'cartesia', params.language || 'hi');
+    const arrayBuffer = generated.audio;
     const { error: uploadError } = await supabase.storage.from('cached-voice-audio').upload(fileName, arrayBuffer, { contentType: 'audio/mpeg', upsert: true });
 
     if (uploadError) {
@@ -125,7 +144,7 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
     }
 
     const audioUrl = `${supabaseUrl}/storage/v1/object/public/cached-voice-audio/${fileName}`;
-    return new Response(JSON.stringify({ audioUrl, cached: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ audioUrl, provider: generated.provider, cached: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
   // Regular authenticated voice playback
@@ -163,52 +182,9 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
     }
   }
 
-  // Generate based on provider
-  let audioBuffer: ArrayBuffer;
-
-  if (provider === 'minimax') {
-    const apiKey = Deno.env.get('MINIMAX_API_KEY');
-    if (!apiKey) throw new Error('MINIMAX_API_KEY not configured');
-
-    const response = await fetch('https://api.minimax.chat/v1/t2a_v2', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'speech-2.6-turbo',
-        text: text,
-        stream: false,
-        voice_setting: { voice_id: 'English_Trustworth_Man', speed: 1.0, vol: 1.0, pitch: 0, emotion: 'happy' },
-        audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3' },
-      }),
-    });
-
-    if (!response.ok) throw new Error(`MiniMax API error: ${await response.text()}`);
-    const result = await response.json();
-    if (!result.data?.audio) throw new Error('No audio data');
-
-    // MiniMax returns base64 audio
-    await supabase.rpc('increment_ai_chat_usage', { p_user_id: user.id, p_usage_type: 'voice_playback', p_tokens: 0 });
-    return new Response(JSON.stringify({ audioContent: result.data.audio, cached: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  } else {
-    // Cartesia (default)
-    const apiKey = Deno.env.get('CARTESIA_API_KEY');
-    if (!apiKey) throw new Error('CARTESIA_API_KEY not configured');
-
-    const response = await fetch('https://api.cartesia.ai/tts/bytes', {
-      method: 'POST',
-      headers: { 'X-API-Key': apiKey, 'Cartesia-Version': '2024-11-13', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model_id: 'sonic-2',
-        transcript: text,
-        voice: { mode: 'id', id: '56e35e2d-6eb6-4226-ab8b-9776515a7094' },
-        language: 'hi',
-        output_format: { container: 'mp3', bit_rate: 128000, sample_rate: 44100 },
-      }),
-    });
-
-    if (!response.ok) throw new Error(`Cartesia API error: ${await response.text()}`);
-    audioBuffer = await response.arrayBuffer();
-  }
+  const generated = await generateTTS(text, provider, params.language || 'hi');
+  const audioBuffer = generated.audio;
+  console.log(`[unified-voice] generated with ${generated.provider}`);
 
   await supabase.rpc('increment_ai_chat_usage', { p_user_id: user.id, p_usage_type: 'voice_playback', p_tokens: 0 });
 
@@ -222,7 +198,7 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
     }
   }
 
-  return new Response(JSON.stringify({ audioContent: base64Encode(audioBuffer), cached: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify({ audioContent: base64Encode(audioBuffer), provider: generated.provider, cached: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
 // =============================================
