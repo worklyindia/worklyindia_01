@@ -34,7 +34,8 @@ create or replace function public.record_android_app_session(
   p_device_model text default 'Android device',
   p_os_version text default 'Unknown',
   p_app_version text default 'Unknown',
-  p_end_session boolean default false
+  p_end_session boolean default false,
+  p_native_installation_id uuid default null
 )
 returns void
 language plpgsql
@@ -61,6 +62,9 @@ begin
           app_version = excluded.app_version,
           last_seen_at = now();
   else
+    if p_native_installation_id is not null then
+      delete from public.app_anonymous_installations where installation_id = p_native_installation_id;
+    end if;
     insert into public.app_installations
       (installation_id, user_id, platform, device_model, os_version, app_version, last_seen_at)
     values (p_installation_id, v_user_id, 'android_app', v_device, v_os, v_app, now())
@@ -89,7 +93,7 @@ begin
 end;
 $$;
 
-revoke all on function public.record_android_app_session(uuid, uuid, text, text, text, boolean) from public;
+revoke all on function public.record_android_app_session(uuid, uuid, text, text, text, boolean, uuid) from public;
 grant execute on function public.record_android_app_session(uuid, uuid, text, text, text, boolean) to anon, authenticated;
 
 -- Direct table writes are no longer needed; the RPC owns session upserts.
