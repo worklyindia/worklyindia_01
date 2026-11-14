@@ -1969,6 +1969,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 @Suppress("DEPRECATION")
                 val appVersionCode = if (Build.VERSION.SDK_INT >= 28) appInfo.longVersionCode else appInfo.versionCode.toLong()
                 JSONObject()
+                    .put("installationId", AppErrorReporter.getInstallationId(this@MainActivity))
                     .put("manufacturer", Build.MANUFACTURER.orEmpty().ifBlank { "Unknown" })
                     .put("brand", Build.BRAND.orEmpty().ifBlank { "Unknown" })
                     .put("model", Build.MODEL.orEmpty().ifBlank { "Unknown" })
