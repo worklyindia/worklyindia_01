@@ -101,6 +101,8 @@ const TeamManagement = lazyRetry(() => import("./pages/owner-portal/TeamManageme
 const InviteMember = lazyRetry(() => import("./pages/owner-portal/InviteMember"));
 const CreateRole = lazyRetry(() => import("./pages/owner-portal/CreateRole"));
 const AuthUsersManagement = lazyRetry(() => import("./pages/owner-portal/AuthUsersManagement"));
+const AppErrorDetails = lazyRetry(() => import("./pages/owner-portal/AppErrorDetails"));
+const AppUserDetails = lazyRetry(() => import("./pages/owner-portal/AppUserDetails"));
 const AIChatPlansManagement = lazyRetry(() => import("./pages/owner-portal/AIChatPlansManagement"));
 const AIPublicPricing = lazyRetry(() => import("./pages/AIPublicPricing"));
 const Pricing = lazyRetry(() => import("./pages/Pricing"));
@@ -496,6 +498,41 @@ const AppContent = () => {
   }, []);
   const { loading: authLoading, profileLoading, user } = useAuth();
   const isAppReady = useAppReady(authLoading, profileLoading, user);
+
+  // Register an account-linked installation heartbeat for the Owner device inventory.
+  useEffect(() => {
+    if (!user?.id) return;
+    let installationId = "";
+    try {
+      const key = "workly-app-installation-id";
+      installationId = localStorage.getItem(key) || "";
+      if (!installationId) {
+        installationId = crypto.randomUUID();
+        localStorage.setItem(key, installationId);
+      }
+    } catch { return; }
+    let cancelled = false;
+    const heartbeat = async () => {
+      if (cancelled) return;
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        const ua = navigator.userAgent || "Unknown device";
+        const isAndroid = /Android/i.test(ua);
+        await supabase.from("app_installations").upsert({
+          installation_id: installationId,
+          user_id: user.id,
+          platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
+          device_model: ua.slice(0, 240),
+          os_version: isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"),
+          app_version: "unknown",
+          last_seen_at: new Date().toISOString(),
+        }, { onConflict: "installation_id" });
+      } catch (error) { console.warn("[App installation] Heartbeat failed", error); }
+    };
+    void heartbeat();
+    const interval = window.setInterval(heartbeat, 5 * 60 * 1000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [user?.id]);
   useTrackWorklyChatReturn();
 
   // Keep the Android home-screen festival widget in sync automatically.
@@ -1213,6 +1250,16 @@ const AppContent = () => {
           <ProtectedPermissionRoute requiredPermission="team_management.edit_roles" ownerOnly>
             <CreateRole />
           </ProtectedPermissionRoute>
+        } />
+        <Route path="/owner-portal/app-error-details" element={
+          <ProtectedAdminRoute requiredRole="owner">
+            <AppErrorDetails />
+          </ProtectedAdminRoute>
+        } />
+        <Route path="/owner-portal/app-user-details" element={
+          <ProtectedAdminRoute requiredRole="owner">
+            <AppUserDetails />
+          </ProtectedAdminRoute>
         } />
         <Route path="/owner-portal/auth-users" element={
           <ProtectedPermissionRoute requiredPermission="manage_users" ownerOnly>
