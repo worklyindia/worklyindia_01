@@ -499,20 +499,39 @@ const AppContent = () => {
   const { loading: authLoading, profileLoading, user } = useAuth();
   const isAppReady = useAppReady(authLoading, profileLoading, user);
 
-  // Register an account-linked installation heartbeat for the Owner device inventory.
+  // Durable, account-scoped installation outbox for the Owner device inventory.
+  // A distinct UUID per account avoids RLS conflicts when multiple users sign in
+  // on the same phone (the native installation UUID is device-wide).
   useEffect(() => {
     if (!user?.id) return;
-    let installationId = "";
+    const accountId = user.id;
     const nativeDeviceInfo = getNativeDeviceInfo();
+    let installationId = "";
     try {
-      const key = "workly-app-installation-id:" + user.id;
-      installationId = nativeDeviceInfo?.installationId || localStorage.getItem(key) || "";
-      if (!installationId) installationId = crypto.randomUUID();
-      localStorage.setItem(key, installationId);
-    } catch { return; }
+      const idKey = "workly-app-installation-id:v2:" + accountId;
+      installationId = localStorage.getItem(idKey) || crypto.randomUUID();
+      localStorage.setItem(idKey, installationId);
+    } catch {
+      console.warn("[App installation] Could not initialize the local installation outbox");
+      return;
+    }
+
     let cancelled = false;
-    const heartbeat = async () => {
-      if (cancelled) return;
+    let inFlight = false;
+    const pendingKey = "workly-pending-installation:" + accountId;
+    type InstallationPayload = {
+      installation_id: string;
+      user_id: string;
+      platform: string;
+      device_model: string;
+      os_version: string;
+      app_version: string;
+      last_seen_at: string;
+    };
+
+    const flushInstallationOutbox = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
       try {
         const { supabase } = await import("@/integrations/supabase/client");
         const ua = navigator.userAgent || "Unknown device";
@@ -523,30 +542,67 @@ const AppContent = () => {
         const appVersion = nativeDeviceInfo
           ? `${nativeDeviceInfo.appVersion} (${nativeDeviceInfo.appVersionCode})`
           : (import.meta.env.VITE_APP_VERSION || "web");
-        const pendingKey = "workly-pending-installation:" + user.id;
-        const installationPayload = {
+
+        // Replay a previously queued row first. Always scope it to this account
+        // and current account-specific installation UUID before sending.
+        let queued: Partial<InstallationPayload> = {};
+        try {
+          const raw = localStorage.getItem(pendingKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object" && parsed.user_id === accountId) {
+              queued = parsed as Partial<InstallationPayload>;
+            }
+          }
+        } catch {
+          // A corrupt queue entry is replaced by a fresh valid heartbeat below.
+        }
+
+        const installationPayload: InstallationPayload = {
+          ...queued,
           installation_id: installationId,
-          user_id: user.id,
+          user_id: accountId,
           platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
           device_model: androidModel.slice(0, 120) || "Unknown device",
           os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"))).slice(0, 80),
           app_version: appVersion.slice(0, 80),
           last_seen_at: new Date().toISOString(),
         };
-        // Persist the latest heartbeat locally before networking. If the
-        // request fails or the app closes, the next launch retries this sync.
-        try { localStorage.setItem(pendingKey, JSON.stringify(installationPayload)); } catch { /* best effort local outbox */ }
+
+        // Write-ahead local save: never clear this entry before Supabase confirms.
+        localStorage.setItem(pendingKey, JSON.stringify(installationPayload));
         const { error } = await supabase.from("app_installations").upsert(
           installationPayload,
           { onConflict: "installation_id" }
         );
         if (error) throw error;
-        try { localStorage.removeItem(pendingKey); } catch { /* server has acknowledged the row */ }
-      } catch (error) { console.warn("[App installation] Heartbeat failed", error); }
+
+        // Only clear the exact payload acknowledged by Supabase. If a newer
+        // heartbeat was queued while this request was in flight, retain it.
+        const acknowledged = JSON.stringify(installationPayload);
+        if (localStorage.getItem(pendingKey) === acknowledged) {
+          localStorage.removeItem(pendingKey);
+        }
+      } catch (error) {
+        console.warn("[App installation] Upload failed; local record retained for retry", error);
+      } finally {
+        inFlight = false;
+      }
     };
-    void heartbeat();
-    const interval = window.setInterval(heartbeat, 5 * 60 * 1000);
-    return () => { cancelled = true; window.clearInterval(interval); };
+
+    const retry = () => { void flushInstallationOutbox(); };
+    retry();
+    window.addEventListener("online", retry);
+    window.addEventListener("focus", retry);
+    document.addEventListener("visibilitychange", retry);
+    const interval = window.setInterval(retry, 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("online", retry);
+      window.removeEventListener("focus", retry);
+      document.removeEventListener("visibilitychange", retry);
+    };
   }, [user?.id]);
   useTrackWorklyChatReturn();
 
