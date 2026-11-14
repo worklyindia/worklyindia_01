@@ -29,8 +29,6 @@ class WorklyErrorReportWorker(context: Context, params: WorkerParameters) : Work
                 readTimeout = 20_000
                 doOutput = true
                 setRequestProperty("apikey", SUPABASE_PUBLISHABLE_KEY)
-                // Send the publishable key in Authorization too so PostgREST resolves the anon role.
-                setRequestProperty("Authorization", "Bearer $SUPABASE_PUBLISHABLE_KEY")
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Prefer", "resolution=ignore-duplicates,return=minimal")
             }
