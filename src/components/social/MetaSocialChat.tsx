@@ -1,4 +1,5 @@
 import { metaChatRequest, metaChatScope } from "@/lib/metaChatScope";
+import { useChatStatusBarTheme } from "@/hooks/useChatStatusBarTheme";
 import { ChatDateSeparator } from '@/components/chat/ChatDateSeparator';
 import { formatChatTime, startsChatDay } from '@/lib/chatTimestamp';
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -89,6 +90,7 @@ const when = (t?: string | null) => {
 
 /** Instagram / Facebook inbox for the Chat page, using the account linked in AI Connect. */
 export default function MetaSocialChat({ platform, audience, accountId }: { platform: MetaPlatform; audience?: "support"; accountId?: string | null }) {
+  useChatStatusBarTheme();
   const metaSocialAction = scopedAction(audience);
   const [searchParams] = useSearchParams();
   const requestedContactId = searchParams.get("contact") || searchParams.get("contact_id") || searchParams.get("sender_id");
@@ -414,7 +416,7 @@ function MetaThread({ platform, accountId, conv, onBack, audience }: { platform:
       <></>
       )}
       {msgSelectionMode ? null : (
-      <div className="shrink-0 bg-whatsapp-panel px-2 py-2 flex items-center gap-2 border-b border-whatsapp-border">
+      <div className="shrink-0 bg-whatsapp-panel px-2 py-2 flex items-center gap-2 border-b border-whatsapp-border pt-[max(0.5rem,env(safe-area-inset-top))]">
         <Button variant="ghost" size="icon" aria-label="Back" className="text-foreground hover:bg-whatsapp-hover h-10 w-10" onClick={onBack}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
