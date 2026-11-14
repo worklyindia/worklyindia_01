@@ -84,6 +84,10 @@ import java.net.URL
 
 class MainActivity : FragmentActivity() {
     private lateinit var webView: WebView
+    // WebView renderer processes can be killed independently of the app process.
+    // Recover once automatically, then offer an explicit restart if it crashes again.
+    private var rendererRecoveryAttempted = false
+    private var rendererWebViewDestroyed = false
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var rootLayout: FrameLayout
     private lateinit var loadingOverlay: FrameLayout
@@ -320,9 +324,15 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        appUpdateManager = AppUpdateManagerFactory.create(this)
-        appUpdateManager.registerListener(appUpdateListener)
-        restorePendingWebsiteInstall()
+        rendererRecoveryAttempted = savedInstanceState?.getBoolean(STATE_RENDERER_RECOVERY_ATTEMPTED, false) ?: false
+        runCatching {
+            appUpdateManager = AppUpdateManagerFactory.create(this)
+            appUpdateManager.registerListener(appUpdateListener)
+        }.onFailure { error ->
+            android.util.Log.w("WorklyStartup", "Play update initialization failed; continuing app startup", error)
+        }
+        runCatching { restorePendingWebsiteInstall() }
+            .onFailure { error -> android.util.Log.w("WorklyStartup", "Pending website update restore failed", error) }
         ContextCompat.registerReceiver(
             this, smsRetrieverReceiver,
             IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
@@ -444,6 +454,50 @@ class MainActivity : FragmentActivity() {
                         httpStatus = errorResponse.statusCode
                     )
                 }
+            }
+
+            override fun onRenderProcessGone(
+                view: WebView,
+                detail: android.webkit.RenderProcessGoneDetail
+            ): Boolean {
+                val didCrash = detail.didCrash()
+                android.util.Log.e("WorklyWebView", "WebView renderer exited; didCrash=$didCrash")
+                AppErrorReporter.capture(
+                    applicationContext,
+                    "webview_renderer",
+                    "error",
+                    "WebViewRendererGone",
+                    "WebView renderer process exited; didCrash=$didCrash",
+                    source = Uri.parse(lastLoadedUrl).encodedPath ?: "/"
+                )
+                // A WebView whose renderer has exited must be removed and destroyed;
+                // reloading the same instance cannot bring its renderer back.
+                (view.parent as? ViewGroup)?.removeView(view)
+                view.stopLoading()
+                view.destroy()
+                rendererWebViewDestroyed = true
+                if (!rendererRecoveryAttempted) {
+                    rendererRecoveryAttempted = true
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) recreate()
+                    }
+                } else {
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Workly India needs to restart")
+                                .setMessage("The Android WebView engine stopped again. Restart Workly India to restore the screen.")
+                                .setCancelable(false)
+                                .setPositiveButton("Restart app") { _, _ ->
+                                    rendererRecoveryAttempted = false
+                                    recreate()
+                                }
+                                .setNegativeButton("Close app") { _, _ -> finish() }
+                                .show()
+                        }
+                    }
+                }
+                return true
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
@@ -3456,6 +3510,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_RENDERER_RECOVERY_ATTEMPTED, rendererRecoveryAttempted)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onDestroy() {
         interviewCallActive = false
         interviewCallVideoEnabled = false
@@ -3478,7 +3537,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         pendingGeoCallback = null
         pendingGeoOrigin = null
         activityScope.cancel()
-        if (::webView.isInitialized) {
+        if (::webView.isInitialized && !rendererWebViewDestroyed) {
             webView.removeJavascriptInterface("WorklyAndroid")
             webView.stopLoading()
             webView.destroy()
@@ -3497,5 +3556,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val REQUEST_VAULT_IMPORT = 4105
         private const val REQUEST_MEDIA = 702
         private const val REQUEST_LOCATION = 703
+        private const val STATE_RENDERER_RECOVERY_ATTEMPTED = "workly_renderer_recovery_attempted"
     }
 }
