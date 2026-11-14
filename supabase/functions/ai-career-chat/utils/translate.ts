@@ -54,9 +54,13 @@ async function callGateway(systemPrompt: string, text: string) {
   add("Google AI Studio", "GOOGLE_AI_STUDIO_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-2.5-flash");
   add("OpenRouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1/chat/completions", "meta-llama/llama-3.3-70b-instruct:free", {"HTTP-Referer":"https://worklyindia.devs.surf","X-Title":"Workly India"});
   add("Together AI", "TOGETHER_AI_API_KEY", "https://api.together.xyz/v1/chat/completions", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free");
-  add("Groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1/chat/completions", "llama-3.3-70b-versatile");
+  add("Groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1/chat/completions", "llama-3.1-8b-instant");
   add("Cerebras", "CEREBRAS_API_KEY", "https://api.cerebras.ai/v1/chat/completions", "llama3.1-8b");
-  add("Mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest");
+  add("Mistral AI", "MISTRAL_API_KEY", "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest");
+  add("Hugging Face", "HUGGINGFACE_API_KEY", "https://router.huggingface.co/v1/chat/completions", "meta-llama/Llama-3.3-70B-Instruct");
+  const cfAccount = Deno.env.get("CLOUDFLARE_ACCOUNT_ID");
+  const cfToken = Deno.env.get("CLOUDFLARE_AI_API_TOKEN") || Deno.env.get("CLOUDFLARE_API_TOKEN");
+  if (cfAccount && cfToken) providers.push({ name: "Cloudflare Workers AI", url: "https://api.cloudflare.com/client/v4/accounts/" + cfAccount + "/ai/v1/chat/completions", key: cfToken, model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" });
   if (!providers.length) throw new Error("No translation-capable AI gateway is configured");
   const failures: string[] = [];
   for (const provider of providers) {
