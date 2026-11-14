@@ -518,7 +518,7 @@ const AppContent = () => {
         const { supabase } = await import("@/integrations/supabase/client");
         const ua = navigator.userAgent || "Unknown device";
         const isAndroid = /Android/i.test(ua);
-        const androidModel = isAndroid ? ((ua.match(/Android [^;]+;\\s*([^;)]+)/i) || [])[1] || "Android device") : (navigator.platform || "Web device");
+        const androidModel = isAndroid ? ((ua.match(/Android [^;]+;\s*([^;)]+)/i) || [])[1] || "Android device") : (navigator.platform || "Web device");
         await supabase.from("app_installations").upsert({
           installation_id: installationId,
           user_id: user.id,
