@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useWhatsAppOTP } from '@/hooks/useWhatsAppOTP';
-import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
+import { useWebOTP } from '@/hooks/useWebOTP';
 import { Check, Loader2, RefreshCw, Shield, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -67,20 +67,12 @@ const WhatsAppOTPVerification: React.FC<WhatsAppOTPVerificationProps> = ({
     if (shouldAutoSend) {
       hasSentRef.current = true;
       console.log('[WhatsAppOTP] Auto-sending OTP to:', phone, 'for purpose:', purpose);
-      try { getWorklyAndroidBridge()?.startWhatsAppOtpHandshake?.(); } catch { /* copy-code/manual fallback */ }
       sendOTP(phone, name, purpose, userId);
     }
   }, [autoSend, isPhoneValid, name, otpSent, isSending, phone, purpose, userId, sendOTP]);
 
-  // WhatsApp OTP is delivered only through Meta's signed one-tap handshake.
-  useEffect(() => {
-    const handleWhatsAppOtp = (event: Event) => {
-      const code = (event as CustomEvent<{ code?: string }>).detail?.code?.replace(/\D/g, '').slice(0, 6);
-      if (code && code.length === 6) setOtp(code);
-    };
-    window.addEventListener('workly-whatsapp-otp', handleWhatsAppOtp as EventListener);
-    return () => window.removeEventListener('workly-whatsapp-otp', handleWhatsAppOtp as EventListener);
-  }, []);
+  // Auto-fill OTP from SMS via Chrome WebOTP prompt
+  useWebOTP((code) => setOtp(code), otpSent && !verified);
 
   // Auto-verify when OTP is complete
   useEffect(() => {
@@ -100,7 +92,6 @@ const WhatsAppOTPVerification: React.FC<WhatsAppOTPVerificationProps> = ({
   const handleManualSendOTP = async () => {
     hasSentRef.current = true;
     console.log('[WhatsAppOTP] Manual send OTP to:', phone);
-    try { getWorklyAndroidBridge()?.startWhatsAppOtpHandshake?.(); } catch { /* copy-code/manual fallback */ }
     await sendOTP(phone, name, purpose, userId);
   };
 
