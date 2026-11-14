@@ -617,8 +617,8 @@ const AppContent = () => {
     try {
       installationId = localStorage.getItem(installationKey) || crypto.randomUUID();
       localStorage.setItem(installationKey, installationId);
-      sessionId = sessionStorage.getItem("workly-app-session-id:v1") || crypto.randomUUID();
-      sessionStorage.setItem("workly-app-session-id:v1", sessionId);
+      sessionId = sessionStorage.getItem("workly-app-session-id:v1:" + accountId) || crypto.randomUUID();
+      sessionStorage.setItem("workly-app-session-id:v1:" + accountId, sessionId);
     } catch {
       console.warn("[App session] Could not initialize the local session queue");
       return;
@@ -627,8 +627,8 @@ const AppContent = () => {
     const queueKey = "workly-pending-session:" + sessionId;
     let startedAt = new Date().toISOString();
     try {
-      startedAt = sessionStorage.getItem("workly-app-session-started-at:v1") || startedAt;
-      sessionStorage.setItem("workly-app-session-started-at:v1", startedAt);
+      startedAt = sessionStorage.getItem("workly-app-session-started-at:v1:" + accountId) || startedAt;
+      sessionStorage.setItem("workly-app-session-started-at:v1:" + accountId, startedAt);
     } catch {
       // Continue with this in-memory session start if session storage is unavailable.
     }
