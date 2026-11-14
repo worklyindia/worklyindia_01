@@ -10,6 +10,7 @@ import { normalizePhoneE164 } from '@/hooks/usePhoneOtpLogin';
 import { saveSignupPhoneProof } from '@/lib/signupPhoneProof';
 import { verifyAccountPhoneOtp } from '@/lib/onboardingPhone';
 import { isValidE164 } from '@/lib/phone';
+import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 
 const COOLDOWN_SECONDS = 60;
 const STORAGE_PREFIX = 'phone_verify_cooldown:';
@@ -140,6 +141,7 @@ export const PhoneVerifyBox = ({
     }
     if (readCooldown(e164) > 0) return;
     setSending(true);
+    try { getWorklyAndroidBridge()?.startSmsUserConsent?.(); } catch { /* manual entry remains available */ }
     try {
       if (onBeforeSend) {
         const blockReason = await onBeforeSend(e164);
@@ -176,7 +178,7 @@ export const PhoneVerifyBox = ({
   }, [autoSend, verified, isPhoneValid, otpSent, sending, sendOtp]);
 
   // Chrome Android SMS auto-fill
-  useWebOTP((code) => setOtp(code), otpSent && !verified);
+  useWebOTP((code) => setOtp(code), !verified && (otpSent || sending), true);
 
   const verify = useCallback(async (code: string) => {
     setVerifying(true);

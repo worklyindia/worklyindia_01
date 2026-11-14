@@ -21,6 +21,7 @@ export const EmailOtpVerifyBox = ({ email, name, page, onVerified }: Props) => {
   const [left, setLeft] = useState(0);
   const [error, setError] = useState('');
   const autoSent = useRef(false);
+  const lastVerifiedCode = useRef('');
 
   useEffect(() => {
     if (left <= 0) return;
@@ -55,17 +56,24 @@ export const EmailOtpVerifyBox = ({ email, name, page, onVerified }: Props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const verify = async () => {
+  const verify = async (value = code) => {
+    const normalizedCode = value.replace(/\D/g, '').slice(0, 6);
+    if (normalizedCode.length !== 6 || verifying || lastVerifiedCode.current === normalizedCode) return;
+    lastVerifiedCode.current = normalizedCode;
     setError('');
     setVerifying(true);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke('email-api/signup-email-otp', {
-        body: { action: 'verify', page, email, code },
+        body: { action: 'verify', page, email, code: normalizedCode },
       });
       if (data?.verified) { onVerified(); return; }
       let msg = data?.error;
       try { msg = msg || (await (fnErr as any)?.context?.json())?.error; } catch { /* ignore */ }
+      lastVerifiedCode.current = '';
       setError(msg || 'Wrong code');
+    } catch (error) {
+      lastVerifiedCode.current = '';
+      setError(error instanceof Error ? error.message : 'Verification failed');
     } finally {
       setVerifying(false);
     }
@@ -82,7 +90,11 @@ export const EmailOtpVerifyBox = ({ email, name, page, onVerified }: Props) => {
         maxLength={6}
         placeholder="Enter 6-digit code"
         value={code}
-        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        onChange={(e) => {
+          const next = e.target.value.replace(/\D/g, '').slice(0, 6);
+          setCode(next);
+          if (next.length === 6) void verify(next);
+        }}
         className="h-12 text-center text-lg tracking-[0.4em] placeholder:text-sm placeholder:tracking-normal"
       />
       {error && <p className="text-center text-xs text-destructive">{error}</p>}

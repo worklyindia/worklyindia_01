@@ -12,7 +12,8 @@ import { useEffect, useRef } from 'react';
  */
 export const useWebOTP = (
   onCode: (code: string) => void,
-  enabled: boolean = true
+  enabled: boolean = true,
+  nativeSmsConsent: boolean = false
 ) => {
   const handlerRef = useRef(onCode);
   handlerRef.current = onCode;
@@ -20,27 +21,35 @@ export const useWebOTP = (
   useEffect(() => {
     if (!enabled) return;
     if (typeof window === 'undefined') return;
-    if (!('OTPCredential' in window)) return;
-    if (!window.isSecureContext) return;
-
+    if (nativeSmsConsent) {
+      const nativeBridge = (window as Window & { WorklyAndroid?: { startSmsUserConsent?: () => boolean } }).WorklyAndroid;
+      try { nativeBridge?.startSmsUserConsent?.(); } catch { /* browser/manual fallback */ }
+    }
+    const onNativeOtp = (event: Event) => {
+      const code = (event as CustomEvent<{ code?: string }>).detail?.code?.replace(/\D/g, '');
+      if (code && code.length >= 4) handlerRef.current(code.slice(0, 6));
+    };
+    if (nativeSmsConsent) window.addEventListener('workly-sms-otp', onNativeOtp as EventListener);
     const controller = new AbortController();
-
-    (navigator.credentials as unknown as {
-      get: (o: unknown) => Promise<{ code?: string } | null>;
-    })
-      .get({ otp: { transport: ['sms'] }, signal: controller.signal })
-      .then((otpCred) => {
-        const code = otpCred?.code?.replace(/\D/g, '');
-        if (code && code.length >= 4) {
-          handlerRef.current(code.slice(0, 6));
-        }
+    if ('OTPCredential' in window && window.isSecureContext) {
+      (navigator.credentials as unknown as {
+        get: (o: unknown) => Promise<{ code?: string } | null>;
       })
-      .catch(() => {
-        /* aborted or denied — silently ignore */
-      });
+        .get({ otp: { transport: ['sms'] }, signal: controller.signal })
+        .then((otpCred) => {
+          const code = otpCred?.code?.replace(/\D/g, '');
+          if (code && code.length >= 4) handlerRef.current(code.slice(0, 6));
+        })
+        .catch(() => {
+          /* aborted or denied — silently ignore */
+        });
+    }
 
-    return () => controller.abort();
-  }, [enabled]);
+    return () => {
+      controller.abort();
+      if (nativeSmsConsent) window.removeEventListener('workly-sms-otp', onNativeOtp as EventListener);
+    };
+  }, [enabled, nativeSmsConsent]);
 };
 
 export default useWebOTP;

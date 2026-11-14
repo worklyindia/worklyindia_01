@@ -60,6 +60,10 @@ import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.InstallStatus
 import com.google.android.play.core.install.model.UpdateAvailability
 import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.gms.auth.api.phone.SmsRetriever
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.whatsapp.otp.android.sdk.WhatsAppOtpHandler
+import com.whatsapp.otp.android.sdk.WhatsAppOtpIncomingIntentHandler
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -106,6 +110,29 @@ class MainActivity : FragmentActivity() {
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
     private lateinit var appUpdateManager: AppUpdateManager
+    private var smsConsentPending = false
+    private var smsReceiverRegistered = false
+    private val smsRetrieverReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
+            val extras = intent.extras ?: return
+            val status = extras.get(SmsRetriever.EXTRA_STATUS) as? com.google.android.gms.common.api.Status ?: return
+            when (status.statusCode) {
+                CommonStatusCodes.SUCCESS -> {
+                    val consentIntent = extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT)
+                    if (consentIntent != null && !smsConsentPending && !isFinishing && !isDestroyed) {
+                        smsConsentPending = true
+                        runCatching { startActivityForResult(consentIntent, REQUEST_SMS_CONSENT) }
+                            .onFailure { error ->
+                                smsConsentPending = false
+                                android.util.Log.w("WorklySmsOtp", "Could not show SMS consent prompt", error)
+                            }
+                    }
+                }
+                CommonStatusCodes.TIMEOUT -> android.util.Log.i("WorklySmsOtp", "SMS consent listening timed out")
+            }
+        }
+    }
     private var updateDialogVisible = false
     private var updateCheckInProgress = false
     private var websiteUpdateCheckInProgress = false
@@ -203,6 +230,21 @@ class MainActivity : FragmentActivity() {
     @Deprecated("Android WebView file chooser result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_SMS_CONSENT) {
+            smsConsentPending = false
+            if (resultCode == RESULT_OK && data != null) {
+                val message = data.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE).orEmpty()
+                val code = Regex("(?<!\\d)\\d{4,8}(?!\\d)").find(message)?.value
+                if (!code.isNullOrBlank() && ::webView.isInitialized) {
+                    val safeCode = code.filter(Char::isDigit)
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('workly-sms-otp',{detail:{code:'$safeCode'}}));",
+                        null
+                    )
+                }
+            }
+            return
+        }
         if (requestCode == REQUEST_WEBSITE_INSTALL) {
             websiteInstallLaunchPending = false
             val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
@@ -281,6 +323,12 @@ class MainActivity : FragmentActivity() {
         appUpdateManager = AppUpdateManagerFactory.create(this)
         appUpdateManager.registerListener(appUpdateListener)
         restorePendingWebsiteInstall()
+        ContextCompat.registerReceiver(
+            this, smsRetrieverReceiver,
+            IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION),
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        smsReceiverRegistered = true
         ContextCompat.registerReceiver(
             this, websiteDownloadReceiver,
             android.content.IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
@@ -1647,7 +1695,68 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         prompt.authenticate(promptInfo)
     }
 
+    private fun handleWhatsAppOtpIntent(intent: Intent): Boolean {
+        if (intent.action != "com.whatsapp.otp.OTP_RETRIEVED") return false
+        val prefs = getSharedPreferences("workly_auth", Context.MODE_PRIVATE)
+        val expectedHandshakeId = prefs.getString("whatsapp_otp_handshake", null)
+        if (expectedHandshakeId.isNullOrBlank()) {
+            android.util.Log.w("WorklyWhatsAppOtp", "Ignoring OTP without an active handshake")
+            return true
+        }
+        WhatsAppOtpIncomingIntentHandler().processOtpCode(
+            intent,
+            expectedHandshakeId,
+            { code ->
+                prefs.edit().remove("whatsapp_otp_handshake").apply()
+                runOnUiThread {
+                    if (::webView.isInitialized) {
+                        val safeCode = JSONObject.quote(code.filter(Char::isDigit))
+                        webView.evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('workly-whatsapp-otp',{detail:{code:$safeCode}}));",
+                            null
+                        )
+                    }
+                }
+            },
+            { error, exception ->
+                android.util.Log.w("WorklyWhatsAppOtp", "OTP handshake rejected: $error", exception)
+            }
+        )
+        return true
+    }
+
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun startWhatsAppOtpHandshake(): Boolean {
+            if (isFinishing || isDestroyed) return false
+            return try {
+                val handshakeId = WhatsAppOtpHandler().sendOtpIntentToWhatsApp(this@MainActivity)
+                getSharedPreferences("workly_auth", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("whatsapp_otp_handshake", handshakeId.toString())
+                    .apply()
+                true
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyWhatsAppOtp", "Could not start WhatsApp OTP handshake", error)
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun startSmsUserConsent(): Boolean {
+            if (isFinishing || isDestroyed) return false
+            return try {
+                SmsRetriever.getClient(this@MainActivity).startSmsUserConsent(null)
+                    .addOnFailureListener { error ->
+                        android.util.Log.w("WorklySmsOtp", "Could not start SMS OTP listener", error)
+                    }
+                true
+            } catch (error: Exception) {
+                android.util.Log.w("WorklySmsOtp", "SMS OTP listener unavailable", error)
+                false
+            }
+        }
+
         @JavascriptInterface
         fun reportAppError(type: String, message: String, source: String, httpStatus: Int): Boolean {
             AppErrorReporter.capture(
@@ -2432,6 +2541,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (handleWhatsAppOtpIntent(intent)) return
         if (intent.getBooleanExtra("workly_open_home", false)) {
             lastLoadedUrl = website
             if (hasInternetConnection()) {
@@ -3350,6 +3460,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         interviewCallActive = false
         interviewCallVideoEnabled = false
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (smsReceiverRegistered) {
+            runCatching { unregisterReceiver(smsRetrieverReceiver) }
+            smsReceiverRegistered = false
+        }
         if (::appUpdateManager.isInitialized) {
             appUpdateManager.unregisterListener(appUpdateListener)
         }
@@ -3376,6 +3490,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val PACKAGE_INSTALL_STATUS_REQUEST = 7441
         private const val REQUEST_APP_UPDATE = 4104
         private const val REQUEST_WEBSITE_INSTALL = 4106
+        private const val REQUEST_SMS_CONSENT = 4108
         private const val REQUEST_NOTIFICATIONS = 701
         private const val REQUEST_CHARGING_ALERT_NOTIFICATIONS = 704
         private const val REQUEST_FILE_CHOOSER = 4103

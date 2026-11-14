@@ -74,6 +74,10 @@ dependencies {
     implementation("com.google.firebase:firebase-perf")
     // Crash diagnostics with R8 mapping-file deobfuscation.
     implementation("com.google.firebase:firebase-crashlytics")
+    // SMS User Consent API: receive OTP SMS without broad SMS permissions.
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.2.0")
+    // Official Meta WhatsApp OTP SDK for signed one-tap authentication handshakes.
+    implementation("com.whatsapp.otp:whatsapp-otp-android-sdk:1.0.0")
     // Official Google Play in-app update flow (flexible updates).
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.17.0")

@@ -32,7 +32,7 @@ export const PhoneOtpField = ({
   otpSent,
 }: PhoneOtpFieldProps) => {
   // Chrome Android SMS auto-fill
-  useWebOTP((code) => onOtpChange(code), true);
+  useWebOTP((code) => onOtpChange(code), true, true);
 
   return (
     <div className="space-y-2">
