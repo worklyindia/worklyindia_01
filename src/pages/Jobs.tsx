@@ -48,6 +48,7 @@ import { useNativeFeel } from "@/hooks/useNativeFeel";
 import { StandardSheetHeader } from "@/components/StandardSheetHeader";
 import { CANONICAL_URL } from "@/services/DomainService";
 import { ROUTE_SEO } from '@/lib/routeSeo';
+import PublicCareerContent from '@/components/PublicCareerContent';
 
 const Jobs = () => {
   const navigate = useNavigate();
@@ -1687,6 +1688,7 @@ const Jobs = () => {
             )}
           </div>
         </div>
+        <PublicCareerContent page="/jobs" />
       </main>
 
       <LocationFilterDialog
