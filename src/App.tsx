@@ -608,15 +608,19 @@ const AppContent = () => {
   // Android-app-only foreground session tracking. Browser/website sessions are
   // deliberately excluded by requiring the native WebView bridge.
   useEffect(() => {
-    if (!user?.id || !isWorklyAndroidApp()) return;
-    const accountId = user.id;
+    if (!isWorklyAndroidApp()) return;
+    const accountId = user?.id || "anonymous";
     const device = getNativeDeviceInfo();
     const installationKey = "workly-app-installation-id:v2:" + accountId;
     let installationId = "";
     let sessionId = "";
     try {
-      installationId = localStorage.getItem(installationKey) || crypto.randomUUID();
-      localStorage.setItem(installationKey, installationId);
+      if (accountId === "anonymous") {
+        installationId = device?.installationId || crypto.randomUUID();
+      } else {
+        installationId = localStorage.getItem(installationKey) || crypto.randomUUID();
+        localStorage.setItem(installationKey, installationId);
+      }
       sessionId = sessionStorage.getItem("workly-app-session-id:v1:" + accountId) || crypto.randomUUID();
       sessionStorage.setItem("workly-app-session-id:v1:" + accountId, sessionId);
     } catch {
@@ -635,29 +639,23 @@ const AppContent = () => {
     let cancelled = false;
     let inFlight = false;
     type SessionPayload = {
-      session_id: string;
-      installation_id: string;
-      user_id: string;
-      platform: "android_app";
-      device_model: string;
-      os_version: string;
-      app_version: string;
-      started_at: string;
-      last_seen_at: string;
-      ended_at: string | null;
+      p_session_id: string;
+      p_installation_id: string;
+      p_native_installation_id: string;
+      p_device_model: string;
+      p_os_version: string;
+      p_app_version: string;
+      p_end_session: boolean;
     };
 
     const makePayload = (endedAt: string | null): SessionPayload => ({
-      session_id: sessionId,
-      installation_id: installationId,
-      user_id: accountId,
-      platform: "android_app",
-      device_model: [device?.manufacturer, device?.model].filter(Boolean).join(" ").slice(0, 120) || "Android device",
-      os_version: (device?.androidVersion || "Unknown").slice(0, 80),
-      app_version: (device ? `${device.appVersion} (${device.appVersionCode})` : "Unknown").slice(0, 80),
-      started_at: startedAt,
-      last_seen_at: new Date().toISOString(),
-      ended_at: endedAt,
+      p_session_id: sessionId,
+      p_installation_id: installationId,
+      p_native_installation_id: device?.installationId || installationId,
+      p_device_model: [device?.manufacturer, device?.model].filter(Boolean).join(" ").slice(0, 120) || "Android device",
+      p_os_version: (device?.androidVersion || "Unknown").slice(0, 80),
+      p_app_version: (device ? `${device.appVersion} (${device.appVersionCode})` : "Unknown").slice(0, 80),
+      p_end_session: endedAt !== null,
     });
 
     const flushQueuedSession = async () => {
@@ -669,7 +667,7 @@ const AppContent = () => {
         if (!sentSnapshot) return;
         const payload = JSON.parse(sentSnapshot) as SessionPayload;
         const { supabase } = await import("@/integrations/supabase/client");
-        const { error } = await supabase.from("app_sessions").upsert(payload, { onConflict: "session_id" });
+        const { error } = await (supabase.rpc as any)("record_android_app_session", payload);
         if (error) throw error;
         if (localStorage.getItem(queueKey) === sentSnapshot) localStorage.removeItem(queueKey);
       } catch (error) {
