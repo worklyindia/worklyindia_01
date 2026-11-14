@@ -87,6 +87,8 @@ dependencies {
     // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
     implementation("androidx.credentials:credentials:1.6.0-beta02")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0-beta02")
+    // Google Play Services Phone Number Hint API; user-selected SIM number suggestion without phone/SMS permissions.
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
     implementation("androidx.webkit:webkit:1.14.0")
     // Render the exact user-supplied WiFi Connecting.json Lottie animation on the offline screen.
     implementation("com.airbnb.android:lottie:6.6.2")
