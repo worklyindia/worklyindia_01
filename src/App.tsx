@@ -503,7 +503,7 @@ const AppContent = () => {
   // A distinct UUID per account avoids RLS conflicts when multiple users sign in
   // on the same phone (the native installation UUID is device-wide).
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !isWorklyAndroidApp()) return;
     const accountId = user.id;
     const nativeDeviceInfo = getNativeDeviceInfo();
     let installationId = "";
@@ -562,7 +562,7 @@ const AppContent = () => {
           ...queued,
           installation_id: installationId,
           user_id: accountId,
-          platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
+          platform: "android_app",
           device_model: androidModel.slice(0, 120) || "Unknown device",
           os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"))).slice(0, 80),
           app_version: appVersion.slice(0, 80),
@@ -602,6 +602,94 @@ const AppContent = () => {
       window.removeEventListener("online", retry);
       window.removeEventListener("focus", retry);
       document.removeEventListener("visibilitychange", retry);
+    };
+  }, [user?.id]);
+
+  // Android-app-only foreground session tracking. Browser/website sessions are
+  // deliberately excluded by requiring the native WebView bridge.
+  useEffect(() => {
+    if (!user?.id || !isWorklyAndroidApp()) return;
+    const accountId = user.id;
+    const device = getNativeDeviceInfo();
+    const installationKey = "workly-app-installation-id:v2:" + accountId;
+    let installationId = "";
+    let sessionId = "";
+    try {
+      installationId = localStorage.getItem(installationKey) || crypto.randomUUID();
+      localStorage.setItem(installationKey, installationId);
+      sessionId = sessionStorage.getItem("workly-app-session-id:v1") || crypto.randomUUID();
+      sessionStorage.setItem("workly-app-session-id:v1", sessionId);
+    } catch {
+      console.warn("[App session] Could not initialize the local session queue");
+      return;
+    }
+
+    const queueKey = "workly-pending-session:" + sessionId;
+    const startedAt = new Date().toISOString();
+    let cancelled = false;
+    let inFlight = false;
+    type SessionPayload = {
+      session_id: string;
+      installation_id: string;
+      user_id: string;
+      platform: "android_app";
+      device_model: string;
+      os_version: string;
+      app_version: string;
+      started_at: string;
+      last_seen_at: string;
+      ended_at: string | null;
+    };
+
+    const makePayload = (endedAt: string | null): SessionPayload => ({
+      session_id: sessionId,
+      installation_id: installationId,
+      user_id: accountId,
+      platform: "android_app",
+      device_model: [device?.manufacturer, device?.model].filter(Boolean).join(" ").slice(0, 120) || "Android device",
+      os_version: (device?.androidVersion || "Unknown").slice(0, 80),
+      app_version: (device ? `${device.appVersion} (${device.appVersionCode})` : "Unknown").slice(0, 80),
+      started_at: startedAt,
+      last_seen_at: new Date().toISOString(),
+      ended_at: endedAt,
+    });
+
+    const flushSession = async (endedAt: string | null) => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        const payload = makePayload(endedAt);
+        localStorage.setItem(queueKey, JSON.stringify(payload));
+        const { supabase } = await import("@/integrations/supabase/client");
+        const { error } = await supabase.from("app_sessions").upsert(payload, { onConflict: "session_id" });
+        if (error) throw error;
+        if (localStorage.getItem(queueKey) === JSON.stringify(payload)) localStorage.removeItem(queueKey);
+      } catch (error) {
+        console.warn("[App session] Sync failed; queued session retained", error);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const sync = () => {
+      if (document.visibilityState === "visible") void flushSession(null);
+    };
+    const end = () => { void flushSession(new Date().toISOString()); };
+    sync();
+    const heartbeat = window.setInterval(sync, 45 * 1000);
+    window.addEventListener("online", sync);
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") sync();
+      else end();
+    });
+    window.addEventListener("pagehide", end);
+    return () => {
+      cancelled = true;
+      window.clearInterval(heartbeat);
+      window.removeEventListener("online", sync);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("pagehide", end);
     };
   }, [user?.id]);
   useTrackWorklyChatReturn();
