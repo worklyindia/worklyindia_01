@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Copy, Share2, Link, Building2, Users, Star, Wallet, Trophy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { copyText, shareText } from "@/utils/openExternalShareUrl";
 
 const ReferralCodePage = () => {
   const navigate = useNavigate();
@@ -23,24 +24,22 @@ const ReferralCodePage = () => {
     ? `${window.location.origin}/employer-auth?ref=${referralCode.referral_code}`
     : "";
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, label: string) => {
+    const copied = await copyText(text);
     toast({
-      title: "Copied!",
-      description: `${label} copied to clipboard`,
+      title: copied ? "Copied!" : "Copy failed",
+      description: copied ? `${label} copied to clipboard` : "Please try again",
+      variant: copied ? "default" : "destructive",
     });
   };
 
-  const shareReferralLink = (link: string, type: string) => {
-    if (navigator.share) {
-      navigator.share({
-        title: 'Join Workly India - Remote Jobs',
-        text: `Join India's best remote job platform using my referral link and get exclusive benefits!`,
-        url: link,
-      });
-    } else {
-      copyToClipboard(link, `${type} link`);
-    }
+  const shareReferralLink = async (link: string, type: string) => {
+    const shared = await shareText(
+      "Join Workly India - Remote Jobs",
+      `Join India's best remote job platform using my ${type.toLowerCase()} referral link and get exclusive benefits!`,
+      link,
+    );
+    if (!shared && !navigator.share) await copyToClipboard(link, `${type} link`);
   };
 
   return (
