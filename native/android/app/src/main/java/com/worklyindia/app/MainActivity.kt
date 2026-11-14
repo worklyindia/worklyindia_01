@@ -505,10 +505,11 @@ class MainActivity : FragmentActivity() {
                             if (!input || input.tagName !== 'INPUT') return;
                             var descriptor = [
                               input.type, input.name, input.id, input.autocomplete,
-                              input.placeholder, input.getAttribute('aria-label')
+                              input.placeholder, input.getAttribute('aria-label'),
+                              Array.prototype.map.call(input.labels || [], function(label) { return label.textContent || ''; }).join(' ')
                             ].join(' ');
-                            if (!/(^|\s)(tel|tel-national|tel-country-code)(\s|$)/i.test(input.autocomplete || '') &&
-                                !/(phone|mobile|telephone|contact.?number|whatsapp.?number)/i.test(descriptor)) return;
+                            if (!/(phone|mobile|telephone|contact.?number|whatsapp.?number|\\btel\\b)/i.test(descriptor) &&
+                                !/(^|\s)(tel|tel-national|tel-country-code)(\s|$)/i.test(input.autocomplete || '')) return;
                             if (input.disabled || input.readOnly || String(input.value || '').trim()) return;
                             target = input;
                             try {
@@ -516,9 +517,6 @@ class MainActivity : FragmentActivity() {
                                 window.WorklyAndroid.requestPhoneNumberHint();
                               }
                             } catch (_) {}
-                          }, true);
-                          document.addEventListener('focusout', function(event) {
-                            if (event.target === target) target = null;
                           }, true);
                           window.addEventListener('workly-phone-number-hint', function(event) {
                             var input = target;
