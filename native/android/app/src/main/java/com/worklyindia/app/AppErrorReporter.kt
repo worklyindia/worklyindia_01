@@ -25,6 +25,13 @@ object AppErrorReporter {
         WorklyErrorReportWorker.schedule(appContext)
     }
 
+    fun getInstallationId(context: Context): String {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_INSTALLATION_ID, null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString(KEY_INSTALLATION_ID, it).commit()
+        }
+    }
+
     fun capture(context: Context, component: String, severity: String, error: Throwable, source: String? = null, httpStatus: Int? = null) {
         capture(context, component, severity, error.javaClass.simpleName.ifBlank { "Exception" },
             error.message ?: "", Log.getStackTraceString(error), source, httpStatus)
@@ -37,10 +44,7 @@ object AppErrorReporter {
         runCatching {
             val app = context.applicationContext
             val id = UUID.randomUUID().toString()
-            val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val installationId = prefs.getString(KEY_INSTALLATION_ID, null) ?: UUID.randomUUID().toString().also {
-                prefs.edit().putString(KEY_INSTALLATION_ID, it).commit()
-            }
+            val installationId = getInstallationId(app)
             val packageInfo = app.packageManager.getPackageInfo(app.packageName, 0)
             val safeContext = JSONObject()
             if (!source.isNullOrBlank()) safeContext.put("source", sanitize(source, 120))
