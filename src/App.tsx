@@ -519,6 +519,15 @@ const AppContent = () => {
     let cancelled = false;
     let inFlight = false;
     const pendingKey = "workly-pending-installation:" + accountId;
+    type InstallationPayload = {
+      installation_id: string;
+      user_id: string;
+      platform: string;
+      device_model: string;
+      os_version: string;
+      app_version: string;
+      last_seen_at: string;
+    };
 
     const flushInstallationOutbox = async () => {
       if (cancelled || inFlight) return;
@@ -536,20 +545,20 @@ const AppContent = () => {
 
         // Replay a previously queued row first. Always scope it to this account
         // and current account-specific installation UUID before sending.
-        let queued: Record<string, unknown> = {};
+        let queued: Partial<InstallationPayload> = {};
         try {
           const raw = localStorage.getItem(pendingKey);
           if (raw) {
             const parsed = JSON.parse(raw);
             if (parsed && typeof parsed === "object" && parsed.user_id === accountId) {
-              queued = parsed as Record<string, unknown>;
+              queued = parsed as Partial<InstallationPayload>;
             }
           }
         } catch {
           // A corrupt queue entry is replaced by a fresh valid heartbeat below.
         }
 
-        const installationPayload = {
+        const installationPayload: InstallationPayload = {
           ...queued,
           installation_id: installationId,
           user_id: accountId,
