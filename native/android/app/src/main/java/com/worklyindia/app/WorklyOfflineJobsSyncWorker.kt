@@ -70,8 +70,12 @@ class WorklyOfflineJobsSyncWorker(context: Context, params: WorkerParameters) : 
             val initial = androidx.work.OneTimeWorkRequestBuilder<WorklyOfflineJobsSyncWorker>()
                 .setConstraints(constraints)
                 .build()
+            // schedule() runs on every cold app start. KEEP would preserve a
+            // completed one-time request, preventing later launches from refreshing
+            // the local snapshot. REPLACE queues a fresh background refresh without
+            // blocking WebView startup or deleting the last good local snapshot.
             WorkManager.getInstance(context).enqueueUniqueWork(
-                "$WORK_NAME-initial", androidx.work.ExistingWorkPolicy.KEEP, initial
+                "$WORK_NAME-initial", androidx.work.ExistingWorkPolicy.REPLACE, initial
             )
         }
     }
