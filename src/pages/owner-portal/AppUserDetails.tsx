@@ -34,25 +34,29 @@ export default function AppUserDetails() {
   const [installs, setInstalls] = useState<InstallRow[]>([]);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [anonymousInstalls, setAnonymousInstalls] = useState<AnonymousInstallRow[]>([]);
+  const [anonymousSessions, setAnonymousSessions] = useState<AnonymousSessionEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [u, i, s, a] = await Promise.all([
+    const [u, i, s, a, ae] = await Promise.all([
       supabase.rpc("get_owner_app_user_details"),
       supabase.from("app_installations").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
       supabase.from("app_sessions").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
       supabase.from("app_anonymous_installations").select("installation_id,last_seen_at,device_model,app_version").order("last_seen_at", { ascending: false }).limit(10000),
+      supabase.from("app_anonymous_sessions").select("session_id,installation_id,event_type,created_at").order("created_at", { ascending: false }).limit(10000),
     ]);
     if (u.error) toast.error("Unable to load app users: " + u.error.message);
     if (i.error) toast.error("Unable to load Android app installations: " + i.error.message);
     if (s.error) toast.error("Unable to load app sessions: " + s.error.message);
     if (a.error) toast.error("Unable to load anonymous app devices: " + a.error.message);
+    if (ae.error) toast.error("Unable to load anonymous app sessions: " + ae.error.message);
     setUsers((u.data || []) as ProfileRow[]);
     setInstalls((i.data || []) as InstallRow[]);
     setSessions((s.data || []) as SessionRow[]);
     setAnonymousInstalls((a.data || []) as AnonymousInstallRow[]);
+    setAnonymousSessions((ae.data || []) as AnonymousSessionEventRow[]);
     setLoading(false);
   }, []);
 
@@ -66,9 +70,13 @@ export default function AppUserDetails() {
     const recentUserIds = new Set(sessions.filter(s => s.user_id &&
       now - new Date(s.last_seen_at).getTime() <= RECENT_WINDOW_MS
     ).map(s => s.user_id as string));
-    const anonymousActive = new Set(sessions.filter(s =>
-      !s.user_id && !s.ended_at && now - new Date(s.last_seen_at).getTime() <= ACTIVE_WINDOW_MS
-    ).map(s => s.installation_id)).size;
+    const latestAnonymousEventBySession = new Map<string, AnonymousSessionEventRow>();
+    anonymousSessions.forEach(event => {
+      if (!latestAnonymousEventBySession.has(event.session_id)) latestAnonymousEventBySession.set(event.session_id, event);
+    });
+    const anonymousActive = new Set([...latestAnonymousEventBySession.values()].filter(event =>
+      event.event_type === "heartbeat" && now - new Date(event.created_at).getTime() <= ACTIVE_WINDOW_MS
+    ).map(event => event.installation_id)).size;
     const distinctIn = (from: Date) => new Set(
       sessions.filter(s => s.user_id && new Date(s.last_seen_at).getTime() >= from.getTime()).map(s => s.user_id as string)
     ).size;
@@ -84,7 +92,7 @@ export default function AppUserDetails() {
       weekly: distinctIn(startOfWeek(new Date(), { weekStartsOn: 1 })),
       monthly: distinctIn(startOfMonth(new Date())),
     };
-  }, [users, installs, sessions, anonymousInstalls]);
+  }, [users, installs, sessions, anonymousInstalls, anonymousSessions]);
 
   const filtered = useMemo(() => users.filter(u =>
     [u.full_name, u.email, u.phone, u.user_id, u.city, u.state, u.location]
