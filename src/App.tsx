@@ -523,7 +523,8 @@ const AppContent = () => {
         const appVersion = nativeDeviceInfo
           ? `${nativeDeviceInfo.appVersion} (${nativeDeviceInfo.appVersionCode})`
           : (import.meta.env.VITE_APP_VERSION || "web");
-        const { error } = await supabase.from("app_installations").upsert({
+        const pendingKey = "workly-pending-installation:" + user.id;
+        const installationPayload = {
           installation_id: installationId,
           user_id: user.id,
           platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
@@ -531,8 +532,16 @@ const AppContent = () => {
           os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"))).slice(0, 80),
           app_version: appVersion.slice(0, 80),
           last_seen_at: new Date().toISOString(),
-        }, { onConflict: "installation_id" });
+        };
+        // Persist the latest heartbeat locally before networking. If the
+        // request fails or the app closes, the next launch retries this sync.
+        try { localStorage.setItem(pendingKey, JSON.stringify(installationPayload)); } catch { /* best effort local outbox */ }
+        const { error } = await supabase.from("app_installations").upsert(
+          installationPayload,
+          { onConflict: "installation_id" }
+        );
         if (error) throw error;
+        try { localStorage.removeItem(pendingKey); } catch { /* server has acknowledged the row */ }
       } catch (error) { console.warn("[App installation] Heartbeat failed", error); }
     };
     void heartbeat();
