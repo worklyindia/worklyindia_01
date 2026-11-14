@@ -13,7 +13,6 @@ import { useEffect, useState } from "react";
 import { WithdrawalDialog } from "./WithdrawalDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployerAuth } from "@/contexts/EmployerAuthContext";
-import { copyText, shareText } from "@/utils/openExternalShareUrl";
 
 const ReferralDashboard = () => {
   const { toast } = useToast();
