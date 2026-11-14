@@ -62,6 +62,8 @@ import com.google.android.play.core.install.model.UpdateAvailability
 import com.google.android.play.core.install.model.AppUpdateType
 import com.google.android.gms.auth.api.phone.SmsRetriever
 import com.google.android.gms.common.api.CommonStatusCodes
+import com.whatsapp.otp.android.sdk.WhatsAppOtpHandler
+import com.whatsapp.otp.android.sdk.WhatsAppOtpIncomingIntentHandler
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -1693,7 +1695,53 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         prompt.authenticate(promptInfo)
     }
 
+    private fun handleWhatsAppOtpIntent(intent: Intent): Boolean {
+        if (intent.action != "com.whatsapp.otp.OTP_RETRIEVED") return false
+        val prefs = getSharedPreferences("workly_auth", Context.MODE_PRIVATE)
+        val expectedHandshakeId = prefs.getString("whatsapp_otp_handshake", null)
+        if (expectedHandshakeId.isNullOrBlank()) {
+            android.util.Log.w("WorklyWhatsAppOtp", "Ignoring OTP without an active handshake")
+            return true
+        }
+        WhatsAppOtpIncomingIntentHandler().processOtpCode(
+            intent,
+            expectedHandshakeId,
+            { code ->
+                prefs.edit().remove("whatsapp_otp_handshake").apply()
+                runOnUiThread {
+                    if (::webView.isInitialized) {
+                        val safeCode = JSONObject.quote(code.filter(Char::isDigit))
+                        webView.evaluateJavascript(
+                            "window.dispatchEvent(new CustomEvent('workly-whatsapp-otp',{detail:{code:$safeCode}}));",
+                            null
+                        )
+                    }
+                }
+            },
+            { error, exception ->
+                android.util.Log.w("WorklyWhatsAppOtp", "OTP handshake rejected: $error", exception)
+            }
+        )
+        return true
+    }
+
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun startWhatsAppOtpHandshake(): Boolean {
+            if (isFinishing || isDestroyed) return false
+            return try {
+                val handshakeId = WhatsAppOtpHandler().sendOtpIntentToWhatsApp(this@MainActivity)
+                getSharedPreferences("workly_auth", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("whatsapp_otp_handshake", handshakeId.toString())
+                    .apply()
+                true
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyWhatsAppOtp", "Could not start WhatsApp OTP handshake", error)
+                false
+            }
+        }
+
         @JavascriptInterface
         fun startSmsUserConsent(): Boolean {
             if (isFinishing || isDestroyed) return false
@@ -2493,6 +2541,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (handleWhatsAppOtpIntent(intent)) return
         if (intent.getBooleanExtra("workly_open_home", false)) {
             lastLoadedUrl = website
             if (hasInternetConnection()) {
