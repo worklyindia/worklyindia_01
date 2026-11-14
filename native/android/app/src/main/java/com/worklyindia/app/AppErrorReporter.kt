@@ -23,6 +23,10 @@ object AppErrorReporter {
             Thread.setDefaultUncaughtExceptionHandler(WorklyUncaughtExceptionHandler(appContext, previous))
         }
         WorklyErrorReportWorker.schedule(appContext)
+        // Flush reports saved in the private SQLite outbox as soon as the app
+        // starts. WorkManager waits for connectivity and retries failures;
+        // the app UI never waits for this background upload.
+        WorklyErrorReportWorker.enqueue(appContext)
     }
 
     fun getInstallationId(context: Context): String {
