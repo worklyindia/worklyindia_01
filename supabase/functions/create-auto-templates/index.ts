@@ -986,13 +986,24 @@ const buildMSG91Components = (template: any): any[] => {
       type: 'FOOTER',
       code_expiration_minutes: 10
     });
+    // Meta one-tap autofill is enabled only when the release signing hash
+    // has been configured. Without it, retain the safe Copy Code fallback.
+    const appSignatureHash = (Deno.env.get('WORKLY_WHATSAPP_OTP_SIGNATURE_HASH') || '').trim();
+    const otpButton: Record<string, unknown> = {
+      type: 'OTP',
+      otp_type: appSignatureHash ? 'ONE_TAP' : 'COPY_CODE',
+      text: 'Copy Code',
+    };
+    if (appSignatureHash) {
+      otpButton.autofill_text = 'Autofill';
+      otpButton.supported_apps = [{
+        package_name: 'com.worklyindia.app',
+        signature_hash: appSignatureHash,
+      }];
+    }
     components.push({
       type: 'BUTTONS',
-      buttons: [{
-        type: 'OTP',
-        otp_type: 'COPY_CODE',
-        text: 'Copy Code'
-      }]
+      buttons: [otpButton],
     });
   } else {
     // HEADER component
