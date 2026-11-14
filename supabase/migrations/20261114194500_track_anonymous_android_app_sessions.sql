@@ -94,7 +94,7 @@ end;
 $$;
 
 revoke all on function public.record_android_app_session(uuid, uuid, text, text, text, boolean, uuid) from public;
-grant execute on function public.record_android_app_session(uuid, uuid, text, text, text, boolean) to anon, authenticated;
+grant execute on function public.record_android_app_session(uuid, uuid, text, text, text, boolean, uuid) to anon, authenticated;
 
 -- Direct table writes are no longer needed; the RPC owns session upserts.
 drop policy if exists "Users create their own Android app sessions" on public.app_sessions;
