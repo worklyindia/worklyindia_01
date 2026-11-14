@@ -52,6 +52,8 @@ import {
   BarChart3,
   Heart,
   HardDrive,
+  Bug,
+  Smartphone,
 
 } from "lucide-react";
 
@@ -199,6 +201,13 @@ const OwnerPortal = () => {
         { name: "Employers", icon: Building, path: "/owner-portal/employer-members" },
         { name: "Website Users", icon: Users, path: "/owner-portal/website-users" },
         { name: "Auth Users", icon: Shield, path: "/owner-portal/auth-users", badge: "Owner" }
+      ]
+    },
+    {
+      title: "App Monitoring",
+      items: [
+        { name: "App Error Details", icon: Bug, path: "/owner-portal/app-error-details", badge: "Owner" },
+        { name: "App User Details", icon: Smartphone, path: "/owner-portal/app-user-details", badge: "Owner" }
       ]
     },
     {
@@ -577,6 +586,8 @@ const OwnerPortal = () => {
                  <div className="space-y-1">
                   {section.items.map((item, itemIndex) => {
                     if (!isPaymentEventsMenuVisible(item.path, isOwner && adminRole === "owner")) return null;
+                    // Owner-only entries must not be visible to admins or regular users.
+                    if (item.badge === "Owner" && !(isOwner && adminRole === "owner")) return null;
                     // Platform owners receive access to every Owner Portal menu item,
                     // including newer routes that have not yet been added to ROUTE_PERMISSIONS.
                     const hasPermission = adminRole === 'owner' || menuPermissions[item.path] === true;
