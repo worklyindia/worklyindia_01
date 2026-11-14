@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, RefreshCw, Search, Smartphone, Users, UserRound, Clock, Activity, CalendarDays } from "lucide-react";
-import { format, startOfDay, startOfWeek, startOfMonth, subDays } from "date-fns";
+import { format, startOfDay, startOfWeek, startOfMonth } from "date-fns";
 import { toast } from "sonner";
 
 type ProfileRow = {
