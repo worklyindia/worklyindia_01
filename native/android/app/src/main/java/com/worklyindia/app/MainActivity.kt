@@ -508,7 +508,7 @@ class MainActivity : FragmentActivity() {
                               input.placeholder, input.getAttribute('aria-label'),
                               Array.prototype.map.call(input.labels || [], function(label) { return label.textContent || ''; }).join(' ')
                             ].join(' ');
-                            if (!/(phone|mobile|telephone|contact.?number|whatsapp.?number|\\btel\\b)/i.test(descriptor) &&
+                            if (!/(phone|mobile|telephone|contact.?number|whatsapp.?number|\btel\b)/i.test(descriptor) &&
                                 !/(^|\s)(tel|tel-national|tel-country-code)(\s|$)/i.test(input.autocomplete || '')) return;
                             if (input.disabled || input.readOnly || String(input.value || '').trim()) return;
                             target = input;
