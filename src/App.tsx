@@ -523,15 +523,16 @@ const AppContent = () => {
         const appVersion = nativeDeviceInfo
           ? `${nativeDeviceInfo.appVersion} (${nativeDeviceInfo.appVersionCode})`
           : (import.meta.env.VITE_APP_VERSION || "web");
-        await supabase.from("app_installations").upsert({
+        const { error } = await supabase.from("app_installations").upsert({
           installation_id: installationId,
           user_id: user.id,
           platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
-          device_model: androidModel.slice(0, 120),
-          os_version: nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown")),
+          device_model: androidModel.slice(0, 120) || "Unknown device",
+          os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"))).slice(0, 80),
           app_version: appVersion.slice(0, 80),
           last_seen_at: new Date().toISOString(),
         }, { onConflict: "installation_id" });
+        if (error) throw error;
       } catch (error) { console.warn("[App installation] Heartbeat failed", error); }
     };
     void heartbeat();
