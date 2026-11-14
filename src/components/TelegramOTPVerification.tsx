@@ -205,7 +205,6 @@ export const TelegramOTPVerification: React.FC<TelegramOTPVerificationProps> = (
                   type="text"
                   inputMode="numeric"
                   maxLength={6}
-                  autoComplete={index === 0 ? "one-time-code" : "off"}
                   value={digit}
                   onChange={(e) => handleInputChange(index, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(index, e)}
