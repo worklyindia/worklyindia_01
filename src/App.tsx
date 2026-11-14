@@ -518,11 +518,12 @@ const AppContent = () => {
         const { supabase } = await import("@/integrations/supabase/client");
         const ua = navigator.userAgent || "Unknown device";
         const isAndroid = /Android/i.test(ua);
+        const androidModel = isAndroid ? ((ua.match(/Android [^;]+;\\s*([^;)]+)/i) || [])[1] || "Android device") : (navigator.platform || "Web device");
         await supabase.from("app_installations").upsert({
           installation_id: installationId,
           user_id: user.id,
           platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
-          device_model: ua.slice(0, 240),
+          device_model: androidModel.slice(0, 120),
           os_version: isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"),
           app_version: "unknown",
           last_seen_at: new Date().toISOString(),
