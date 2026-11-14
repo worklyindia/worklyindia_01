@@ -66,6 +66,9 @@ object AppErrorReporter {
                 .put("stack_trace", sanitize(stackTrace, 10000))
                 .put("context", safeContext)
             WorklyErrorReportStore.enqueue(app, id, report.toString())
+            // Schedule the durable local outbox immediately after the SQLite save.
+            // A Crashlytics SDK problem must never prevent our own report from uploading.
+            WorklyErrorReportWorker.enqueue(app)
             // Mirror sanitized handled exceptions to Google Crashlytics as non-fatal events.
             // Do not attach raw messages, URLs, tokens, email addresses, or user-entered data.
             if (severity in setOf("warning", "error")) {
@@ -75,7 +78,6 @@ object AppErrorReporter {
                 com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance()
                     .recordException(safeException)
             }
-            WorklyErrorReportWorker.enqueue(app)
         }.onFailure { Log.w(TAG, "Could not save technical error report locally", it) }
     }
 
