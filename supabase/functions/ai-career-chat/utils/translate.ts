@@ -147,10 +147,10 @@ export async function handleTranslate(req: Request): Promise<Response> {
       ].join("\n");
 
       const result = await callGateway(systemPrompt, text.slice(0, 2000));
-      if ("rateLimited" in result) {
+      if (result.rateLimited === true) {
         return json({ error: "Rate limit exceeded, please try again shortly." }, 429);
       }
-      if ("noCredits" in result) {
+      if (result.noCredits === true) {
         return json({ error: "AI credits exhausted." }, 402);
       }
       const detected = normalizeCode(String(result.parsed?.detected || "en"));
@@ -188,10 +188,10 @@ export async function handleTranslate(req: Request): Promise<Response> {
     ].join("\n");
 
     const result = await callGateway(systemPrompt, text);
-    if ("rateLimited" in result) {
+    if (result.rateLimited === true) {
       return json({ error: "Rate limit exceeded, please try again shortly." }, 429);
     }
-    if ("noCredits" in result) {
+    if (result.noCredits === true) {
       return json({ error: "AI credits exhausted. Please top up to continue translating." }, 402);
     }
 
