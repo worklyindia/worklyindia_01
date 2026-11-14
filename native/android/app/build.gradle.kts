@@ -2,6 +2,9 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("com.google.devtools.ksp")
+    id("androidx.baselineprofile")
+    id("com.google.firebase.firebase-perf")
 }
 
 val releaseProperties = Properties().apply {
@@ -78,6 +81,17 @@ dependencies {
     // On-device OCR for scanned resume pages; no image upload is required.
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
+    // Structured, transactional offline cache for public job snapshots.
+    implementation("androidx.room:room-runtime:2.7.2")
+    implementation("androidx.room:room-ktx:2.7.2")
+    ksp("androidx.room:room-compiler:2.7.2")
+    // Preferences DataStore for durable native app settings and sync metadata.
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
+    // Firebase Performance traces and automatic network/app startup monitoring.
+    implementation("com.google.firebase:firebase-perf")
+    // Install generated Baseline Profiles on supported Android versions.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    baselineProfile(project(":baselineprofile"))
     // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
     implementation("androidx.credentials:credentials:1.6.0-beta02")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0-beta02")

@@ -14,4 +14,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "WorklyIndia"
-include(":app")
+include(":app", ":baselineprofile")
