@@ -78,13 +78,7 @@ dependencies {
     implementation("com.airbnb.android:lottie:6.6.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // Native interview calling providers. Website iframe calls remain unchanged.
-    // 100ms SDK: room-code authentication is issued by the existing Supabase function.
-    implementation("live.100ms:android-sdk:2.9.88")
-    implementation("live.100ms:video-view:2.9.88")
-
-    // VideoSDK native Android client; tokens/meeting IDs remain server-issued.
-    implementation("live.videosdk:rtc-android-sdk:3.0.0")
+    // Video calling is handled by the existing website inside WebView.
 }
 
 if (file("google-services.json").exists()) {
