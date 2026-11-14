@@ -1161,13 +1161,43 @@ serve(async (req) => {
           // Find if any approved template exists (skip recreation)
           const approvedTemplate = existingTemplates?.find(t => t.status === 'APPROVED');
           if (approvedTemplate) {
+            const appSignatureHash = (Deno.env.get('WORKLY_WHATSAPP_OTP_SIGNATURE_HASH') || '').trim();
+            // Existing approved OTP templates must be resubmitted with the one-tap
+            // button once the release signing hash is configured. Meta approval is
+            // required again, so mark the row pending and pause OTP sends until approved.
+            if (template.isOTP && appSignatureHash && approvedTemplate.msg91_template_id && cloudAccessToken && cloudWabaId) {
+              const refreshResult = await editMetaTemplate(template, approvedTemplate.msg91_template_id, cloudAccessToken, cloudWabaId);
+              if (refreshResult.success) {
+                await supabase.from('whatsapp_templates')
+                  .update({ status: 'PENDING', rejection_reason: null })
+                  .eq('id', approvedTemplate.id);
+                results.push({
+                  event: template.event,
+                  name: approvedTemplate.name,
+                  status: 'resubmitted_for_one_tap',
+                  templateId: approvedTemplate.id,
+                  templateStatus: 'PENDING'
+                });
+                continue;
+              }
+              results.push({
+                event: template.event,
+                name: approvedTemplate.name,
+                status: 'one_tap_update_failed',
+                templateId: approvedTemplate.id,
+                templateStatus: 'APPROVED',
+                error: refreshResult.error || 'Meta rejected the one-tap template update'
+              });
+              continue;
+            }
             console.log(`✅ Template already APPROVED: ${approvedTemplate.name} - SKIPPING`);
             results.push({
               event: template.event,
               name: approvedTemplate.name,
               status: 'approved_exists',
               templateId: approvedTemplate.id,
-              templateStatus: 'APPROVED'
+              templateStatus: 'APPROVED',
+              oneTapReady: Boolean(appSignatureHash && template.isOTP)
             });
             continue;
           }
