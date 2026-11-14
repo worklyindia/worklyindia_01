@@ -8,10 +8,12 @@ import { useReferralSettings } from "@/hooks/useReferralSettings";
 import { usePaymentSettings } from "@/hooks/usePaymentSettings";
 import { useWithdrawalRequests } from "@/hooks/useWithdrawalRequests";
 import { useToast } from "@/hooks/use-toast";
+import { copyText, shareText } from "@/utils/openExternalShareUrl";
 import { useEffect, useState } from "react";
 import { WithdrawalDialog } from "./WithdrawalDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployerAuth } from "@/contexts/EmployerAuthContext";
+import { copyText, shareText } from "@/utils/openExternalShareUrl";
 
 const ReferralDashboard = () => {
   const { toast } = useToast();
@@ -62,28 +64,22 @@ const ReferralDashboard = () => {
     }
   }, [isLoadingCode, referralCode, isGenerating, hasInitialized, generateCode]);
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string) => {
+    const copied = await copyText(text);
     toast({
-      title: "Copied!",
-      description: "Copied to clipboard",
+      title: copied ? "Copied!" : "Copy failed",
+      description: copied ? "Copied to clipboard" : "Please try again",
+      variant: copied ? "default" : "destructive",
     });
   };
 
-  const shareReferralLink = (link: string) => {
-    if (navigator.share) {
-      navigator.share({
-        title: 'Join Workly India - Remote Jobs',
-        text: 'Join India\'s best remote job platform using my referral code and get exclusive benefits!',
-        url: link,
-      });
-    } else {
-      copyToClipboard(link);
-      toast({
-        title: "Link Copied!",
-        description: "Share this link with others to refer them",
-      });
-    }
+  const shareReferralLink = async (link: string) => {
+    const shared = await shareText(
+      "Join Workly India - Remote Jobs",
+      "Join India's best remote job platform using my referral code and get exclusive benefits!",
+      link,
+    );
+    if (!shared && !navigator.share) await copyToClipboard(link);
   };
 
   const referralLink = referralCode
