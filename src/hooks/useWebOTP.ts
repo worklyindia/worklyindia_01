@@ -27,24 +27,20 @@ export const useWebOTP = (
       if (code && code.length >= 4) handlerRef.current(code.slice(0, 6));
     };
     window.addEventListener('workly-sms-otp', onNativeOtp as EventListener);
-    if (!('OTPCredential' in window)) return;
-    if (!window.isSecureContext) return;
-
     const controller = new AbortController();
-
-    (navigator.credentials as unknown as {
-      get: (o: unknown) => Promise<{ code?: string } | null>;
-    })
-      .get({ otp: { transport: ['sms'] }, signal: controller.signal })
-      .then((otpCred) => {
-        const code = otpCred?.code?.replace(/\D/g, '');
-        if (code && code.length >= 4) {
-          handlerRef.current(code.slice(0, 6));
-        }
+    if ('OTPCredential' in window && window.isSecureContext) {
+      (navigator.credentials as unknown as {
+        get: (o: unknown) => Promise<{ code?: string } | null>;
       })
-      .catch(() => {
-        /* aborted or denied — silently ignore */
-      });
+        .get({ otp: { transport: ['sms'] }, signal: controller.signal })
+        .then((otpCred) => {
+          const code = otpCred?.code?.replace(/\D/g, '');
+          if (code && code.length >= 4) handlerRef.current(code.slice(0, 6));
+        })
+        .catch(() => {
+          /* aborted or denied — silently ignore */
+        });
+    }
 
     return () => {
       controller.abort();
