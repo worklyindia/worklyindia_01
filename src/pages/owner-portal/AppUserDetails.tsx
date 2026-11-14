@@ -20,7 +20,7 @@ type InstallRow = {
   last_seen_at: string; created_at: string;
 };
 type SessionRow = {
-  id: string; session_id: string; user_id: string; installation_id: string; platform: string;
+  id: string; session_id: string; user_id: string | null; installation_id: string; platform: string;
   device_model: string; os_version: string; app_version: string;
   started_at: string; last_seen_at: string; ended_at: string | null;
 };
@@ -33,22 +33,26 @@ export default function AppUserDetails() {
   const [users, setUsers] = useState<ProfileRow[]>([]);
   const [installs, setInstalls] = useState<InstallRow[]>([]);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [anonymousInstalls, setAnonymousInstalls] = useState<AnonymousInstallRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [u, i, s] = await Promise.all([
+    const [u, i, s, a] = await Promise.all([
       supabase.rpc("get_owner_app_user_details"),
       supabase.from("app_installations").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
       supabase.from("app_sessions").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
+      supabase.from("app_anonymous_installations").select("installation_id,last_seen_at,device_model,app_version").order("last_seen_at", { ascending: false }).limit(10000),
     ]);
     if (u.error) toast.error("Unable to load app users: " + u.error.message);
     if (i.error) toast.error("Unable to load Android app installations: " + i.error.message);
     if (s.error) toast.error("Unable to load app sessions: " + s.error.message);
+    if (a.error) toast.error("Unable to load anonymous app devices: " + a.error.message);
     setUsers((u.data || []) as ProfileRow[]);
     setInstalls((i.data || []) as InstallRow[]);
     setSessions((s.data || []) as SessionRow[]);
+    setAnonymousInstalls((a.data || []) as AnonymousInstallRow[]);
     setLoading(false);
   }, []);
 
@@ -59,15 +63,20 @@ export default function AppUserDetails() {
     const activeUserIds = new Set(sessions.filter(s =>
       !s.ended_at && now - new Date(s.last_seen_at).getTime() <= ACTIVE_WINDOW_MS
     ).map(s => s.user_id));
-    const recentUserIds = new Set(sessions.filter(s =>
+    const recentUserIds = new Set(sessions.filter(s => s.user_id &&
       now - new Date(s.last_seen_at).getTime() <= RECENT_WINDOW_MS
-    ).map(s => s.user_id));
+    ).map(s => s.user_id as string));
+    const anonymousActive = new Set(sessions.filter(s =>
+      !s.user_id && !s.ended_at && now - new Date(s.last_seen_at).getTime() <= ACTIVE_WINDOW_MS
+    ).map(s => s.installation_id)).size;
     const distinctIn = (from: Date) => new Set(
-      sessions.filter(s => new Date(s.last_seen_at).getTime() >= from.getTime()).map(s => s.user_id)
+      sessions.filter(s => s.user_id && new Date(s.last_seen_at).getTime() >= from.getTime()).map(s => s.user_id as string)
     ).size;
     return {
       totalUsers: users.length,
-      installations: installs.length,
+      installations: installs.length + anonymousInstalls.length,
+      anonymousDevices: anonymousInstalls.length,
+      anonymousActive,
       activeNow: activeUserIds.size,
       recentlyActive: recentUserIds.size,
       inactive: Math.max(0, users.length - recentUserIds.size),
@@ -75,7 +84,7 @@ export default function AppUserDetails() {
       weekly: distinctIn(startOfWeek(new Date(), { weekStartsOn: 1 })),
       monthly: distinctIn(startOfMonth(new Date())),
     };
-  }, [users, installs, sessions]);
+  }, [users, installs, sessions, anonymousInstalls]);
 
   const filtered = useMemo(() => users.filter(u =>
     [u.full_name, u.email, u.phone, u.user_id, u.city, u.state, u.location]
@@ -131,8 +140,9 @@ export default function AppUserDetails() {
           <Card><CardContent className="p-3 sm:p-4"><p className="text-xs text-muted-foreground">Inactive Users</p><p className="mt-1 text-2xl font-bold tabular-nums">{stats.inactive}</p><p className="text-[11px] text-muted-foreground">No app activity in 24 hours</p></CardContent></Card>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">App Installations</p><p className="text-xl font-semibold tabular-nums">{stats.installations}</p></CardContent></Card>
+          <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Anonymous Devices</p><p className="text-xl font-semibold tabular-nums">{stats.anonymousDevices}</p><p className="text-[11px] text-muted-foreground">{stats.anonymousActive} active now</p></CardContent></Card>
           <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Daily Active Users</p><p className="text-xl font-semibold tabular-nums">{stats.daily}</p></CardContent></Card>
           <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Weekly Active Users</p><p className="text-xl font-semibold tabular-nums">{stats.weekly}</p></CardContent></Card>
           <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Monthly Active Users</p><p className="text-xl font-semibold tabular-nums">{stats.monthly}</p></CardContent></Card>
@@ -210,7 +220,7 @@ export default function AppUserDetails() {
           </div>}
 
         <p className="text-xs text-muted-foreground">
-          Active Now means a foreground heartbeat within 2 minutes. Recently Active means activity within 24 hours. Session history is retained for 90 days and app installation records for up to 365 days. Only signed-in Android app activity is counted; website visits and website-only accounts are excluded.
+          Active Now means a foreground heartbeat within 2 minutes. Recently Active means activity within 24 hours. Session history is retained for 90 days and app installation records for up to 365 days. Signed-in users and anonymous app devices are tracked separately. Website visits and website-only accounts are excluded.
         </p>
       </section>
     </main>
