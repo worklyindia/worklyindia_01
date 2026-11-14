@@ -210,7 +210,7 @@ const Index = () => {
     "name": BRAND_CONFIG.name,
     "alternateName": "Workly India",
     "url": siteUrl,
-    "description": "Workly India is an India-focused jobs and hiring platform for remote jobs, work-from-home opportunities and employer hiring across India.",
+    "description": "Find legitimate remote jobs in India. Browse remote opportunities across various industries.",
     "potentialAction": {
       "@type": "SearchAction",
       "target": {
@@ -225,12 +225,12 @@ const Index = () => {
     <>
       <div className="min-h-screen bg-background page-enter pb-20 md:pb-0">
         <SEO 
-          title="Workly India | Remote Jobs & Work From Home in India"
-          description="Find remote jobs and work-from-home opportunities across India. Explore job openings, create your profile and connect with employers on Workly India."
+          title="Workly India"
+          description="India's #1 remote job portal. Find verified remote jobs in data entry, customer support, content writing, and more. 100% free for job seekers. Employers post jobs free. Start your remote career today!"
           keywords="remote jobs india, remote jobs india, Workly India jobs 2026, online jobs without investment, data entry jobs, customer support jobs, content writing jobs, part time jobs from home, genuine remote jobs india, legitimate online work india"
           canonical="/"
         />
-        <h1 className="sr-only">Workly India – India’s Remote Jobs, Work From Home & Hiring Platform</h1>
+        <h1 className="sr-only">Workly India – free verified remote jobs and hiring platform in India</h1>
         <OrganizationStructuredData />
         <LocalBusinessSchemaFull />
         
