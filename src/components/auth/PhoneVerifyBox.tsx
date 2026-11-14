@@ -178,7 +178,7 @@ export const PhoneVerifyBox = ({
   }, [autoSend, verified, isPhoneValid, otpSent, sending, sendOtp]);
 
   // Chrome Android SMS auto-fill
-  useWebOTP((code) => setOtp(code), otpSent && !verified);
+  useWebOTP((code) => setOtp(code), !verified && (otpSent || sending));
 
   const verify = useCallback(async (code: string) => {
     setVerifying(true);
