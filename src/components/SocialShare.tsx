@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Share2, Facebook, Twitter, Linkedin, Instagram, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
-import { openExternalShareUrl } from "@/utils/openExternalShareUrl";
+import { copyText, openExternalShareUrl } from "@/utils/openExternalShareUrl";
 
 interface SocialShareProps {
   url?: string;
@@ -57,7 +57,8 @@ const SocialShare = ({
 
   const copyToClipboard = async () => {
     try {
-      await navigator.clipboard.writeText(url);
+      const copiedSuccessfully = await copyText(url);
+      if (!copiedSuccessfully) throw new Error("Clipboard unavailable");
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
