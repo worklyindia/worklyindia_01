@@ -8,7 +8,6 @@ import SEO from "../components/SEO";
 import { Button } from "../components/ui/button";
 import HomeResumePreviewStrip from "../components/HomeResumePreviewStrip";
 import { ROUTE_SEO } from '@/lib/routeSeo';
-import PublicCareerContent from '@/components/PublicCareerContent';
 
 const LOGIN = "/auth?redirect=%2Fresume-builder";
 const SIGNUP = `${LOGIN}&mode=signup`;
@@ -198,7 +197,6 @@ export default function ResumeBuilderLanding() {
             </Button>
           </div>
         </section>
-        <PublicCareerContent page="/resume-builder" />
       </main>
     </div>
   );
