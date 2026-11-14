@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("com.google.devtools.ksp")
     id("com.google.firebase.firebase-perf")
+    id("com.google.firebase.crashlytics")
 }
 
 val releaseProperties = Properties().apply {
@@ -70,6 +71,8 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     // Native GA4/Firebase Analytics: app installs, opens, sessions and screen views.
     implementation("com.google.firebase:firebase-analytics")
+    // Google Crashlytics: native crashes, ANRs and recorded non-fatal exceptions.
+    implementation("com.google.firebase:firebase-crashlytics")
     // Official Google Play in-app update flow (flexible updates).
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.17.0")
