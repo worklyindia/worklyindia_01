@@ -2573,16 +2573,34 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
       };
       
       audio.onerror = () => {
+        audioRef.current = null;
+        // If an online provider returns an invalid/unsupported audio payload,
+        // try the phone/browser's installed TTS engine before showing an error.
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(message.content);
+            utterance.lang = /[\\u0900-\\u097F]/.test(message.content) ? 'hi-IN' : 'en-IN';
+            utterance.onend = () => setPlayingMessageId(null);
+            utterance.onerror = () => {
+              setPlayingMessageId(null);
+              setLoadingVoiceId(null);
+              toast.error('Voice playback failed', { description: 'Online voice aur device TTS dono playback nahi kar paaye.' });
+            };
+            setLoadingVoiceId(null);
+            setPlayingMessageId(message.id);
+            window.speechSynthesis.speak(utterance);
+            return;
+          } catch (deviceTtsError) {
+            console.warn('Device TTS fallback failed:', deviceTtsError);
+          }
+        }
         setPlayingMessageId(null);
         setLoadingVoiceId(null);
-        audioRef.current = null;
         toast.error('Audio playback failed', {
-          description: 'Browser audio decode nahi kar paya. Dobara try karein.',
+          description: 'Online voice aur phone TTS dono available nahi hain. Dobara try karein.',
           duration: 5000,
-          action: {
-            label: 'Retry',
-            onClick: () => handlePlayMessage(message),
-          },
+          action: { label: 'Retry', onClick: () => handlePlayMessage(message) },
         });
       };
       
