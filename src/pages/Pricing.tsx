@@ -23,36 +23,7 @@ export default function Pricing() {
       </div>
     </header>
     <main className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
-      {isPending && (
-        <div role="status" aria-label="Loading pricing information" className="space-y-10 animate-pulse">
-          {Array.from({ length: 3 }).map((_, sectionIndex) => (
-            <section key={sectionIndex} className="border-b border-border py-8 first:pt-0">
-              <div className="mb-5 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-muted" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-5 w-40 rounded bg-muted" />
-                  <div className="h-3 w-3/4 max-w-xl rounded bg-muted" />
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {Array.from({ length: 3 }).map((_, cardIndex) => (
-                  <div key={cardIndex} className="space-y-4 rounded-lg border border-border bg-card p-5">
-                    <div className="h-4 w-2/3 rounded bg-muted" />
-                    <div className="h-9 w-1/2 rounded bg-muted" />
-                    <div className="h-3 w-1/3 rounded bg-muted" />
-                    <div className="space-y-2 pt-3">
-                      <div className="h-3 w-full rounded bg-muted" />
-                      <div className="h-3 w-5/6 rounded bg-muted" />
-                      <div className="h-3 w-4/5 rounded bg-muted" />
-                    </div>
-                    <div className="h-10 w-full rounded bg-muted" />
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
+      {isPending && <div role="status" className="py-12 text-center text-muted-foreground">Loading current prices…</div>}
       {isError && <div role="alert" className="mb-8 border-l-4 border-destructive bg-muted p-4"><p>Current prices could not be loaded. Please try again.</p><Button variant="outline" className="mt-3" onClick={() => { void refetch(); }}>Try again</Button></div>}
       {data && sections.map((section) => {
         const Icon = icons[section.icon as keyof typeof icons] || BriefcaseBusiness;
