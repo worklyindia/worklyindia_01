@@ -29,7 +29,7 @@ export default function AppUserDetails() {
       if (roleError || role?.role !== "owner") throw new Error("Owner access required");
       const [profileResult, deviceResult] = await Promise.all([
         supabase.from("profiles").select("user_id,full_name,email,phone,whatsapp_number,profile_image_url,account_status,created_at,updated_at,last_login_at").order("created_at", { ascending: false }).limit(500),
-        supabase.from("device_info_logs").select("user_id,device_id,device_type,operating_system,browser_name,browser_version,native_device_info,created_at").order("updated_at", { ascending: false }).limit(1000),
+        supabase.from("device_info_logs").select("user_id,device_id,device_type,operating_system,browser_name,browser_version,native_device_info,created_at,updated_at").order("updated_at", { ascending: false }).limit(1000),
       ]);
       if (profileResult.error) throw profileResult.error;
       if (deviceResult.error) throw deviceResult.error;
