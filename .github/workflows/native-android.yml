@@ -239,6 +239,39 @@ jobs:
         run: |
           gradle assembleWebsiteRelease bundlePlayStoreRelease --stacktrace
 
+      - name: Calculate Meta WhatsApp OTP app signing hash
+        id: whatsapp-otp-hash
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/workly-signing/upload-key.jks
+          STORE_PASSWORD: ${{ secrets.WORKLY_UPLOAD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.WORKLY_UPLOAD_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          CERT_FILE="$RUNNER_TEMP/workly-signing/upload-cert.der"
+          keytool -exportcert -keystore "$KEYSTORE_FILE" -alias "$KEY_ALIAS" -storepass "$STORE_PASSWORD" -file "$CERT_FILE" >/dev/null
+          APP_HASH=$(python - "$CERT_FILE" <<'PY'
+          import base64
+          import hashlib
+          import pathlib
+          import sys
+          package = "com.worklyindia.app"
+          certificate = pathlib.Path(sys.argv[1]).read_bytes()
+          digest = hashlib.sha256(package.encode("utf-8") + b" " + certificate).digest()
+          print(base64.b64encode(digest[:9]).decode("ascii")[:11])
+          PY
+          )
+          echo "app_hash=$APP_HASH" >> "$GITHUB_OUTPUT"
+          {
+            echo "## WhatsApp OTP app signing hash"
+            echo
+            echo "Set the Supabase Edge Function secret `WORKLY_WHATSAPP_OTP_SIGNATURE_HASH` to:"
+            echo
+            echo "`$APP_HASH`"
+            echo
+            echo "This is a public app-signature hash, not the private signing key."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Calculated WhatsApp OTP app signature hash: $APP_HASH"
+
       - name: Verify APK embedded version matches release metadata
         id: verify-apk
         run: |
