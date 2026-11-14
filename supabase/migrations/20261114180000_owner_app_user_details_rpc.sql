@@ -12,8 +12,7 @@ returns table (
   city text,
   state text,
   profile_image_url text,
-  account_status text,
-  user_type text
+  account_status text
 )
 language plpgsql
 security definer
@@ -40,8 +39,7 @@ begin
     p.city,
     p.state,
     p.profile_image_url,
-    p.account_status,
-    p.user_type
+    p.account_status
   from auth.users u
   left join public.profiles p on p.user_id = u.id
   order by u.created_at desc;
