@@ -3,7 +3,6 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("com.google.devtools.ksp")
-    id("androidx.baselineprofile")
     id("com.google.firebase.firebase-perf")
 }
 
@@ -89,9 +88,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     // Firebase Performance traces and automatic network/app startup monitoring.
     implementation("com.google.firebase:firebase-perf")
-    // Install generated Baseline Profiles on supported Android versions.
+    // Install the app startup Baseline Profile on supported Android versions.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
-    baselineProfile(project(":baselineprofile"))
     // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
     implementation("androidx.credentials:credentials:1.6.0-beta02")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0-beta02")
