@@ -44,6 +44,14 @@ android {
 
     buildTypes {
         getByName("release") {
+            // Shrink unused bytecode/resources in signed release APKs and bundles.
+            // Keep the debug build unshrunk for easier local diagnostics.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             val storePath = System.getenv("WORKLY_UPLOAD_STORE_FILE")
             if (!storePath.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
         }
