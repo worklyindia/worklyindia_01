@@ -72,41 +72,41 @@ initializeApp();
 // Create optimized query client
 const queryClient = createQueryClient();
 
-// Restore previously viewed public data before the first React paint.
-// Private account, chat, payment and identity data is never written to this cache.
+// Start the React app immediately. IndexedDB cache restoration is useful for
+// repeat visits, but must never delay the first website render on mobile.
 const root = createRoot(document.getElementById("root")!);
+
+// Seed tiny, bundled static lists immediately; these do not require network access.
+prefetchStaticData(queryClient);
 
 // Initialize utilities without blocking the first screen.
 void initializePerformanceUtils();
 void initializeErrorMonitoring();
 void initializeMarketingTools();
 
-void (async () => {
-  await restoreAndPersistQueryCache(queryClient);
-  prefetchStaticData(queryClient);
+root.render(
+  <StrictMode>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <EmployerAuthProvider>
+              <ThemeProvider>
+                <Suspense fallback={<AppLoadingSpinner />}>
+                  <App />
+                </Suspense>
+                <SlowNetworkBanner />
+                <ServiceUnavailableOverlay />
+                <Toaster />
+              </ThemeProvider>
+            </EmployerAuthProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  </StrictMode>
+);
 
-  // Render only after the local snapshot has had a chance to hydrate, so
-  // cached content can be displayed immediately while fresh requests run.
-  root.render(
-    <StrictMode>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
-            <AuthProvider>
-              <EmployerAuthProvider>
-                <ThemeProvider>
-                  <Suspense fallback={<AppLoadingSpinner />}>
-                    <App />
-                  </Suspense>
-                  <SlowNetworkBanner />
-                  <ServiceUnavailableOverlay />
-                  <Toaster />
-                </ThemeProvider>
-              </EmployerAuthProvider>
-            </AuthProvider>
-          </BrowserRouter>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </StrictMode>
-  );
-})();
+// Restore only public, non-sensitive cached queries in the background.
+// A slow IndexedDB read must not keep the startup animation on screen.
+void restoreAndPersistQueryCache(queryClient);
