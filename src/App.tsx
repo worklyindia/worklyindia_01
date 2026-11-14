@@ -564,7 +564,7 @@ const AppContent = () => {
           user_id: accountId,
           platform: "android_app",
           device_model: androidModel.slice(0, 120) || "Unknown device",
-          os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"))).slice(0, 80),
+          os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android") : (navigator.platform || "Unknown")).slice(0, 80),
           app_version: appVersion.slice(0, 80),
           last_seen_at: new Date().toISOString(),
         };
