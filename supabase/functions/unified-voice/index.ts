@@ -88,7 +88,7 @@ async function generateTTS(text: string, preferred = 'cartesia', language = 'hi'
       if (p === 'cartesia') {
         const key = Deno.env.get('CARTESIA_API_KEY');
         if (!key) throw new Error('CARTESIA_API_KEY missing');
-        const r = await fetch('https://api.cartesia.ai/tts/bytes', {method:'POST', headers:{'X-API-Key':key,'Cartesia-Version':'2024-11-13','Content-Type':'application/json'}, body:JSON.stringify({model_id:'sonic-latest',transcript:text,voice:{mode:'id',id:'56e35e2d-6eb6-4226-ab8b-9776515a7094'},language,output_format:{container:'mp3',bit_rate:128000,sample_rate:44100}})});
+        const r = await fetch('https://api.cartesia.ai/tts/bytes', {method:'POST', headers:{'X-API-Key':key,'Cartesia-Version':'2026-08-14','Content-Type':'application/json'}, body:JSON.stringify({model_id:'sonic-3.6',transcript:text,voice:{mode:'id',id:'56e35e2d-6eb6-4226-ab8b-9776515a7094'},language,output_format:{container:'mp3',bit_rate:128000,sample_rate:44100}})});
         if (!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,350));
         const audio=await r.arrayBuffer(); if (!audio.byteLength) throw new Error('Empty audio'); return {audio,provider:p};
       }
