@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useWhatsAppOTP } from '@/hooks/useWhatsAppOTP';
-import { useWebOTP } from '@/hooks/useWebOTP';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { Check, Loader2, RefreshCw, Shield, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
