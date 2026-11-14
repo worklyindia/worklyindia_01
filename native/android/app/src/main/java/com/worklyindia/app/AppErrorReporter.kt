@@ -23,6 +23,17 @@ object AppErrorReporter {
             Thread.setDefaultUncaughtExceptionHandler(WorklyUncaughtExceptionHandler(appContext, previous))
         }
         WorklyErrorReportWorker.schedule(appContext)
+        // Flush reports saved in the private SQLite outbox as soon as the app
+        // starts. WorkManager waits for connectivity and retries failures;
+        // the app UI never waits for this background upload.
+        WorklyErrorReportWorker.enqueue(appContext)
+    }
+
+    fun getInstallationId(context: Context): String {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_INSTALLATION_ID, null) ?: UUID.randomUUID().toString().also {
+            prefs.edit().putString(KEY_INSTALLATION_ID, it).commit()
+        }
     }
 
     fun capture(context: Context, component: String, severity: String, error: Throwable, source: String? = null, httpStatus: Int? = null) {
@@ -37,10 +48,7 @@ object AppErrorReporter {
         runCatching {
             val app = context.applicationContext
             val id = UUID.randomUUID().toString()
-            val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val installationId = prefs.getString(KEY_INSTALLATION_ID, null) ?: UUID.randomUUID().toString().also {
-                prefs.edit().putString(KEY_INSTALLATION_ID, it).commit()
-            }
+            val installationId = getInstallationId(app)
             val packageInfo = app.packageManager.getPackageInfo(app.packageName, 0)
             val safeContext = JSONObject()
             if (!source.isNullOrBlank()) safeContext.put("source", sanitize(source, 120))
@@ -58,6 +66,15 @@ object AppErrorReporter {
                 .put("stack_trace", sanitize(stackTrace, 10000))
                 .put("context", safeContext)
             WorklyErrorReportStore.enqueue(app, id, report.toString())
+            // Mirror sanitized handled exceptions to Google Crashlytics as non-fatal events.
+            // Do not attach raw messages, URLs, tokens, email addresses, or user-entered data.
+            if (severity in setOf("warning", "error")) {
+                val safeException = RuntimeException(
+                    "${sanitize(component, 80)}: ${sanitize(errorType, 120)}: ${sanitize(message, 500)}"
+                )
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance()
+                    .recordException(safeException)
+            }
             WorklyErrorReportWorker.enqueue(app)
         }.onFailure { Log.w(TAG, "Could not save technical error report locally", it) }
     }

@@ -7,6 +7,7 @@ import {
   readPersistentJobsCache,
   writePersistentJobsCache,
 } from '@/utils/persistentJobsCache';
+import { readOfflinePublicJobs, writeOfflinePublicJobs } from '@/utils/offlinePublicJobsCache';
 
 
 export interface TrendingJob {
@@ -282,13 +283,24 @@ export const useTrendingJobs = (options?: {
       // For top ranked section, always set hasMore to false as we fetch all ranked jobs
       const nextHasMore = showTopRanked ? false : fetchedJobs.length === limit;
       writePersistentJobsCache(cacheKey, { jobs: fetchedJobs, hasMore: nextHasMore });
+      // Preserve a public snapshot for offline fallback; online requests still refresh.
+      writeOfflinePublicJobs(cacheKey, { jobs: fetchedJobs, hasMore: nextHasMore });
       setHasMore(nextHasMore);
       setPage(pageNum);
     } catch (err) {
       if (requestId !== requestRef.current) return;
-      setHasMore(false);
       console.error('❌ Error fetching jobs:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch jobs');
+      const offlineSnapshot = readOfflinePublicJobs<{ jobs: TrendingJob[]; hasMore: boolean }>(cacheKey);
+      if (offlineSnapshot?.jobs?.length) {
+        if (reset || pageNum === 0) setJobs(offlineSnapshot.jobs);
+        else setJobs(prev => [...prev, ...offlineSnapshot.jobs]);
+        setHasMore(false);
+        setPage(pageNum);
+        setError(null);
+      } else {
+        setHasMore(false);
+        setError(err instanceof Error ? err.message : 'Failed to fetch jobs');
+      }
     } finally {
       if (requestId === requestRef.current) {
         fetchingRef.current = false;

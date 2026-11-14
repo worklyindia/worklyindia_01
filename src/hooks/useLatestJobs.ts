@@ -8,6 +8,7 @@ import {
   readPersistentJobsCache,
   writePersistentJobsCache,
 } from '@/utils/persistentJobsCache';
+import { readOfflinePublicJobs, writeOfflinePublicJobs } from '@/utils/offlinePublicJobsCache';
 
 
 export interface LatestJob {
@@ -195,14 +196,27 @@ export const useLatestJobs = (options?: {
         jobs: enrichedJobs,
         hasMore: nextHasMore,
       });
+      // Keep the latest successful public feed as an offline-only fallback.
+      // Unlike the freshness cache, this snapshot never skips online refreshes.
+      writeOfflinePublicJobs(cacheKey, { jobs: enrichedJobs, hasMore: nextHasMore });
 
       setHasMore(nextHasMore);
       setPage(pageNum);
     } catch (err) {
       if (requestId !== requestRef.current) return;
-      setHasMore(false);
       console.error('❌ Error fetching latest jobs:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch jobs');
+      const offlineSnapshot = readOfflinePublicJobs<{ jobs: LatestJob[]; hasMore: boolean }>(cacheKey);
+      if (offlineSnapshot?.jobs?.length) {
+        // Show previously fetched public jobs instead of a blank screen offline.
+        if (pageNum === 0 || reset) setJobs(offlineSnapshot.jobs);
+        else setJobs(prev => [...prev, ...offlineSnapshot.jobs]);
+        setHasMore(false);
+        setPage(pageNum);
+        setError(null);
+      } else {
+        setHasMore(false);
+        setError(err instanceof Error ? err.message : 'Failed to fetch jobs');
+      }
       
       // Report error to monitoring
       import('../utils/errorMonitoring').then(({ handleReactQueryError }) => {

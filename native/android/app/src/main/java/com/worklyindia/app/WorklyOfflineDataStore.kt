@@ -4,12 +4,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Device-local, read-only snapshot of public job data. No applicant/employer account data is stored. */
+/** Room-backed, device-local snapshot of public job data only. */
 object WorklyOfflineDataStore {
-    private const val PREFS = "workly_offline_data_v1"
-    private const val KEY_JOBS = "public_jobs_json"
-    private const val KEY_SYNCED_AT = "public_jobs_synced_at"
-
     data class Job(
         val id: String,
         val title: String,
@@ -23,48 +19,60 @@ object WorklyOfflineDataStore {
         val requirements: String
     )
 
-    fun savePublicJobs(context: Context, rows: JSONArray): Boolean {
-        if (rows.length() == 0) return false
-        val safeRows = JSONArray()
+    fun savePublicJobs(context: Context, rows: JSONArray): Boolean = runCatching {
+        val safeRows = ArrayList<OfflinePublicJobEntity>()
         for (index in 0 until rows.length().coerceAtMost(50)) {
             val row = rows.optJSONObject(index) ?: continue
             val id = row.optString("id").takeIf { it.isNotBlank() } ?: continue
-            safeRows.put(JSONObject()
-                .put("id", id.take(100))
-                .put("title", row.optString("title").take(120))
-                .put("company", row.optString("api_company_name").take(100))
-                .put("location", row.optString("location").take(100))
-                .put("salary", row.optString("salary_range").take(80))
-                .put("job_type", row.optString("job_type").take(60))
-                .put("experience", row.optString("experience_level").take(60))
-                .put("category", row.optString("category").take(80))
-                .put("description", row.optString("description").take(5000))
-                .put("requirements", row.optString("requirements").take(2500)))
+            safeRows += OfflinePublicJobEntity(
+                id = id.take(100),
+                title = row.optString("title").take(120),
+                company = row.optString("api_company_name").take(100),
+                location = row.optString("location").take(100),
+                salary = row.optString("salary_range").take(80),
+                jobType = row.optString("job_type").take(60),
+                experience = row.optString("experience_level").take(60),
+                category = row.optString("category").take(80),
+                description = row.optString("description").take(5000),
+                requirements = row.optString("requirements").take(2500)
+            )
         }
-        if (safeRows.length() == 0) return false
-        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(KEY_JOBS, safeRows.toString())
-            .putLong(KEY_SYNCED_AT, System.currentTimeMillis())
-            .commit()
-    }
+        if (safeRows.isEmpty()) return false
+        OfflineJobsDatabase.getInstance(context).publicJobsDao().replaceAll(safeRows)
+        // Remove the legacy snapshot only after the Room transaction succeeds.
+        context.getSharedPreferences("workly_offline_data_v1", Context.MODE_PRIVATE)
+            .edit().clear().apply()
+        true
+    }.getOrDefault(false)
 
-    fun getPublicJobs(context: Context): List<Job> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_JOBS, null) ?: return emptyList()
-        return runCatching {
-            val rows = JSONArray(raw)
-            (0 until rows.length()).mapNotNull { index ->
-                val row = rows.optJSONObject(index) ?: return@mapNotNull null
-                val id = row.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                Job(id, row.optString("title"), row.optString("company"),
-                    row.optString("location"), row.optString("salary"),
-                    row.optString("job_type"), row.optString("experience"),
-                    row.optString("category"), row.optString("description"),
-                    row.optString("requirements"))
+    fun getPublicJobs(context: Context): List<Job> = runCatching {
+        val database = OfflineJobsDatabase.getInstance(context)
+        var rows = database.publicJobsDao().getAll()
+        if (rows.isEmpty()) {
+            // One-time migration preserves the existing SharedPreferences cache on upgrade.
+            val legacy = context.getSharedPreferences("workly_offline_data_v1", Context.MODE_PRIVATE)
+            val legacyJson = legacy.getString("public_jobs_json", null)
+            if (!legacyJson.isNullOrBlank()) {
+                val legacyRows = JSONArray(legacyJson)
+                if (savePublicJobs(context, legacyRows)) {
+                    val oldTimestamp = legacy.getLong("public_jobs_synced_at", 0L)
+                    if (oldTimestamp > 0L) WorklyAppSettings.setLastPublicJobsSyncAt(context, oldTimestamp)
+                    rows = database.publicJobsDao().getAll()
+                }
             }
-        }.getOrDefault(emptyList())
-    }
+        }
+        rows.map { row ->
+            Job(row.id, row.title, row.company, row.location, row.salary,
+                row.jobType, row.experience, row.category, row.description, row.requirements)
+        }
+    }.getOrDefault(emptyList())
 
-    fun lastSyncedAt(context: Context): Long =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(KEY_SYNCED_AT, 0L)
+    fun lastSyncedAt(context: Context): Long {
+        val stored = WorklyAppSettings.lastPublicJobsSyncAt(context)
+        if (stored > 0L) return stored
+        val legacy = context.getSharedPreferences("workly_offline_data_v1", Context.MODE_PRIVATE)
+            .getLong("public_jobs_synced_at", 0L)
+        if (legacy > 0L) WorklyAppSettings.setLastPublicJobsSyncAt(context, legacy)
+        return legacy
+    }
 }

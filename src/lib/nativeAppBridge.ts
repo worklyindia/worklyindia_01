@@ -51,6 +51,7 @@ export interface NativeDeviceInfo {
   appVersion: string;
   appVersionCode: number;
   locale: string;
+  installationId: string;
 }
 
 export const getNativeDeviceInfo = (): NativeDeviceInfo | null => {

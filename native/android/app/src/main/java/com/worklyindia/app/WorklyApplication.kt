@@ -6,6 +6,18 @@ import android.content.pm.ShortcutManager
 class WorklyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Debug-only StrictMode diagnostics. Log violations without crashing the app.
+        // This is excluded from release behavior and helps catch accidental main-thread I/O.
+        if (BuildConfig.DEBUG) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .penaltyLog()
+                    .build()
+            )
+        }
         // Install crash capture before starting background services.
         AppErrorReporter.initialize(this)
         // Clear obsolete launcher shortcuts that may show a personal account name.

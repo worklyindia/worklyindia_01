@@ -49,7 +49,7 @@ import { useNativeStatusBar } from "@/hooks/useNativeStatusBar";
 import { useNativeKeyboard } from "@/hooks/useNativeKeyboard";
 import { useNativeBackButton } from "@/hooks/useNativeBackButton";
 import { useNativeNetwork } from "@/hooks/useNativeNetwork";
-import { isWorklyAndroidApp } from "@/lib/nativeAppBridge";
+import { getNativeDeviceInfo, isWorklyAndroidApp } from "@/lib/nativeAppBridge";
 
 const isBandwidthSaverMode = import.meta.env.VITE_BANDWIDTH_SAVER !== 'false';
 
@@ -503,13 +503,12 @@ const AppContent = () => {
   useEffect(() => {
     if (!user?.id) return;
     let installationId = "";
+    const nativeDeviceInfo = getNativeDeviceInfo();
     try {
       const key = "workly-app-installation-id:" + user.id;
-      installationId = localStorage.getItem(key) || "";
-      if (!installationId) {
-        installationId = crypto.randomUUID();
-        localStorage.setItem(key, installationId);
-      }
+      installationId = nativeDeviceInfo?.installationId || localStorage.getItem(key) || "";
+      if (!installationId) installationId = crypto.randomUUID();
+      localStorage.setItem(key, installationId);
     } catch { return; }
     let cancelled = false;
     const heartbeat = async () => {
@@ -518,16 +517,31 @@ const AppContent = () => {
         const { supabase } = await import("@/integrations/supabase/client");
         const ua = navigator.userAgent || "Unknown device";
         const isAndroid = /Android/i.test(ua);
-        const androidModel = isAndroid ? ((ua.match(/Android [^;]+;\s*([^;)]+)/i) || [])[1] || "Android device") : (navigator.platform || "Web device");
-        await supabase.from("app_installations").upsert({
+        const androidModel = nativeDeviceInfo
+          ? [nativeDeviceInfo.manufacturer, nativeDeviceInfo.model].filter(Boolean).join(" ")
+          : (isAndroid ? ((ua.match(/Android [^;]+;\s*([^;)]+)/i) || [])[1] || "Android device") : (navigator.platform || "Web device"));
+        const appVersion = nativeDeviceInfo
+          ? `${nativeDeviceInfo.appVersion} (${nativeDeviceInfo.appVersionCode})`
+          : (import.meta.env.VITE_APP_VERSION || "web");
+        const pendingKey = "workly-pending-installation:" + user.id;
+        const installationPayload = {
           installation_id: installationId,
           user_id: user.id,
           platform: isWorklyAndroidApp() ? "android_app" : (isAndroid ? "android_web" : "web"),
-          device_model: androidModel.slice(0, 120),
-          os_version: isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"),
-          app_version: "unknown",
+          device_model: androidModel.slice(0, 120) || "Unknown device",
+          os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android" : (navigator.platform || "Unknown"))).slice(0, 80),
+          app_version: appVersion.slice(0, 80),
           last_seen_at: new Date().toISOString(),
-        }, { onConflict: "installation_id" });
+        };
+        // Persist the latest heartbeat locally before networking. If the
+        // request fails or the app closes, the next launch retries this sync.
+        try { localStorage.setItem(pendingKey, JSON.stringify(installationPayload)); } catch { /* best effort local outbox */ }
+        const { error } = await supabase.from("app_installations").upsert(
+          installationPayload,
+          { onConflict: "installation_id" }
+        );
+        if (error) throw error;
+        try { localStorage.removeItem(pendingKey); } catch { /* server has acknowledged the row */ }
       } catch (error) { console.warn("[App installation] Heartbeat failed", error); }
     };
     void heartbeat();

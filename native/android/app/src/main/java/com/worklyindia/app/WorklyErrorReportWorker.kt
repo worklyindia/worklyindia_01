@@ -29,8 +29,9 @@ class WorklyErrorReportWorker(context: Context, params: WorkerParameters) : Work
                 readTimeout = 20_000
                 doOutput = true
                 setRequestProperty("apikey", SUPABASE_PUBLISHABLE_KEY)
-                // Send the publishable key in Authorization too so PostgREST resolves the anon role.
-                setRequestProperty("Authorization", "Bearer $SUPABASE_PUBLISHABLE_KEY")
+                // Publishable keys identify the project but are not JWTs. Supply the legacy anon JWT
+                // so PostgREST switches from authenticator to the anon role and applies the INSERT RLS policy.
+                setRequestProperty("Authorization", "Bearer $SUPABASE_ANON_KEY")
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Prefer", "resolution=ignore-duplicates,return=minimal")
             }
@@ -58,6 +59,7 @@ class WorklyErrorReportWorker(context: Context, params: WorkerParameters) : Work
         private const val TAG = "WorklyErrorUpload"
         private const val SUPABASE_URL = "https://jubwzelupbntbetpajqb.supabase.co"
         private const val SUPABASE_PUBLISHABLE_KEY = "sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o"
+        private const val SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Ynd6ZWx1cGJudGJldHBhanFiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5MDc3NjIsImV4cCI6MjA3MDQ4Mzc2Mn0.YsA13ya6S-ogDW59wVQ-n1JhVzDSwAuErfG0WZLTqI4"
         private const val PERIODIC_WORK = "workly-error-report-periodic-upload"
 
         fun enqueue(context: Context) {

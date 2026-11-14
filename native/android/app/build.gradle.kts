@@ -2,6 +2,9 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("com.google.devtools.ksp")
+    id("com.google.firebase.firebase-perf")
+    id("com.google.firebase.crashlytics")
 }
 
 val releaseProperties = Properties().apply {
@@ -44,6 +47,14 @@ android {
 
     buildTypes {
         getByName("release") {
+            // Shrink unused bytecode/resources in signed release APKs and bundles.
+            // Keep the debug build unshrunk for easier local diagnostics.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             val storePath = System.getenv("WORKLY_UPLOAD_STORE_FILE")
             if (!storePath.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
         }
@@ -56,10 +67,14 @@ android {
 }
 
 dependencies {
+    // Debug-only memory leak detection; excluded from public release APK/AAB.
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
     // Native GA4/Firebase Analytics: app installs, opens, sessions and screen views.
     implementation("com.google.firebase:firebase-analytics")
+    // Google Crashlytics: native crashes, ANRs and recorded non-fatal exceptions.
+    implementation("com.google.firebase:firebase-crashlytics")
     // Official Google Play in-app update flow (flexible updates).
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.17.0")
@@ -70,6 +85,16 @@ dependencies {
     // On-device OCR for scanned resume pages; no image upload is required.
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
+    // Structured, transactional offline cache for public job snapshots.
+    implementation("androidx.room:room-runtime:2.7.2")
+    implementation("androidx.room:room-ktx:2.7.2")
+    ksp("androidx.room:room-compiler:2.7.2")
+    // Preferences DataStore for durable native app settings and sync metadata.
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
+    // Firebase Performance traces and automatic network/app startup monitoring.
+    implementation("com.google.firebase:firebase-perf")
+    // Install the app startup Baseline Profile on supported Android versions.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     // WebAuthn/passkey support inside the embedded WebView via Android Credential Manager.
     implementation("androidx.credentials:credentials:1.6.0-beta02")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0-beta02")
@@ -78,13 +103,7 @@ dependencies {
     implementation("com.airbnb.android:lottie:6.6.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // Native interview calling providers. Website iframe calls remain unchanged.
-    // 100ms SDK: room-code authentication is issued by the existing Supabase function.
-    implementation("live.100ms:android-sdk:2.9.88")
-    implementation("live.100ms:video-view:2.9.88")
-
-    // VideoSDK native Android client; tokens/meeting IDs remain server-issued.
-    implementation("live.videosdk:rtc-android-sdk:3.0.0")
+    // Video calling is handled by the existing website inside WebView.
 }
 
 if (file("google-services.json").exists()) {
