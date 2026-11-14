@@ -92,9 +92,9 @@ export const BRAND_NAME = BRAND_CONFIG.name;
 export const BRAND_FULL_TITLE = `${BRAND_CONFIG.name} - Remote Jobs`;
 
 // SEO helpers
-export const BRAND_SEO_TITLE = 'Workly India - Remote Jobs';
+export const BRAND_SEO_TITLE = 'Workly India | Remote Jobs & Work From Home in India';
 export const BRAND_SEO_SUFFIX = '| Workly India';
-export const BRAND_SEO_DESCRIPTION = 'Find legitimate remote jobs in India. Browse remote opportunities in customer support, data entry, content writing, and more. 100% free for job seekers.';
+export const BRAND_SEO_DESCRIPTION = 'Find remote jobs and work-from-home opportunities across India. Explore job openings, create your profile and connect with employers on Workly India.';
 
 // Template for page titles
 export const getPageTitle = (pageTitle: string): string => {
