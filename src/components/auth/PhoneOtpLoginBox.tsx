@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Phone, RefreshCw, Send, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { usePhoneOtpLogin } from '@/hooks/usePhoneOtpLogin';
+import useWebOTP from '@/hooks/useWebOTP';
+import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { useToast } from '@/hooks/use-toast';
 
 interface PhoneOtpLoginBoxProps {
@@ -26,6 +28,7 @@ export const PhoneOtpLoginBox: React.FC<PhoneOtpLoginBoxProps> = ({
   className,
 }) => {
   const { toast } = useToast();
+  const lastAutoVerifyCode = useRef('');
   const [open, setOpen] = useState(false);
   const [rawPhone, setRawPhone] = useState('');
   const [code, setCode] = useState('');
@@ -33,21 +36,35 @@ export const PhoneOtpLoginBox: React.FC<PhoneOtpLoginBoxProps> = ({
     usePhoneOtpLogin(rawPhone);
 
   const handleSend = async () => {
+    try { getWorklyAndroidBridge()?.startSmsUserConsent?.(); } catch { /* manual entry remains available */ }
     const ok = await sendOtp();
     if (ok) {
       toast({ title: 'OTP sent', description: 'Check your SMS for the 6-digit code.' });
     }
   };
 
-  const handleVerify = async () => {
-    const ok = await verifyOtp(code);
+  const handleVerify = async (value = code) => {
+    const normalizedCode = value.replace(/\D/g, '').slice(0, 6);
+    if (normalizedCode.length !== 6 || lastAutoVerifyCode.current === normalizedCode) return;
+    lastAutoVerifyCode.current = normalizedCode;
+    const ok = await verifyOtp(normalizedCode);
     if (ok) {
       toast({ title: 'Verified', description: 'Signing you in…' });
       onVerified();
     } else {
+      lastAutoVerifyCode.current = '';
       setCode('');
     }
   };
+
+  useWebOTP((detectedCode) => {
+    setCode(detectedCode);
+    void handleVerify(detectedCode);
+  }, otpSent && !verifying);
+
+  useEffect(() => {
+    if (code.length === 6 && !verifying) void handleVerify(code);
+  }, [code]);
 
   if (!open) {
     return (
