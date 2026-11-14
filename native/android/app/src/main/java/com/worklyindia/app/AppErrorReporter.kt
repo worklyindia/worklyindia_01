@@ -66,6 +66,15 @@ object AppErrorReporter {
                 .put("stack_trace", sanitize(stackTrace, 10000))
                 .put("context", safeContext)
             WorklyErrorReportStore.enqueue(app, id, report.toString())
+            // Mirror sanitized handled exceptions to Google Crashlytics as non-fatal events.
+            // Do not attach raw messages, URLs, tokens, email addresses, or user-entered data.
+            if (severity in setOf("warning", "error")) {
+                val safeException = RuntimeException(
+                    "${sanitize(component, 80)}: ${sanitize(errorType, 120)}: ${sanitize(message, 500)}"
+                )
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance()
+                    .recordException(safeException)
+            }
             WorklyErrorReportWorker.enqueue(app)
         }.onFailure { Log.w(TAG, "Could not save technical error report locally", it) }
     }
