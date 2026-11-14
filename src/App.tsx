@@ -654,41 +654,59 @@ const AppContent = () => {
       ended_at: endedAt,
     });
 
-    const flushSession = async (endedAt: string | null) => {
+    const flushQueuedSession = async () => {
       if (cancelled || inFlight) return;
       inFlight = true;
+      let sentSnapshot = "";
       try {
-        const payload = makePayload(endedAt);
-        localStorage.setItem(queueKey, JSON.stringify(payload));
+        sentSnapshot = localStorage.getItem(queueKey) || "";
+        if (!sentSnapshot) return;
+        const payload = JSON.parse(sentSnapshot) as SessionPayload;
         const { supabase } = await import("@/integrations/supabase/client");
         const { error } = await supabase.from("app_sessions").upsert(payload, { onConflict: "session_id" });
         if (error) throw error;
-        if (localStorage.getItem(queueKey) === JSON.stringify(payload)) localStorage.removeItem(queueKey);
+        if (localStorage.getItem(queueKey) === sentSnapshot) localStorage.removeItem(queueKey);
       } catch (error) {
         console.warn("[App session] Sync failed; queued session retained", error);
       } finally {
         inFlight = false;
+        // If a foreground/background transition updated the queue mid-request,
+        // immediately send that newer state rather than losing the end marker.
+        if (!cancelled && sentSnapshot && localStorage.getItem(queueKey) && localStorage.getItem(queueKey) !== sentSnapshot) {
+          void flushQueuedSession();
+        }
       }
     };
 
-    const sync = () => {
-      if (document.visibilityState === "visible") void flushSession(null);
+    const queueSession = (endedAt: string | null) => {
+      if (cancelled) return;
+      try {
+        localStorage.setItem(queueKey, JSON.stringify(makePayload(endedAt)));
+        void flushQueuedSession();
+      } catch (error) {
+        console.warn("[App session] Could not persist session state", error);
+      }
     };
-    const end = () => { void flushSession(new Date().toISOString()); };
+    const sync = () => {
+      if (document.visibilityState === "visible") queueSession(null);
+    };
+    const end = () => queueSession(new Date().toISOString());
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") sync();
+      else end();
+    };
     sync();
     const heartbeat = window.setInterval(sync, 45 * 1000);
     window.addEventListener("online", sync);
     window.addEventListener("focus", sync);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") sync();
-      else end();
-    });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pagehide", end);
     return () => {
       cancelled = true;
       window.clearInterval(heartbeat);
       window.removeEventListener("online", sync);
       window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", end);
     };
   }, [user?.id]);
