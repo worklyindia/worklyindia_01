@@ -60,7 +60,7 @@ export const PhoneOtpLoginBox: React.FC<PhoneOtpLoginBoxProps> = ({
   useWebOTP((detectedCode) => {
     setCode(detectedCode);
     void handleVerify(detectedCode);
-  }, otpSent && !verifying);
+  }, open && (sending || otpSent) && !verifying);
 
   useEffect(() => {
     if (code.length === 6 && !verifying) void handleVerify(code);
