@@ -71,6 +71,9 @@ export const EmailOtpVerifyBox = ({ email, name, page, onVerified }: Props) => {
       try { msg = msg || (await (fnErr as any)?.context?.json())?.error; } catch { /* ignore */ }
       lastVerifiedCode.current = '';
       setError(msg || 'Wrong code');
+    } catch (error) {
+      lastVerifiedCode.current = '';
+      setError(error instanceof Error ? error.message : 'Verification failed');
     } finally {
       setVerifying(false);
     }
