@@ -2525,58 +2525,37 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
         audioContent = cachedAudio;
         console.log('🎵 Using cached TTS audio');
       } else {
-        // Try Cartesia first
-        try {
-          const { data, error } = await supabase.functions.invoke('unified-voice', {
-            body: { action: 'text-to-speech', text: message.content, provider: 'cartesia' }
-          });
+        // The Edge Function now tries Cartesia → MiniMax → ElevenLabs.
+        const { data, error } = await supabase.functions.invoke('unified-voice', {
+          body: { action: 'text-to-speech', text: message.content, provider: 'cartesia' }
+        });
 
-          if (error) {
-            // Handle specific error types
-            if (error.message?.includes('login') || error.message?.includes('session expired') || error.message?.includes('Authentication required')) {
-              setLoadingVoiceId(null);
-              toast.error('Session Expired - Please login again', {
-                duration: 5000,
-                action: {
-                  label: 'Login',
-                  onClick: () => navigate('/auth?redirect=/ai-assistant')
-                }
-              });
-              return;
-            }
-            
-            // Handle limit errors with redirect
-            if (error.message?.includes('limit') || error.message?.includes('exhausted')) {
-              setLoadingVoiceId(null);
-              toast.error('🔊 Voice Playback Limit Reached', {
-                description: 'Your voice playback limit has been exhausted. Redirecting to subscription page...',
-                duration: 2000,
-              });
-              setTimeout(() => {
-                navigate('/ai-assistant/subscription');
-              }, 2000);
-              return;
-            }
-            
-            throw error;
+        if (error) {
+          const messageText = error.message?.toLowerCase() || '';
+          if (messageText.includes('login') || messageText.includes('session expired') || messageText.includes('authentication required')) {
+            setLoadingVoiceId(null);
+            toast.error('Session Expired - Please login again', {
+              duration: 5000,
+              action: { label: 'Login', onClick: () => navigate('/auth?redirect=/ai-assistant') }
+            });
+            return;
           }
-
-          audioContent = data.audioContent;
-          console.log('✅ Cartesia voice generated');
-        } catch (cartesiaError) {
-          console.warn('⚠️ Cartesia failed, falling back to ElevenLabs:', cartesiaError);
-          
-          // Fallback to ElevenLabs (MiniMax)
-          const { data, error } = await supabase.functions.invoke('unified-voice', {
-            body: { action: 'text-to-speech', text: message.content, provider: 'minimax' }
-          });
-
-          if (error) throw error;
-
-          audioContent = data.audioContent;
-          console.log('✅ ElevenLabs fallback voice generated');
+          if (messageText.includes('limit') || messageText.includes('exhausted')) {
+            setLoadingVoiceId(null);
+            toast.error('🔊 Voice Playback Limit Reached', {
+              description: 'Your voice playback limit has been exhausted. Redirecting to subscription page...',
+              duration: 2000,
+            });
+            setTimeout(() => navigate('/ai-assistant/subscription'), 2000);
+            return;
+          }
+          throw error;
         }
-        
+
+        audioContent = data?.audioContent || '';
+        if (!audioContent) throw new Error('Voice providers returned no playable audio');
+        console.log(`✅ Voice generated via ${data.provider || 'server fallback'}`);
+
         // Save to cache for future use
         setCachedAudio(message.content, audioContent);
       }
@@ -2610,8 +2589,38 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
       await audio.play();
       successHaptic();
     } catch (error: any) {
-      console.error('Error playing message:', error);
+      console.error('Online voice playback failed; trying device TTS:', error);
       const errorMsg = error?.message || 'Voice playback failed';
+      const lowerError = errorMsg.toLowerCase();
+
+      // Final offline/device fallback. Never bypass authentication or plan limits.
+      if (!lowerError.includes('session expired') && !lowerError.includes('authentication required') &&
+          !lowerError.includes('limit') && !lowerError.includes('exhausted') &&
+          typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(message.content);
+          utterance.lang = /[\\u0900-\\u097F]/.test(message.content) ? 'hi-IN' : 'en-IN';
+          utterance.rate = 1;
+          utterance.pitch = 1;
+          utterance.onstart = () => {
+            setLoadingVoiceId(null);
+            setPlayingMessageId(message.id);
+          };
+          utterance.onend = () => setPlayingMessageId(null);
+          utterance.onerror = () => {
+            setPlayingMessageId(null);
+            setLoadingVoiceId(null);
+            toast.error('Device voice playback failed', { description: 'Phone settings mein Text-to-Speech engine check karein.' });
+          };
+          setLoadingVoiceId(null);
+          setPlayingMessageId(message.id);
+          window.speechSynthesis.speak(utterance);
+          return;
+        } catch (deviceTtsError) {
+          console.warn('Device TTS unavailable:', deviceTtsError);
+        }
+      }
 
       // Show real reason from the server + a Retry action so the user isn't
       // stuck on a generic "Voice playback failed" message.
