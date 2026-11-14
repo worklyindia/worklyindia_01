@@ -538,7 +538,7 @@ const AppContent = () => {
         const isAndroid = /Android/i.test(ua);
         const androidModel = nativeDeviceInfo
           ? [nativeDeviceInfo.manufacturer, nativeDeviceInfo.model].filter(Boolean).join(" ")
-          : (isAndroid ? ((ua.match(/Android [^;]+;\\s*([^;)]+)/i) || [])[1] || "Android device") : (navigator.platform || "Web device"));
+          : (isAndroid ? ((ua.match(/Android [^;]+;\s*([^;)]+)/i) || [])[1] || "Android device") : (navigator.platform || "Web device"));
         const appVersion = nativeDeviceInfo
           ? `${nativeDeviceInfo.appVersion} (${nativeDeviceInfo.appVersionCode})`
           : (import.meta.env.VITE_APP_VERSION || "web");
