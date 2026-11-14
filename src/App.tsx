@@ -632,6 +632,7 @@ const AppContent = () => {
     let cancelled = false;
     let inFlight = false;
     type SessionPayload = {
+      p_event_id: string;
       p_session_id: string;
       p_installation_id: string;
       p_native_installation_id: string;
@@ -642,6 +643,7 @@ const AppContent = () => {
     };
 
     const makePayload = (endedAt: string | null): SessionPayload => ({
+      p_event_id: crypto.randomUUID(),
       p_session_id: sessionId,
       p_installation_id: installationId,
       p_native_installation_id: device?.installationId || installationId,
