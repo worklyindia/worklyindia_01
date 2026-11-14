@@ -41,51 +41,66 @@ const json = (body: unknown, status = 200) =>
   });
 
 async function callGateway(systemPrompt: string, text: string) {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("Translation service not configured");
-
-  const response = await fetch(
-    "https://ai.gateway.lovable.dev/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: text },
-        ],
-      }),
-    },
-  );
-
-  if (response.status === 429) {
-    return { rateLimited: true } as const;
+  type Provider = { name: string; url: string; key: string; model: string; headers?: Record<string,string> };
+  const providers: Provider[] = [];
+  const add = (name: string, env: string, url: string, model: string, headers: Record<string,string> = {}) => {
+    const key = Deno.env.get(env);
+    if (key) providers.push({ name, url, key, model, headers });
+  };
+  // Only gateways with text/chat-completion APIs are included. Cartesia,
+  // MiniMax and ElevenLabs credentials in this project are speech APIs.
+  add("Vercel AI Gateway", "VERCEL_AI_GATEWAY_API_KEY", "https://ai-gateway.vercel.sh/v1/chat/completions", "google/gemini-2.5-flash");
+  add("Lovable AI Gateway", "LOVABLE_API_KEY", "https://ai.gateway.lovable.dev/v1/chat/completions", "google/gemini-2.5-flash");
+  add("Google AI Studio", "GOOGLE_AI_STUDIO_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-2.5-flash");
+  add("OpenRouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1/chat/completions", "meta-llama/llama-3.3-70b-instruct:free", {"HTTP-Referer":"https://worklyindia.devs.surf","X-Title":"Workly India"});
+  add("Together AI", "TOGETHER_AI_API_KEY", "https://api.together.xyz/v1/chat/completions", "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free");
+  add("Groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1/chat/completions", "llama-3.1-8b-instant");
+  add("Cerebras", "CEREBRAS_API_KEY", "https://api.cerebras.ai/v1/chat/completions", "llama3.1-8b");
+  add("Mistral AI", "MISTRAL_API_KEY", "https://api.mistral.ai/v1/chat/completions", "mistral-small-latest");
+  add("Hugging Face", "HUGGINGFACE_API_KEY", "https://router.huggingface.co/v1/chat/completions", "meta-llama/Llama-3.3-70B-Instruct");
+  const cfAccount = Deno.env.get("CLOUDFLARE_ACCOUNT_ID");
+  const cfToken = Deno.env.get("CLOUDFLARE_AI_API_TOKEN") || Deno.env.get("CLOUDFLARE_API_TOKEN");
+  if (cfAccount && cfToken) providers.push({ name: "Cloudflare Workers AI", url: "https://api.cloudflare.com/client/v4/accounts/" + cfAccount + "/ai/v1/chat/completions", key: cfToken, model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" });
+  if (!providers.length) throw new Error("No translation-capable AI gateway is configured");
+  const failures: string[] = [];
+  for (const provider of providers) {
+    try {
+      const response = await fetch(provider.url, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + provider.key, "Content-Type": "application/json", ...provider.headers },
+        body: JSON.stringify({
+          model: provider.model, temperature: 0.2, max_tokens: 3000,
+          response_format: { type: "json_object" },
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
+        }),
+        signal: AbortSignal.timeout(25000),
+      });
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 240);
+        failures.push(provider.name + " HTTP " + response.status + ": " + detail);
+        console.warn("[Translation] " + provider.name + " failed (" + response.status + "); falling back");
+        continue;
+      }
+      const data = await response.json();
+      const raw = String(data?.choices?.[0]?.message?.content ?? "").trim();
+      if (!raw) { failures.push(provider.name + ": empty response"); continue; }
+      let parsed: Record<string, unknown> = {};
+      try {
+        const jsonText = raw.replace(/^\x60{3}(?:json)?/i, "").replace(/\x60{3}$/, "").trim();
+        parsed = JSON.parse(jsonText);
+      } catch {
+        parsed = { translation: raw };
+      }
+      console.log("[Translation] provider=" + provider.name + " succeeded");
+      return { parsed, raw, provider: provider.name, rateLimited: false as const, noCredits: false as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(provider.name + ": " + message.slice(0, 180));
+      console.warn("[Translation] " + provider.name + " request failed; falling back: " + message);
+    }
   }
-  if (response.status === 402) {
-    return { noCredits: true } as const;
-  }
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("AI gateway error:", response.status, errText);
-    throw new Error("Translation failed");
-  }
-
-  const data = await response.json();
-  const raw = data?.choices?.[0]?.message?.content?.trim() ?? "";
-  let parsed: Record<string, unknown> = {};
-  try {
-    const jsonText = raw.replace(/^```(?:json)?/i, "").replace(/```$/, "")
-      .trim();
-    parsed = JSON.parse(jsonText);
-  } catch (_) {
-    parsed = { translation: raw };
-  }
-  return { parsed, raw } as const;
+  console.error("[Translation] all configured providers failed:", failures.join(" | "));
+  throw new Error("All configured translation AI providers are temporarily unavailable. Please retry in a moment.");
 }
 
 // Normalize ISO 639-2/3 codes the model may return to our 2-letter keys
@@ -199,7 +214,7 @@ export async function handleTranslate(req: Request): Promise<Response> {
       languageLabel: labelFor(detected, romanized),
       correctedText: corrected,
       hasCorrection: Boolean(corrected) && corrected.trim() !== text.trim(),
-      provider: "lovable-ai",
+      provider: result.provider,
     });
   } catch (error) {
     console.error("Translation error:", error);
