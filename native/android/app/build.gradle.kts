@@ -2,8 +2,6 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("com.google.firebase.crashlytics")
-    id("com.google.firebase.firebase-perf")
 }
 
 val releaseProperties = Properties().apply {
@@ -48,14 +46,6 @@ android {
         getByName("release") {
             val storePath = System.getenv("WORKLY_UPLOAD_STORE_FILE")
             if (!storePath.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
-            // Enable R8 shrinking/optimization only for release builds. Keep
-            // debug builds debuggable and preserve consumer SDK rules.
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
 
@@ -70,14 +60,6 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     // Native GA4/Firebase Analytics: app installs, opens, sessions and screen views.
     implementation("com.google.firebase:firebase-analytics")
-    // Automatic startup, network and custom trace instrumentation.
-    implementation("com.google.firebase:firebase-perf")
-    // Crash diagnostics with R8 mapping-file deobfuscation.
-    implementation("com.google.firebase:firebase-crashlytics")
-    // SMS User Consent API: receive OTP SMS without broad SMS permissions.
-    implementation("com.google.android.gms:play-services-auth-api-phone:18.2.0")
-    // Official Meta WhatsApp OTP SDK for signed one-tap authentication handshakes.
-    implementation("com.whatsapp.otp:whatsapp-otp-android-sdk:1.0.0")
     // Official Google Play in-app update flow (flexible updates).
     implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("androidx.core:core-ktx:1.17.0")

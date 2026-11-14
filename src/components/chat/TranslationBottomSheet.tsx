@@ -16,46 +16,6 @@ import {
 import { translationStorage } from '@/lib/translationStorage';
 import { supabase } from '@/integrations/supabase/client';
 
-type TranslationPayload = { text: string; sourceLang?: string; targetLang?: string; mode?: string };
-const translationInFlight = new Map<string, Promise<{ data: any; error: any }>>();
-
-const waitForTranslationRetry = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-// Share identical in-flight requests and retry transient Supabase edge/network
-// throttling. Provider-level fallback remains on the server.
-async function invokeTranslation(body: TranslationPayload): Promise<{ data: any; error: any }> {
-  const key = JSON.stringify(body);
-  const pending = translationInFlight.get(key);
-  if (pending) return pending;
-
-  const request = (async () => {
-    let lastResult: { data: any; error: any } = { data: null, error: null };
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        lastResult = await supabase.functions.invoke('ai-career-chat/translate', { body });
-        if (!lastResult.error) return lastResult;
-
-        const status = Number((lastResult.error as any)?.context?.status ?? 0);
-        const transient = status === 0 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
-        if (!transient || attempt === 2) return lastResult;
-      } catch (error) {
-        lastResult = { data: null, error };
-        if (attempt === 2) return lastResult;
-      }
-      await waitForTranslationRetry(600 * (2 ** attempt));
-    }
-    return lastResult;
-  })();
-
-  translationInFlight.set(key, request);
-  try {
-    return await request;
-  } finally {
-    if (translationInFlight.get(key) === request) translationInFlight.delete(key);
-  }
-}
-
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -206,19 +166,19 @@ export default function TranslationBottomSheet({
   useEffect(() => {
     if (!open) return;
     setDetectedLang(isDetectable(firstText) ? localDetect(firstText) : null);
-  }, [open, firstText, targetLang]);
+  }, [open, firstText]);
 
   useEffect(() => {
     if (!open || !isDetectable(firstText)) {
       setAiSourceLabel(null);
       return;
     }
-    // Don't run a second AI request while a translation is already selected.
-    if (targetLang) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const { data, error } = await invokeTranslation({ text: firstText, mode: 'detect' });
+        const { data, error } = await supabase.functions.invoke('ai-career-chat/translate', {
+          body: { text: firstText, mode: 'detect' },
+        });
         if (cancelled || error || !data?.languageLabel) return;
         setAiSourceLabel(data.languageLabel as string);
         const firstId = selectedMessages[0]?.id;
@@ -268,7 +228,9 @@ export default function TranslationBottomSheet({
     text: string,
     langCode: string,
   ): Promise<{ translated: string; detected: string; corrected?: string }> => {
-    const { data, error } = await invokeTranslation({ text, sourceLang: 'auto', targetLang: langCode });
+    const { data, error } = await supabase.functions.invoke('ai-career-chat/translate', {
+      body: { text, sourceLang: 'auto', targetLang: langCode },
+    });
 
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
