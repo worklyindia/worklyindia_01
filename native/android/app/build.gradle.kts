@@ -71,6 +71,8 @@ dependencies {
     debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // Google Mobile Ads SDK. Keep the test ad unit active until AdMob app readiness approval.
+    implementation("com.google.android.gms:play-services-ads:25.5.0")
     // Native GA4/Firebase Analytics: app installs, opens, sessions and screen views.
     implementation("com.google.firebase:firebase-analytics")
     // Google Crashlytics: native crashes, ANRs and recorded non-fatal exceptions.
