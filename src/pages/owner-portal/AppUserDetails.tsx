@@ -61,8 +61,8 @@ export default function AppUserDetails() {
   const stats = useMemo(() => {
     const now = Date.now();
     const activeUserIds = new Set(sessions.filter(s =>
-      !s.ended_at && now - new Date(s.last_seen_at).getTime() <= ACTIVE_WINDOW_MS
-    ).map(s => s.user_id));
+      s.user_id && !s.ended_at && now - new Date(s.last_seen_at).getTime() <= ACTIVE_WINDOW_MS
+    ).map(s => s.user_id as string));
     const recentUserIds = new Set(sessions.filter(s => s.user_id &&
       now - new Date(s.last_seen_at).getTime() <= RECENT_WINDOW_MS
     ).map(s => s.user_id as string));
@@ -99,7 +99,10 @@ export default function AppUserDetails() {
 
   const sessionsByUser = useMemo(() => {
     const map = new Map<string, SessionRow[]>();
-    sessions.forEach(row => map.set(row.user_id, [...(map.get(row.user_id) || []), row]));
+    sessions.forEach(row => {
+      if (!row.user_id) return;
+      map.set(row.user_id, [...(map.get(row.user_id) || []), row]);
+    });
     return map;
   }, [sessions]);
 
