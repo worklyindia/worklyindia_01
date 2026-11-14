@@ -504,7 +504,7 @@ const AppContent = () => {
     if (!user?.id) return;
     let installationId = "";
     try {
-      const key = "workly-app-installation-id";
+      const key = "workly-app-installation-id:" + user.id;
       installationId = localStorage.getItem(key) || "";
       if (!installationId) {
         installationId = crypto.randomUUID();
