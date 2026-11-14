@@ -2580,7 +2580,7 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
           try {
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(message.content);
-            utterance.lang = /[\\u0900-\\u097F]/.test(message.content) ? 'hi-IN' : 'en-IN';
+            utterance.lang = /[\u0900-\u097F]/.test(message.content) ? 'hi-IN' : 'en-IN';
             utterance.onend = () => setPlayingMessageId(null);
             utterance.onerror = () => {
               setPlayingMessageId(null);
@@ -2618,7 +2618,7 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
         try {
           window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(message.content);
-          utterance.lang = /[\\u0900-\\u097F]/.test(message.content) ? 'hi-IN' : 'en-IN';
+          utterance.lang = /[\u0900-\u097F]/.test(message.content) ? 'hi-IN' : 'en-IN';
           utterance.rate = 1;
           utterance.pitch = 1;
           utterance.onstart = () => {
