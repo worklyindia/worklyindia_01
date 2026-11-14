@@ -625,7 +625,13 @@ const AppContent = () => {
     }
 
     const queueKey = "workly-pending-session:" + sessionId;
-    const startedAt = new Date().toISOString();
+    let startedAt = new Date().toISOString();
+    try {
+      startedAt = sessionStorage.getItem("workly-app-session-started-at:v1") || startedAt;
+      sessionStorage.setItem("workly-app-session-started-at:v1", startedAt);
+    } catch {
+      // Continue with this in-memory session start if session storage is unavailable.
+    }
     let cancelled = false;
     let inFlight = false;
     type SessionPayload = {
