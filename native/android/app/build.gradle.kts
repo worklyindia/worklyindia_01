@@ -67,6 +67,8 @@ android {
 }
 
 dependencies {
+    // Debug-only memory leak detection; excluded from public release APK/AAB.
+    debugImplementation("com.squareup.leakcanary:leakcanary-android:2.14")
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
     // Native GA4/Firebase Analytics: app installs, opens, sessions and screen views.
