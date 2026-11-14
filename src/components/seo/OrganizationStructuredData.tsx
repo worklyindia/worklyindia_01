@@ -19,8 +19,7 @@ export const OrganizationStructuredData = ({ brandName }: OrganizationStructured
     "url": SITE_URL,
     "@id": `${SITE_URL.replace(/\/$/, '')}/#organization`,
     "logo": `${SITE_URL.replace(/\/$/, '')}/workly-india-logo.png`,
-    "description": "Workly India is an India-focused jobs and hiring platform where job seekers can explore remote and work-from-home opportunities and connect with employers.",
-    "slogan": "India's Remote Jobs, Work From Home & Hiring Platform",
+    "description": "India's leading platform connecting job seekers with legitimate Workly India opportunities. We verify employers and ensure quality remote job listings.",
     "foundingDate": "2024",
     "founder": {
       "@type": "Person",
@@ -53,9 +52,6 @@ export const OrganizationStructuredData = ({ brandName }: OrganizationStructured
     "knowsAbout": [
       "Workly India",
       "Remote Jobs",
-      "Work From Home Jobs in India",
-      "Remote Hiring",
-      "Employer Recruitment",
       "Freelancing",
       "Career Development",
       "Resume Building",
