@@ -259,11 +259,11 @@ const More = () => {
         </Card>
 
         {/* Stats Dashboard */}
-        <div className="mb-8 grid grid-cols-3 gap-3">
+        <div className="mb-8 grid w-full grid-cols-2 gap-3">
           {statsData.map((stat) => (
             <Card
               key={stat.label}
-              className="rounded-2xl border border-border/60 bg-gradient-to-br from-card to-muted/40 p-3 shadow-sm"
+              className="w-full min-w-0 rounded-2xl border border-border/60 bg-gradient-to-br from-card to-muted/40 p-4 shadow-sm"
             >
               <div className="mb-2 inline-flex rounded-lg bg-primary/10 p-1.5">
                 <stat.icon className="h-4 w-4 text-primary" />
