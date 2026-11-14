@@ -184,12 +184,13 @@ class ChargingMonitorService : Service() {
 
         // Keep the ongoing foreground notification current for the lock screen
         // and notification shade, even while the app UI is closed.
-        // Refresh the foreground-service notification itself on every battery
-        // broadcast. This is more reliable than notify() alone across OEM skins.
+        // Keep the foreground service promoted from onStartCommand(), then update
+        // the existing notification in place with the same stable ID. Repeated
+        // startForeground() calls for every battery tick can look like a fresh
+        // notification update on some OEM notification shades.
         val monitorNotification = buildMonitorNotification(percent)
-        // Keep the service in the foreground regardless of full-screen-intent
-        // permission. FSI access is checked only when posting the 100% alert.
-        startForeground(MONITOR_NOTIFICATION_ID, monitorNotification)
+        getSystemService(NotificationManager::class.java)
+            .notify(MONITOR_NOTIFICATION_ID, monitorNotification)
 
         // Record a live session from battery state too. This covers devices
         // that deliver a sticky charging snapshot before/without a plug edge.
