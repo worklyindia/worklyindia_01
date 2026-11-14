@@ -67,6 +67,8 @@ create policy "Users update their own Android app sessions" on public.app_sessio
   );
 grant insert, update, select on public.app_sessions to authenticated;
 
+drop function if exists public.record_android_app_session(uuid, uuid, text, text, text, boolean, uuid);
+
 -- SECURITY INVOKER keeps all writes subject to the caller's RLS policies.
 -- Authenticated callers write their own session; anonymous callers can only
 -- append non-readable anonymous telemetry events.
