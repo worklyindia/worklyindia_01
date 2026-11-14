@@ -52,6 +52,8 @@ import {
   BarChart3,
   Heart,
   HardDrive,
+  Smartphone,
+  AlertTriangle,
 
 } from "lucide-react";
 
@@ -303,7 +305,14 @@ const OwnerPortal = () => {
         { name: "Razorpay Payment Events", icon: Activity, path: "/owner-portal/payment-events" },
         { name: "PayPal Payment Events", icon: Activity, path: "/owner-portal/paypal-payment-events" }
       ]
-    }
+    },
+    ...(isOwner && adminRole === "owner" ? [{
+      title: "App Monitoring",
+      items: [
+        { name: "App Error Details", icon: AlertTriangle, path: "/owner-portal/app-error-details", badge: "Owner" },
+        { name: "App User Details", icon: Smartphone, path: "/owner-portal/app-user-details", badge: "Owner" }
+      ]
+    }] : [])
   ];
 
   // Mobile header component with conditional back button
