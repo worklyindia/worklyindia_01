@@ -60,6 +60,8 @@ import com.google.android.play.core.install.InstallStateUpdatedListener
 import com.google.android.play.core.install.model.InstallStatus
 import com.google.android.play.core.install.model.UpdateAvailability
 import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest
+import com.google.android.gms.auth.api.identity.Identity
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -106,6 +108,7 @@ class MainActivity : FragmentActivity() {
     private val website = "https://worklyindia.devs.surf/"
     private val allowedHost = "worklyindia.devs.surf"
     private lateinit var appUpdateManager: AppUpdateManager
+    private var phoneNumberHintPending = false
     private var updateDialogVisible = false
     private var updateCheckInProgress = false
     private var websiteUpdateCheckInProgress = false
@@ -203,6 +206,24 @@ class MainActivity : FragmentActivity() {
     @Deprecated("Android WebView file chooser result callback")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_PHONE_NUMBER_HINT) {
+            phoneNumberHintPending = false
+            if (resultCode == RESULT_OK && data != null) {
+                runCatching { Identity.getSignInClient(this).getPhoneNumberFromIntent(data) }
+                    .onSuccess { phoneNumber ->
+                        if (!phoneNumber.isNullOrBlank()) {
+                            dispatchNativeEvent(
+                                "workly-phone-number-hint",
+                                JSONObject().put("phoneNumber", phoneNumber).toString()
+                            )
+                        }
+                    }
+                    .onFailure { error ->
+                        android.util.Log.w("WorklyPhoneHint", "Could not read selected phone number", error)
+                    }
+            }
+            return
+        }
         if (requestCode == REQUEST_WEBSITE_INSTALL) {
             websiteInstallLaunchPending = false
             val targetCode = websiteDownloadRelease?.optInt("version_code", 0)?.toLong() ?: 0L
@@ -472,6 +493,47 @@ class MainActivity : FragmentActivity() {
                     }
                     if (hasInternetConnection()) view.settings.cacheMode = WebSettings.LOAD_DEFAULT
                     syncWebsiteSession()
+                    // Suggest a number from the device SIM/account when a phone field is focused.
+                    // The system picker is user-controlled; no READ_PHONE_STATE or SMS permission is needed.
+                    view.evaluateJavascript("""
+                        (function() {
+                          if (window.__worklyPhoneNumberHintInstalled) return;
+                          window.__worklyPhoneNumberHintInstalled = true;
+                          var target = null;
+                          document.addEventListener('focusin', function(event) {
+                            var input = event.target;
+                            if (!input || input.tagName !== 'INPUT') return;
+                            var descriptor = [
+                              input.type, input.name, input.id, input.autocomplete,
+                              input.placeholder, input.getAttribute('aria-label')
+                            ].join(' ');
+                            if (!/(^|\s)(tel|tel-national|tel-country-code)(\s|$)/i.test(input.autocomplete || '') &&
+                                !/(phone|mobile|telephone|contact.?number|whatsapp.?number)/i.test(descriptor)) return;
+                            if (input.disabled || input.readOnly || String(input.value || '').trim()) return;
+                            target = input;
+                            try {
+                              if (window.WorklyAndroid && window.WorklyAndroid.requestPhoneNumberHint) {
+                                window.WorklyAndroid.requestPhoneNumberHint();
+                              }
+                            } catch (_) {}
+                          }, true);
+                          document.addEventListener('focusout', function(event) {
+                            if (event.target === target) target = null;
+                          }, true);
+                          window.addEventListener('workly-phone-number-hint', function(event) {
+                            var input = target;
+                            var number = event && event.detail && event.detail.phoneNumber;
+                            if (!input || !input.isConnected || input.disabled || input.readOnly ||
+                                String(input.value || '').trim() || typeof number !== 'string' || !number.trim()) return;
+                            var prototype = Object.getPrototypeOf(input);
+                            var descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+                            if (descriptor && descriptor.set) descriptor.set.call(input, number);
+                            else input.value = number;
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                          });
+                        })();
+                    """.trimIndent(), null)
                     // Capture JavaScript crashes and first-party/Supabase service failures without collecting request bodies or query strings.
                     view.evaluateJavascript("""
                         (function() {
@@ -1648,6 +1710,37 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     inner class WorklyWebBridge {
+        @JavascriptInterface
+        fun requestPhoneNumberHint(): Boolean {
+            if (phoneNumberHintPending || isFinishing || isDestroyed) return false
+            phoneNumberHintPending = true
+            runOnUiThread {
+                val request = GetPhoneNumberHintIntentRequest.builder().build()
+                Identity.getSignInClient(this@MainActivity)
+                    .getPhoneNumberHintIntent(request)
+                    .addOnSuccessListener { pendingIntent ->
+                        runCatching {
+                            startIntentSenderForResult(
+                                pendingIntent.intentSender,
+                                REQUEST_PHONE_NUMBER_HINT,
+                                null,
+                                0,
+                                0,
+                                0
+                            )
+                        }.onFailure { error ->
+                            phoneNumberHintPending = false
+                            android.util.Log.w("WorklyPhoneHint", "Could not launch phone number picker", error)
+                        }
+                    }
+                    .addOnFailureListener { error ->
+                        phoneNumberHintPending = false
+                        android.util.Log.w("WorklyPhoneHint", "Phone number hint is unavailable on this device", error)
+                    }
+            }
+            return true
+        }
+
         @JavascriptInterface
         fun reportAppError(type: String, message: String, source: String, httpStatus: Int): Boolean {
             AppErrorReporter.capture(
@@ -3380,6 +3473,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val REQUEST_CHARGING_ALERT_NOTIFICATIONS = 704
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_VAULT_IMPORT = 4105
+        private const val REQUEST_PHONE_NUMBER_HINT = 4107
         private const val REQUEST_MEDIA = 702
         private const val REQUEST_LOCATION = 703
     }
