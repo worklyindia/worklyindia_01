@@ -47,6 +47,10 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.core.content.FileProvider
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.MobileAds
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -80,6 +84,7 @@ import java.net.URL
 
 class MainActivity : FragmentActivity() {
     private lateinit var webView: WebView
+    private var admobBannerView: AdView? = null
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var rootLayout: FrameLayout
     private lateinit var loadingOverlay: FrameLayout
@@ -887,6 +892,36 @@ class MainActivity : FragmentActivity() {
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
+        // Keep the banner inside the native app shell; the website itself never receives ad code.
+        // Use Google's official test unit until the app is approved and privacy consent is configured.
+        val adContainer = FrameLayout(this).apply {
+            setBackgroundColor(Color.WHITE)
+            visibility = android.view.View.GONE
+        }
+        rootLayout.addView(adContainer, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM
+        ))
+        val banner = AdView(this).also { admobBannerView = it }
+        rootLayout.post {
+            val density = resources.displayMetrics.density
+            val widthDp = (rootLayout.width / density).toInt().coerceAtLeast(320)
+            val bannerSize = AdSize.getLargeAnchoredAdaptiveBannerAdSize(this, widthDp)
+            banner.adUnitId = TEST_BANNER_AD_UNIT_ID
+            banner.setAdSize(bannerSize)
+            adContainer.addView(banner, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                bannerSize.getHeightInPixels(this)
+            ))
+            val webParams = swipeRefreshLayout.layoutParams as FrameLayout.LayoutParams
+            webParams.bottomMargin = bannerSize.getHeightInPixels(this) + (8 * density).toInt()
+            swipeRefreshLayout.layoutParams = webParams
+            adContainer.visibility = android.view.View.VISIBLE
+            MobileAds.initialize(this) {
+                banner.loadAd(AdRequest.Builder().build())
+            }
+        }
         loadingOverlay = createStartupLoadingOverlay()
         rootLayout.addView(loadingOverlay, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -2502,6 +2537,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onResume() {
         super.onResume()
+        admobBannerView?.resume()
         // Re-check the user's battery-optimization choice after returning from
         // Android Settings. If already charging, start the monitor while this
         // Activity is foreground; future charger events can then start it locked.
@@ -2586,6 +2622,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     override fun onPause() {
+        admobBannerView?.pause()
         getSystemService(android.app.NotificationManager::class.java).cancel(4108)
         // Stop network-quality tracking immediately when Workly India is no longer visible.
         networkCallback?.let { callback ->
@@ -3348,6 +3385,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     override fun onDestroy() {
+        admobBannerView?.destroy()
+        admobBannerView = null
         interviewCallActive = false
         interviewCallVideoEnabled = false
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -3374,6 +3413,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     }
 
     companion object {
+        // Google-provided test banner. Replace only after AdMob app readiness approval and consent setup.
+        private const val TEST_BANNER_AD_UNIT_ID = "ca-app-pub-3940256099942544/9214589741"
         private const val PACKAGE_INSTALL_STATUS_REQUEST = 7441
         private const val REQUEST_APP_UPDATE = 4104
         private const val REQUEST_WEBSITE_INSTALL = 4106
