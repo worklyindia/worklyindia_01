@@ -22,7 +22,10 @@ object AppErrorReporter {
         if (previous !is WorklyUncaughtExceptionHandler) {
             Thread.setDefaultUncaughtExceptionHandler(WorklyUncaughtExceptionHandler(appContext, previous))
         }
-        WorklyErrorReportWorker.schedule(appContext)
+        // Crash reporting is best-effort: a WorkManager initialization problem
+        // must never prevent Android from opening the main application activity.
+        runCatching { WorklyErrorReportWorker.schedule(appContext) }
+            .onFailure { Log.w(TAG, "Could not schedule background crash-report upload; app startup will continue", it) }
     }
 
     fun capture(context: Context, component: String, severity: String, error: Throwable, source: String? = null, httpStatus: Int? = null) {
