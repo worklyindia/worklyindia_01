@@ -20,7 +20,7 @@ import {
 } from "@/utils/platformShareFormatters";
 import { getJobShareUrl, getExternalJobShareUrl } from "@/config/domainConfig";
 import { useShortExternalJobUrl, resolveShortExternalJobUrl } from "@/hooks/useShortExternalJobUrl";
-import { openExternalShareUrl } from "@/utils/openExternalShareUrl";
+import { copyText as copyToClipboardText, openExternalShareUrl } from "@/utils/openExternalShareUrl";
 
 interface ShareDialogProps {
   jobTitle: string;
@@ -185,7 +185,8 @@ const ShareDialog = ({
       const copyText = isExternal
         ? externalMessage(await getExternalUrl())
         : formatCopyShare(jobData, referralCode);
-      await navigator.clipboard.writeText(copyText);
+      const copiedSuccessfully = await copyToClipboardText(copyText);
+      if (!copiedSuccessfully) throw new Error("Clipboard unavailable");
       setCopied(true);
       
       // Track copy as a share

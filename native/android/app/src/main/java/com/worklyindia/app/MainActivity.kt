@@ -1916,6 +1916,29 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
 
         @JavascriptInterface
+        fun copyText(text: String): Boolean {
+            if (text.isBlank()) return false
+            return try {
+                runOnUiThread {
+                    try {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Workly India", text))
+                        if (Build.VERSION.SDK_INT < 33) {
+                            Toast.makeText(this@MainActivity, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (error: Exception) {
+                        android.util.Log.w("WorklyShare", "Could not copy text", error)
+                        Toast.makeText(this@MainActivity, "Could not copy. Please try again.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                true
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyShare", "Could not access clipboard", error)
+                false
+            }
+        }
+
+        @JavascriptInterface
         fun shareText(title: String, message: String, url: String): Boolean {
             return try {
                 val payload = buildString {
