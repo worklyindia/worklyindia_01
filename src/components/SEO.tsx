@@ -128,7 +128,7 @@ const SEO = ({
             "alternateName": "Workly India",
             "url": siteUrl,
             "logo": brandAssets.logo_url ? (brandAssets.logo_url.startsWith('http') ? brandAssets.logo_url : `${siteUrl}${brandAssets.logo_url}`) : undefined,
-            "description": "India's premier platform connecting talented professionals with legitimate Workly India opportunities",
+            "description": "Workly India is an India-focused jobs and hiring platform for remote jobs, work-from-home opportunities and employer hiring across India.",
             "foundingDate": "2024-01-01",
             "contactPoint": {
               "@type": "ContactPoint",

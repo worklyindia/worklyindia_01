@@ -17,7 +17,7 @@ export const WebSiteStructuredData = ({
     "name": "Workly India",
     "alternateName": ["WorklyIndia", "Workly"],
     "url": SITE_URL,
-    "description": "India's #1 platform for legitimate remote jobs. Find remote jobs, freelance opportunities, and home-based work across all industries.",
+    "description": "Workly India is an India-focused jobs and hiring platform for remote jobs, work-from-home opportunities and employer hiring across India.",
     "potentialAction": {
       "@type": "SearchAction",
       "target": {
