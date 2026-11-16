@@ -84,7 +84,7 @@ const HUGGINGFACE_MAP: Record<string, string> = {
 };
 
 /** Build the provider chain from whatever API keys exist in this project. */
-export function buildAiGateways(): AiGateway[] {
+export function buildAiGateways(freeOnly = false): AiGateway[] {
   const env = (k: string) => Deno.env.get(k) || "";
   const gws: AiGateway[] = [];
 
@@ -190,7 +190,12 @@ export function buildAiGateways(): AiGateway[] {
     });
   }
 
-  return gws;
+  // Voice calls must never fall through to providers/models that may be billed.
+  // These gateways expose free-tier/free-model options; actual quota availability
+  // remains provider-controlled and a request can still fail when limits are reached.
+  return freeOnly
+    ? gws.filter((gw) => ["Google AI Studio", "OpenRouter", "Groq", "Cerebras"].includes(gw.name))
+    : gws;
 }
 
 function headersFor(gw: AiGateway): Record<string, string> {
@@ -220,6 +225,7 @@ export interface AiChainOptions {
   label?: string;
   /** Suppress provider diagnostics for privacy-sensitive stateless requests. */
   silent?: boolean;
+  freeOnly?: boolean;
 }
 
 export interface AiChainResult {
@@ -237,7 +243,7 @@ export async function runAiChain(
   options: AiChainOptions = {},
 ): Promise<AiChainResult | null> {
   const label = options.label || "ai-chain";
-  const gateways = buildAiGateways();
+  const gateways = buildAiGateways(options.freeOnly === true);
   if (gateways.length === 0) {
     if (!options.silent) console.error(`[${label}] no AI provider key configured`);
     return null;
