@@ -9,7 +9,6 @@ import android.content.Intent
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.ModelDownloadListener
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.media.AudioRecord
@@ -1948,29 +1947,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                                 } else intent
                                 dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "downloading-language-model").put("message", "Requesting offline speech language data…").toString())
                                 runCatching {
-                                    if (Build.VERSION.SDK_INT >= 34) {
-                                        voiceRecognizer?.triggerModelDownload(downloadIntent, mainExecutor, object : SpeechRecognizer.ModelDownloadListener {
-                                            override fun onProgress(progress: Int) {
-                                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "downloading-language-model").put("progress", progress).toString())
-                                            }
-                                            override fun onSuccess() {
-                                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "language-model-ready").put("message", "Offline language data is ready. Starting listening…").toString())
-                                                startOnDeviceVoiceRecognition(languageTag)
-                                            }
-                                            override fun onScheduled() {
-                                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "The phone scheduled the offline language download. Keep the phone online, wait for the download to finish, then tap Start AI Call again.").put("code", error).toString())
-                                                stopOnDeviceVoiceRecognition()
-                                            }
-                                            override fun onError(downloadError: Int) {
-                                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android could not download the offline language model (code $downloadError). Check Google Speech Services, internet, and available storage.").put("code", downloadError).toString())
-                                                stopOnDeviceVoiceRecognition()
-                                            }
-                                        })
-                                    } else {
-                                        voiceRecognizer?.triggerModelDownload(downloadIntent)
-                                        dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android has been asked to download the offline language model. Wait for the phone to finish, then tap Start AI Call again.").put("code", error).toString())
-                                        stopOnDeviceVoiceRecognition()
-                                    }
+                                    voiceRecognizer?.triggerModelDownload(downloadIntent)
+                                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android has been asked to download the offline language model. Keep the phone online, wait for the download to finish, then tap Start AI Call again.").put("code", error).toString())
+                                    stopOnDeviceVoiceRecognition()
                                 }.onFailure { downloadFailure ->
                                     dispatchNativeEvent("workly-voice-error", JSONObject().put("message", downloadFailure.message ?: "Could not request the offline language download.").toString())
                                     stopOnDeviceVoiceRecognition()
