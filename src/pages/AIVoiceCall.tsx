@@ -83,6 +83,15 @@ export default function AIVoiceCall() {
     }
   }, [bridge, language, muted]);
 
+  const handleBargeIn = useCallback((event: Event) => {
+    if (!activeRef.current || muted) return;
+    const detail = (event as CustomEvent<{ languageTag?: string }>).detail;
+    bridge?.stopVoiceReply?.();
+    const started = bridge?.startOnDeviceVoiceRecognition?.(detail?.languageTag || languageTags[language]);
+    if (started) setCallState('listening');
+    else { setCallState('error'); toast.error('Could not listen after interruption.'); }
+  }, [bridge, language, muted]);
+
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const message = (event as CustomEvent<{ message?: string }>).detail?.message || 'Voice service error.';
@@ -95,15 +104,17 @@ export default function AIVoiceCall() {
     window.addEventListener('workly-voice-transcript', handleTranscript);
     window.addEventListener('workly-voice-status', handleNativeStatus);
     window.addEventListener('workly-voice-error', handleNativeError);
+    window.addEventListener('workly-voice-barge-in', handleBargeIn);
     return () => {
       window.removeEventListener('workly-voice-transcript', handleTranscript);
       window.removeEventListener('workly-voice-status', handleNativeStatus);
       window.removeEventListener('workly-voice-error', handleNativeError);
+      window.removeEventListener('workly-voice-barge-in', handleBargeIn);
       activeRef.current = false;
       bridge?.stopOnDeviceVoiceRecognition?.();
       bridge?.stopVoiceReply?.();
     };
-  }, [bridge, handleTranscript, handleNativeStatus, handleNativeError]);
+  }, [bridge, handleTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
 
   const startCall = async () => {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
