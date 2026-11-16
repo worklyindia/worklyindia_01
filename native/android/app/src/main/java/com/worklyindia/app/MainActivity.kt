@@ -9,6 +9,7 @@ import android.content.Intent
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.ModelDownloadListener
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.media.AudioRecord
