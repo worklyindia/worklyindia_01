@@ -84,6 +84,18 @@ export default function AIVoiceCall() {
           </div>
         </div>
 
+        <div className="mt-5 w-full rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-4 text-left">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-sm font-semibold">Private, no-retention voice design</p>
+              <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                The live voice service will process audio and transcripts temporarily in memory only. Audio, speech-to-text transcripts and AI voice replies must not be saved in chat history, database, storage or content logs. This policy is pending backend implementation and verification.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-5 grid w-full grid-cols-3 gap-2">
           {['Hindi', 'English', 'Gujarati'].map((language) => (
             <div key={language} className="rounded-xl border border-border/70 bg-card px-2 py-3 text-sm font-medium">
