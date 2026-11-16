@@ -36,3 +36,21 @@ Suggested environment variables (server-side only):
 - `WORKLY_VOICE_SERVICE_SECRET`
 
 Do not enable live calling until the inference host, AI response model, license review, security checks and Hindi/English/Gujarati quality tests are complete.
+
+## Privacy-first, no-retention requirement
+
+The production voice service must process speech in memory and must not persist:
+- Raw microphone audio or generated speech audio.
+- Partial or final speech-to-text transcripts.
+- Text prompts or AI voice responses created during a call.
+- Call recordings, replay buffers, or speech payloads in analytics/crash reports.
+
+Implementation requirements:
+1. Keep audio chunks and transcript buffers in volatile memory only; discard them immediately after each processing step and clear remaining buffers when a call ends, is interrupted, or disconnects.
+2. Do not write audio, transcripts, prompts, or generated responses to Supabase, object storage, browser local/session storage, IndexedDB, GitHub, or application logs.
+3. Disable request-body logging and payload capture at the inference gateway, reverse proxy, hosting platform, observability tools, and error reporting. Log only non-content operational metadata (for example status, latency, model availability and coarse byte counts), with no user speech or text.
+4. Do not retain provider-side prompts or speech data. Use only a self-hosted/open-source inference stack whose runtime and hosting configuration can meet this requirement; verify host-level logs and backups before launch.
+5. Keep only the minimum non-content operational event if required, and make even that optional. Do not save transcripts as chat history by default.
+6. Clearly disclose that transient processing still occurs and that infrastructure providers may process network/operational metadata.
+
+This no-retention policy is a required acceptance criterion, not a claim that the current UI already performs live speech processing. It reduces stored data and privacy risk, but does not remove free-tier compute, bandwidth, concurrency, request-duration or quota limits.
