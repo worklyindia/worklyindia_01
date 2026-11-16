@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, PhoneCall, PhoneOff, Mic, MicOff, ShieldCheck, AudioLines, Languages, Info } from 'lucide-react';
+import { ArrowLeft, PhoneCall, Mic, ShieldCheck, AudioLines, Languages, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,7 +14,6 @@ export default function AIVoiceCall() {
   const { user } = useAuth();
   const { data: settings } = useAIChatSettings();
   const [micState, setMicState] = useState<MicState>('unchecked');
-  const [isMuted, setIsMuted] = useState(false);
 
   const aiName = settings?.name || 'Workly India AI';
   const showBadge = settings?.verification_enabled;
