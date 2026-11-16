@@ -12,6 +12,7 @@ type LocalRecognition = {
 
 type LocalSpeechRecognitionConstructor = {
   new (): LocalRecognition;
+  prototype: LocalRecognition;
   available?: (options: { langs: string[]; processLocally: true }) => Promise<string>;
   install?: (options: { langs: string[]; processLocally: true }) => Promise<boolean>;
 };
