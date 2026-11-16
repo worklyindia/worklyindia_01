@@ -1889,6 +1889,28 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 runCatching {
                     voiceRecognizer?.destroy()
                     voiceRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this@MainActivity)
+                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                        if (Build.VERSION.SDK_INT >= 34 && languageTag == "auto") {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "und")
+                            putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
+                            putStringArrayListExtra(
+                                RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,
+                                arrayListOf(
+                                    "en-IN", "hi-IN", "gu-IN", "mr-IN", "bn-IN", "ta-IN",
+                                    "te-IN", "pa-IN", "ur-IN", "kn-IN", "ml-IN", "or-IN",
+                                    "as-IN", "ne-NP", "sd-IN", "ks-IN"
+                                )
+                            )
+                        } else {
+                            val fallbackTag = languageTag.takeIf { it.isNotBlank() && it != "auto" }
+                                ?: Locale.getDefault().toLanguageTag()
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, fallbackTag)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, fallbackTag)
+                        }
+                    }
                     voiceRecognizer?.setRecognitionListener(object : RecognitionListener {
                         override fun onReadyForSpeech(params: Bundle?) { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").toString()) }
                         override fun onBeginningOfSpeech() {}
@@ -1908,11 +1930,54 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is missing. Allow it in Android settings."
                                 SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "Too many speech requests. Wait a moment and try again."
                                 SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "This language is not supported by the installed offline speech service."
-                                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "The offline language pack is not installed. Download it in Android speech settings."
+                                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "The offline language pack is not installed. Workly is requesting the phone's speech service to download it."
                                 else -> "Offline speech recognition failed (code $error). Check the offline speech service and language pack."
                             }
-                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", reason).put("code", error).toString())
-                            stopOnDeviceVoiceRecognition()
+                            if (error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE && Build.VERSION.SDK_INT >= 33) {
+                                // Android 13+ lets the app request the model for the exact recognition intent.
+                                // For auto-detection, request the device's primary locale first; after download,
+                                // restart the original auto-detection intent.
+                                val downloadIntent = if (languageTag == "auto") {
+                                    Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+                                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                                    }
+                                } else intent
+                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "downloading-language-model").put("message", "Requesting offline speech language data…").toString())
+                                runCatching {
+                                    if (Build.VERSION.SDK_INT >= 34) {
+                                        voiceRecognizer?.triggerModelDownload(downloadIntent, mainExecutor, object : SpeechRecognizer.ModelDownloadListener {
+                                            override fun onProgress(progress: Int) {
+                                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "downloading-language-model").put("progress", progress).toString())
+                                            }
+                                            override fun onSuccess() {
+                                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "language-model-ready").put("message", "Offline language data is ready. Starting listening…").toString())
+                                                startOnDeviceVoiceRecognition(languageTag)
+                                            }
+                                            override fun onScheduled() {
+                                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "The phone scheduled the offline language download. Keep the phone online, wait for the download to finish, then tap Start AI Call again.").put("code", error).toString())
+                                                stopOnDeviceVoiceRecognition()
+                                            }
+                                            override fun onError(downloadError: Int) {
+                                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android could not download the offline language model (code $downloadError). Check Google Speech Services, internet, and available storage.").put("code", downloadError).toString())
+                                                stopOnDeviceVoiceRecognition()
+                                            }
+                                        })
+                                    } else {
+                                        voiceRecognizer?.triggerModelDownload(downloadIntent)
+                                        dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android has been asked to download the offline language model. Wait for the phone to finish, then tap Start AI Call again.").put("code", error).toString())
+                                        stopOnDeviceVoiceRecognition()
+                                    }
+                                }.onFailure { downloadFailure ->
+                                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", downloadFailure.message ?: "Could not request the offline language download.").toString())
+                                    stopOnDeviceVoiceRecognition()
+                                }
+                            } else {
+                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", reason).put("code", error).toString())
+                                stopOnDeviceVoiceRecognition()
+                            }
                         }
                         override fun onResults(results: Bundle?) {
                             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
@@ -1936,28 +2001,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             }
                         }
                     })
-                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                        if (Build.VERSION.SDK_INT >= 34 && languageTag == "auto") {
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "und")
-                            putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
-                            putStringArrayListExtra(
-                                RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,
-                                arrayListOf(
-                                    "en-IN", "hi-IN", "gu-IN", "mr-IN", "bn-IN", "ta-IN",
-                                    "te-IN", "pa-IN", "ur-IN", "kn-IN", "ml-IN", "or-IN",
-                                    "as-IN", "ne-NP", "sd-IN", "ks-IN"
-                                )
-                            )
-                        } else {
-                            val fallbackTag = languageTag.takeIf { it.isNotBlank() && it != "auto" }
-                                ?: Locale.getDefault().toLanguageTag()
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, fallbackTag)
-                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, fallbackTag)
-                        }
-                    }
                     voiceCallActive = true
                     voiceRecognizer?.startListening(intent)
                 }.onFailure {
