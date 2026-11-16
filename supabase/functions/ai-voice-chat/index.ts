@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
         },
         { role: "user", content: transcript },
       ],
-      { maxTokens: 220, temperature: 0.6, label: "stateless-ai-voice", silent: true },
+      { maxTokens: 220, temperature: 0.6, label: "stateless-ai-voice", silent: true, freeOnly: true },
     );
     if (!result?.text) {
       return new Response(JSON.stringify({ error: "AI service is temporarily unavailable. Please try again." }), { status: 503, headers: corsHeaders });
