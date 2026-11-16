@@ -1880,7 +1880,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Selected language voice is not installed on this phone.").toString())
                     return@runOnUiThread
                 }
-                voiceTts?.language = locale
+                // Prefer a female-sounding installed voice when the device exposes one;
+                // otherwise keep the system's default voice for this language.
+                val preferredVoice = voiceTts?.voices?.firstOrNull {
+                    it.locale.language == locale.language &&
+                        (it.name.contains("female", ignoreCase = true) || it.name.contains("woman", ignoreCase = true))
+                }
+                if (preferredVoice != null) voiceTts?.voice = preferredVoice else voiceTts?.language = locale
                 voiceTts?.setSpeechRate(0.96f)
                 voiceTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "workly-voice-reply")
                 dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "speaking").toString())
