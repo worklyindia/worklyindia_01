@@ -3586,7 +3586,7 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
                     aria-label="Start AI voice call"
                     className="flex h-9 w-9 items-center justify-center rounded-full shadow-md bg-[#0A84FF] hover:bg-[#0a76e0] text-white transition-colors"
                   >
-                    <Phone className="h-[22px] w-[22px]" strokeWidth={2.2} />
+                    <AudioLines className="h-[22px] w-[22px]" strokeWidth={2.2} />
                   </button>
 
                 )}
