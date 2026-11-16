@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Languages, Info } from 'lucide-react';
+import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,15 +9,12 @@ import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
 
-type VoiceLanguage = 'Hindi' | 'English' | 'Gujarati';
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
-const languageTags: Record<VoiceLanguage, string> = { Hindi: 'hi-IN', English: 'en-IN', Gujarati: 'gu-IN' };
 
 export default function AIVoiceCall() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data: settings } = useAIChatSettings();
-  const [language, setLanguage] = useState<VoiceLanguage>('Hindi');
   const [callState, setCallState] = useState<CallState>('idle');
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
@@ -41,21 +38,21 @@ export default function AIVoiceCall() {
 
   const handleTranscript = useCallback(async (event: Event) => {
     if (!activeRef.current) return;
-    const detail = (event as CustomEvent<{ text?: string }>).detail;
+    const detail = (event as CustomEvent<{ text?: string; languageTag?: string }>).detail;
     const transcript = detail?.text?.trim();
     if (!transcript) return;
     setLastTranscript(transcript);
     setCallState('thinking');
     try {
       const { data, error } = await supabase.functions.invoke('unified-voice', {
-        body: { action: 'ai-voice-chat', text: transcript, language },
+        body: { action: 'ai-voice-chat', text: transcript, languageTag: detail?.languageTag || 'und' },
       });
       if (error) throw error;
       const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
       if (!reply) throw new Error('AI did not return a voice response.');
       if (!activeRef.current) return;
       setLastReply(reply);
-      const spoken = bridge?.speakVoiceReply?.(reply, languageTags[language]);
+      const spoken = bridge?.speakVoiceReply?.(reply, detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
     } catch (error) {
@@ -64,7 +61,7 @@ export default function AIVoiceCall() {
       toast.error(error instanceof Error ? error.message : 'Voice reply failed. Please try again.');
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [bridge, language]);
+  }, [bridge]);
 
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -75,19 +72,19 @@ export default function AIVoiceCall() {
     if (status === 'finished' && activeRef.current && !muted) {
       window.setTimeout(() => {
         if (activeRef.current && !muted) {
-          const started = bridge?.startOnDeviceVoiceRecognition?.(languageTags[language]);
+          const started = bridge?.startOnDeviceVoiceRecognition?.('auto');
           if (started) setCallState('listening');
           else { setCallState('error'); toast.error('Could not resume listening.'); }
         }
       }, 250);
     }
-  }, [bridge, language, muted]);
+  }, [bridge, muted]);
 
   const handleBargeIn = useCallback((event: Event) => {
     if (!activeRef.current || muted) return;
     const detail = (event as CustomEvent<{ languageTag?: string }>).detail;
     bridge?.stopVoiceReply?.();
-    const started = bridge?.startOnDeviceVoiceRecognition?.(detail?.languageTag || languageTags[language]);
+    const started = bridge?.startOnDeviceVoiceRecognition?.(detail?.languageTag || 'auto');
     if (started) setCallState('listening');
     else { setCallState('error'); toast.error('Could not listen after interruption.'); }
   }, [bridge, language, muted]);
@@ -130,7 +127,7 @@ export default function AIVoiceCall() {
       setLastReply('');
       setLastTranscript('');
       setCallState('listening');
-      if (!bridge.startOnDeviceVoiceRecognition?.(languageTags[language])) {
+      if (!bridge.startOnDeviceVoiceRecognition?.('auto')) {
         activeRef.current = false;
         setCallState('error');
         toast.error('Could not start on-device speech recognition.');
@@ -148,7 +145,7 @@ export default function AIVoiceCall() {
       bridge?.stopOnDeviceVoiceRecognition?.();
       bridge?.stopVoiceReply?.();
     } else if (activeRef.current) {
-      bridge?.startOnDeviceVoiceRecognition?.(languageTags[language]);
+      bridge?.startOnDeviceVoiceRecognition?.('auto');
       setCallState('listening');
     }
   };
@@ -176,16 +173,14 @@ export default function AIVoiceCall() {
           {callState === 'listening' ? 'Listening on this device' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
         </div>
 
-        <div className="mt-8 w-full">
-          <div className="mb-3 flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-white/45"><Languages className="h-4 w-4" /> Call language</div>
-          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5">
-            {(['Hindi', 'English', 'Gujarati'] as VoiceLanguage[]).map((item) => <button key={item} type="button" disabled={activeRef.current} onClick={() => setLanguage(item)} aria-pressed={language === item} className={`min-h-11 rounded-xl px-2 text-sm font-medium transition-colors ${language === item ? 'bg-blue-600 text-white shadow-lg' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}>{item}</button>)}
-          </div>
+        <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
+          <p className="mt-2 text-sm text-white/70">Speak naturally in your language. The call will use the detected language when your phone's offline speech service supports it.</p>
         </div>
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
-          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic' : 'Device speech unavailable'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.</p>
+          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : 'Offline speech setup needed'}</span></div>
+          <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.'}</p>
           {(lastTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only</p>{lastTranscript && <p className="text-xs text-white/65">You: {lastTranscript}</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
@@ -196,10 +191,10 @@ export default function AIVoiceCall() {
             <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
           </div>
           {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Requires Android on-device speech language data and an internet connection for AI replies. No paid voice API is called by this feature.</span></div>
+          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Requires a compatible offline speech recognizer and downloaded language data, plus internet for AI replies. Language coverage and voices depend on your phone. No paid voice API is called by this feature.</span></div>
         </div>
       </section>
-      <footer className="relative z-10 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-[10px] tracking-wide text-white/30">Selected language: {language}</footer>
+      
     </main>
   );
 }
