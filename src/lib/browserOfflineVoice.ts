@@ -29,16 +29,16 @@ let speaking = false;
 
 export function isBrowserLocalVoiceAvailable(): boolean {
   if (typeof window === 'undefined') return false;
-  const Ctor = window.SpeechRecognition;
-  return !!Ctor && 'processLocally' in Ctor.prototype;
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  return !!Ctor && 'processLocally' in Ctor.prototype && !!Ctor.available;
 }
 
 export async function startBrowserLocalRecognition(language = 'en-US'): Promise<boolean> {
-  const Ctor = window.SpeechRecognition;
-  if (!Ctor || !('processLocally' in Ctor.prototype)) return false;
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Ctor || !('processLocally' in Ctor.prototype) || !Ctor.available) return false;
 
   const lang = language || 'en-US';
-  if (Ctor.available) {
+  {
     const status = await Ctor.available({ langs: [lang], processLocally: true });
     if (status !== 'available') {
       if ((status === 'downloadable' || status === 'downloading') && Ctor.install) {
@@ -91,8 +91,14 @@ export function stopBrowserLocalRecognition(): void {
 export function speakBrowserLocalReply(text: string, language = 'en-US'): boolean {
   if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return false;
   window.speechSynthesis.cancel();
+  const voices = window.speechSynthesis.getVoices();
+  const prefix = language.toLowerCase().split('-')[0];
+  const localVoice = voices.find((voice) => voice.localService && voice.lang.toLowerCase() === language.toLowerCase())
+    || voices.find((voice) => voice.localService && voice.lang.toLowerCase().startsWith(prefix + '-'));
+  if (!localVoice) return false;
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = language;
+  utterance.voice = localVoice;
+  utterance.lang = localVoice.lang;
   utterance.onstart = () => {
     speaking = true;
     window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
