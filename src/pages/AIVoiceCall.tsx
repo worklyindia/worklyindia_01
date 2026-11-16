@@ -84,7 +84,7 @@ export default function AIVoiceCall() {
     if (!activeRef.current || muted) return;
     const detail = (event as CustomEvent<{ languageTag?: string }>).detail;
     bridge?.stopVoiceReply?.();
-    const started = bridge?.startOnDeviceVoiceRecognition?.(detail?.languageTag || 'auto');
+    const started = bridge?.startOnDeviceVoiceRecognition?.('auto');
     if (started) setCallState('listening');
     else { setCallState('error'); toast.error('Could not listen after interruption.'); }
   }, [bridge, language, muted]);
