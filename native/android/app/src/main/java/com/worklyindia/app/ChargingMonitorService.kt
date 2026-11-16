@@ -277,20 +277,20 @@ class ChargingMonitorService : Service() {
         ) return
 
         runCatching {
-            val player = MediaPlayer.create(applicationContext, R.raw.charging_started, AudioAttributes.Builder()
+            val player = MediaPlayer.create(applicationContext, R.raw.charging_connected, AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build(), 0)
-                ?: throw IllegalStateException("Could not load bundled charging-start audio")
+                ?: throw IllegalStateException("Could not load bundled charging-connected audio")
             chargingStartPlayer = player
             player.setOnCompletionListener { completed ->
-                android.util.Log.i(TAG, "Bundled charging-start audio completed")
+                android.util.Log.i(TAG, "Bundled charging-connected audio completed")
                 completed.release()
                 if (chargingStartPlayer === completed) chargingStartPlayer = null
             }
             player.setOnErrorListener { failed, what, extra ->
-                android.util.Log.e(TAG, "Bundled charging-start audio failed: what=$what extra=$extra")
-                AppErrorReporter.capture(applicationContext, "charging_audio", "error", "MediaPlayerError", "Charging-start MP3 failed: what=$what extra=$extra", source = "charging_started.mp3")
+                android.util.Log.e(TAG, "Bundled charging-connected audio failed: what=$what extra=$extra")
+                AppErrorReporter.capture(applicationContext, "charging_audio", "error", "MediaPlayerError", "Charging-connected MP3 failed: what=$what extra=$extra", source = "charging_connected.mp3")
                 prefs.edit()
                     .putBoolean(KEY_STARTED_ANNOUNCED, false)
                     .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
@@ -312,7 +312,7 @@ class ChargingMonitorService : Service() {
             android.util.Log.i(TAG, "Bundled charging-start MP3 playback started")
         }.onFailure { error ->
             android.util.Log.e(TAG, "Could not play bundled charging-start MP3", error)
-            AppErrorReporter.capture(applicationContext, "charging_audio", "error", error, source = "charging_started.mp3")
+            AppErrorReporter.capture(applicationContext, "charging_audio", "error", error, source = "charging_connected.mp3")
             prefs.edit()
                 .putBoolean(KEY_STARTED_ANNOUNCED, false)
                 .putBoolean(KEY_START_ANNOUNCEMENT_PENDING, true)
