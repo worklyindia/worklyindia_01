@@ -524,7 +524,7 @@ const AppContent = () => {
       user_id: string;
       platform: string;
       device_model: string;
-          os_version: (nativeDeviceInfo?.androidVersion || (isAndroid ? ((ua.match(/Android [^;)]*/i) || [])[0] || "Android") : (navigator.platform || "Unknown"))).slice(0, 80),
+      os_version: string;
       app_version: string;
       last_seen_at: string;
     };
