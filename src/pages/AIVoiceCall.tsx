@@ -47,8 +47,8 @@ export default function AIVoiceCall() {
     setLastTranscript(transcript);
     setCallState('thinking');
     try {
-      const { data, error } = await supabase.functions.invoke('ai-voice-chat', {
-        body: { text: transcript, language },
+      const { data, error } = await supabase.functions.invoke('unified-voice', {
+        body: { action: 'ai-voice-chat', text: transcript, language },
       });
       if (error) throw error;
       const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
