@@ -21,6 +21,11 @@ export interface WorklyAndroidBridge {
   getChargingAlertSettings?(): string;
   saveChargingAlertSettings?(chargingStart: boolean, chargerDisconnect: boolean, batteryFull: boolean, silentMode: boolean, monitorEnabled: boolean): boolean;
   scanResumeImage?(dataUrl: string): boolean;
+  isOnDeviceVoiceRecognitionAvailable?(): boolean;
+  startOnDeviceVoiceRecognition?(languageTag: string): boolean;
+  stopOnDeviceVoiceRecognition?(): boolean;
+  speakVoiceReply?(text: string, languageTag: string): boolean;
+  stopVoiceReply?(): boolean;
 }
 
 type WorklyWindow = Window & { WorklyAndroid?: WorklyAndroidBridge };

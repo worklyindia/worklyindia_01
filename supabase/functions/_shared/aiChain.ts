@@ -84,7 +84,7 @@ const HUGGINGFACE_MAP: Record<string, string> = {
 };
 
 /** Build the provider chain from whatever API keys exist in this project. */
-export function buildAiGateways(): AiGateway[] {
+export function buildAiGateways(freeOnly = false): AiGateway[] {
   const env = (k: string) => Deno.env.get(k) || "";
   const gws: AiGateway[] = [];
 
@@ -190,7 +190,12 @@ export function buildAiGateways(): AiGateway[] {
     });
   }
 
-  return gws;
+  // Voice calls must never fall through to providers/models that may be billed.
+  // These gateways expose free-tier/free-model options; actual quota availability
+  // remains provider-controlled and a request can still fail when limits are reached.
+  return freeOnly
+    ? gws.filter((gw) => ["Google AI Studio", "OpenRouter", "Groq", "Cerebras"].includes(gw.name))
+    : gws;
 }
 
 function headersFor(gw: AiGateway): Record<string, string> {
@@ -218,6 +223,9 @@ export interface AiChainOptions {
   temperature?: number;
   /** Log prefix so each feature is identifiable in the function logs. */
   label?: string;
+  /** Suppress provider diagnostics for privacy-sensitive stateless requests. */
+  silent?: boolean;
+  freeOnly?: boolean;
 }
 
 export interface AiChainResult {
@@ -235,9 +243,9 @@ export async function runAiChain(
   options: AiChainOptions = {},
 ): Promise<AiChainResult | null> {
   const label = options.label || "ai-chain";
-  const gateways = buildAiGateways();
+  const gateways = buildAiGateways(options.freeOnly === true);
   if (gateways.length === 0) {
-    console.error(`[${label}] no AI provider key configured`);
+    if (!options.silent) console.error(`[${label}] no AI provider key configured`);
     return null;
   }
 
@@ -275,23 +283,25 @@ export async function runAiChain(
           body: JSON.stringify(body),
         });
         if (!res.ok) {
-          const detail = (await res.text()).slice(0, 200);
-          console.warn(`[${label}] ${gw.name} ${providerModel} -> ${res.status}: ${detail}`);
+          if (!options.silent) {
+            const detail = (await res.text()).slice(0, 200);
+            console.warn(`[${label}] ${gw.name} ${providerModel} -> ${res.status}: ${detail}`);
+          }
           continue;
         }
         const json = await res.json();
         const text = json?.choices?.[0]?.message?.content?.trim();
         if (text) {
-          console.log(`[${label}] ✅ ${gw.name} / ${providerModel}`);
+          if (!options.silent) console.log(`[${label}] ✅ ${gw.name} / ${providerModel}`);
           return { text, model: providerModel, gateway: gw.name };
         }
-        console.warn(`[${label}] ${gw.name} ${providerModel} returned empty text`);
+        if (!options.silent) console.warn(`[${label}] ${gw.name} ${providerModel} returned empty text`);
       } catch (e) {
-        console.warn(`[${label}] ${gw.name} ${providerModel} error:`, e);
+        if (!options.silent) console.warn(`[${label}] ${gw.name} ${providerModel} request failed`);
       }
     }
   }
-  console.error(`[${label}] ❌ all providers/models failed`);
+  if (!options.silent) console.error(`[${label}] ❌ all providers/models failed`);
   return null;
 }
 
