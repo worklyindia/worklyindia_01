@@ -8,6 +8,7 @@ import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
+import { isBrowserLocalVoiceAvailable, startBrowserLocalRecognition, stopBrowserLocalRecognition, speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
@@ -18,6 +19,7 @@ export default function AIVoiceCall() {
   const [callState, setCallState] = useState<CallState>('idle');
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
   const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
@@ -26,16 +28,37 @@ export default function AIVoiceCall() {
   const showBadge = settings?.verification_enabled;
   const badgeColor = (settings?.verification_color || 'blue') as 'gold' | 'blue' | 'green' | 'silver';
   const bridge = getWorklyAndroidBridge();
+  const startRecognition = useCallback((language = 'auto') => {
+    if (bridge) return bridge.startOnDeviceVoiceRecognition?.(language) ?? false;
+    void startBrowserLocalRecognition(navigator.language || 'en-US').catch((error) => {
+      window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: error instanceof Error ? error.message : 'Local browser speech recognition failed.' } }));
+    });
+    return true;
+  }, [bridge]);
+  const stopRecognition = useCallback(() => {
+    if (bridge) bridge.stopOnDeviceVoiceRecognition?.();
+    else stopBrowserLocalRecognition();
+  }, [bridge]);
+  const speakReply = useCallback((text: string, language: string) => {
+    if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
+    return speakBrowserLocalReply(text, language === 'und' ? (navigator.language || 'en-US') : language);
+  }, [bridge]);
+  const stopReply = useCallback(() => {
+    if (bridge) bridge.stopVoiceReply?.();
+    else stopBrowserLocalReply();
+  }, [bridge]);
+  const recognitionAvailable = useCallback(() => bridge ? !!bridge.isOnDeviceVoiceRecognitionAvailable?.() : isBrowserLocalVoiceAvailable(), [bridge]);
 
   const endCall = useCallback(() => {
     activeRef.current = false;
-    bridge?.stopOnDeviceVoiceRecognition?.();
-    bridge?.stopVoiceReply?.();
+    stopRecognition();
+    stopReply();
     setCallState('idle');
     setLastReply('');
     setLastTranscript('');
+    setErrorMessage('');
     setMuted(false);
-  }, [bridge]);
+  }, [stopRecognition, stopReply]);
 
   const handleTranscript = useCallback(async (event: Event) => {
     if (!activeRef.current) return;
@@ -43,6 +66,7 @@ export default function AIVoiceCall() {
     const transcript = detail?.text?.trim();
     if (!transcript) return;
     setLastTranscript(transcript);
+    setErrorMessage('');
     setCallState('thinking');
     try {
       const { data, error } = await supabase.functions.invoke('unified-voice', {
@@ -53,16 +77,18 @@ export default function AIVoiceCall() {
       if (!reply) throw new Error('AI did not return a voice response.');
       if (!activeRef.current) return;
       setLastReply(reply);
-      const spoken = bridge?.speakVoiceReply?.(reply, detail?.languageTag || 'und');
+      const spoken = speakReply(reply, detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
     } catch (error) {
       if (!activeRef.current) return;
+      const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
+      setErrorMessage(message);
       setCallState('error');
-      toast.error(error instanceof Error ? error.message : 'Voice reply failed. Please try again.');
+      toast.error(message);
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [bridge]);
+  }, [speakReply]);
 
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -73,32 +99,33 @@ export default function AIVoiceCall() {
     if (status === 'finished' && activeRef.current && !muted) {
       window.setTimeout(() => {
         if (activeRef.current && !muted) {
-          const started = bridge?.startOnDeviceVoiceRecognition?.('auto');
+          const started = startRecognition('auto');
           if (started) setCallState('listening');
           else { setCallState('error'); toast.error('Could not resume listening.'); }
         }
       }, 250);
     }
-  }, [bridge, muted]);
+  }, [startRecognition, muted]);
 
   const handleBargeIn = useCallback((event: Event) => {
     if (!activeRef.current || muted) return;
     const detail = (event as CustomEvent<{ languageTag?: string }>).detail;
-    bridge?.stopVoiceReply?.();
-    const started = bridge?.startOnDeviceVoiceRecognition?.('auto');
+    stopReply();
+    const started = startRecognition('auto');
     if (started) setCallState('listening');
     else { setCallState('error'); toast.error('Could not listen after interruption.'); }
-  }, [bridge, muted]);
+  }, [startRecognition, stopReply, muted]);
 
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const message = (event as CustomEvent<{ message?: string }>).detail?.message || 'Voice service error.';
+    setErrorMessage(message);
     setCallState('error');
     toast.error(message);
   }, []);
 
   useEffect(() => {
-    setNativeAvailable(!!bridge?.isOnDeviceVoiceRecognitionAvailable?.());
+    setNativeAvailable(recognitionAvailable());
     window.addEventListener('workly-voice-transcript', handleTranscript);
     window.addEventListener('workly-voice-status', handleNativeStatus);
     window.addEventListener('workly-voice-error', handleNativeError);
@@ -109,14 +136,14 @@ export default function AIVoiceCall() {
       window.removeEventListener('workly-voice-error', handleNativeError);
       window.removeEventListener('workly-voice-barge-in', handleBargeIn);
       activeRef.current = false;
-      bridge?.stopOnDeviceVoiceRecognition?.();
-      bridge?.stopVoiceReply?.();
+      stopRecognition();
+      stopReply();
     };
-  }, [bridge, handleTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
+  }, [recognitionAvailable, stopRecognition, stopReply, handleTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
 
   const startCall = async () => {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
-    if (!bridge?.isOnDeviceVoiceRecognitionAvailable?.()) {
+    if (!recognitionAvailable()) {
       setNativeAvailable(false);
       toast.error('Secure on-device speech recognition is not available on this phone. Audio will not be sent to a speech service.');
       return;
@@ -127,13 +154,16 @@ export default function AIVoiceCall() {
       activeRef.current = true;
       setLastReply('');
       setLastTranscript('');
+      setErrorMessage('');
       setCallState('listening');
-      if (!bridge.startOnDeviceVoiceRecognition?.('auto')) {
+      if (!startRecognition('auto')) {
         activeRef.current = false;
+        setErrorMessage('Could not start on-device speech recognition. Check the offline speech service and try again.');
         setCallState('error');
         toast.error('Could not start on-device speech recognition.');
       }
     } catch {
+      setErrorMessage('Microphone permission was denied. Allow microphone access in app settings, then try again.');
       setCallState('error');
       toast.error('Microphone permission was denied. Allow microphone access in app settings.');
     }
@@ -143,10 +173,10 @@ export default function AIVoiceCall() {
     const next = !muted;
     setMuted(next);
     if (next) {
-      bridge?.stopOnDeviceVoiceRecognition?.();
-      bridge?.stopVoiceReply?.();
+      stopRecognition();
+      stopReply();
     } else if (activeRef.current) {
-      bridge?.startOnDeviceVoiceRecognition?.('auto');
+      startRecognition('auto');
       setCallState('listening');
     }
   };
@@ -174,6 +204,8 @@ export default function AIVoiceCall() {
           {callState === 'listening' ? 'Listening on this device' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
         </div>
 
+        {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
+
         <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
           <p className="mt-2 text-sm text-white/70">Speak naturally in your language. The call will use the detected language when your phone's offline speech service supports it.</p>
@@ -181,7 +213,7 @@ export default function AIVoiceCall() {
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
           <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : isNativeApp ? 'Offline speech setup needed' : 'Browser voice input unavailable'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : isNativeApp ? 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.' : 'This browser does not expose a supported on-device speech recognizer for this website. The call will not start and microphone audio will not be uploaded to a speech service. For private voice calling, use the Workly India Android app on a device with offline speech recognition enabled. Browser-based remote transcription is intentionally disabled.'}</p>
+          <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : isNativeApp ? 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.' : 'This browser must support on-device speech recognition and have a local language pack. Remote transcription is never used; browser support and language coverage vary.'}</p>
           {(lastTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only</p>{lastTranscript && <p className="text-xs text-white/65">You: {lastTranscript}</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
