@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import AISupportProfile from '@/components/AISupportProfile';
 import AIChatLanding from './AIChatLanding';
-import { ArrowLeft, ArrowUp, Send, Paperclip, X, Check, Trash2, Smile, Camera, Phone, PhoneCall, Copy, Star, Mic, Volume2, Loader2, FileText, File, Youtube, Plus, Image as ImageIcon, AudioLines, Brain, ChevronDown, Sparkles, Zap, MoreVertical, Link2, Crown } from 'lucide-react';
+import { ArrowLeft, ArrowUp, Send, Paperclip, X, Check, Trash2, Smile, Camera, Phone, Copy, Star, Mic, Volume2, Loader2, FileText, File, Youtube, Plus, Image as ImageIcon, AudioLines, Brain, ChevronDown, Sparkles, Zap, MoreVertical, Link2, Crown } from 'lucide-react';
 import { ChatFilePreview } from '@/components/ai-chat/ChatFilePreview';
 import { forceDownloadFile } from '@/utils/forceDownload';
 
@@ -3586,7 +3586,7 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
                     aria-label="Start AI voice call"
                     className="flex h-9 w-9 items-center justify-center rounded-full shadow-md bg-[#0A84FF] hover:bg-[#0a76e0] text-white transition-colors"
                   >
-                    <PhoneCall className="h-[22px] w-[22px]" strokeWidth={2.2} />
+                    <Phone className="h-[22px] w-[22px]" strokeWidth={2.2} />
                   </button>
 
                 )}
