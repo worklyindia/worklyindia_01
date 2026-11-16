@@ -278,13 +278,25 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
     return new Response(JSON.stringify({ error: 'Session expired' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   const text = typeof params.text === 'string' ? params.text.trim().slice(0, 4000) : '';
-  const language = ['Hindi', 'English', 'Gujarati'].includes(params.language) ? params.language : 'Hindi';
+  const languageTag = typeof params.languageTag === 'string' ? params.languageTag.trim().slice(0, 24) : 'und';
   if (!text) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-  const languageInstruction = language === 'Gujarati' ? 'Reply naturally in Gujarati.' : language === 'English' ? 'Reply naturally in Indian English.' : 'Reply naturally in Hindi.';
+  const scriptDetected =
+    /[\\u0A80-\\u0AFF]/.test(text) ? 'Gujarati' :
+    /[\\u0B80-\\u0BFF]/.test(text) ? 'Tamil' :
+    /[\\u0C00-\\u0C7F]/.test(text) ? 'Telugu' :
+    /[\\u0C80-\\u0CFF]/.test(text) ? 'Kannada' :
+    /[\\u0D00-\\u0D7F]/.test(text) ? 'Malayalam' :
+    /[\\u0980-\\u09FF]/.test(text) ? 'Bengali' :
+    /[\\u0A00-\\u0A7F]/.test(text) ? 'Punjabi' :
+    /[\\u0900-\\u097F]/.test(text) ? 'the detected Devanagari language' :
+    'the language used by the caller';
+  const languageInstruction = languageTag !== 'und' && languageTag !== 'auto'
+    ? 'Reply in the same spoken language identified by locale tag ' + languageTag + '. Mirror the caller’s language and any code-switching; do not translate unless asked.'
+    : 'Automatically identify the language of the caller’s message and reply naturally in that same language. Mirror code-switching; do not translate unless asked. The script suggests ' + scriptDetected + ' where applicable.';
   const result = await runAiChain([
-    { role: 'system', content: 'You are Workly India AI, a helpful voice assistant. Keep replies concise and conversational. ' + languageInstruction },
+    { role: 'system', content: 'You are Workly India AI, a helpful voice assistant. Keep replies concise, natural and conversational. ' + languageInstruction },
     { role: 'user', content: text },
   ], { maxTokens: 220, temperature: 0.6, label: 'ai-voice-call', silent: true, freeOnly: true });
   if (!result?.text) {
