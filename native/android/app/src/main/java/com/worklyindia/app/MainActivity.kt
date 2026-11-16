@@ -6,6 +6,11 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Intent
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.content.IntentFilter
 import android.content.ContentValues
 import android.app.DownloadManager
@@ -83,6 +88,10 @@ class MainActivity : FragmentActivity() {
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var rootLayout: FrameLayout
     private lateinit var loadingOverlay: FrameLayout
+    private var voiceRecognizer: SpeechRecognizer? = null
+    private var voiceTts: TextToSpeech? = null
+    private var voiceTtsReady = false
+    private var voiceCallActive = false
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingFileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var pendingCameraUri: Uri? = null
@@ -1785,6 +1794,107 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
 
         @JavascriptInterface
+        fun isOnDeviceVoiceRecognitionAvailable(): Boolean {
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)
+        }
+
+        @JavascriptInterface
+        fun startOnDeviceVoiceRecognition(languageTag: String): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                !SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
+                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "On-device speech recognition is not available on this phone.").toString())
+                return false
+            }
+            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Microphone permission is required.").toString())
+                return false
+            }
+            runOnUiThread {
+                runCatching {
+                    voiceRecognizer?.destroy()
+                    voiceRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this@MainActivity)
+                    voiceRecognizer?.setRecognitionListener(object : RecognitionListener {
+                        override fun onReadyForSpeech(params: Bundle?) { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").toString()) }
+                        override fun onBeginningOfSpeech() {}
+                        override fun onRmsChanged(rmsdB: Float) {}
+                        override fun onBufferReceived(buffer: ByteArray?) {}
+                        override fun onEndOfSpeech() { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "processing").toString()) }
+                        override fun onError(error: Int) {
+                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Speech recognition failed (code $error).").toString())
+                            stopOnDeviceVoiceRecognition()
+                        }
+                        override fun onResults(results: Bundle?) {
+                            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                            if (text.isNotBlank()) dispatchNativeEvent("workly-voice-transcript", JSONObject().put("text", text).toString())
+                            else dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech was detected. Please try again.").toString())
+                            stopOnDeviceVoiceRecognition()
+                        }
+                        override fun onPartialResults(partialResults: Bundle?) {}
+                        override fun onEvent(eventType: Int, params: Bundle?) {}
+                    })
+                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
+                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageTag)
+                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    }
+                    voiceCallActive = true
+                    voiceRecognizer?.startListening(intent)
+                }.onFailure {
+                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", it.message ?: "Could not start on-device speech recognition.").toString())
+                    stopOnDeviceVoiceRecognition()
+                }
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun stopOnDeviceVoiceRecognition(): Boolean {
+            runOnUiThread {
+                voiceCallActive = false
+                runCatching { voiceRecognizer?.cancel() }
+                runCatching { voiceRecognizer?.destroy() }
+                voiceRecognizer = null
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun speakVoiceReply(text: String, languageTag: String): Boolean {
+            if (text.isBlank() || text.length > 5000) return false
+            runOnUiThread {
+                if (voiceTts == null) {
+                    voiceTts = TextToSpeech(this@MainActivity) { status ->
+                        voiceTtsReady = status == TextToSpeech.SUCCESS
+                        if (voiceTtsReady) speakVoiceReply(text, languageTag)
+                        else dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Text-to-speech is unavailable.").toString())
+                    }
+                    return@runOnUiThread
+                }
+                if (!voiceTtsReady) return@runOnUiThread
+                val locale = Locale.forLanguageTag(languageTag)
+                val availability = voiceTts?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
+                if (availability < TextToSpeech.LANG_AVAILABLE) {
+                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Selected language voice is not installed on this phone.").toString())
+                    return@runOnUiThread
+                }
+                voiceTts?.language = locale
+                voiceTts?.setSpeechRate(0.96f)
+                voiceTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "workly-voice-reply")
+                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "speaking").toString())
+            }
+            return true
+        }
+
+        @JavascriptInterface
+        fun stopVoiceReply(): Boolean {
+            runOnUiThread { runCatching { voiceTts?.stop() } }
+            return true
+        }
+
+        @JavascriptInterface
         fun scanResumeImage(dataUrl: String): Boolean {
             return try {
                 if (!dataUrl.startsWith("data:image/") || dataUrl.length > 16 * 1024 * 1024) {
@@ -3350,6 +3460,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
     override fun onDestroy() {
         interviewCallActive = false
         interviewCallVideoEnabled = false
+        voiceCallActive = false
+        runCatching { voiceRecognizer?.cancel(); voiceRecognizer?.destroy(); voiceRecognizer = null }
+        runCatching { voiceTts?.stop(); voiceTts?.shutdown(); voiceTts = null }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (::appUpdateManager.isInitialized) {
             appUpdateManager.unregisterListener(appUpdateListener)
