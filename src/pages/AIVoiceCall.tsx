@@ -20,6 +20,7 @@ export default function AIVoiceCall() {
   const [lastTranscript, setLastTranscript] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
+  const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
   const activeRef = useRef(false);
   const aiName = settings?.name || 'Workly India AI';
   const showBadge = settings?.verification_enabled;
@@ -87,7 +88,7 @@ export default function AIVoiceCall() {
     const started = bridge?.startOnDeviceVoiceRecognition?.('auto');
     if (started) setCallState('listening');
     else { setCallState('error'); toast.error('Could not listen after interruption.'); }
-  }, [bridge, language, muted]);
+  }, [bridge, muted]);
 
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -179,8 +180,8 @@ export default function AIVoiceCall() {
         </div>
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
-          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : 'Offline speech setup needed'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.'}</p>
+          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : isNativeApp ? 'Offline speech setup needed' : 'Browser voice input unavailable'}</span></div>
+          <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : isNativeApp ? 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.' : 'This browser does not expose a supported on-device speech recognizer for this website. The call will not start and microphone audio will not be uploaded to a speech service. For private voice calling, use the Workly India Android app on a device with offline speech recognition enabled. Browser-based remote transcription is intentionally disabled.'}</p>
           {(lastTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only</p>{lastTranscript && <p className="text-xs text-white/65">You: {lastTranscript}</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
@@ -191,7 +192,7 @@ export default function AIVoiceCall() {
             <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
           </div>
           {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Requires a compatible offline speech recognizer and downloaded language data, plus internet for AI replies. Language coverage and voices depend on your phone. No paid voice API is called by this feature.</span></div>
+          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>{isNativeApp ? 'Requires a compatible offline speech recognizer and downloaded language data, plus internet for AI replies. Language coverage and voices depend on your phone. No paid voice API is called by this feature.' : 'Website voice calls require browser support for on-device speech recognition. This browser does not currently provide it; remote audio transcription is disabled for privacy.'}</span></div>
         </div>
       </section>
       
