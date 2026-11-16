@@ -122,7 +122,8 @@ export default function AIVoiceCall() {
   };
 
   const listenAgain = () => {
-    if (!activeRef.current || muted) return;
+    if (!activeRef.current) return;
+    bridge?.stopVoiceReply?.();
     setLastTranscript('');
     if (!bridge?.startOnDeviceVoiceRecognition?.(languageTags[language])) {
       setCallState('error');
@@ -133,8 +134,13 @@ export default function AIVoiceCall() {
   const toggleMute = () => {
     const next = !muted;
     setMuted(next);
-    if (next) bridge?.stopOnDeviceVoiceRecognition?.();
-    else if (activeRef.current) listenAgain();
+    if (next) {
+      bridge?.stopOnDeviceVoiceRecognition?.();
+      bridge?.stopVoiceReply?.();
+    } else if (activeRef.current) {
+      bridge?.startOnDeviceVoiceRecognition?.(languageTags[language]);
+      setCallState('listening');
+    }
   };
 
   return (
