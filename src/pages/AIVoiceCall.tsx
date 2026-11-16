@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, PhoneCall, Mic, ShieldCheck, AudioLines, Languages, Info } from 'lucide-react';
+import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Languages, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,12 +8,14 @@ import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 
 type MicState = 'unchecked' | 'checking' | 'ready' | 'blocked';
+type VoiceLanguage = 'Hindi' | 'English' | 'Gujarati';
 
 export default function AIVoiceCall() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data: settings } = useAIChatSettings();
   const [micState, setMicState] = useState<MicState>('unchecked');
+  const [language, setLanguage] = useState<VoiceLanguage>('Hindi');
 
   const aiName = settings?.name || 'Workly India AI';
   const showBadge = settings?.verification_enabled;
@@ -37,102 +39,106 @@ export default function AIVoiceCall() {
       toast.success('Microphone permission is ready.');
     } catch {
       setMicState('blocked');
-      toast.error('Microphone permission was denied. Allow microphone access in browser settings.');
+      toast.error('Microphone permission was denied. Allow microphone access in app settings.');
     }
   };
 
   return (
-    <main className="min-h-[100dvh] bg-gradient-to-b from-background via-background to-primary/5 flex flex-col">
-      <header className="sticky top-0 z-20 border-b border-border/60 bg-background/90 backdrop-blur-xl px-4 py-3">
-        <div className="mx-auto flex max-w-lg items-center justify-between">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/ai-assistant')} aria-label="Back to AI Chat">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5">
-              <h1 className="text-base font-semibold">{aiName}</h1>
-              {showBadge && <VerificationBadge color={badgeColor} size={15} />}
-            </div>
-            <p className="text-xs text-muted-foreground">AI Voice Call</p>
-          </div>
-          <span className="w-10" aria-hidden="true" />
+    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[#080D1B] text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,rgba(37,99,235,0.24),transparent_48%)]" />
+      <header className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate('/ai-assistant')} aria-label="Back to AI Chat" className="text-white hover:bg-white/10 hover:text-white">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div className="text-center">
+          <p className="text-xs font-medium uppercase tracking-[0.22em] text-blue-200/70">Workly India</p>
+          <p className="mt-1 text-sm text-white/70">AI Voice Call</p>
         </div>
+        <span className="h-10 w-10" aria-hidden="true" />
       </header>
 
-      <section className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-5 py-10 text-center">
-        <div className="relative mb-7 flex h-36 w-36 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 via-primary/10 to-accent/30 ring-1 ring-primary/20 shadow-xl">
-          <div className="absolute inset-3 rounded-full border border-primary/15" />
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg">
-            <AudioLines className="h-12 w-12" />
+      <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pt-8 pb-8 text-center">
+        <div className="relative flex h-44 w-44 items-center justify-center">
+          <div className="absolute inset-0 rounded-full border border-blue-400/15" />
+          <div className="absolute inset-3 rounded-full border border-blue-400/20" />
+          <div className="absolute inset-6 rounded-full bg-blue-500/10 blur-xl" />
+          <div className="relative flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-[0_12px_60px_rgba(37,99,235,0.42)] ring-1 ring-white/20">
+            <AudioLines className="h-14 w-14 text-white" strokeWidth={2.1} />
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold tracking-tight">Talk to {aiName}</h2>
-        <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-          A natural female AI voice experience in Hindi, English and Gujarati is being prepared.
-        </p>
+        <div className="mt-7 flex items-center justify-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{aiName}</h1>
+          {showBadge && <VerificationBadge color={badgeColor} size={17} />}
+        </div>
+        <p className="mt-2 text-sm text-blue-100/65">Voice assistant</p>
+        <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-2 text-xs font-medium text-amber-100">
+          <span className="h-2 w-2 rounded-full bg-amber-300" />
+          Voice service setup pending
+        </div>
 
-        <div className="mt-7 w-full rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-left">
-          <div className="flex items-start gap-3">
-            <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <div>
-              <p className="font-semibold text-sm">Free voice engine setup pending</p>
-              <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                The open-source Whisper.cpp speech recognition and Mithi female voice engine are not connected to this deployment yet. Calls stay disabled until a compatible inference server is configured. No paid voice API is used by this screen.
-              </p>
-            </div>
+        <div className="mt-10 w-full">
+          <div className="mb-3 flex items-center justify-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-white/45">
+            <Languages className="h-4 w-4" /> Call language
+          </div>
+          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5">
+            {(['Hindi', 'English', 'Gujarati'] as VoiceLanguage[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setLanguage(item)}
+                aria-pressed={language === item}
+                className={`min-h-11 rounded-xl px-2 text-sm font-medium transition-colors ${language === item ? 'bg-blue-600 text-white shadow-lg' : 'text-white/65 hover:bg-white/10 hover:text-white'}`}
+              >
+                {item}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="mt-5 w-full rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-4 text-left">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
-            <div>
-              <p className="text-sm font-semibold">Private, no-retention voice design</p>
-              <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                The live voice service will process audio and transcripts temporarily in memory only. Audio, speech-to-text transcripts and AI voice replies must not be saved in chat history, database, storage or content logs. This policy is pending backend implementation and verification.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 grid w-full grid-cols-3 gap-2">
-          {['Hindi', 'English', 'Gujarati'].map((language) => (
-            <div key={language} className="rounded-xl border border-border/70 bg-card px-2 py-3 text-sm font-medium">
-              <Languages className="mx-auto mb-1 h-4 w-4 text-primary" />
-              {language}
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-6 w-full rounded-2xl border border-border/70 bg-card p-4 text-left">
+        <div className="mt-7 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            <p className="text-sm font-semibold">Microphone permission</p>
-            <span className="ml-auto text-xs text-muted-foreground">
-              {micState === 'ready' ? 'Ready' : micState === 'blocked' ? 'Blocked' : micState === 'checking' ? 'Checking…' : 'Not checked'}
+            <ShieldCheck className="h-5 w-5 text-emerald-300" />
+            <p className="text-sm font-semibold">Privacy-first call</p>
+            <span className="ml-auto text-xs text-white/50">
+              {micState === 'ready' ? 'Mic ready' : micState === 'blocked' ? 'Mic blocked' : micState === 'checking' ? 'Checking…' : 'Mic not checked'}
             </span>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            You can check browser microphone permission now. This only tests access; it does not start or record a call.
+          <p className="mt-2 text-xs leading-5 text-white/55">
+            The intended call must not save audio, transcripts or AI replies to chat history, database or storage. This protection is not implemented or verified yet.
           </p>
-          <Button className="mt-3 w-full" variant="outline" onClick={checkMicrophone} disabled={micState === 'checking'}>
+          <Button onClick={checkMicrophone} disabled={micState === 'checking'} variant="outline" className="mt-3 w-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
             <Mic className="mr-2 h-4 w-4" />
-            {micState === 'checking' ? 'Checking microphone…' : 'Check microphone'}
+            {micState === 'checking' ? 'Checking microphone…' : micState === 'ready' ? 'Check microphone again' : 'Check microphone'}
           </Button>
         </div>
 
-        <Button className="mt-5 w-full max-w-sm rounded-full" size="lg" disabled>
-          <PhoneCall className="mr-2 h-5 w-5" />
-          Voice calling not available yet
-        </Button>
-        <p className="mt-3 text-xs text-muted-foreground">
-          No subscription, paid API or per-minute charge is enabled here.
-        </p>
+        <div className="mt-auto w-full pt-10">
+          <div className="mb-5 flex items-center justify-center gap-7">
+            <div className="flex flex-col items-center gap-2 text-white/35">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5"><MicOff className="h-5 w-5" /></span>
+              <span className="text-[11px]">Mute</span>
+            </div>
+            <div className="flex flex-col items-center gap-2 text-white/35">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5"><Volume2 className="h-5 w-5" /></span>
+              <span className="text-[11px]">Speaker</span>
+            </div>
+            <div className="flex flex-col items-center gap-2 text-white/35">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20"><PhoneOff className="h-5 w-5" /></span>
+              <span className="text-[11px]">End call</span>
+            </div>
+          </div>
+          <Button disabled className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white opacity-70">
+            Voice calling is not connected yet
+          </Button>
+          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>Free AI speech recognition and voice reply engine must be connected before calls can start. No paid voice API is enabled.</span>
+          </div>
+        </div>
       </section>
-
-      <footer className="px-5 pb-6 text-center text-xs text-muted-foreground">
-        Workly India AI Voice · Open-source engine planned
+      <footer className="relative z-10 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-[10px] tracking-wide text-white/30">
+        Selected language: {language}
       </footer>
     </main>
   );
