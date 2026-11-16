@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Languages, Info, Loader2 } from 'lucide-react';
+import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Languages, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -128,16 +128,6 @@ export default function AIVoiceCall() {
       setCallState('error');
       toast.error('Microphone permission was denied. Allow microphone access in app settings.');
     }
-  };
-
-  const listenAgain = () => {
-    if (!activeRef.current) return;
-    bridge?.stopVoiceReply?.();
-    setLastTranscript('');
-    if (!bridge?.startOnDeviceVoiceRecognition?.(languageTags[language])) {
-      setCallState('error');
-      toast.error('Could not start microphone listening.');
-    } else setCallState('listening');
   };
 
   const toggleMute = () => {
