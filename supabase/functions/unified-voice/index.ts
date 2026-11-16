@@ -2,6 +2,7 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { runAiChain } from '../_shared/aiChain.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,6 +63,10 @@ serve(async (req) => {
       
       case 'speech-to-text':
         return await handleSpeechToText(params);
+
+      // Stateless AI voice reply: no database, storage, cache, usage counters or transcript logs.
+      case 'ai-voice-chat':
+        return await handleAiVoiceChat(supabase, params, req);
       
       default:
         return new Response(
@@ -257,3 +262,33 @@ async function handleSpeechToText(params: any) {
 }
 
 
+
+
+// =============================================
+// STATELESS AI VOICE CHAT (no Workly retention)
+// =============================================
+async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const token = authHeader.slice(7);
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: 'Session expired' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const text = typeof params.text === 'string' ? params.text.trim().slice(0, 4000) : '';
+  const language = ['Hindi', 'English', 'Gujarati'].includes(params.language) ? params.language : 'Hindi';
+  if (!text) {
+    return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const languageInstruction = language === 'Gujarati' ? 'Reply naturally in Gujarati.' : language === 'English' ? 'Reply naturally in Indian English.' : 'Reply naturally in Hindi.';
+  const result = await runAiChain([
+    { role: 'system', content: 'You are Workly India AI, a helpful voice assistant. Keep replies concise and conversational. ' + languageInstruction },
+    { role: 'user', content: text },
+  ], { maxTokens: 220, temperature: 0.6, label: 'ai-voice-call', silent: true, freeOnly: true });
+  if (!result?.text) {
+    return new Response(JSON.stringify({ error: 'Free AI providers are temporarily unavailable. Please try again.' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  return new Response(JSON.stringify({ reply: result.text }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+}
