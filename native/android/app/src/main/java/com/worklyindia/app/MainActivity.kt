@@ -10,6 +10,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import android.content.IntentFilter
 import android.content.ContentValues
@@ -1888,8 +1889,19 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 }
                 if (preferredVoice != null) voiceTts?.voice = preferredVoice else voiceTts?.language = locale
                 voiceTts?.setSpeechRate(0.96f)
+                voiceTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "speaking").toString())
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "finished").toString())
+                    }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "AI voice playback failed.").toString())
+                    }
+                })
                 voiceTts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "workly-voice-reply")
-                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "speaking").toString())
             }
             return true
         }
