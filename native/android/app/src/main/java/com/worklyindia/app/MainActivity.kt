@@ -11,6 +11,10 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.media.AudioRecord
+import android.media.AudioFormat
+import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
 import java.util.Locale
 import android.content.IntentFilter
 import android.content.ContentValues
@@ -93,6 +97,9 @@ class MainActivity : FragmentActivity() {
     private var voiceTts: TextToSpeech? = null
     private var voiceTtsReady = false
     private var voiceCallActive = false
+    @Volatile private var voiceTtsSpeaking = false
+    @Volatile private var voiceBargeInLanguage = ""
+    private var voiceBargeInJob: kotlinx.coroutines.Job? = null
     private var pendingWebPermission: PermissionRequest? = null
     private var pendingFileChooserCallback: android.webkit.ValueCallback<Array<Uri>>? = null
     private var pendingCameraUri: Uri? = null
@@ -1442,6 +1449,71 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
     }
 
+    /**
+     * Local barge-in: keep a short-lived microphone monitor active only while
+     * Android TTS is speaking. Acoustic echo cancellation reduces feedback;
+     * sustained near-end speech interrupts TTS and hands the mic to on-device STT.
+     * No PCM audio is written to disk or sent to a server.
+     */
+    private fun startVoiceBargeInMonitor() {
+        stopVoiceBargeInMonitor()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        voiceBargeInJob = activityScope.launch(Dispatchers.IO) {
+            val sampleRate = 16000
+            val minBuffer = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            if (minBuffer <= 0) return@launch
+            var recorder: AudioRecord? = null
+            var echoCanceler: AcousticEchoCanceler? = null
+            try {
+                recorder = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                    sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    maxOf(minBuffer, sampleRate / 2)
+                )
+                if (recorder.state != AudioRecord.STATE_INITIALIZED) return@launch
+                if (AcousticEchoCanceler.isAvailable()) {
+                    echoCanceler = AcousticEchoCanceler.create(recorder.audioSessionId)
+                    echoCanceler?.enabled = true
+                }
+                val buffer = ShortArray(1024)
+                var speechFrames = 0
+                recorder.startRecording()
+                while (voiceTtsSpeaking && voiceCallActive && isActive) {
+                    val count = recorder.read(buffer, 0, buffer.size)
+                    if (count <= 0) continue
+                    var sum = 0.0
+                    for (i in 0 until count) sum += buffer[i].toDouble() * buffer[i].toDouble()
+                    val rms = kotlin.math.sqrt(sum / count)
+                    // Require sustained near-end energy to avoid reacting to brief clicks.
+                    if (rms > 1850.0) speechFrames++ else speechFrames = maxOf(0, speechFrames - 1)
+                    if (speechFrames >= 5 && voiceTtsSpeaking && voiceCallActive) {
+                        voiceTtsSpeaking = false
+                        dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "interrupting").toString())
+                        withContext(Dispatchers.Main) {
+                            runCatching { voiceTts?.stop() }
+                            startOnDeviceVoiceRecognition(voiceBargeInLanguage.ifBlank { Locale.getDefault().toLanguageTag() })
+                        }
+                        break
+                    }
+                }
+            } catch (error: Exception) {
+                android.util.Log.w("WorklyVoice", "Barge-in monitor unavailable", error)
+            } finally {
+                runCatching { recorder?.stop() }
+                runCatching { recorder?.release() }
+                runCatching { echoCanceler?.release() }
+            }
+        }
+    }
+
+    private fun stopVoiceBargeInMonitor() {
+        voiceBargeInJob?.cancel()
+        voiceBargeInJob = null
+    }
+
     private fun dispatchNativeEvent(name: String, detail: String = "{}") {
         val safeName = name.replace(Regex("[^a-zA-Z0-9_-]"), "")
         runOnUiThread {
@@ -1865,6 +1937,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         @JavascriptInterface
         fun speakVoiceReply(text: String, languageTag: String): Boolean {
             if (text.isBlank() || text.length > 5000) return false
+            voiceBargeInLanguage = languageTag
             runOnUiThread {
                 if (voiceTts == null) {
                     voiceTts = TextToSpeech(this@MainActivity) { status ->
@@ -1891,9 +1964,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 voiceTts?.setSpeechRate(0.96f)
                 voiceTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
+                        voiceTtsSpeaking = true
                         dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "speaking").toString())
+                        startVoiceBargeInMonitor()
                     }
                     override fun onDone(utteranceId: String?) {
+                        voiceTtsSpeaking = false
+                        stopVoiceBargeInMonitor()
                         dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "finished").toString())
                     }
                     @Deprecated("Deprecated in Java")
@@ -1908,6 +1985,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
         @JavascriptInterface
         fun stopVoiceReply(): Boolean {
+            voiceTtsSpeaking = false
+            stopVoiceBargeInMonitor()
             runOnUiThread { runCatching { voiceTts?.stop() } }
             return true
         }
@@ -3479,6 +3558,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         interviewCallActive = false
         interviewCallVideoEnabled = false
         voiceCallActive = false
+        voiceTtsSpeaking = false
+        stopVoiceBargeInMonitor()
         runCatching { voiceRecognizer?.cancel(); voiceRecognizer?.destroy(); voiceRecognizer = null }
         runCatching { voiceTts?.stop(); voiceTts?.shutdown(); voiceTts = null }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
