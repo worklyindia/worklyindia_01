@@ -1950,6 +1950,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     return@runOnUiThread
                 }
                 if (!voiceTtsReady) return@runOnUiThread
+                voiceCallActive = true
                 val locale = Locale.forLanguageTag(languageTag)
                 val availability = voiceTts?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
                 if (availability < TextToSpeech.LANG_AVAILABLE) {
@@ -1972,6 +1973,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     }
                     override fun onDone(utteranceId: String?) {
                         voiceTtsSpeaking = false
+                        voiceCallActive = false
                         stopVoiceBargeInMonitor()
                         dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "finished").toString())
                     }
