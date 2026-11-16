@@ -19,6 +19,7 @@ export default function AIVoiceCall() {
   const [callState, setCallState] = useState<CallState>('idle');
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
   const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
@@ -55,6 +56,7 @@ export default function AIVoiceCall() {
     setCallState('idle');
     setLastReply('');
     setLastTranscript('');
+    setErrorMessage('');
     setMuted(false);
   }, [stopRecognition, stopReply]);
 
@@ -64,6 +66,7 @@ export default function AIVoiceCall() {
     const transcript = detail?.text?.trim();
     if (!transcript) return;
     setLastTranscript(transcript);
+    setErrorMessage('');
     setCallState('thinking');
     try {
       const { data, error } = await supabase.functions.invoke('unified-voice', {
@@ -79,8 +82,10 @@ export default function AIVoiceCall() {
       setCallState('speaking');
     } catch (error) {
       if (!activeRef.current) return;
+      const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
+      setErrorMessage(message);
       setCallState('error');
-      toast.error(error instanceof Error ? error.message : 'Voice reply failed. Please try again.');
+      toast.error(message);
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
   }, [speakReply]);
@@ -114,6 +119,7 @@ export default function AIVoiceCall() {
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const message = (event as CustomEvent<{ message?: string }>).detail?.message || 'Voice service error.';
+    setErrorMessage(message);
     setCallState('error');
     toast.error(message);
   }, []);
@@ -148,13 +154,16 @@ export default function AIVoiceCall() {
       activeRef.current = true;
       setLastReply('');
       setLastTranscript('');
+      setErrorMessage('');
       setCallState('listening');
       if (!startRecognition('auto')) {
         activeRef.current = false;
+        setErrorMessage('Could not start on-device speech recognition. Check the offline speech service and try again.');
         setCallState('error');
         toast.error('Could not start on-device speech recognition.');
       }
     } catch {
+      setErrorMessage('Microphone permission was denied. Allow microphone access in app settings, then try again.');
       setCallState('error');
       toast.error('Microphone permission was denied. Allow microphone access in app settings.');
     }
@@ -194,6 +203,8 @@ export default function AIVoiceCall() {
           <span className={`h-2 w-2 rounded-full ${callState === 'listening' ? 'bg-emerald-400 animate-pulse' : callState === 'thinking' ? 'bg-amber-300 animate-pulse' : callState === 'speaking' ? 'bg-blue-300 animate-pulse' : 'bg-white/30'}`} />
           {callState === 'listening' ? 'Listening on this device' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
         </div>
+
+        {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
 
         <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
