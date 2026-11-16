@@ -1896,7 +1896,22 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "processing").toString()) }
                         override fun onError(error: Int) {
-                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Offline speech recognition failed (code $error). Check that offline speech language data is installed.").toString())
+                            val reason = when (error) {
+                                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech service timed out. Check your phone's offline speech service."
+                                SpeechRecognizer.ERROR_NETWORK -> "Speech service network error. Offline recognition must be enabled."
+                                SpeechRecognizer.ERROR_AUDIO -> "Microphone audio could not be captured. Check microphone access."
+                                SpeechRecognizer.ERROR_SERVER -> "The phone's speech recognition service returned an error."
+                                SpeechRecognizer.ERROR_CLIENT -> "Speech recognition was interrupted. Tap Start AI Call and try again."
+                                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech was heard. Speak after the listening indicator appears."
+                                SpeechRecognizer.ERROR_NO_MATCH -> "Your speech could not be recognized. Try speaking more clearly."
+                                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Speech recognition is busy. End the current attempt and try again."
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is missing. Allow it in Android settings."
+                                SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "Too many speech requests. Wait a moment and try again."
+                                SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "This language is not supported by the installed offline speech service."
+                                SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "The offline language pack is not installed. Download it in Android speech settings."
+                                else -> "Offline speech recognition failed (code $error). Check the offline speech service and language pack."
+                            }
+                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", reason).put("code", error).toString())
                             stopOnDeviceVoiceRecognition()
                         }
                         override fun onResults(results: Bundle?) {
