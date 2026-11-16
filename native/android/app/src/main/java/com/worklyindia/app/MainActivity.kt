@@ -81,6 +81,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import org.json.JSONObject
@@ -1494,7 +1496,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "interrupting").toString())
                         withContext(Dispatchers.Main) {
                             runCatching { voiceTts?.stop() }
-                            startOnDeviceVoiceRecognition(voiceBargeInLanguage.ifBlank { Locale.getDefault().toLanguageTag() })
+                            dispatchNativeEvent("workly-voice-barge-in", JSONObject().put("languageTag", voiceBargeInLanguage.ifBlank { Locale.getDefault().toLanguageTag() }).toString())
                         }
                         break
                     }
