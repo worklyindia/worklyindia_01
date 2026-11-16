@@ -72,7 +72,16 @@ export default function AIVoiceCall() {
     if (status === 'listening') setCallState('listening');
     if (status === 'processing') setCallState('thinking');
     if (status === 'speaking') setCallState('speaking');
-  }, []);
+    if (status === 'finished' && activeRef.current && !muted) {
+      window.setTimeout(() => {
+        if (activeRef.current && !muted) {
+          const started = bridge?.startOnDeviceVoiceRecognition?.(languageTags[language]);
+          if (started) setCallState('listening');
+          else { setCallState('error'); toast.error('Could not resume listening.'); }
+        }
+      }, 250);
+    }
+  }, [bridge, language, muted]);
 
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -185,7 +194,7 @@ export default function AIVoiceCall() {
             <div className="flex flex-col items-center gap-2 text-white/35"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5"><Volume2 className="h-5 w-5" /></span><span className="text-[11px]">Speaker</span></div>
             <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
           </div>
-          {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <Button onClick={listenAgain} disabled={muted || callState === 'listening' || callState === 'thinking'} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">{callState === 'thinking' ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Please wait…</> : callState === 'speaking' ? 'Tap to speak again' : 'Speak now'}</Button>}
+          {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
           <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Requires Android on-device speech language data and an internet connection for AI replies. No paid voice API is called by this feature.</span></div>
         </div>
       </section>
