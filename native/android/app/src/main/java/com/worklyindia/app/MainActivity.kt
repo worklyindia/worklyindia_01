@@ -1878,7 +1878,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         fun startOnDeviceVoiceRecognition(languageTag: String): Boolean {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
                 !SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
-                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "On-device speech recognition is not available on this phone.").toString())
+                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Offline speech recognition is not available. Enable or install an on-device speech recognition service and offline language data in Android settings. Workly will not upload microphone audio for transcription.").toString())
                 return false
             }
             if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1896,29 +1896,57 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "processing").toString()) }
                         override fun onError(error: Int) {
-                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Speech recognition failed (code $error).").toString())
+                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Offline speech recognition failed (code $error). Check that offline speech language data is installed.").toString())
                             stopOnDeviceVoiceRecognition()
                         }
                         override fun onResults(results: Bundle?) {
                             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                            if (text.isNotBlank()) dispatchNativeEvent("workly-voice-transcript", JSONObject().put("text", text).toString())
-                            else dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech was detected. Please try again.").toString())
+                            val detectedTag = if (Build.VERSION.SDK_INT >= 34) {
+                                results?.getString(SpeechRecognizer.DETECTED_LANGUAGE).orEmpty()
+                            } else ""
+                            if (text.isNotBlank()) {
+                                dispatchNativeEvent(
+                                    "workly-voice-transcript",
+                                    JSONObject().put("text", text).put("languageTag", detectedTag.ifBlank { Locale.getDefault().toLanguageTag() }).toString()
+                                )
+                            } else dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech was detected. Please try again.").toString())
                             stopOnDeviceVoiceRecognition()
                         }
                         override fun onPartialResults(partialResults: Bundle?) {}
                         override fun onEvent(eventType: Int, params: Bundle?) {}
+                        override fun onLanguageDetection(results: Bundle) {
+                            if (Build.VERSION.SDK_INT >= 34) {
+                                val detectedTag = results.getString(SpeechRecognizer.DETECTED_LANGUAGE).orEmpty()
+                                if (detectedTag.isNotBlank()) voiceBargeInLanguage = detectedTag
+                            }
+                        }
                     })
                     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
-                        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageTag)
                         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
                         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                        if (Build.VERSION.SDK_INT >= 34 && languageTag == "auto") {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "und")
+                            putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION, true)
+                            putStringArrayListExtra(
+                                RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,
+                                arrayListOf(
+                                    "en-IN", "hi-IN", "gu-IN", "mr-IN", "bn-IN", "ta-IN",
+                                    "te-IN", "pa-IN", "ur-IN", "kn-IN", "ml-IN", "or-IN",
+                                    "as-IN", "ne-NP", "sd-IN", "ks-IN"
+                                )
+                            )
+                        } else {
+                            val fallbackTag = languageTag.takeIf { it.isNotBlank() && it != "auto" }
+                                ?: Locale.getDefault().toLanguageTag()
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, fallbackTag)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, fallbackTag)
+                        }
                     }
                     voiceCallActive = true
                     voiceRecognizer?.startListening(intent)
                 }.onFailure {
-                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", it.message ?: "Could not start on-device speech recognition.").toString())
+                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", it.message ?: "Could not start offline speech recognition.").toString())
                     stopOnDeviceVoiceRecognition()
                 }
             }
