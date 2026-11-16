@@ -283,14 +283,14 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
   const scriptDetected =
-    /[\\u0A80-\\u0AFF]/.test(text) ? 'Gujarati' :
-    /[\\u0B80-\\u0BFF]/.test(text) ? 'Tamil' :
-    /[\\u0C00-\\u0C7F]/.test(text) ? 'Telugu' :
-    /[\\u0C80-\\u0CFF]/.test(text) ? 'Kannada' :
-    /[\\u0D00-\\u0D7F]/.test(text) ? 'Malayalam' :
-    /[\\u0980-\\u09FF]/.test(text) ? 'Bengali' :
-    /[\\u0A00-\\u0A7F]/.test(text) ? 'Punjabi' :
-    /[\\u0900-\\u097F]/.test(text) ? 'the detected Devanagari language' :
+    /[\u0A80-\u0AFF]/.test(text) ? 'Gujarati' :
+    /[\u0B80-\u0BFF]/.test(text) ? 'Tamil' :
+    /[\u0C00-\u0C7F]/.test(text) ? 'Telugu' :
+    /[\u0C80-\u0CFF]/.test(text) ? 'Kannada' :
+    /[\u0D00-\u0D7F]/.test(text) ? 'Malayalam' :
+    /[\u0980-\u09FF]/.test(text) ? 'Bengali' :
+    /[\u0A00-\u0A7F]/.test(text) ? 'Punjabi' :
+    /[\u0900-\u097F]/.test(text) ? 'the detected Devanagari language' :
     'the language used by the caller';
   const languageInstruction = languageTag !== 'und' && languageTag !== 'auto'
     ? 'Reply in the same spoken language identified by locale tag ' + languageTag + '. Mirror the caller’s language and any code-switching; do not translate unless asked.'
