@@ -106,7 +106,7 @@ export default function AIVoiceCall() {
     if (!activeRef.current || muted) return;
     const detail = (event as CustomEvent<{ languageTag?: string }>).detail;
     stopReply();
-    const started = bridge?.startOnDeviceVoiceRecognition?.('auto');
+    const started = startRecognition('auto');
     if (started) setCallState('listening');
     else { setCallState('error'); toast.error('Could not listen after interruption.'); }
   }, [startRecognition, stopReply, muted]);
@@ -164,8 +164,8 @@ export default function AIVoiceCall() {
     const next = !muted;
     setMuted(next);
     if (next) {
-      bridge?.stopOnDeviceVoiceRecognition?.();
-      bridge?.stopVoiceReply?.();
+      stopRecognition();
+      stopReply();
     } else if (activeRef.current) {
       startRecognition('auto');
       setCallState('listening');
