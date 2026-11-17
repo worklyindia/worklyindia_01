@@ -9,6 +9,7 @@ import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
 import { isBrowserLocalVoiceAvailable, isBrowserOnDeviceVoiceAvailable, startBrowserLocalRecognition, stopBrowserLocalRecognition, speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
+import { prepareKokoroTts, speakKokoroTts, stopKokoroTts, isKokoroLanguageSupported } from '@/lib/kokoroTts';
 
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
@@ -28,6 +29,9 @@ export default function AIVoiceCall() {
   const [voiceStage, setVoiceStage] = useState('Waiting for microphone…');
   const [micLevel, setMicLevel] = useState(0);
   const [aiRequestStatus, setAiRequestStatus] = useState('Not sent');
+  const [kokoroEnabled, setKokoroEnabled] = useState(() => { try { return localStorage.getItem('workly_kokoro_enabled') === 'true'; } catch { return false; } });
+  const [kokoroStatus, setKokoroStatus] = useState('not-ready');
+  const [kokoroMessage, setKokoroMessage] = useState('Optional on-device neural voice · about 295 MB first download');
   const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
   const activeRef = useRef(false);
   const browserRemoteAllowedRef = useRef(false);
@@ -49,11 +53,23 @@ export default function AIVoiceCall() {
     if (bridge) bridge.stopOnDeviceVoiceRecognition?.();
     else stopBrowserLocalRecognition();
   }, [bridge]);
-  const speakReply = useCallback((text: string, language: string) => {
+  const speakReply = useCallback(async (text: string, language: string) => {
+    const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
+    if (kokoroEnabled && isKokoroLanguageSupported(resolvedLanguage)) {
+      try {
+        const spoken = await speakKokoroTts(text, resolvedLanguage);
+        if (spoken) return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Kokoro voice failed; using the phone voice instead.';
+        setKokoroStatus('error');
+        setKokoroMessage(message);
+      }
+    }
     if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
-    return speakBrowserLocalReply(text, language === 'und' ? (navigator.language || 'en-US') : language);
-  }, [bridge]);
+    return speakBrowserLocalReply(text, resolvedLanguage);
+  }, [bridge, kokoroEnabled]);
   const stopReply = useCallback(() => {
+    stopKokoroTts();
     if (bridge) bridge.stopVoiceReply?.();
     else stopBrowserLocalReply();
   }, [bridge]);
@@ -104,7 +120,7 @@ export default function AIVoiceCall() {
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
-      const spoken = speakReply(reply, data?.languageTag || detail?.languageTag || 'und');
+      const spoken = await speakReply(reply, data?.languageTag || detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
       setVoiceStage('TTS playback started');
@@ -178,6 +194,38 @@ export default function AIVoiceCall() {
     setCallState('error');
     toast.error(message);
   }, []);
+
+  useEffect(() => {
+    const handleKokoroStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ status?: string; message?: string }>).detail;
+      if (detail?.status) setKokoroStatus(detail.status);
+      if (detail?.message) setKokoroMessage(detail.message);
+      if (detail?.status === 'ready') {
+        setKokoroEnabled(true);
+        try { localStorage.setItem('workly_kokoro_enabled', 'true'); } catch { /* storage may be disabled */ }
+      }
+    };
+    window.addEventListener('workly-kokoro-status', handleKokoroStatus);
+    return () => window.removeEventListener('workly-kokoro-status', handleKokoroStatus);
+  }, []);
+
+  const enableKokoro = async () => {
+    try {
+      setKokoroStatus('downloading');
+      setKokoroMessage('Loading Kokoro-82M. The first download is about 295 MB; keep this page open.');
+      await prepareKokoroTts();
+      setKokoroEnabled(true);
+      setKokoroStatus('ready');
+      setKokoroMessage('Kokoro-82M is ready. Hindi and English replies can now use local neural speech.');
+      try { localStorage.setItem('workly_kokoro_enabled', 'true'); } catch { /* storage may be disabled */ }
+      toast.success('Kokoro voice is ready.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not load Kokoro voice on this device.';
+      setKokoroStatus('error');
+      setKokoroMessage(message);
+      toast.error(message);
+    }
+  };
 
   useEffect(() => {
     // Warm browser speech voices before the first AI reply needs playback.
@@ -311,6 +359,16 @@ export default function AIVoiceCall() {
         <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
           <p className="mt-2 text-sm text-white/70">Speak naturally in your language. The call will use the detected language when your phone's offline speech service supports it.</p>
+        </div>
+
+        <div className="mt-5 w-full rounded-2xl border border-violet-300/20 bg-violet-400/[0.06] p-4 text-left">
+          <div className="flex items-center gap-2"><AudioLines className="h-5 w-5 text-violet-200" /><p className="text-sm font-semibold">Kokoro-82M Neural Voice</p><span className="ml-auto text-[10px] text-violet-100/65">{kokoroEnabled ? 'Enabled' : kokoroStatus === 'downloading' ? 'Loading' : 'Optional'}</span></div>
+          <p className="mt-2 text-xs leading-5 text-white/60">{kokoroMessage}</p>
+          <p className="mt-1 text-[11px] leading-5 text-white/45">Runs on this device in the Android app and website. The model is downloaded only after you tap below; it is not included in the APK. Hindi and English are supported. Gujarati uses the existing voice.</p>
+          <Button onClick={enableKokoro} disabled={kokoroStatus === 'downloading' || kokoroStatus === 'synthesizing'} className="mt-3 h-11 w-full rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-500">
+            {kokoroEnabled ? 'Reload Kokoro voice' : kokoroStatus === 'downloading' ? 'Loading Kokoro model…' : 'Download & enable Kokoro (≈295 MB)'}
+          </Button>
+          {kokoroEnabled && <button type="button" onClick={() => { setKokoroEnabled(false); try { localStorage.setItem('workly_kokoro_enabled', 'false'); } catch { /* storage may be disabled */ } setKokoroMessage('Kokoro is disabled. The existing device voice will be used.'); }} className="mt-2 min-h-11 w-full text-xs text-white/55 underline underline-offset-4">Use existing voice instead</button>}
         </div>
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
