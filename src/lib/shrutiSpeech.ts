@@ -64,7 +64,7 @@ export function prepareShrutiRecognition(): Promise<void> {
     };
     current.addEventListener('message', onMessage);
     current.postMessage({ type: 'init' });
-  });
+  }).catch((error) => { workerReady = null; throw error; });
   return workerReady;
 }
 
