@@ -97,7 +97,6 @@ async function initialize() {
 function transcribe(message) {
   const pcm = message.pcm;
   const audioPointer = copyIn(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
-  const languagePointer = message.language ? copyIn(encoder.encode(message.language + '\\0')) : 0;
   const outputCapacity = Math.max(65536, Math.ceil(pcm.length / 16000) * 4096 + 16384);
   const outputPointer = alloc(outputCapacity);
   try {
