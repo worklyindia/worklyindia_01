@@ -78,8 +78,8 @@ export async function prepareKokoroTts(): Promise<void> {
 
 export async function speakKokoroTts(text: string, languageTag: string): Promise<boolean> {
   if (!isKokoroLanguageSupported(languageTag)) return false;
-  const token = ++playbackToken;
   stopKokoroTts();
+  const token = playbackToken;
   const engine = await getEngine();
   if (token !== playbackToken) return false;
   report("synthesizing", "Creating speech locally on this device…");
@@ -104,10 +104,12 @@ export async function speakKokoroTts(text: string, languageTag: string): Promise
     if (activeSource === source) {
       activeSource = null;
       report("finished", "Kokoro playback finished.");
+      window.dispatchEvent(new CustomEvent("workly-voice-status", { detail: { status: "finished" } }));
     }
   };
   source.start();
   report("speaking", "Kokoro is speaking offline.");
+  window.dispatchEvent(new CustomEvent("workly-voice-status", { detail: { status: "speaking" } }));
   return true;
 }
 
