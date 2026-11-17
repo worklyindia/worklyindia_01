@@ -1915,10 +1915,18 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     var retriedAfterInstalledModel = false
                     voiceRecognizer?.setRecognitionListener(object : RecognitionListener {
                         override fun onReadyForSpeech(params: Bundle?) { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").toString()) }
-                        override fun onBeginningOfSpeech() {}
-                        override fun onRmsChanged(rmsdB: Float) {}
+                        override fun onBeginningOfSpeech() {
+                            dispatchNativeEvent("workly-voice-input", JSONObject().put("status", "Speech detected · listening…").toString())
+                        }
+                        override fun onRmsChanged(rmsdB: Float) {
+                            val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+                            dispatchNativeEvent("workly-voice-input", JSONObject().put("level", normalized).toString())
+                        }
                         override fun onBufferReceived(buffer: ByteArray?) {}
-                        override fun onEndOfSpeech() { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "processing").toString()) }
+                        override fun onEndOfSpeech() {
+                            dispatchNativeEvent("workly-voice-input", JSONObject().put("status", "You stopped speaking · processing words…").toString())
+                            dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "processing").toString())
+                        }
                         override fun onError(error: Int) {
                             val reason = when (error) {
                                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech service timed out. Check your phone's offline speech service."
