@@ -175,7 +175,7 @@ export default function AIVoiceCall() {
         }
       }, 250);
     }
-  }, [startRecognition, muted]);
+  }, [startRecognition, stopRecognition, muted]);
 
   const handleBargeIn = useCallback((_event: Event) => {
     if (!activeRef.current || muted) return;
