@@ -4,11 +4,8 @@ type WorkerMessage =
   | { type: 'result'; id: number; text: string; language: string; ms: number }
   | { type: 'error'; id?: number; stage: string; message: string };
 
-type RecognitionEngine = 'shruti' | 'indicconformer';
-
 let worker: Worker | null = null;
 let workerReady: Promise<void> | null = null;
-let engine: RecognitionEngine = 'shruti';
 let requestId = 0;
 let media: MediaStream | null = null;
 let context: AudioContext | null = null;
@@ -24,78 +21,35 @@ function emit(name: string, detail: Record<string, unknown>) {
   window.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
-/**
- * Use the Gujarati IndicConformer only when Gujarati is an explicit device
- * language. Hindi and Indian English continue to use the smaller Shruti model.
- */
-function preferredEngine(): RecognitionEngine {
-  const languages = [...(navigator.languages || []), navigator.language, document.documentElement.lang]
-    .filter(Boolean)
-    .map((language) => language.toLowerCase());
-  return languages.some((language) => language === 'gu' || language.startsWith('gu-'))
-    ? 'indicconformer'
-    : 'shruti';
-}
-
 function getWorker(): Worker {
-  const preferred = preferredEngine();
-  if (worker && engine !== preferred && !active) {
-    worker.terminate();
-    worker = null;
-    workerReady = null;
-  }
   if (!worker) {
-    engine = preferred;
-    worker = engine === 'indicconformer'
-      ? new Worker(new URL('../workers/indicconformer.worker.ts', import.meta.url), { type: 'module' })
-      : new Worker('/workers/shruti-worker.js');
+    worker = new Worker('/workers/shruti-worker.js');
     worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
       const message = event.data;
       if (message.type === 'progress') {
-        emit('workly-shruti-status', { status: 'downloading', loaded: message.loaded, total: message.total, engine });
+        emit('workly-shruti-status', { status: 'downloading', loaded: message.loaded, total: message.total });
       } else if (message.type === 'ready') {
-        emit('workly-shruti-status', { status: 'ready', source: message.source, engine });
+        emit('workly-shruti-status', { status: 'ready', source: message.source });
       } else if (message.type === 'result') {
         const text = message.text.trim();
-        const languageTag = engine === 'indicconformer'
-          ? 'gu-IN'
-          : message.language === 'hi' ? 'hi-IN' : message.language === 'en' ? 'en-IN' : 'und';
-        emit('workly-shruti-status', { status: 'transcribed', language: message.language, ms: message.ms, engine });
-        if (active && text) emit('workly-voice-transcript', {
-          text,
-          languageTag,
-          source: engine === 'indicconformer' ? 'indicconformer-gu-int8' : 'shruti-on-device',
-        });
+        emit('workly-shruti-status', { status: 'transcribed', language: message.language, ms: message.ms });
+        if (active && text) emit('workly-voice-transcript', { text, languageTag: message.language === 'hi' ? 'hi-IN' : message.language === 'en' ? 'en-IN' : 'und', source: 'shruti-on-device' });
         transcribing = false;
       } else if (message.type === 'error') {
-        emit('workly-shruti-status', { status: 'error', message: message.message, engine });
+        emit('workly-shruti-status', { status: 'error', message: message.message });
         transcribing = false;
-        if (message.stage === 'transcribe') {
-          emit('workly-voice-error', { message: message.message });
-        }
       }
     };
-    worker.onerror = () => emit('workly-voice-error', {
-      message: engine === 'indicconformer'
-        ? 'Gujarati IndicConformer speech engine could not start in this browser.'
-        : 'Shruti speech engine could not start in this browser.',
-    });
+    worker.onerror = () => emit('workly-voice-error', { message: 'Shruti speech engine could not start in this browser.' });
   }
   return worker;
 }
 
 export function prepareShrutiRecognition(): Promise<void> {
   if (workerReady) return workerReady;
-  const selectedEngine = preferredEngine();
   workerReady = new Promise((resolve, reject) => {
     const current = getWorker();
-    const timeoutMs = selectedEngine === 'indicconformer' ? 480000 : 120000;
-    const modelName = selectedEngine === 'indicconformer' ? 'Gujarati IndicConformer' : 'Shruti';
-    const timeout = window.setTimeout(() => {
-      current.removeEventListener('message', onMessage);
-      workerReady = null;
-      reject(new Error(`${modelName} took too long to load. Check your internet connection and try again.`));
-    }, timeoutMs);
+    const timeout = window.setTimeout(() => reject(new Error('Shruti took too long to load. Please try again.')), 120000);
     const onMessage = (event: MessageEvent<WorkerMessage>) => {
       if (event.data.type === 'ready') {
         window.clearTimeout(timeout);
@@ -140,7 +94,7 @@ function submitUtterance() {
   const pcm = resample16k(joined, context?.sampleRate || 48000);
   if (pcm.length < 4800) return;
   transcribing = true;
-  emit('workly-shruti-status', { status: 'transcribing', engine });
+  emit('workly-shruti-status', { status: 'transcribing' });
   const id = ++requestId;
   worker.postMessage({ type: 'transcribe', id, pcm }, [pcm.buffer]);
 }
@@ -191,8 +145,8 @@ export async function startShrutiRecognition(): Promise<boolean> {
       submitUtterance();
     }
   };
-  emit('workly-voice-status', { status: 'listening', mode: engine === 'indicconformer' ? 'indicconformer-gu-int8' : 'shruti-on-device' });
-  emit('workly-shruti-status', { status: 'listening', engine });
+  emit('workly-voice-status', { status: 'listening', mode: 'shruti-on-device' });
+  emit('workly-shruti-status', { status: 'listening' });
   return true;
 }
 
