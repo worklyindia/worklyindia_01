@@ -25,6 +25,57 @@ const MODEL_URL =
 const WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@latest/wasm";
 
+// Kokoro LiteRT bundles must retain their original filename inside MediaPipe's
+// Wasm filesystem. Without this, some Tasks Audio versions save every model as
+// "model.litertlm" and mis-detect Kokoro as another TTS architecture.
+const DEFAULT_MODEL_FILE = "model.litertlm";
+let activeModelUrl = MODEL_URL;
+let filenameWorkaroundInstalled = false;
+
+function installKokoroFilenameWorkaround() {
+  if (filenameWorkaroundInstalled) return;
+  const globalModule = globalThis as typeof globalThis & { ModuleFactory?: (...args: unknown[]) => Promise<any> };
+  let factory = globalModule.ModuleFactory;
+  const wrapFactory = (current: typeof factory) => {
+    if (typeof current !== "function" || (current as any).__worklyKokoroFilenameWrapped) return current;
+    return Object.assign(async (...args: unknown[]) => {
+      const module = await current(...args);
+      if (!module || typeof module.FS_createDataFile !== "function") return module;
+      const getFilename = () => {
+        try {
+          const pathname = new URL(activeModelUrl, window.location.href).pathname;
+          const filename = pathname.split("/").pop()?.replace(/[^A-Za-z0-9._-]/g, "_");
+          return filename && filename.endsWith(".litertlm") ? filename : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+      const remap = (path: string) => {
+        const filename = getFilename();
+        return filename && path === `/${DEFAULT_MODEL_FILE}` ? `/${filename}` : path;
+      };
+      const createDataFile = module.FS_createDataFile;
+      module.FS_createDataFile = (parent: string, name: string, ...rest: unknown[]) =>
+        createDataFile.call(module, parent, parent === "/" && name === DEFAULT_MODEL_FILE ? (getFilename() || name) : name, ...rest);
+      const unlink = module.FS_unlink;
+      if (typeof unlink === "function") module.FS_unlink = (path: string) => unlink.call(module, remap(path));
+      const createTextToSpeech = module.createTextToSpeech;
+      if (typeof createTextToSpeech === "function") {
+        module.createTextToSpeech = (path: string, ...rest: unknown[]) =>
+          createTextToSpeech.call(module, remap(path), ...rest);
+      }
+      return module;
+    }, { __worklyKokoroFilenameWrapped: true });
+  };
+  factory = wrapFactory(factory);
+  Object.defineProperty(globalModule, "ModuleFactory", {
+    configurable: true,
+    get: () => factory,
+    set: (nextFactory) => { factory = wrapFactory(nextFactory); },
+  });
+  filenameWorkaroundInstalled = true;
+}
+
 let enginePromise: Promise<Awaited<ReturnType<MediaPipeAudioModule["TextToSpeech"]["createFromOptions"]>>> | null = null;
 let audioContext: AudioContext | null = null;
 let activeSource: AudioBufferSourceNode | null = null;
@@ -43,13 +94,13 @@ async function getEngine() {
     enginePromise = (async () => {
       report("downloading", "Downloading Kokoro-82M model (about 295 MB) and preparing on-device voice…");
       // Load the MediaPipe Audio Tasks runtime only when the user enables Kokoro.
-      const moduleUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@latest/+esm";
+      const moduleUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.3/+esm";
       const mediaPipe = await import(/* @vite-ignore */ moduleUrl) as MediaPipeAudioModule;
+      installKokoroFilenameWorkaround();
       const fileset = await mediaPipe.FilesetResolver.forAudioTasks(WASM_URL);
       try {
         const engine = await mediaPipe.TextToSpeech.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" },
-          defaultVoiceId: "af_heart",
           speakingRate: 1,
         });
         report("ready", "Kokoro-82M is ready. Speech is generated on this device.");
@@ -59,10 +110,10 @@ async function getEngine() {
         // rather than failing outright on those devices.
         report("downloading", "GPU voice is unavailable here. Trying Kokoro CPU mode…");
         const cpuModelUrl = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
+        activeModelUrl = cpuModelUrl;
         try {
           const engine = await mediaPipe.TextToSpeech.createFromOptions(fileset, {
             baseOptions: { modelAssetPath: cpuModelUrl, delegate: "CPU" },
-            defaultVoiceId: "af_heart",
             speakingRate: 1,
           });
           report("ready", "Kokoro-82M is ready in CPU mode. Speech is generated on this device.");
@@ -107,8 +158,20 @@ export async function speakKokoroTts(text: string, languageTag: string): Promise
   if (token !== playbackToken) return false;
   report("synthesizing", "Creating speech locally on this device…");
   const voiceId = languageTag.toLowerCase().startsWith("hi") ? "hf_alpha" : "af_heart";
-  const audio = await engine.synthesize(text.slice(0, 4000), { voiceId });
-  if (token !== playbackToken || !audio.samples.length) return false;
+  let audio: { samples: Float32Array; sampleRateHz: number };
+  try {
+    audio = await engine.synthesize(text.slice(0, 4000), { voiceId });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Kokoro synthesis failed.";
+    report("error", `Kokoro loaded, but speech generation failed: ${detail}`);
+    throw error;
+  }
+  if (token !== playbackToken) return false;
+  if (!audio.samples?.length || !audio.sampleRateHz) {
+    const message = "Kokoro returned empty audio. Check the selected voice and model compatibility.";
+    report("error", message);
+    throw new Error(message);
+  }
 
   const Context = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Context) throw new Error("This browser does not support local audio playback.");
@@ -116,6 +179,9 @@ export async function speakKokoroTts(text: string, languageTag: string): Promise
     audioContext = new Context({ sampleRate: audio.sampleRateHz });
   }
   if (audioContext.state === "suspended") await audioContext.resume();
+  if (audioContext.state !== "running") {
+    throw new Error("Audio playback is blocked by the browser. Tap the page once and try again.");
+  }
 
   const buffer = audioContext.createBuffer(1, audio.samples.length, audio.sampleRateHz);
   buffer.copyToChannel(audio.samples, 0);
