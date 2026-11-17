@@ -21,7 +21,7 @@ type MediaPipeAudioModule = {
 };
 
 const MODEL_URL =
-  "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_gpu_fp16.litertlm";
+  "https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/kokoro/kokoro_int8_gpu_fp16.litertlm";
 const WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@latest/wasm";
 
@@ -58,7 +58,7 @@ async function getEngine() {
         // Some Android WebViews do not expose WebGPU. Retry with the CPU bundle
         // rather than failing outright on those devices.
         report("downloading", "GPU voice is unavailable here. Trying Kokoro CPU mode…");
-        const cpuModelUrl = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
+        const cpuModelUrl = "https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/kokoro/kokoro_int8_fp16.litertlm";
         try {
           const engine = await mediaPipe.TextToSpeech.createFromOptions(fileset, {
             baseOptions: { modelAssetPath: cpuModelUrl, delegate: "CPU" },
