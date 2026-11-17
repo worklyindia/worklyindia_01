@@ -20,6 +20,8 @@ export default function AIVoiceCall() {
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
   const [partialTranscript, setPartialTranscript] = useState('');
+  const [speechInputStatus, setSpeechInputStatus] = useState('Waiting for speech…');
+  const [speechLevel, setSpeechLevel] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
@@ -58,6 +60,8 @@ export default function AIVoiceCall() {
     setLastReply('');
     setLastTranscript('');
     setPartialTranscript('');
+    setSpeechInputStatus('Call ended');
+    setSpeechLevel(0);
     setErrorMessage('');
     setMuted(false);
   }, [stopRecognition, stopReply]);
@@ -68,6 +72,7 @@ export default function AIVoiceCall() {
     const transcript = detail?.text?.trim();
     if (!transcript) return;
     setLastTranscript(transcript);
+    setSpeechInputStatus('Speech recognized · contacting AI…');
     setPartialTranscript('');
     setErrorMessage('');
     setCallState('thinking');
@@ -80,6 +85,7 @@ export default function AIVoiceCall() {
       if (!reply) throw new Error('AI did not return a voice response.');
       if (!activeRef.current) return;
       setLastReply(reply);
+      setSpeechInputStatus('AI replied · playing voice…');
       const spoken = speakReply(reply, detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
@@ -93,11 +99,18 @@ export default function AIVoiceCall() {
     // Transcript and reply remain only in component memory and are cleared by End Call.
   }, [speakReply]);
 
+  const handleSpeechInput = useCallback((event: Event) => {
+    if (!activeRef.current) return;
+    const detail = (event as CustomEvent<{ status?: string; level?: number }>).detail;
+    if (detail?.status) setSpeechInputStatus(detail.status);
+    if (typeof detail?.level === 'number') setSpeechLevel(Math.max(0, Math.min(1, detail.level)));
+  }, []);
+
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const detail = (event as CustomEvent<{ text?: string }>).detail;
     const text = detail?.text?.trim();
-    if (text) setPartialTranscript(text);
+    if (text) { setPartialTranscript(text); setSpeechInputStatus('Hearing your words…'); }
   }, []);
 
   const handleNativeStatus = useCallback((event: Event) => {
@@ -138,12 +151,14 @@ export default function AIVoiceCall() {
     setNativeAvailable(recognitionAvailable());
     window.addEventListener('workly-voice-transcript', handleTranscript);
     window.addEventListener('workly-voice-partial-transcript', handlePartialTranscript);
+    window.addEventListener('workly-voice-input', handleSpeechInput);
     window.addEventListener('workly-voice-status', handleNativeStatus);
     window.addEventListener('workly-voice-error', handleNativeError);
     window.addEventListener('workly-voice-barge-in', handleBargeIn);
     return () => {
       window.removeEventListener('workly-voice-transcript', handleTranscript);
       window.removeEventListener('workly-voice-partial-transcript', handlePartialTranscript);
+      window.removeEventListener('workly-voice-input', handleSpeechInput);
       window.removeEventListener('workly-voice-status', handleNativeStatus);
       window.removeEventListener('workly-voice-error', handleNativeError);
       window.removeEventListener('workly-voice-barge-in', handleBargeIn);
@@ -151,7 +166,7 @@ export default function AIVoiceCall() {
       stopRecognition();
       stopReply();
     };
-  }, [recognitionAvailable, stopRecognition, stopReply, handleTranscript, handlePartialTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
+  }, [recognitionAvailable, stopRecognition, stopReply, handleTranscript, handlePartialTranscript, handleSpeechInput, handleNativeStatus, handleNativeError, handleBargeIn]);
 
   const startCall = async () => {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
@@ -167,6 +182,8 @@ export default function AIVoiceCall() {
       setLastReply('');
       setLastTranscript('');
       setPartialTranscript('');
+      setSpeechInputStatus('Microphone ready · speak now');
+      setSpeechLevel(0);
       setErrorMessage('');
       setCallState('listening');
       if (!startRecognition('auto')) {
@@ -227,7 +244,7 @@ export default function AIVoiceCall() {
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
           <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : isNativeApp ? 'Offline speech setup needed' : 'Browser voice input unavailable'}</span></div>
           <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : isNativeApp ? 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.' : 'This browser must support on-device speech recognition and have a local language pack. Remote transcription is never used; browser support and language coverage vary.'}</p>
-          {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only · not saved</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
+          {activeRef.current && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3" aria-live="polite"><div className="flex items-center justify-between gap-2"><p className="text-[11px] text-white/55">Live voice diagnostics · current call only</p><p className="text-[10px] text-white/45">{Math.round(speechLevel * 100)}% mic</p></div><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${Math.round(speechLevel * 100)}%` }} /></div><p className="text-xs text-emerald-100/80">{speechInputStatus}</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/75">You: {lastTranscript || partialTranscript}</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
         <div className="mt-auto w-full pt-8">
