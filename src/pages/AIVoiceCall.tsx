@@ -8,8 +8,7 @@ import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
-import { isBrowserLocalVoiceAvailable, isBrowserOnDeviceVoiceAvailable, startBrowserLocalRecognition, stopBrowserLocalRecognition, speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
-import { prepareKokoroTts, reloadKokoroTts, speakKokoroTts, stopKokoroTts, isKokoroLanguageSupported } from '@/lib/kokoroTts';
+import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition } from '@/lib/shrutiSpeech';
 
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -25,20 +24,12 @@ export default function AIVoiceCall() {
   const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
-  const [browserOnDeviceAvailable, setBrowserOnDeviceAvailable] = useState(false);
-  const [browserRemoteAllowed, setBrowserRemoteAllowed] = useState(false);
   const [voiceStage, setVoiceStage] = useState('Waiting for microphone…');
   const [micLevel, setMicLevel] = useState(0);
   const [aiRequestStatus, setAiRequestStatus] = useState('Not sent');
-  const [kokoroEnabled, setKokoroEnabled] = useState(() => { try { return localStorage.getItem('workly_kokoro_enabled') === 'true'; } catch { return false; } });
-  const [kokoroStatus, setKokoroStatus] = useState('not-ready');
-  const [kokoroMessage, setKokoroMessage] = useState('Optional on-device neural voice · about 295 MB first download');
-  const [shrutiEnabled, setShrutiEnabled] = useState(() => { try { return localStorage.getItem('workly_shruti_enabled') === 'true'; } catch { return false; } });
-  const [shrutiStatus, setShrutiStatus] = useState('not-ready');
-  const [shrutiMessage, setShrutiMessage] = useState('On-device Hindi, English and Hinglish speech-to-text · about 29.5 MB first download');
+  const shrutiEnabled = true;
   const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
   const activeRef = useRef(false);
-  const browserRemoteAllowedRef = useRef(false);
   const partialFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSubmittedTranscriptRef = useRef('');
   const conversationTurnRef = useRef(0);
@@ -46,8 +37,8 @@ export default function AIVoiceCall() {
   const showBadge = settings?.verification_enabled;
   const badgeColor = (settings?.verification_color || 'blue') as 'gold' | 'blue' | 'green' | 'silver';
   const bridge = getWorklyAndroidBridge();
-  const startRecognition = useCallback((language = 'auto') => {
-    if (shrutiEnabled) {
+  const startRecognition = useCallback((_language = 'auto') => {
+    {
       void startShrutiRecognition().catch((error) => window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: error instanceof Error ? error.message : 'Shruti microphone could not start.' } })));
       return true;
     }
@@ -57,32 +48,17 @@ export default function AIVoiceCall() {
     });
     return true;
   }, [bridge, shrutiEnabled]);
-  const stopRecognition = useCallback(() => {
-    if (shrutiEnabled) stopShrutiRecognition();
-    else if (bridge) bridge.stopOnDeviceVoiceRecognition?.();
-    else stopBrowserLocalRecognition();
-  }, [bridge, shrutiEnabled]);
+  const stopRecognition = useCallback(() => { stopShrutiRecognition(); }, []);
   const speakReply = useCallback(async (text: string, language: string) => {
     const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
-    if (kokoroEnabled && isKokoroLanguageSupported(resolvedLanguage)) {
-      try {
-        const spoken = await speakKokoroTts(text, resolvedLanguage);
-        if (spoken) return true;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Kokoro voice failed; using the phone voice instead.';
-        setKokoroStatus('error');
-        setKokoroMessage(message);
-      }
-    }
     if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
     return speakBrowserLocalReply(text, resolvedLanguage);
   }, [bridge, kokoroEnabled]);
   const stopReply = useCallback(() => {
-    stopKokoroTts();
     if (bridge) bridge.stopVoiceReply?.();
     else stopBrowserLocalReply();
   }, [bridge]);
-  const recognitionAvailable = useCallback(() => shrutiEnabled || (bridge ? !!bridge.isOnDeviceVoiceRecognitionAvailable?.() : isBrowserLocalVoiceAvailable()), [bridge, shrutiEnabled]);
+  const recognitionAvailable = useCallback(() => true, []);
 
   const endCall = useCallback(() => {
     activeRef.current = false;
@@ -207,70 +183,17 @@ export default function AIVoiceCall() {
   useEffect(() => {
     const handleShrutiStatus = (event: Event) => {
       const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
-      if (detail?.status) setShrutiStatus(detail.status);
-      if (detail?.status === 'downloading' && detail.total) setShrutiMessage('Downloading Shruti · ' + (detail.loaded / 1e6).toFixed(1) + ' / ' + (detail.total / 1e6).toFixed(1) + ' MB');
-      else if (detail?.status === 'ready') { setNativeAvailable(true); setShrutiMessage('Shruti is ready. Hindi, English and Hinglish speech is processed on this device.'); }
-      else if (detail?.status === 'listening') setShrutiMessage('Microphone is listening locally. Audio stays on this device.');
-      else if (detail?.status === 'transcribing') setShrutiMessage('Converting speech to text on this device…');
-      else if (detail?.status === 'error') setShrutiMessage(detail.message || 'Shruti could not start.');
+      if (detail?.status === 'ready') setNativeAvailable(true);
+      if (detail?.status === 'ready') setNativeAvailable(true);
     };
     window.addEventListener('workly-shruti-status', handleShrutiStatus);
-    const handleKokoroStatus = (event: Event) => {
-      const detail = (event as CustomEvent<{ status?: string; message?: string }>).detail;
-      if (detail?.status) setKokoroStatus(detail.status);
-      if (detail?.message) setKokoroMessage(detail.message);
-      if (detail?.status === 'ready') {
-        setKokoroEnabled(true);
-        try { localStorage.setItem('workly_kokoro_enabled', 'true'); } catch { /* storage may be disabled */ }
-      }
-    };
-    window.addEventListener('workly-kokoro-status', handleKokoroStatus);
-    return () => { window.removeEventListener('workly-kokoro-status', handleKokoroStatus); window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
+    return () => { window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
   }, []);
-
-  const enableShruti = async () => {
-    try {
-      setShrutiStatus('downloading');
-      setShrutiMessage('Downloading and verifying the 29.5 MB Shruti model. Keep this page open.');
-      await prepareShrutiRecognition();
-      setShrutiEnabled(true);
-      setNativeAvailable(true);
-      setShrutiStatus('ready');
-      setShrutiMessage('Shruti is ready. Hindi, English and Hinglish speech-to-text is on-device.');
-      try { localStorage.setItem('workly_shruti_enabled', 'true'); } catch { /* storage may be disabled */ }
-      toast.success('Shruti offline speech-to-text is ready.');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not load Shruti on this device.';
-      setShrutiStatus('error');
-      setShrutiMessage(message);
-      toast.error(message);
-    }
-  };
-
-  const enableKokoro = async () => {
-    try {
-      setKokoroStatus('downloading');
-      setKokoroMessage('Loading Kokoro-82M. The first download is about 295 MB; keep this page open.');
-      if (kokoroEnabled) await reloadKokoroTts();
-      else await prepareKokoroTts();
-      setKokoroEnabled(true);
-      setKokoroStatus('ready');
-      setKokoroMessage('Kokoro-82M is ready. Hindi and English replies can now use local neural speech.');
-      try { localStorage.setItem('workly_kokoro_enabled', 'true'); } catch { /* storage may be disabled */ }
-      toast.success('Kokoro voice is ready.');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Could not load Kokoro voice on this device.';
-      setKokoroStatus('error');
-      setKokoroMessage(message);
-      toast.error(message);
-    }
-  };
 
   useEffect(() => {
     // Warm browser speech voices before the first AI reply needs playback.
     if (!bridge && 'speechSynthesis' in window) window.speechSynthesis.getVoices();
     setNativeAvailable(bridge ? recognitionAvailable() : false);
-    setBrowserOnDeviceAvailable(!bridge && isBrowserOnDeviceVoiceAvailable());
     const handleSpeechStart = () => { if (activeRef.current) setVoiceStage('Speech detected by microphone'); };
     const handleMicLevel = (event: Event) => {
       if (!activeRef.current) return;
@@ -308,19 +231,11 @@ export default function AIVoiceCall() {
       toast.error('Speech recognition is not supported in this browser. Please use the latest Chrome or Edge.');
       return;
     }
-    if (!bridge && !shrutiEnabled) {
-      const accepted = window.confirm('Workly India will prefer on-device speech recognition. If your browser does not have a supported offline language pack, its speech service may process microphone audio to transcribe your words. Workly India does not record or store call audio. Continue?');
-      if (!accepted) return;
-      browserRemoteAllowedRef.current = true;
-      setBrowserRemoteAllowed(true);
-    }
     try {
-      // Shruti captures audio in the shared WebView page. The legacy native
-      // SpeechRecognizer path keeps its existing permission and microphone flow.
-      if (!bridge && !shrutiEnabled) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      // Load the offline model only after the user taps Start AI Call.
+      // The model is persisted in IndexedDB and reused on later visits.
+      try { await navigator.storage?.persist?.(); } catch { /* browser may deny persistent storage */ }
+      await prepareShrutiRecognition();
       activeRef.current = true;
       if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
       partialFinalizeTimerRef.current = null;
@@ -330,7 +245,7 @@ export default function AIVoiceCall() {
       setPartialTranscript('');
       setErrorMessage('');
       setCallState('listening');
-      setVoiceStage(shrutiEnabled ? 'Starting Shruti on-device microphone…' : bridge ? 'Starting on-device microphone…' : browserOnDeviceAvailable ? 'Starting browser on-device microphone…' : 'Starting browser speech service…');
+      setVoiceStage('Starting secure on-device microphone…');
       setMicLevel(0);
       setAiRequestStatus('Not sent');
       if (!startRecognition('auto')) {
@@ -388,33 +303,14 @@ export default function AIVoiceCall() {
           <p className="mt-2 text-xs text-white/80">Microphone / recognition: {voiceStage}</p>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${micLevel}%` }} /></div>
           <p className="mt-2 text-xs text-white/65">AI request: {aiRequestStatus}</p>
-          <p className="mt-1 text-[10px] text-white/40">{isNativeApp || !browserRemoteAllowed ? 'Only recognized speech text is sent to AI. Workly India does not save call audio.' : 'Your browser speech service may process microphone audio to create text. Workly India does not record or store call audio; only recognized text is sent to AI.'}</p>
+          <p className="mt-1 text-[10px] text-white/40">Only recognized speech text is sent to AI. Workly India does not save call audio.</p>
         </div>}
 
         {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
 
         <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
-          <p className="mt-2 text-sm text-white/70">Speak naturally in Hindi, English or Hinglish. When Shruti is enabled, speech is converted to text on this device.</p>
-        </div>
-
-        <div className="mt-5 w-full rounded-2xl border border-cyan-300/20 bg-cyan-400/[0.06] p-4 text-left">
-          <div className="flex items-center gap-2"><AudioLines className="h-5 w-5 text-cyan-200" /><p className="text-sm font-semibold">Shruti Offline Speech-to-Text</p><span className="ml-auto text-[10px] text-cyan-100/65">{shrutiEnabled ? "Enabled" : shrutiStatus === "downloading" ? "Loading" : "Optional"}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/60">{shrutiMessage}</p>
-          <p className="mt-1 text-[11px] leading-5 text-white/45">Hindi, English and Hinglish · first download about 29.5 MB · works offline after download. Shared by the website and Android app WebView. Microphone audio is processed locally; only recognized text is sent to AI.</p>
-          <Button onClick={enableShruti} disabled={shrutiStatus === "downloading" || shrutiStatus === "transcribing"} className="mt-3 h-11 w-full rounded-xl bg-cyan-700 text-sm font-semibold text-white hover:bg-cyan-600">
-            {shrutiEnabled ? "Reload Shruti model" : shrutiStatus === "downloading" ? "Downloading Shruti…" : "Download & enable Shruti (≈29.5 MB)"}
-          </Button>
-          {shrutiEnabled && <button type="button" onClick={() => { stopShrutiRecognition(); setShrutiEnabled(false); try { localStorage.setItem("workly_shruti_enabled", "false"); } catch { /* storage may be disabled */ } setShrutiMessage("Shruti is disabled. The existing speech recognizer will be used."); }} className="mt-2 min-h-11 w-full text-xs text-white/55 underline underline-offset-4">Use existing speech recognition</button>}
-        </div>
-        <div className="mt-5 w-full rounded-2xl border border-violet-300/20 bg-violet-400/[0.06] p-4 text-left">
-          <div className="flex items-center gap-2"><AudioLines className="h-5 w-5 text-violet-200" /><p className="text-sm font-semibold">Kokoro-82M Neural Voice</p><span className="ml-auto text-[10px] text-violet-100/65">{kokoroEnabled ? 'Enabled' : kokoroStatus === 'downloading' ? 'Loading' : 'Optional'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/60">{kokoroMessage}</p>
-          <p className="mt-1 text-[11px] leading-5 text-white/45">Runs on this device in the Android app and website. The model is downloaded only after you tap below; it is not included in the APK. Hindi and English are supported. Gujarati uses the existing voice.</p>
-          <Button onClick={enableKokoro} disabled={kokoroStatus === 'downloading' || kokoroStatus === 'synthesizing'} className="mt-3 h-11 w-full rounded-xl bg-violet-600 text-sm font-semibold text-white hover:bg-violet-500">
-            {kokoroEnabled ? 'Reload Kokoro voice' : kokoroStatus === 'downloading' ? 'Loading Kokoro model…' : 'Download & enable Kokoro (≈295 MB)'}
-          </Button>
-          {kokoroEnabled && <button type="button" onClick={() => { setKokoroEnabled(false); try { localStorage.setItem('workly_kokoro_enabled', 'false'); } catch { /* storage may be disabled */ } setKokoroMessage('Kokoro is disabled. The existing device voice will be used.'); }} className="mt-2 min-h-11 w-full text-xs text-white/55 underline underline-offset-4">Use existing voice instead</button>}
+          <p className="mt-2 text-sm text-white/70">Speak naturally. Speech is converted to text on this device.</p>
         </div>
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
@@ -430,7 +326,7 @@ export default function AIVoiceCall() {
             <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
           </div>
           {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>{isNativeApp ? 'Requires a compatible offline speech recognizer and downloaded language data, plus internet for AI replies. Language coverage and voices depend on your phone.' : browserOnDeviceAvailable ? 'The website prefers on-device speech recognition. If your browser has no local language pack, install it or allow the browser speech service when prompted.' : 'The website uses the browser speech service after you approve it. Microphone permission and browser speech-service support are required.'}</span></div>
+          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Shruti runs on this device. Internet is required only for AI replies; voice playback uses your existing phone/browser TTS.</span></div>
         </div>
       </section>
       
