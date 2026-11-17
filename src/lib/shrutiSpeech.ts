@@ -11,14 +11,11 @@ let media: MediaStream | null = null;
 let context: AudioContext | null = null;
 let processor: ScriptProcessorNode | null = null;
 let source: MediaStreamAudioSourceNode | null = null;
-let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 let chunks: Float32Array[] = [];
 let speechStartedAt = 0;
 let lastVoiceAt = 0;
 let transcribing = false;
 let active = false;
-let resolvePending: ((value: string) => void) | null = null;
-let rejectPending: ((error: Error) => void) | null = null;
 
 function emit(name: string, detail: Record<string, unknown>) {
   window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -36,17 +33,11 @@ function getWorker(): Worker {
       } else if (message.type === 'result') {
         const text = message.text.trim();
         emit('workly-shruti-status', { status: 'transcribed', language: message.language, ms: message.ms });
-        if (text) emit('workly-voice-transcript', { text, languageTag: message.language === 'hi' ? 'hi-IN' : message.language === 'en' ? 'en-IN' : 'und', source: 'shruti-on-device' });
+        if (active && text) emit('workly-voice-transcript', { text, languageTag: message.language === 'hi' ? 'hi-IN' : message.language === 'en' ? 'en-IN' : 'und', source: 'shruti-on-device' });
         transcribing = false;
-        if (resolvePending) resolvePending(text);
-        resolvePending = null;
-        rejectPending = null;
       } else if (message.type === 'error') {
         emit('workly-shruti-status', { status: 'error', message: message.message });
         transcribing = false;
-        if (rejectPending) rejectPending(new Error(message.message));
-        resolvePending = null;
-        rejectPending = null;
       }
     };
     worker.onerror = () => emit('workly-voice-error', { message: 'Shruti speech engine could not start in this browser.' });
@@ -161,8 +152,6 @@ export async function startShrutiRecognition(): Promise<boolean> {
 
 export function stopShrutiRecognition(): void {
   active = false;
-  if (silenceTimer) clearTimeout(silenceTimer);
-  silenceTimer = null;
   if (processor) { processor.onaudioprocess = null; processor.disconnect(); processor = null; }
   if (source) { source.disconnect(); source = null; }
   if (media) { media.getTracks().forEach((track) => track.stop()); media = null; }
@@ -171,7 +160,4 @@ export function stopShrutiRecognition(): void {
   speechStartedAt = 0;
   lastVoiceAt = 0;
   transcribing = false;
-  if (resolvePending) resolvePending('');
-  resolvePending = null;
-  rejectPending = null;
 }
