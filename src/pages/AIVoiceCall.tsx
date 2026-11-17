@@ -211,7 +211,10 @@ export default function AIVoiceCall() {
 
   const startCall = async () => {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
-    if (!recognitionAvailable()) {
+    // Native Android must be allowed to enter its permission flow first.
+    // Android will report a precise on-device recognizer error after permission
+    // is granted if the phone does not provide a compatible offline service.
+    if (!bridge && !recognitionAvailable()) {
       setNativeAvailable(false);
       toast.error('Speech recognition is not supported in this browser. Please use the latest Chrome or Edge.');
       return;
