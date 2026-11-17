@@ -1930,6 +1930,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     // after a no-match/timeout so the call can still work on those devices.
                     var retriedAfterInstalledModel = false
                     var retriedWithDeviceLanguage = false
+                    var activeRecognitionLanguageTag = Locale.getDefault().toLanguageTag()
                     fun retryWithDeviceLanguage(): Boolean {
                         if (languageTag != "auto" || retriedWithDeviceLanguage) return false
                         retriedWithDeviceLanguage = true
@@ -2074,7 +2075,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             if (text.isNotBlank()) {
                                 dispatchNativeEvent(
                                     "workly-voice-transcript",
-                                    JSONObject().put("text", text).put("languageTag", detectedTag.ifBlank { Locale.getDefault().toLanguageTag() }).toString()
+                                    JSONObject().put("text", text).put("languageTag", detectedTag.ifBlank { activeRecognitionLanguageTag.ifBlank { Locale.getDefault().toLanguageTag() } }).toString()
                                 )
                             } else if (!retryWithDeviceLanguage()) {
                                 dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech transcript was returned. Check the phone's offline speech language pack and try again.").toString())
@@ -2084,14 +2085,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         override fun onPartialResults(partialResults: Bundle?) {
                             val partialText = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                             if (partialText.isNotBlank()) {
-                                dispatchNativeEvent("workly-voice-partial-transcript", JSONObject().put("text", partialText).toString())
+                                dispatchNativeEvent("workly-voice-partial-transcript", JSONObject().put("text", partialText).put("languageTag", activeRecognitionLanguageTag).toString())
                             }
                         }
                         override fun onEvent(eventType: Int, params: Bundle?) {}
                         override fun onLanguageDetection(results: Bundle) {
                             if (Build.VERSION.SDK_INT >= 34) {
                                 val detectedTag = results.getString(SpeechRecognizer.DETECTED_LANGUAGE).orEmpty()
-                                if (detectedTag.isNotBlank()) voiceBargeInLanguage = detectedTag
+                                if (detectedTag.isNotBlank()) { activeRecognitionLanguageTag = detectedTag; voiceBargeInLanguage = detectedTag }
                             }
                         }
                     })
