@@ -73,6 +73,14 @@ export function isKokoroLanguageSupported(languageTag: string): boolean {
 
 /** Loads Kokoro only after an explicit user action; model weights are not part of the app bundle. */
 export async function prepareKokoroTts(): Promise<void> {
+  const Context = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Context) throw new Error("This browser does not support local audio playback.");
+  // Create/unlock Web Audio during the explicit user tap so later AI replies
+  // can play after the asynchronous model download has completed.
+  if (!audioContext || audioContext.state === "closed") {
+    audioContext = new Context({ sampleRate: 24000 });
+  }
+  if (audioContext.state === "suspended") await audioContext.resume();
   await getEngine();
 }
 
