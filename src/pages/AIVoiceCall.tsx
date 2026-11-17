@@ -216,14 +216,11 @@ export default function AIVoiceCall() {
       toast.error('Speech recognition is not supported in this browser. Please use the latest Chrome or Edge.');
       return;
     }
-    if (!bridge && !isBrowserOnDeviceVoiceAvailable()) {
-      const accepted = window.confirm('This browser does not support on-device speech recognition. To make website voice calls work, your browser speech service may process microphone audio. Workly India does not record or store the audio. Continue?');
+    if (!bridge) {
+      const accepted = window.confirm('Workly India will prefer on-device speech recognition. If your browser does not have a supported offline language pack, its speech service may process microphone audio to transcribe your words. Workly India does not record or store call audio. Continue?');
       if (!accepted) return;
       browserRemoteAllowedRef.current = true;
       setBrowserRemoteAllowed(true);
-    } else if (!bridge) {
-      browserRemoteAllowedRef.current = false;
-      setBrowserRemoteAllowed(false);
     }
     try {
       // The native Android SpeechRecognizer owns the microphone directly.
