@@ -99,6 +99,7 @@ class MainActivity : FragmentActivity() {
     private var voiceTts: TextToSpeech? = null
     private var voiceTtsReady = false
     private var voiceCallActive = false
+    @Volatile private var lastVoiceRmsDispatchMs = 0L
     @Volatile private var voiceTtsSpeaking = false
     @Volatile private var voiceBargeInLanguage = ""
     private var voiceBargeInJob: kotlinx.coroutines.Job? = null
@@ -1915,8 +1916,17 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     var retriedAfterInstalledModel = false
                     voiceRecognizer?.setRecognitionListener(object : RecognitionListener {
                         override fun onReadyForSpeech(params: Bundle?) { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").toString()) }
-                        override fun onBeginningOfSpeech() {}
-                        override fun onRmsChanged(rmsdB: Float) {}
+                        override fun onBeginningOfSpeech() {
+                            dispatchNativeEvent("workly-voice-speech-start", JSONObject().put("stage", "speech-start").toString())
+                        }
+                        override fun onRmsChanged(rmsdB: Float) {
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (now - lastVoiceRmsDispatchMs >= 250) {
+                                lastVoiceRmsDispatchMs = now
+                                val level = ((rmsdB + 2f) * 5f).toInt().coerceIn(0, 100)
+                                dispatchNativeEvent("workly-voice-mic-level", JSONObject().put("level", level).toString())
+                            }
+                        }
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "processing").toString()) }
                         override fun onError(error: Int) {
