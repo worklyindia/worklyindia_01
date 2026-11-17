@@ -1878,11 +1878,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
         @JavascriptInterface
         fun startOnDeviceVoiceRecognition(languageTag: String): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                !SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
-                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Offline speech recognition is not available. Enable or install an on-device speech recognition service and offline language data in Android settings. Workly will not upload microphone audio for transcription.").toString())
-                return false
-            }
             if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 // Native SpeechRecognizer does not trigger WebChromeClient's getUserMedia
                 // permission flow. Request RECORD_AUDIO explicitly, then start recognition
@@ -1898,6 +1893,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     }
                 }
                 return true
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                !SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
+                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Microphone permission is available, but this phone does not provide a supported on-device speech recognizer. Enable or install an offline speech recognition service and language data in Android settings. Workly will not upload microphone audio for transcription.").toString())
+                return false
             }
             runOnUiThread {
                 runCatching {
@@ -1930,6 +1930,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     // after a no-match/timeout so the call can still work on those devices.
                     var retriedAfterInstalledModel = false
                     var retriedWithDeviceLanguage = false
+                    var activeRecognitionLanguageTag = Locale.getDefault().toLanguageTag()
                     fun retryWithDeviceLanguage(): Boolean {
                         if (languageTag != "auto" || retriedWithDeviceLanguage) return false
                         retriedWithDeviceLanguage = true
@@ -2074,7 +2075,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             if (text.isNotBlank()) {
                                 dispatchNativeEvent(
                                     "workly-voice-transcript",
-                                    JSONObject().put("text", text).put("languageTag", detectedTag.ifBlank { Locale.getDefault().toLanguageTag() }).toString()
+                                    JSONObject().put("text", text).put("languageTag", detectedTag.ifBlank { activeRecognitionLanguageTag.ifBlank { Locale.getDefault().toLanguageTag() } }).toString()
                                 )
                             } else if (!retryWithDeviceLanguage()) {
                                 dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech transcript was returned. Check the phone's offline speech language pack and try again.").toString())
@@ -2084,14 +2085,14 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         override fun onPartialResults(partialResults: Bundle?) {
                             val partialText = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                             if (partialText.isNotBlank()) {
-                                dispatchNativeEvent("workly-voice-partial-transcript", JSONObject().put("text", partialText).toString())
+                                dispatchNativeEvent("workly-voice-partial-transcript", JSONObject().put("text", partialText).put("languageTag", activeRecognitionLanguageTag).toString())
                             }
                         }
                         override fun onEvent(eventType: Int, params: Bundle?) {}
                         override fun onLanguageDetection(results: Bundle) {
                             if (Build.VERSION.SDK_INT >= 34) {
                                 val detectedTag = results.getString(SpeechRecognizer.DETECTED_LANGUAGE).orEmpty()
-                                if (detectedTag.isNotBlank()) voiceBargeInLanguage = detectedTag
+                                if (detectedTag.isNotBlank()) { activeRecognitionLanguageTag = detectedTag; voiceBargeInLanguage = detectedTag }
                             }
                         }
                     })
@@ -2131,19 +2132,27 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 }
                 if (!voiceTtsReady) return@runOnUiThread
                 voiceCallActive = true
-                val locale = Locale.forLanguageTag(languageTag)
-                val availability = voiceTts?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-                if (availability < TextToSpeech.LANG_AVAILABLE) {
-                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Selected language voice is not installed on this phone.").toString())
+                val requestedTag = languageTag.takeIf { it.isNotBlank() && it != "und" && it != "auto" }
+                    ?: Locale.getDefault().toLanguageTag()
+                val requestedLocale = Locale.forLanguageTag(requestedTag)
+                val tts = voiceTts ?: return@runOnUiThread
+                val availableVoices = tts.voices.orEmpty()
+                // Prefer an exact locale voice, then any installed voice for the
+                // same language. Never select an unrelated default voice.
+                val matchingVoice = availableVoices.firstOrNull {
+                    it.locale.toLanguageTag().equals(requestedTag, ignoreCase = true)
+                } ?: availableVoices.firstOrNull {
+                    it.locale.language.equals(requestedLocale.language, ignoreCase = true)
+                }
+                val languageResult = tts.setLanguage(requestedLocale)
+                if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "The " + requestedLocale.displayLanguage + " text-to-speech voice is not installed or supported on this phone. Install its speech voice in Android Text-to-speech settings and try again.").toString())
                     return@runOnUiThread
                 }
-                // Prefer a female-sounding installed voice when the device exposes one;
-                // otherwise keep the system's default voice for this language.
-                val preferredVoice = voiceTts?.voices?.firstOrNull {
-                    it.locale.language == locale.language &&
-                        (it.name.contains("female", ignoreCase = true) || it.name.contains("woman", ignoreCase = true))
+                if (matchingVoice != null) {
+                    runCatching { tts.voice = matchingVoice }
                 }
-                if (preferredVoice != null) voiceTts?.voice = preferredVoice else voiceTts?.language = locale
                 voiceTts?.setSpeechRate(0.96f)
                 voiceTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {

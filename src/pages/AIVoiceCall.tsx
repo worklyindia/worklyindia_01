@@ -104,7 +104,7 @@ export default function AIVoiceCall() {
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
-      const spoken = speakReply(reply, detail?.languageTag || 'und');
+      const spoken = speakReply(reply, data?.languageTag || detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
       setVoiceStage('TTS playback started');
@@ -122,7 +122,7 @@ export default function AIVoiceCall() {
 
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
-    const detail = (event as CustomEvent<{ text?: string }>).detail;
+    const detail = (event as CustomEvent<{ text?: string; languageTag?: string }>).detail;
     const text = detail?.text?.trim();
     if (!text || text === lastSubmittedTranscriptRef.current) return;
     setPartialTranscript(text);
@@ -130,7 +130,7 @@ export default function AIVoiceCall() {
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
     partialFinalizeTimerRef.current = setTimeout(() => {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
-      window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: navigator.language || 'und', source: 'partial-fallback' } }));
+      window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: detail?.languageTag || 'und', source: 'partial-fallback' } }));
     }, 1400);
   }, []);
 
@@ -211,7 +211,10 @@ export default function AIVoiceCall() {
 
   const startCall = async () => {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
-    if (!recognitionAvailable()) {
+    // Native Android must be allowed to enter its permission flow first.
+    // Android will report a precise on-device recognizer error after permission
+    // is granted if the phone does not provide a compatible offline service.
+    if (!bridge && !recognitionAvailable()) {
       setNativeAvailable(false);
       toast.error('Speech recognition is not supported in this browser. Please use the latest Chrome or Edge.');
       return;

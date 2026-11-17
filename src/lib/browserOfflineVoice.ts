@@ -123,15 +123,14 @@ export function speakBrowserLocalReply(text: string, language = 'en-US'): boolea
   const voices = window.speechSynthesis.getVoices();
   const normalizedLanguage = language.toLowerCase();
   const prefix = normalizedLanguage.split('-')[0];
+  // Never force a mismatched default voice (for example English) to read
+  // Hindi/Gujarati text. Keep the requested language tag so the browser TTS
+  // engine can choose its own compatible voice when the voice list is empty.
   const voice = voices.find((item) => item.lang.toLowerCase() === normalizedLanguage)
-    || voices.find((item) => item.lang.toLowerCase().startsWith(prefix + '-'))
-    || voices[0];
+    || voices.find((item) => item.lang.toLowerCase().startsWith(prefix + '-'));
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = language;
-  if (voice) {
-    utterance.voice = voice;
-    utterance.lang = voice.lang;
-  }
+  if (voice) utterance.voice = voice;
   utterance.onstart = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
   utterance.onend = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
   utterance.onerror = () => window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: 'Browser text-to-speech is unavailable for this reply.' } }));
