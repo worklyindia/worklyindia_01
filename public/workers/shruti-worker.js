@@ -14,6 +14,55 @@ let engine = null;
 let ready = false;
 
 function send(message) { self.postMessage(message); }
+
+const DB_NAME = 'workly-voice-models';
+const DB_STORE = 'models';
+function openModelDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(DB_STORE)) request.result.createObjectStore(DB_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Could not open model storage.'));
+  });
+}
+async function readPersistentModel() {
+  try {
+    const db = await openModelDb();
+    const value = await new Promise((resolve, reject) => {
+      const request = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(CACHE_NAME);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    if (!value) return null;
+    const bytes = new Uint8Array(value);
+    if (validModel(bytes) && await sha256Hex(bytes) === MODEL_SHA256) return bytes;
+    await deletePersistentModel();
+  } catch { /* fall through to Cache API/network */ }
+  return null;
+}
+async function writePersistentModel(bytes) {
+  const db = await openModelDb();
+  await new Promise((resolve, reject) => {
+    const request = db.transaction(DB_STORE, 'readwrite').objectStore(DB_STORE).put(bytes.buffer.slice(0), CACHE_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+}
+async function deletePersistentModel() {
+  try {
+    const db = await openModelDb();
+    await new Promise((resolve, reject) => {
+      const request = db.transaction(DB_STORE, 'readwrite').objectStore(DB_STORE).delete(CACHE_NAME);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+  } catch { /* ignore unavailable storage */ }
+}
 function validModel(bytes) {
   if (!bytes || bytes.length < 1024) return false;
   return MAGIC.every((byte, index) => bytes[index] === byte);
@@ -23,14 +72,17 @@ async function sha256Hex(bytes) {
   return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 async function loadModel() {
+  const persistent = await readPersistentModel();
+  if (persistent) return { bytes: persistent, source: 'indexeddb' };
   let cache = null;
   try { cache = await caches.open(CACHE_NAME); } catch { /* storage may be unavailable */ }
   if (cache) {
     const cached = await cache.match(MODEL_URL);
     if (cached) {
       const bytes = new Uint8Array(await cached.arrayBuffer());
-      if (validModel(bytes) && await sha256Hex(bytes) === MODEL_SHA256) return { bytes, source: 'cache' };
+      if (validModel(bytes) && await sha256Hex(bytes) === MODEL_SHA256) { try { await writePersistentModel(bytes); } catch { /* Cache API remains usable */ } return { bytes, source: 'cache' }; }
       await cache.delete(MODEL_URL);
+      await deletePersistentModel();
     }
   }
   const response = await fetch(MODEL_URL, { mode: 'cors', credentials: 'omit' });
@@ -54,6 +106,7 @@ async function loadModel() {
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   if (!validModel(bytes)) throw new Error('Downloaded file is not a valid Shruti model.');
   if (await sha256Hex(bytes) !== MODEL_SHA256) throw new Error('Shruti model checksum verification failed.');
+  try { await writePersistentModel(bytes); } catch { /* fall back to Cache API */ }
   if (cache) {
     try { await cache.put(MODEL_URL, new Response(bytes, { headers: { 'content-type': 'application/octet-stream' } })); } catch { /* model works for this session */ }
   }
