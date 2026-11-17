@@ -1,5 +1,5 @@
-type LocalRecognition = {
-  processLocally: boolean;
+type BrowserRecognition = {
+  processLocally?: boolean;
   lang: string;
   continuous: boolean;
   interimResults: boolean;
@@ -10,35 +10,45 @@ type LocalRecognition = {
   stop(): void;
 };
 
-type LocalSpeechRecognitionConstructor = {
-  new (): LocalRecognition;
-  prototype: LocalRecognition;
+type BrowserRecognitionConstructor = {
+  new (): BrowserRecognition;
+  prototype: BrowserRecognition;
   available?: (options: { langs: string[]; processLocally: true }) => Promise<string>;
   install?: (options: { langs: string[]; processLocally: true }) => Promise<boolean>;
 };
 
 declare global {
   interface Window {
-    SpeechRecognition?: LocalSpeechRecognitionConstructor;
-    webkitSpeechRecognition?: LocalSpeechRecognitionConstructor;
+    SpeechRecognition?: BrowserRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserRecognitionConstructor;
   }
 }
 
-let recognition: LocalRecognition | null = null;
-let speaking = false;
+let recognition: BrowserRecognition | null = null;
 
+const getRecognitionConstructor = () =>
+  typeof window === 'undefined' ? undefined : window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/** General browser speech recognition support (local or browser-provided service). */
 export function isBrowserLocalVoiceAvailable(): boolean {
-  if (typeof window === 'undefined') return false;
-  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
+  return !!getRecognitionConstructor();
+}
+
+/** True only when this browser exposes the experimental on-device recognition API. */
+export function isBrowserOnDeviceVoiceAvailable(): boolean {
+  const Ctor = getRecognitionConstructor();
   return !!Ctor && 'processLocally' in Ctor.prototype && !!Ctor.available;
 }
 
-export async function startBrowserLocalRecognition(language = 'en-US'): Promise<boolean> {
-  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Ctor || !('processLocally' in Ctor.prototype) || !Ctor.available) return false;
+export async function startBrowserLocalRecognition(language = 'en-US', allowBrowserService = false): Promise<boolean> {
+  const Ctor = getRecognitionConstructor();
+  if (!Ctor) throw new Error('Speech recognition is not supported in this browser. Please use the latest Chrome or Edge.');
 
   const lang = language || 'en-US';
-  {
+  const supportsLocal = 'processLocally' in Ctor.prototype && !!Ctor.available;
+  let useLocal = supportsLocal;
+
+  if (supportsLocal && Ctor.available) {
     const status = await Ctor.available({ langs: [lang], processLocally: true });
     if (status !== 'available') {
       if ((status === 'downloadable' || status === 'downloading') && Ctor.install) {
@@ -46,36 +56,55 @@ export async function startBrowserLocalRecognition(language = 'en-US'): Promise<
         if (!installed) throw new Error('Offline language pack could not be installed. Check internet and try again.');
         throw new Error('Offline language pack installed. Tap Start AI Call again.');
       }
-      throw new Error(`On-device speech recognition is unavailable for ${lang} in this browser.`);
+      useLocal = false;
     }
+  }
+
+  if (!useLocal && !allowBrowserService) {
+    throw new Error('On-device speech recognition is unavailable. Allow browser speech recognition to continue, or use a browser with an installed offline language pack.');
   }
 
   stopBrowserLocalRecognition();
   const next = new Ctor();
-  next.processLocally = true;
+  if ('processLocally' in Ctor.prototype) next.processLocally = useLocal;
   next.lang = lang;
   next.continuous = false;
-  next.interimResults = false;
+  next.interimResults = true;
+  let receivedSpeechResult = false;
   next.onresult = (event) => {
-    const text = event.results?.[event.resultIndex ?? 0]?.[0]?.transcript?.trim();
-    if (text) {
-      window.dispatchEvent(new CustomEvent('workly-voice-transcript', {
-        detail: { text, languageTag: lang },
+    const resultIndex = event.resultIndex ?? 0;
+    for (let index = resultIndex; index < (event.results?.length ?? 0); index += 1) {
+      const result = event.results[index];
+      receivedSpeechResult = true;
+      const text = result?.[0]?.transcript?.trim();
+      if (!text) continue;
+      window.dispatchEvent(new CustomEvent(result.isFinal ? 'workly-voice-transcript' : 'workly-voice-partial-transcript', {
+        detail: { text, languageTag: lang, source: useLocal ? 'browser-on-device' : 'browser-speech-service' },
       }));
     }
   };
   next.onerror = (event) => {
-    window.dispatchEvent(new CustomEvent('workly-voice-error', {
-      detail: { message: event.error === 'not-allowed' ? 'Microphone permission was denied.' : `On-device recognition error: ${event.error || 'unknown'}` },
-    }));
+    const message = event.error === 'not-allowed'
+      ? 'Microphone permission was denied. Allow microphone access for this website.'
+      : event.error === 'service-not-allowed'
+        ? 'The browser speech service is blocked. Check browser permissions or use on-device speech recognition.'
+        : `Browser speech recognition error: ${event.error || 'unknown'}`;
+    window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message } }));
   };
   next.onend = () => {
     if (recognition === next) recognition = null;
-    window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
+    window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: receivedSpeechResult ? 'recognition-ended' : 'finished' } }));
   };
   recognition = next;
-  next.start();
-  window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'listening' } }));
+  try {
+    next.start();
+  } catch (error) {
+    recognition = null;
+    throw error;
+  }
+  window.dispatchEvent(new CustomEvent('workly-voice-status', {
+    detail: { status: 'listening', mode: useLocal ? 'on-device' : 'browser-service' },
+  }));
   return true;
 }
 
@@ -89,33 +118,27 @@ export function stopBrowserLocalRecognition(): void {
 }
 
 export function speakBrowserLocalReply(text: string, language = 'en-US'): boolean {
-  if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return false;
+  if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return false;
   window.speechSynthesis.cancel();
   const voices = window.speechSynthesis.getVoices();
-  const prefix = language.toLowerCase().split('-')[0];
-  const localVoice = voices.find((voice) => voice.localService && voice.lang.toLowerCase() === language.toLowerCase())
-    || voices.find((voice) => voice.localService && voice.lang.toLowerCase().startsWith(prefix + '-'));
-  if (!localVoice) return false;
+  const normalizedLanguage = language.toLowerCase();
+  const prefix = normalizedLanguage.split('-')[0];
+  const voice = voices.find((item) => item.lang.toLowerCase() === normalizedLanguage)
+    || voices.find((item) => item.lang.toLowerCase().startsWith(prefix + '-'))
+    || voices[0];
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.voice = localVoice;
-  utterance.lang = localVoice.lang;
-  utterance.onstart = () => {
-    speaking = true;
-    window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
-  };
-  utterance.onend = () => {
-    speaking = false;
-    window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
-  };
-  utterance.onerror = () => {
-    speaking = false;
-    window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: 'Local text-to-speech is unavailable for this language.' } }));
-  };
+  utterance.lang = language;
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
+  }
+  utterance.onstart = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
+  utterance.onend = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
+  utterance.onerror = () => window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: 'Browser text-to-speech is unavailable for this reply.' } }));
   window.speechSynthesis.speak(utterance);
   return true;
 }
 
 export function stopBrowserLocalReply(): void {
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  speaking = false;
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
 }

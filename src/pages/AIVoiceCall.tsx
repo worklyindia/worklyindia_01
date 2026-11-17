@@ -8,7 +8,7 @@ import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
-import { isBrowserLocalVoiceAvailable, startBrowserLocalRecognition, stopBrowserLocalRecognition, speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
+import { isBrowserLocalVoiceAvailable, isBrowserOnDeviceVoiceAvailable, startBrowserLocalRecognition, stopBrowserLocalRecognition, speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
@@ -23,11 +23,14 @@ export default function AIVoiceCall() {
   const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
+  const [browserOnDeviceAvailable, setBrowserOnDeviceAvailable] = useState(false);
+  const [browserRemoteAllowed, setBrowserRemoteAllowed] = useState(false);
   const [voiceStage, setVoiceStage] = useState('Waiting for microphone…');
   const [micLevel, setMicLevel] = useState(0);
   const [aiRequestStatus, setAiRequestStatus] = useState('Not sent');
   const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
   const activeRef = useRef(false);
+  const browserRemoteAllowedRef = useRef(false);
   const partialFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSubmittedTranscriptRef = useRef('');
   const conversationTurnRef = useRef(0);
@@ -37,7 +40,7 @@ export default function AIVoiceCall() {
   const bridge = getWorklyAndroidBridge();
   const startRecognition = useCallback((language = 'auto') => {
     if (bridge) return bridge.startOnDeviceVoiceRecognition?.(language) ?? false;
-    void startBrowserLocalRecognition(navigator.language || 'en-US').catch((error) => {
+    void startBrowserLocalRecognition(navigator.language || 'en-US', browserRemoteAllowedRef.current).catch((error) => {
       window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: error instanceof Error ? error.message : 'Local browser speech recognition failed.' } }));
     });
     return true;
@@ -98,7 +101,7 @@ export default function AIVoiceCall() {
       const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
       if (!reply) throw new Error('AI did not return a voice response.');
       setAiRequestStatus('Reply received');
-      setVoiceStage('AI reply received; starting phone TTS…');
+      setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
       const spoken = speakReply(reply, detail?.languageTag || 'und');
@@ -177,7 +180,8 @@ export default function AIVoiceCall() {
   }, []);
 
   useEffect(() => {
-    setNativeAvailable(recognitionAvailable());
+    setNativeAvailable(bridge ? recognitionAvailable() : false);
+    setBrowserOnDeviceAvailable(!bridge && isBrowserOnDeviceVoiceAvailable());
     const handleSpeechStart = () => { if (activeRef.current) setVoiceStage('Speech detected by microphone'); };
     const handleMicLevel = (event: Event) => {
       if (!activeRef.current) return;
@@ -203,14 +207,20 @@ export default function AIVoiceCall() {
       stopRecognition();
       stopReply();
     };
-  }, [recognitionAvailable, stopRecognition, stopReply, handleTranscript, handlePartialTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
+  }, [bridge, recognitionAvailable, stopRecognition, stopReply, handleTranscript, handlePartialTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
 
   const startCall = async () => {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
     if (!recognitionAvailable()) {
       setNativeAvailable(false);
-      toast.error('Secure on-device speech recognition is not available on this phone. Audio will not be sent to a speech service.');
+      toast.error('Speech recognition is not supported in this browser. Please use the latest Chrome or Edge.');
       return;
+    }
+    if (!bridge) {
+      const accepted = window.confirm('Workly India will prefer on-device speech recognition. If your browser does not have a supported offline language pack, its speech service may process microphone audio to transcribe your words. Workly India does not record or store call audio. Continue?');
+      if (!accepted) return;
+      browserRemoteAllowedRef.current = true;
+      setBrowserRemoteAllowed(true);
     }
     try {
       // The native Android SpeechRecognizer owns the microphone directly.
@@ -230,13 +240,13 @@ export default function AIVoiceCall() {
       setPartialTranscript('');
       setErrorMessage('');
       setCallState('listening');
-      setVoiceStage('Starting on-device microphone…');
+      setVoiceStage(bridge ? 'Starting on-device microphone…' : browserOnDeviceAvailable ? 'Starting browser on-device microphone…' : 'Starting browser speech service…');
       setMicLevel(0);
       setAiRequestStatus('Not sent');
       if (!startRecognition('auto')) {
         activeRef.current = false;
         setVoiceStage('Could not start speech recognition');
-        setErrorMessage('Could not start on-device speech recognition. Check microphone permission and the offline speech service, then try again.');
+        setErrorMessage('Could not start speech recognition. Check microphone permission and browser speech settings, then try again.');
         setCallState('error');
         toast.error('Could not start on-device speech recognition.');
       }
@@ -288,7 +298,7 @@ export default function AIVoiceCall() {
           <p className="mt-2 text-xs text-white/80">Microphone / recognition: {voiceStage}</p>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${micLevel}%` }} /></div>
           <p className="mt-2 text-xs text-white/65">AI request: {aiRequestStatus}</p>
-          <p className="mt-1 text-[10px] text-white/40">Only speech text is sent to AI. Audio is not saved or uploaded by this call.</p>
+          <p className="mt-1 text-[10px] text-white/40">{isNativeApp || !browserRemoteAllowed ? 'Only recognized speech text is sent to AI. Workly India does not save call audio.' : 'Your browser speech service may process microphone audio to create text. Workly India does not record or store call audio; only recognized text is sent to AI.'}</p>
         </div>}
 
         {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
@@ -299,8 +309,8 @@ export default function AIVoiceCall() {
         </div>
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
-          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : isNativeApp ? 'Offline speech setup needed' : 'Browser voice input unavailable'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : isNativeApp ? 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.' : 'This browser must support on-device speech recognition and have a local language pack. Remote transcription is never used; browser support and language coverage vary.'}</p>
+          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Voice privacy</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : isNativeApp ? 'Offline speech setup needed' : browserOnDeviceAvailable ? 'Browser local speech available' : 'Browser speech service'}</span></div>
+          <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : isNativeApp ? 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.' : browserOnDeviceAvailable ? 'This browser supports on-device recognition when the selected language pack is installed. If unavailable, install the pack or allow browser speech service as an alternative. Workly India does not record or store call audio.' : 'Website voice calls use your browser speech-recognition service to transcribe speech. Depending on the browser, microphone audio may be processed by that browser provider. Workly India does not record or store call audio; recognized text is sent to the AI provider for replies.'}</p>
           {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only · not saved</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
@@ -311,7 +321,7 @@ export default function AIVoiceCall() {
             <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
           </div>
           {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>{isNativeApp ? 'Requires a compatible offline speech recognizer and downloaded language data, plus internet for AI replies. Language coverage and voices depend on your phone. No paid voice API is called by this feature.' : 'Website voice calls require browser support for on-device speech recognition. This browser does not currently provide it; remote audio transcription is disabled for privacy.'}</span></div>
+          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>{isNativeApp ? 'Requires a compatible offline speech recognizer and downloaded language data, plus internet for AI replies. Language coverage and voices depend on your phone.' : browserOnDeviceAvailable ? 'The website prefers on-device speech recognition. If your browser has no local language pack, install it or allow the browser speech service when prompted.' : 'The website uses the browser speech service after you approve it. Microphone permission and browser speech-service support are required.'}</span></div>
         </div>
       </section>
       
