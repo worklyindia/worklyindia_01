@@ -1945,13 +1945,58 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                                         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                                     }
                                 } else intent
-                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "downloading-language-model").put("message", "Requesting offline speech language data…").toString())
+                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "checking-language-model").put("message", "Checking offline language pack status…").toString())
                                 runCatching {
-                                    voiceRecognizer?.triggerModelDownload(downloadIntent)
-                                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android has been asked to download the offline language model. Keep the phone online, wait for the download to finish, then tap Start AI Call again.").put("code", error).toString())
-                                    stopOnDeviceVoiceRecognition()
-                                }.onFailure { downloadFailure ->
-                                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", downloadFailure.message ?: "Could not request the offline language download.").toString())
+                                    val recognizer = voiceRecognizer
+                                    if (recognizer == null) {
+                                        dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Speech recognizer is unavailable. Please try again.").toString())
+                                        stopOnDeviceVoiceRecognition()
+                                    } else {
+                                        // Check installed and already-scheduled models before requesting another download.
+                                        // This prevents Android's large download confirmation from appearing repeatedly.
+                                        recognizer.checkRecognitionSupport(
+                                            downloadIntent,
+                                            mainExecutor,
+                                            object : android.speech.RecognitionSupportCallback {
+                                                override fun onSupportResult(support: android.speech.RecognitionSupport) {
+                                                    val requestedTag = downloadIntent.getStringExtra(RecognizerIntent.EXTRA_LANGUAGE)
+                                                        ?: Locale.getDefault().toLanguageTag()
+                                                    fun containsLanguage(languages: List<String>): Boolean =
+                                                        languages.any { it.equals(requestedTag, ignoreCase = true) ||
+                                                            it.substringBefore('-').equals(requestedTag.substringBefore('-'), ignoreCase = true) }
+                                                    when {
+                                                        containsLanguage(support.installedOnDeviceLanguages) -> {
+                                                            dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "language-model-ready").put("message", "Offline language pack is already installed. Tap Start AI Call again.").toString())
+                                                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "The offline language pack is installed. Please start the AI call again.").toString())
+                                                        }
+                                                        containsLanguage(support.pendingOnDeviceLanguages) -> {
+                                                            dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "language-model-pending").put("message", "Offline language download is already pending. Keep the phone online; Workly will not request it again.").toString())
+                                                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "The offline language download is already pending. Wait for Android to finish it, then start the AI call again.").toString())
+                                                        }
+                                                        containsLanguage(support.supportedOnDeviceLanguages) -> {
+                                                            dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "downloading-language-model").put("message", "Requesting offline speech language data…").toString())
+                                                            runCatching {
+                                                                recognizer.triggerModelDownload(downloadIntent)
+                                                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android has been asked to download the offline language model. Keep the phone online. Once the download finishes, start the AI call again.").put("code", error).toString())
+                                                            }.onFailure { downloadFailure ->
+                                                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", downloadFailure.message ?: "Could not request the offline language download.").toString())
+                                                            }
+                                                        }
+                                                        else -> {
+                                                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "This offline speech service does not list the requested language pack as available. Check Android speech recognition settings.").put("code", error).toString())
+                                                        }
+                                                    }
+                                                    stopOnDeviceVoiceRecognition()
+                                                }
+                                                override fun onError(checkError: Int) {
+                                                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Could not check offline language-pack status (code $checkError). No duplicate download was requested.").put("code", checkError).toString())
+                                                    stopOnDeviceVoiceRecognition()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }.onFailure { checkFailure ->
+                                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", checkFailure.message ?: "Could not check offline language-pack status.").toString())
                                     stopOnDeviceVoiceRecognition()
                                 }
                             } else {
