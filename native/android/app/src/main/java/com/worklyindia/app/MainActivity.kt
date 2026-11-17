@@ -2103,6 +2103,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         startVoiceBargeInMonitor()
                     }
                     override fun onDone(utteranceId: String?) {
+                        // stopVoiceReply() sets this false before stopping TTS; ignore that
+                        // completion callback so it cannot race the barge-in recognizer restart.
+                        if (!voiceTtsSpeaking) return
                         voiceTtsSpeaking = false
                         voiceCallActive = false
                         stopVoiceBargeInMonitor()
