@@ -29,7 +29,7 @@ function emit(name: string, detail: Record<string, unknown>) {
  * language. Hindi and Indian English continue to use the smaller Shruti model.
  */
 function preferredEngine(): RecognitionEngine {
-  const languages = [...(navigator.languages || []), navigator.language]
+  const languages = [...(navigator.languages || []), navigator.language, document.documentElement.lang]
     .filter(Boolean)
     .map((language) => language.toLowerCase());
   return languages.some((language) => language === 'gu' || language.startsWith('gu-'))
