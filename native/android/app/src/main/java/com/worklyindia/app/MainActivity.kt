@@ -1900,6 +1900,15 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 return false
             }
             runOnUiThread {
+                // Initialize TTS while the user is speaking, not after the AI reply arrives.
+                if (voiceTts == null) {
+                    voiceTts = TextToSpeech(this@MainActivity) { status ->
+                        voiceTtsReady = status == TextToSpeech.SUCCESS
+                        if (!voiceTtsReady) {
+                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Text-to-speech is unavailable.").toString())
+                        }
+                    }
+                }
                 runCatching {
                     voiceRecognizer?.destroy()
                     voiceRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this@MainActivity)
@@ -2158,7 +2167,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     override fun onStart(utteranceId: String?) {
                         voiceTtsSpeaking = true
                         dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "speaking").toString())
-                        startVoiceBargeInMonitor()
+                        // Ignore ambient/background voices while AI is speaking.
+                        // An always-open mic monitor can mistake TV or nearby speech for barge-in.
                     }
                     override fun onDone(utteranceId: String?) {
                         // stopVoiceReply() sets this false before stopping TTS; ignore that
