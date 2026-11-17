@@ -1925,8 +1925,29 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, fallbackTag)
                         }
                     }
-                    // Avoid looping forever if the provider reports an installed model but still rejects it.
+                    // Some OEM speech services accept Android's auto-language mode but never
+                    // return a transcript for it. Retry once with the phone's configured language
+                    // after a no-match/timeout so the call can still work on those devices.
                     var retriedAfterInstalledModel = false
+                    var retriedWithDeviceLanguage = false
+                    fun retryWithDeviceLanguage(): Boolean {
+                        if (languageTag != "auto" || retriedWithDeviceLanguage) return false
+                        retriedWithDeviceLanguage = true
+                        val fallbackTag = Locale.getDefault().toLanguageTag().ifBlank { "en-IN" }
+                        val fallbackIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, fallbackTag)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, fallbackTag)
+                            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                        }
+                        return runCatching {
+                            dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").put("message", "Retrying speech recognition in $fallbackTag…").toString())
+                            voiceRecognizer?.startListening(fallbackIntent)
+                            true
+                        }.getOrElse { false }
+                    }
                     voiceRecognizer?.setRecognitionListener(object : RecognitionListener {
                         override fun onReadyForSpeech(params: Bundle?) { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").toString()) }
                         override fun onBeginningOfSpeech() {
@@ -1943,6 +1964,9 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                         override fun onBufferReceived(buffer: ByteArray?) {}
                         override fun onEndOfSpeech() { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "processing").toString()) }
                         override fun onError(error: Int) {
+                            if ((error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
+                                    error == SpeechRecognizer.ERROR_NO_MATCH) &&
+                                retryWithDeviceLanguage()) return
                             val reason = when (error) {
                                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech service timed out. Check your phone's offline speech service."
                                 SpeechRecognizer.ERROR_NETWORK -> "Speech service network error. Offline recognition must be enabled."
@@ -2052,8 +2076,10 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                                     "workly-voice-transcript",
                                     JSONObject().put("text", text).put("languageTag", detectedTag.ifBlank { Locale.getDefault().toLanguageTag() }).toString()
                                 )
-                            } else dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech was detected. Please try again.").toString())
-                            stopOnDeviceVoiceRecognition()
+                            } else if (!retryWithDeviceLanguage()) {
+                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech transcript was returned. Check the phone's offline speech language pack and try again.").toString())
+                                stopOnDeviceVoiceRecognition()
+                            }
                         }
                         override fun onPartialResults(partialResults: Bundle?) {
                             val partialText = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
