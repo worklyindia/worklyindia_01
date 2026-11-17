@@ -5,7 +5,7 @@
 'use strict';
 importScripts('https://cdn.jsdelivr.net/gh/udgamlabs/shruti@main/examples/browser/needle/needle.js');
 
-const MODEL_URL = 'https://huggingface.co/udgamlabs/Shruti/resolve/main/shruti.cact';
+const MODEL_URL = 'https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/shruti/shruti.cact';
 const MODEL_SHA256 = 'b189e954aaed4a9fd41acbad3ac05e486381e96325b22a4c695b9ea5153d7065';
 const MODEL_BYTES = 29546527;
 const CACHE_NAME = 'workly-shruti-hi-v1';
