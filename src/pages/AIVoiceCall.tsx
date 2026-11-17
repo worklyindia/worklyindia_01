@@ -22,6 +22,8 @@ export default function AIVoiceCall() {
   const { user } = useAuth();
   const { data: settings } = useAIChatSettings();
   const [callState, setCallState] = useState<CallState>('idle');
+  const [callDuration, setCallDuration] = useState(0);
+  const callStartedAtRef = useRef<number | null>(null);
   const [, setLastReply] = useState('');
   const [, setLastTranscript] = useState('');
   const [, setPartialTranscript] = useState('');
@@ -88,6 +90,8 @@ export default function AIVoiceCall() {
     stopRecognition();
     stopReply();
     setCallState('idle');
+    callStartedAtRef.current = null;
+    setCallDuration(0);
     setVoiceStage('Call ended');
     setMicLevel(0);
     setAiRequestStatus('Not sent');
@@ -286,6 +290,8 @@ export default function AIVoiceCall() {
       try { await navigator.storage?.persist?.(); } catch { /* browser may deny persistent storage */ }
       await prepareShrutiRecognition();
       activeRef.current = true;
+      callStartedAtRef.current = Date.now();
+      setCallDuration(0);
       if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
       partialFinalizeTimerRef.current = null;
       lastSubmittedTranscriptRef.current = '';
@@ -315,6 +321,14 @@ export default function AIVoiceCall() {
       toast.error(message);
     }
   };
+
+  useEffect(() => {
+    if (!activeRef.current || !callStartedAtRef.current) return;
+    const timer = window.setInterval(() => {
+      if (callStartedAtRef.current) setCallDuration(Math.floor((Date.now() - callStartedAtRef.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [callState]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -353,7 +367,7 @@ export default function AIVoiceCall() {
           <p className="mt-7 text-lg font-medium text-white/90" aria-live="polite">
             {callState === 'idle' ? 'Ready to call' : callState === 'listening' ? 'Connected' : callState === 'thinking' ? 'Calling…' : callState === 'speaking' ? 'Speaking' : 'Call interrupted'}
           </p>
-          {callState === 'listening' && <p className="mt-1 text-sm text-white/45">00:00</p>}
+          {activeRef.current && callState !== 'error' && <p className="mt-1 text-sm tabular-nums text-white/45">{String(Math.floor(callDuration / 60)).padStart(2, '0')}:{String(callDuration % 60).padStart(2, '0')}</p>}
           {errorMessage && (
             <div role="alert" className="mt-6 w-full rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100">
               <p className="font-medium">Call failed</p>
