@@ -1911,6 +1911,8 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, fallbackTag)
                         }
                     }
+                    // Avoid looping forever if the provider reports an installed model but still rejects it.
+                    var retriedAfterInstalledModel = false
                     voiceRecognizer?.setRecognitionListener(object : RecognitionListener {
                         override fun onReadyForSpeech(params: Bundle?) { dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").toString()) }
                         override fun onBeginningOfSpeech() {}
@@ -1966,8 +1968,21 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                                                             it.substringBefore('-').equals(requestedTag.substringBefore('-'), ignoreCase = true) }
                                                     when {
                                                         containsLanguage(support.installedOnDeviceLanguages) -> {
-                                                            dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "language-model-ready").put("message", "Offline language pack is already installed. Tap Start AI Call again.").toString())
-                                                            dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "The offline language pack is installed. Please start the AI call again.").toString())
+                                                            if (!retriedAfterInstalledModel) {
+                                                                retriedAfterInstalledModel = true
+                                                                dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "listening").put("message", "Offline language pack is installed. Restarting speech recognition…").toString())
+                                                                runCatching {
+                                                                    // The first attempt can race the system model installer. Retry once automatically.
+                                                                    voiceCallActive = true
+                                                                    recognizer.startListening(intent)
+                                                                }.onFailure { retryFailure ->
+                                                                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", retryFailure.message ?: "The language pack is installed, but speech recognition could not restart.").toString())
+                                                                    stopOnDeviceVoiceRecognition()
+                                                                }
+                                                            } else {
+                                                                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Android reports the offline language pack is installed, but its speech service still cannot use it. Check the selected offline speech service or restart the phone.").put("code", error).toString())
+                                                                stopOnDeviceVoiceRecognition()
+                                                            }
                                                         }
                                                         containsLanguage(support.pendingOnDeviceLanguages) -> {
                                                             dispatchNativeEvent("workly-voice-status", JSONObject().put("status", "language-model-pending").put("message", "Offline language download is already pending. Keep the phone online; Workly will not request it again.").toString())
