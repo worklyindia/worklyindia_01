@@ -1,0 +1,122 @@
+name: Upload AI models to Cloudflare R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_models:
+        description: "Upload Kokoro-82M GPU + CPU variants and Shruti Hindi"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workly-ai-models-r2-upload
+  cancel-in-progress: false
+
+jobs:
+  upload-models:
+    if: inputs.upload_models
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Validate existing R2 credentials
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$R2_ACCESS_KEY_ID" || { echo "::error::Missing R2_ACCESS_KEY_ID secret"; exit 1; }
+          test -n "$R2_SECRET_ACCESS_KEY" || { echo "::error::Missing R2_SECRET_ACCESS_KEY secret"; exit 1; }
+
+      - name: Download Kokoro-82M and Shruti models
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet -U huggingface_hub
+          mkdir -p "$RUNNER_TEMP/workly-ai-models/kokoro" "$RUNNER_TEMP/workly-ai-models/shruti"
+          hf download litert-community/Kokoro-82M kokoro_int8_gpu_fp16.litertlm --local-dir "$RUNNER_TEMP/workly-ai-models/kokoro"
+          hf download litert-community/Kokoro-82M kokoro_int8_fp16.litertlm --local-dir "$RUNNER_TEMP/workly-ai-models/kokoro"
+          hf download udgamlabs/Shruti shruti.cact --local-dir "$RUNNER_TEMP/workly-ai-models/shruti"
+          test -s "$RUNNER_TEMP/workly-ai-models/kokoro/kokoro_int8_gpu_fp16.litertlm"
+          test -s "$RUNNER_TEMP/workly-ai-models/kokoro/kokoro_int8_fp16.litertlm"
+          test -s "$RUNNER_TEMP/workly-ai-models/shruti/shruti.cact"
+
+      - name: Verify files and upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: "07937ccf8d5c6398c657c170018f8f80"
+          R2_BUCKET: workly-ai-models
+          MODEL_DIR: ${{ runner.temp }}/workly-ai-models
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet boto3
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          import boto3
+          from boto3.s3.transfer import TransferConfig
+
+          root = Path(os.environ["MODEL_DIR"])
+          bucket = os.environ["R2_BUCKET"]
+          endpoint = f'https://{os.environ["R2_ACCOUNT_ID"]}.r2.cloudflarestorage.com'
+          expected_shruti = "b189e954aaed4a9fd41acbad3ac05e486381e96325b22a4c695b9ea5153d7065"
+          files = [
+              (root / "kokoro/kokoro_int8_gpu_fp16.litertlm", "kokoro/kokoro_int8_gpu_fp16.litertlm", "https://huggingface.co/litert-community/Kokoro-82M"),
+              (root / "kokoro/kokoro_int8_fp16.litertlm", "kokoro/kokoro_int8_fp16.litertlm", "https://huggingface.co/litert-community/Kokoro-82M"),
+              (root / "shruti/shruti.cact", "shruti/shruti.cact", "https://huggingface.co/udgamlabs/Shruti"),
+          ]
+          manifest = {"bucket": bucket, "models": [], "formatVersion": 1}
+          for path, key, source in files:
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(f"Missing/empty model file: {path}")
+              size = path.stat().st_size
+              if key.startswith("kokoro/") and size < 250_000_000:
+                  raise SystemExit(f"Kokoro file unexpectedly small: {path.name} ({size} bytes)")
+              digest = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+                      digest.update(chunk)
+              sha = digest.hexdigest()
+              if key == "shruti/shruti.cact" and sha != expected_shruti:
+                  raise SystemExit(f"Shruti SHA-256 mismatch: {sha}")
+              manifest["models"].append({"key": key, "sizeBytes": size, "sha256": sha, "source": source})
+
+          s3 = boto3.client(
+              "s3", endpoint_url=endpoint,
+              aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+              region_name="auto",
+          )
+          config = TransferConfig(multipart_threshold=64*1024*1024, multipart_chunksize=64*1024*1024, max_concurrency=4, use_threads=True)
+          for item, (path, key, _) in zip(manifest["models"], files):
+              print(f"Uploading {key} ({item['sizeBytes']} bytes)")
+              s3.upload_file(str(path), bucket, key, ExtraArgs={
+                  "ContentType": "application/octet-stream",
+                  "CacheControl": "public, max-age=31536000, immutable",
+              }, Config=config)
+              head = s3.head_object(Bucket=bucket, Key=key)
+              if head["ContentLength"] != item["sizeBytes"]:
+                  raise SystemExit(f"R2 size verification failed: {key}")
+
+          manifest_path = root / "manifest.json"
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+          s3.upload_file(str(manifest_path), bucket, "manifest.json", ExtraArgs={
+              "ContentType": "application/json", "CacheControl": "public, max-age=300"
+          })
+          head = s3.head_object(Bucket=bucket, Key="manifest.json")
+          if head["ContentLength"] != manifest_path.stat().st_size:
+              raise SystemExit("R2 manifest verification failed")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("## Workly AI model upload verified\n\n")
+              summary.write("| R2 object | Size (MB) | SHA-256 |\n|---|---:|---|\n")
+              for item in manifest["models"]:
+                  summary.write(f"| {item['key']} | {item['sizeBytes']/1_000_000:.1f} | {item['sha256']} |\n")
+          print("All R2 uploads and object-size checks passed.")
+          PY
