@@ -180,6 +180,8 @@ export default function AIVoiceCall() {
   }, []);
 
   useEffect(() => {
+    // Warm browser speech voices before the first AI reply needs playback.
+    if (!bridge && 'speechSynthesis' in window) window.speechSynthesis.getVoices();
     setNativeAvailable(bridge ? recognitionAvailable() : false);
     setBrowserOnDeviceAvailable(!bridge && isBrowserOnDeviceVoiceAvailable());
     const handleSpeechStart = () => { if (activeRef.current) setVoiceStage('Speech detected by microphone'); };
