@@ -9,7 +9,7 @@ import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
 import { isBrowserLocalVoiceAvailable, isBrowserOnDeviceVoiceAvailable, startBrowserLocalRecognition, stopBrowserLocalRecognition, speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
-import { prepareKokoroTts, speakKokoroTts, stopKokoroTts, isKokoroLanguageSupported } from '@/lib/kokoroTts';
+import { prepareKokoroTts, reloadKokoroTts, speakKokoroTts, stopKokoroTts, isKokoroLanguageSupported } from '@/lib/kokoroTts';
 import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition } from '@/lib/shrutiSpeech';
 
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -251,7 +251,8 @@ export default function AIVoiceCall() {
     try {
       setKokoroStatus('downloading');
       setKokoroMessage('Loading Kokoro-82M. The first download is about 295 MB; keep this page open.');
-      await prepareKokoroTts();
+      if (kokoroEnabled) await reloadKokoroTts();
+      else await prepareKokoroTts();
       setKokoroEnabled(true);
       setKokoroStatus('ready');
       setKokoroMessage('Kokoro-82M is ready. Hindi and English replies can now use local neural speech.');
