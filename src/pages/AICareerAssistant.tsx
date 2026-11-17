@@ -3581,7 +3581,7 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
                     type="button"
                     onClick={() => {
                       if (!currentUser) { handleLoginRequired('use voice mode'); return; }
-                      navigate('/ai-voice-call');
+                      navigate(`/ai-voice-call?audience=${chatAudience}`);
                     }}
                     aria-label="Start AI voice call"
                     className="flex h-9 w-9 items-center justify-center rounded-full shadow-md bg-[#0A84FF] hover:bg-[#0a76e0] text-white transition-colors"

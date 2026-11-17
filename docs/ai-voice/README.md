@@ -1,56 +1,27 @@
-# Workly India AI Voice — zero-cost-first deployment plan
+# Workly India AI Voice
 
-## Current implementation status
+## Current implementation
 
-- The AI Chat composer has a dedicated phone-call icon that opens `/ai-voice-call`.
-- The voice-call page is a UI shell with a microphone permission check.
-- The page deliberately does not call OpenAI Realtime or any paid voice API.
-- Live calling remains disabled until an open-source inference service is deployed and configured.
+- The AI Chat composer opens `/ai-voice-call` and passes the current chat audience.
+- Voice recognition uses the existing Shruti speech-recognition flow. The phone/browser TTS speaks the AI reply.
+- Each recognized utterance is sent to the same `ai-career-chat` backend used by text chat. Voice therefore reuses the existing AI instructions, role context, conversation history, enabled tools and knowledge; it is not a separate assistant.
+- The user's transcript and the assistant's reply are saved in the same signed-in user's AI Chat browser history. Returning to AI Chat shows both sides of the voice conversation.
+- Voice replies are restricted to Hindi or English. Hindi input receives Hindi in Devanagari; English and all other languages (including Gujarati) receive English. TTS language is selected from the AI reply.
+- Android call startup checks that both Hindi and English TTS voice data are available. If either is missing, Android's system TTS installer opens and the app checks again after the user returns. Android requires user confirmation; an app cannot silently install system voice data.
+- No Kokoro or additional bundled TTS model is used.
 
-## Intended open-source stack
+## Production validation still required
 
-- Speech-to-text: `whisper.cpp` (start with the multilingual base model; Gujarati/Hindi/English must be tested with real audio).
-- Text-to-speech: Mithi v2 Flash (verify the model card, license, runtime dependencies, voice quality and language coverage before production use).
-- Existing Workly AI response service: reuse only if it can be called without introducing a paid provider charge. Otherwise the AI response model also needs a self-hosted open-source option.
-- Browser transport: WebRTC or a self-hosted WebSocket/WebRTC gateway. Do not assume Vercel serverless functions can host persistent audio streams.
+1. Run the frontend production build and Android Kotlin/Gradle build.
+2. Test on Android with both TTS voices installed, then with one or both missing. Confirm the installer opens and call startup resumes only after both voices are available.
+3. Test Hindi, English and Gujarati speech. Confirm AI replies and spoken TTS are Hindi/English only.
+4. Verify both user and AI messages appear in AI Chat history after returning from a call.
+5. Verify existing AI tools run with the same permissions and confirmation requirements as text chat.
+6. Test mute, interruption, call termination, offline/network errors and quota exhaustion.
 
-## Free-tier constraints
+## Privacy and history behavior
 
-Supabase Free and Vercel are not model-inference hosts. Do not upload model weights into Supabase database/storage or commit model weights to GitHub. Store source code, setup scripts and configuration in GitHub; download model weights onto the inference host at deployment time.
-
-A public 24/7 service with unlimited callers cannot be guaranteed at zero cost. Any free hosting tier has compute, bandwidth, concurrency, execution-time or inactivity limits. If no always-on machine is available, the voice feature must remain unavailable or run only while a user's own machine is online.
-
-## Required backend contract before enabling the call button
-
-Create a separately hosted inference service that:
-1. Authenticates users with short-lived signed tokens; never expose service credentials in browser code.
-2. Accepts streamed audio and returns partial/final transcripts.
-3. Sends text to the approved Workly AI response provider.
-4. Synthesizes the response with Mithi and streams audio chunks back.
-5. Supports interruption/cancellation, mute, call termination and disconnect cleanup.
-6. Enforces request-size, duration, concurrency and abuse controls.
-7. Returns explicit errors for unavailable model, overload, timeout and quota exhaustion.
-
-Suggested environment variables (server-side only):
-- `WORKLY_VOICE_SERVICE_URL`
-- `WORKLY_VOICE_SERVICE_SECRET`
-
-Do not enable live calling until the inference host, AI response model, license review, security checks and Hindi/English/Gujarati quality tests are complete.
-
-## Privacy-first, no-retention requirement
-
-The production voice service must process speech in memory and must not persist:
-- Raw microphone audio or generated speech audio.
-- Partial or final speech-to-text transcripts.
-- Text prompts or AI voice responses created during a call.
-- Call recordings, replay buffers, or speech payloads in analytics/crash reports.
-
-Implementation requirements:
-1. Keep audio chunks and transcript buffers in volatile memory only; discard them immediately after each processing step and clear remaining buffers when a call ends, is interrupted, or disconnects.
-2. Do not write audio, transcripts, prompts, or generated responses to Supabase, object storage, browser local/session storage, IndexedDB, GitHub, or application logs.
-3. Disable request-body logging and payload capture at the inference gateway, reverse proxy, hosting platform, observability tools, and error reporting. Log only non-content operational metadata (for example status, latency, model availability and coarse byte counts), with no user speech or text.
-4. Do not retain provider-side prompts or speech data. Use only a self-hosted/open-source inference stack whose runtime and hosting configuration can meet this requirement; verify host-level logs and backups before launch.
-5. Keep only the minimum non-content operational event if required, and make even that optional. Do not save transcripts as chat history by default.
-6. Clearly disclose that transient processing still occurs and that infrastructure providers may process network/operational metadata.
-
-This no-retention policy is a required acceptance criterion, not a claim that the current UI already performs live speech processing. It reduces stored data and privacy risk, but does not remove free-tier compute, bandwidth, concurrency, request-duration or quota limits.
+- Raw microphone audio and generated speech audio are not intentionally saved as call recordings.
+- Recognized text and AI replies are deliberately saved in the same AI Chat history using browser local storage.
+- Voice transcripts are sent to the existing AI Chat backend to generate responses and are subject to that backend's existing provider and logging configuration.
+- Do not describe calls as transcript-free or no-retention: the text transcript and AI reply are retained in AI Chat history. Review provider-side logging and retention settings separately.

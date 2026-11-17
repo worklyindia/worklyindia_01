@@ -243,6 +243,11 @@ class MainActivity : FragmentActivity() {
             }
             return
         }
+        if (requestCode == REQUEST_TTS_DATA) {
+            ttsDataInstallPending = false
+            initializeAndCheckVoiceTts(allowInstaller = false)
+            return
+        }
         if (requestCode == REQUEST_VAULT_IMPORT) {
             if (resultCode == RESULT_OK && data?.data != null) {
                 val selectedUri = data.data!!
@@ -1733,6 +1738,60 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         prompt.authenticate(promptInfo)
     }
 
+    private var ttsDataInstallPending = false
+
+    private fun dispatchVoiceTtsReady(ready: Boolean, message: String? = null) {
+        val detail = JSONObject().put("ready", ready)
+        if (!message.isNullOrBlank()) detail.put("message", message)
+        dispatchNativeEvent("workly-tts-ready", detail.toString())
+    }
+
+    private fun initializeAndCheckVoiceTts(allowInstaller: Boolean) {
+        runCatching { voiceTts?.shutdown() }
+        voiceTts = null
+        voiceTtsReady = false
+        voiceTts = TextToSpeech(this) { status ->
+            runOnUiThread {
+                if (status != TextToSpeech.SUCCESS) {
+                    dispatchVoiceTtsReady(false, "Android text-to-speech could not start. Check the phone's TTS engine.")
+                    return@runOnUiThread
+                }
+                voiceTtsReady = true
+                val tts = voiceTts ?: run {
+                    dispatchVoiceTtsReady(false, "Android text-to-speech is unavailable.")
+                    return@runOnUiThread
+                }
+                val installedLanguages = tts.voices.orEmpty().map { it.locale.language.lowercase(Locale.ROOT) }.toSet()
+                val hindi = "hi" in installedLanguages ||
+                    tts.isLanguageAvailable(Locale("hi")) >= TextToSpeech.LANG_AVAILABLE ||
+                    tts.isLanguageAvailable(Locale.forLanguageTag("hi-IN")) >= TextToSpeech.LANG_AVAILABLE
+                val english = "en" in installedLanguages ||
+                    tts.isLanguageAvailable(Locale("en")) >= TextToSpeech.LANG_AVAILABLE ||
+                    tts.isLanguageAvailable(Locale.forLanguageTag("en-IN")) >= TextToSpeech.LANG_AVAILABLE
+                if (hindi && english) {
+                    dispatchVoiceTtsReady(true)
+                } else if (allowInstaller && !ttsDataInstallPending) {
+                    ttsDataInstallPending = true
+                    runCatching {
+                        startActivityForResult(
+                            Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA),
+                            REQUEST_TTS_DATA
+                        )
+                    }.onFailure {
+                        ttsDataInstallPending = false
+                        dispatchVoiceTtsReady(false, "Could not open Android voice-data installer. Install Hindi and English voices in Text-to-speech settings.")
+                    }
+                } else {
+                    val missing = buildList {
+                        if (!hindi) add("Hindi")
+                        if (!english) add("English")
+                    }.joinToString(" and ")
+                    dispatchVoiceTtsReady(false, "$missing TTS voice data is still unavailable. Install it in Android Text-to-speech settings and try again.")
+                }
+            }
+        }
+    }
+
     inner class WorklyWebBridge {
         @JavascriptInterface
         fun reportAppError(type: String, message: String, source: String, httpStatus: Int): Boolean {
@@ -2123,6 +2182,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 runCatching { voiceRecognizer?.destroy() }
                 voiceRecognizer = null
             }
+            return true
+        }
+
+        @JavascriptInterface
+        fun prepareVoiceTts(): Boolean {
+            runOnUiThread { initializeAndCheckVoiceTts(allowInstaller = true) }
             return true
         }
 
@@ -3811,6 +3876,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val REQUEST_CHARGING_ALERT_NOTIFICATIONS = 704
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_VAULT_IMPORT = 4105
+        private const val REQUEST_TTS_DATA = 4107
         private const val REQUEST_MEDIA = 702
         private const val REQUEST_VOICE_MIC = 705
         private const val REQUEST_LOCATION = 703
