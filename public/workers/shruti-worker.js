@@ -3,7 +3,7 @@
  * Engine: Cactus needle WebAssembly, Apache-2.0. Audio stays on-device.
  */
 'use strict';
-importScripts('https://cdn.jsdelivr.net/npm/@cactus-compute/needle@latest/dist/needle.js');
+importScripts('https://cdn.jsdelivr.net/gh/udgamlabs/shruti@main/examples/browser/needle/needle.js');
 
 const MODEL_URL = 'https://huggingface.co/udgamlabs/Shruti/resolve/main/shruti.cact';
 const MODEL_SHA256 = 'b189e954aaed4a9fd41acbad3ac05e486381e96325b22a4c695b9ea5153d7065';
