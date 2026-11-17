@@ -3767,7 +3767,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_VAULT_IMPORT = 4105
         private const val REQUEST_MEDIA = 702
-        private const val REQUEST_VOICE_MIC = 703
+        private const val REQUEST_VOICE_MIC = 705
         private const val REQUEST_LOCATION = 703
     }
 }
