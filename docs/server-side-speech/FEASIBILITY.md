@@ -4,40 +4,48 @@ Date: 2026-11-17
 Repository branch: `feature/server-side-indic-speech`
 Tracking issue: https://github.com/worklyindia/worklyindia_01/issues/174
 
-## Important model-task correction
+## Requested four-model scope and verified task types
 
-The four names supplied are not four TTS models:
+The owner requests all four named model families to be server-side, with exact repositories and licenses verified before deployment.
 
-| Requested name | Verified task | Initial finding |
+| Requested model | Verified task / current finding | Deployment decision |
 |---|---|---|
-| AI4Bharat IndicConformer INT8 | STT / ASR | Quantized Sherpa-ONNX exports exist; one public pack documents ~190 MB per language model plus shared tokens. Verify exact export, upstream provenance and license before adopting. |
-| Indic Tiny TTS | TTS | A public candidate `sulabhkatiyar/indic-tts-mini-24k` is described as an 8.9M-parameter Matcha-TTS acoustic model with Vocos vocoder. The surfaced Tamil model card lists CC-BY-4.0 acoustic weights, MIT code and MIT Vocos weights. This candidate is Tamil-specific; do not assume it covers Hindi/Gujarati. |
-| Kokoro-82M | TTS | Official `hexgrad/Kokoro-82M` has 82M parameters and Apache-2.0 weights. Its model card lists English (American/British) support, not Indic-language coverage. |
-| Shruti | **STT / ASR, not TTS** | `udgamlabs/Shruti` is a 55M-parameter Hindi/English/Hinglish recognizer. The quantized `.cact` file is about 29.5 MB; Apache-2.0 weights and Cactus needle engine. It cannot be wired as a TTS voice. |
+| AI4Bharat IndicConformer INT8 | STT / ASR. Public INT8 ONNX exports surfaced, including `yashwork-byte/indic-conformer-600m-int8-onnx`; the exact export, upstream provenance, runtime compatibility and license still require review. | STT candidate only. Never use as TTS. |
+| Indic Tiny TTS | TTS. Search surfaced separate language repos by `sulabhkatiyar`, including Hindi (`indic-tiny-tts-hindi`) and Gujarati (`indic-tiny-tts-gujarati`), both tagged CC-BY-4.0. Other language-specific repositories also surfaced. | Include Hindi/Gujarati candidates in benchmark; verify model card, files, code/vocoder licensing and runtime before deployment. Do not assume one checkpoint is multilingual. |
+| Kokoro-82M | TTS. Official `hexgrad/Kokoro-82M` is Apache-2.0 and English-focused (American/British voices in its model card). | TTS candidate; English route only unless a separately validated supported language is proven. |
+| Shruti | The previously identified `udgamlabs/Shruti` is STT / ASR for Hindi, English and Hinglish, not TTS. Search for a distinct "Shruti TTS" repository did not return a verified match. | Do not deploy as TTS. Owner's intended TTS repository/name and license remain unverified. Keep known Shruti ASR only as optional STT fallback. |
 
-Sources:
-- IndicConformer Sherpa-ONNX export overview: https://huggingface.co/parismitaglobalsolutions/indicconformer-sherpa-onnx
-- Indic Tiny TTS candidate: https://huggingface.co/sulabhkatiyar/indic-tiny-tts-tamil
-- Kokoro model card: https://huggingface.co/hexgrad/Kokoro-82M
-- Shruti model and runtime: https://github.com/udgamlabs/shruti and https://udgamlabs.com/research/shruti
+## Candidate repository references
 
-## Hosting feasibility under the approved ₹0/month budget
+- IndicConformer quantized candidate: https://huggingface.co/yashwork-byte/indic-conformer-600m-int8-onnx
+- Indic Tiny TTS Hindi: https://huggingface.co/sulabhkatiyar/indic-tiny-tts-hindi
+- Indic Tiny TTS Gujarati: https://huggingface.co/sulabhkatiyar/indic-tiny-tts-gujarati
+- Kokoro: https://huggingface.co/hexgrad/Kokoro-82M
+- Shruti ASR project: https://github.com/udgamlabs/shruti
 
-- Cloudflare Workers AI Free currently includes 10,000 Neurons/day, but it exposes Cloudflare's supported catalogue; this does not mean arbitrary custom model weights such as these four can be uploaded and served there.
-- Cloudflare Workers Free is suitable for a lightweight authenticated API gateway, not for loading large PyTorch/ONNX speech models into a Worker.
-- Supabase Edge Functions should remain orchestration/authentication only; they are not a persistent GPU model host.
-- R2 can store model/audio artifacts within its free allowance, but object storage does not execute inference.
-- No reliable always-on free GPU host has been verified for production. Hugging Face ZeroGPU/free shared GPU capacity is quota-limited and unsuitable as a guaranteed production endpoint.
+Repository search results are discovery only, not a license or production-readiness approval. Inspect each model card, pinned revision, weight license, inference code license, dependencies and any vocoder/tokenizer license before downloading or deploying.
+
+## Cloudflare and inference boundary
+
+- Cloudflare Workers are the public authenticated API gateway, not the runtime for arbitrary PyTorch/ONNX model weights.
+- Check each model against the current Cloudflare Workers AI supported catalogue. Only route a model through Workers AI if that exact model is officially supported there; otherwise route through the external inference service.
+- AI Gateway can provide supported request observability/routing controls, but it does not host arbitrary custom model weights.
+- R2 is object storage for explicitly approved reusable artifacts/audio; it does not execute inference. Do not persist private recordings by default.
+- Queues are optional for back-pressure and asynchronous workloads; do not queue raw private audio unless retention, access controls and deletion are explicitly designed.
+- DNS/security protect the public gateway and origin; origin must not be directly exposed.
+- Supabase Edge Functions are suitable for auth/orchestration, not persistent GPU inference.
+- No reliable always-on free GPU host has been verified. The approved budget remains ₹0/month; do not create paid compute, trials that auto-bill, credits or billing changes.
 
 ## Safe implementation sequence
 
-1. Confirm the exact intended Indic Tiny TTS repository/version and whether Tamil-only is acceptable.
-2. Confirm whether Shruti was mistakenly labelled TTS; keep it as an optional STT candidate alongside IndicConformer, not as TTS.
-3. Benchmark candidate models on a genuinely free CPU/GPU runtime, recording cold start, peak RAM/VRAM, real-time factor, language accuracy and concurrent request behavior.
-4. Build a separate inference container only after a free host is proven; do not place model weights in Workers or Supabase Edge Functions.
-5. Add a new, isolated API route/gateway after inference tests pass. Keep existing `unified-voice` production routing unchanged until authenticated end-to-end tests pass.
-6. Move clients away from local model downloads only after the replacement server endpoint passes Hindi, Gujarati and English tests and fallback behavior is verified.
+1. Verify exact pinned repositories, revisions, task type, model/weight/code/vocoder licenses and language coverage for all requested models.
+2. Resolve the "Shruti TTS" identity. Do not substitute the known Shruti ASR model as TTS.
+3. Benchmark IndicConformer INT8 for Gujarati, Hindi and English STT; benchmark Indic Tiny TTS Hindi/Gujarati separately; benchmark Kokoro English; benchmark any verified Shruti TTS candidate only after its identity is confirmed.
+4. Prove a genuinely free runtime can load and serve the models. Record cold start, warm latency, peak RAM/VRAM, real-time factor and concurrency. No always-on or unlimited capacity claims without evidence.
+5. Implement an isolated external inference service behind a Cloudflare Worker gateway. Keep model weights out of Workers and Supabase.
+6. Add the requested API routes only after the inference runtime is healthy and smoke-tested.
+7. Change Android clients only after server parity, security, retry, playback and rollback tests pass. Keep existing local/browser speech and charging notification sounds until acceptance tests pass.
 
 ## Current state
 
-This is a feasibility/documentation commit only. No production Worker, Supabase function, secret, model file, billing setting, or production route has been changed. No paid resource has been created. A production-ready all-four-model service at ₹0/month is **not yet demonstrated**.
+Documentation and candidate discovery only. No model has been deployed as a production inference endpoint. No Worker, Queue, R2 object, DNS route, Supabase function, secret, model weight or Android client has been changed by this audit. No paid resources or billing changes were made. A production-ready all-four-model service at ₹0/month is not demonstrated.
