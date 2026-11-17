@@ -282,12 +282,12 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   if (!text) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-  const callerLanguage = /[\\u0900-\\u097F]/.test(text) || languageTag.toLowerCase().startsWith('hi')
+  const callerLanguage = /[\u0900-\u097F]/.test(text) || languageTag.toLowerCase().startsWith('hi')
     ? 'Hindi'
     : 'English';
   const languageInstruction = 'Speak only Hindi or English. The caller language is ' + callerLanguage + '. If the caller speaks Hindi, reply in natural Hindi using Devanagari script. Otherwise reply in clear, natural English. If the input is Gujarati or any language other than Hindi or English, answer in English. Never reply in Gujarati or any other third language. Do not translate unless asked. Keep the voice response short and conversational.';
   const detectLanguageTag = (value: string, fallback: string): string => {
-    if (/[\\u0900-\\u097F]/.test(value)) return 'hi-IN';
+    if (/[\u0900-\u097F]/.test(value)) return 'hi-IN';
     return fallback.toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-IN';
   };
   const result = await runAiChain([
