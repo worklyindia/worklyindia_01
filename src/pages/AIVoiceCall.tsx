@@ -300,12 +300,12 @@ export default function AIVoiceCall() {
 
         <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Device-language speech recognition</p>
-          <p className="mt-2 text-sm text-white/70">Gujarati device language uses IndicConformer INT8. Hindi and English use Shruti.</p>
+          <p className="mt-2 text-sm text-white/70">Speak naturally. Shruti converts supported speech to text on this device.</p>
         </div>
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
           <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Voice privacy</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : 'On-device speech'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">Shruti or Gujarati IndicConformer converts speech to text on this device. Only recognized text is sent to the AI provider. Workly India does not save call audio or transcripts.</p>
+          <p className="mt-2 text-xs leading-5 text-white/55">Shruti converts speech to text on this device. Only recognized text is sent to the AI provider. Workly India does not save call audio or transcripts.</p>
           {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only · not saved</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
