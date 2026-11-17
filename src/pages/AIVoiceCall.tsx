@@ -28,6 +28,7 @@ export default function AIVoiceCall() {
   const [micLevel, setMicLevel] = useState(0);
   const [aiRequestStatus, setAiRequestStatus] = useState('Not sent');
   const activeRef = useRef(false);
+  const startingCallRef = useRef(false);
   const partialFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSubmittedTranscriptRef = useRef('');
   const conversationTurnRef = useRef(0);
@@ -35,7 +36,7 @@ export default function AIVoiceCall() {
   const showBadge = settings?.verification_enabled;
   const badgeColor = (settings?.verification_color || 'blue') as 'gold' | 'blue' | 'green' | 'silver';
   const bridge = getWorklyAndroidBridge();
-  const startRecognition = useCallback(() => {
+  const startRecognition = useCallback((_language = 'auto') => {
     void startShrutiRecognition().catch((error) => window.dispatchEvent(new CustomEvent('workly-voice-error', {
       detail: { message: error instanceof Error ? error.message : 'Shruti microphone could not start.' },
     })));
@@ -213,7 +214,9 @@ export default function AIVoiceCall() {
   }, [bridge, stopRecognition, stopReply, handleTranscript, handlePartialTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
 
   const startCall = async () => {
+    if (startingCallRef.current || activeRef.current) return;
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
+    startingCallRef.current = true;
     try {
       // Load the offline model only after the user taps Start AI Call.
       // The model is persisted in IndexedDB and reused on later visits.
@@ -231,6 +234,7 @@ export default function AIVoiceCall() {
       setVoiceStage('Starting secure on-device microphone…');
       setMicLevel(0);
       setAiRequestStatus('Not sent');
+      startingCallRef.current = false;
       if (!startRecognition('auto')) {
         activeRef.current = false;
         setVoiceStage('Could not start speech recognition');
@@ -239,6 +243,7 @@ export default function AIVoiceCall() {
         toast.error('Could not start on-device speech recognition.');
       }
     } catch (error) {
+      startingCallRef.current = false;
       activeRef.current = false;
       const message = error instanceof Error ? error.message : 'Shruti could not start. Check microphone permission and try again.';
       setErrorMessage(message);
