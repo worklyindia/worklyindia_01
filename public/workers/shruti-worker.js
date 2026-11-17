@@ -12,7 +12,6 @@ const CACHE_NAME = 'workly-shruti-hi-v1';
 const MAGIC = [0x84, 0x2a, 0xe1, 0x05];
 let engine = null;
 let ready = false;
-const encoder = new TextEncoder();
 
 function send(message) { self.postMessage(message); }
 function validModel(bytes) {
@@ -103,7 +102,7 @@ function transcribe(message) {
   const outputPointer = alloc(outputCapacity);
   try {
     const started = performance.now();
-    const count = engine._needle_transcribe(audioPointer, pcm.length, languagePointer, 0, 0, outputPointer, outputCapacity);
+    const count = engine._needle_transcribe(audioPointer, pcm.length, 0, 0, 0, outputPointer, outputCapacity);
     if (count < 0) throw new Error(lastError());
     const result = JSON.parse(engine.UTF8ToString(outputPointer));
     send({ type: 'result', id: message.id, text: result.text || '', language: result.language || 'und', ms: performance.now() - started });
@@ -112,7 +111,6 @@ function transcribe(message) {
   } finally {
     engine._free(outputPointer);
     engine._free(audioPointer);
-    if (languagePointer) engine._free(languagePointer);
   }
 }
 self.onmessage = (event) => {
