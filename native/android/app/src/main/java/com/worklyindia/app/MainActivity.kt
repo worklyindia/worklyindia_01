@@ -1891,7 +1891,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     voiceRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this@MainActivity)
                     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                         if (Build.VERSION.SDK_INT >= 34 && languageTag == "auto") {
                             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "und")
@@ -2032,7 +2032,12 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                             } else dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "No speech was detected. Please try again.").toString())
                             stopOnDeviceVoiceRecognition()
                         }
-                        override fun onPartialResults(partialResults: Bundle?) {}
+                        override fun onPartialResults(partialResults: Bundle?) {
+                            val partialText = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                            if (partialText.isNotBlank()) {
+                                dispatchNativeEvent("workly-voice-partial-transcript", JSONObject().put("text", partialText).toString())
+                            }
+                        }
                         override fun onEvent(eventType: Int, params: Bundle?) {}
                         override fun onLanguageDetection(results: Bundle) {
                             if (Build.VERSION.SDK_INT >= 34) {
