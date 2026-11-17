@@ -25,6 +25,9 @@ export default function AIVoiceCall() {
   const [nativeAvailable, setNativeAvailable] = useState(false);
   const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
   const activeRef = useRef(false);
+  const partialFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSubmittedTranscriptRef = useRef('');
+  const conversationTurnRef = useRef(0);
   const aiName = settings?.name || 'Workly India AI';
   const showBadge = settings?.verification_enabled;
   const badgeColor = (settings?.verification_color || 'blue') as 'gold' | 'blue' | 'green' | 'silver';
@@ -52,6 +55,10 @@ export default function AIVoiceCall() {
 
   const endCall = useCallback(() => {
     activeRef.current = false;
+    if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
+    partialFinalizeTimerRef.current = null;
+    lastSubmittedTranscriptRef.current = '';
+    conversationTurnRef.current += 1;
     stopRecognition();
     stopReply();
     setCallState('idle');
@@ -66,7 +73,11 @@ export default function AIVoiceCall() {
     if (!activeRef.current) return;
     const detail = (event as CustomEvent<{ text?: string; languageTag?: string }>).detail;
     const transcript = detail?.text?.trim();
-    if (!transcript) return;
+    if (!transcript || transcript === lastSubmittedTranscriptRef.current) return;
+    lastSubmittedTranscriptRef.current = transcript;
+    const turnId = ++conversationTurnRef.current;
+    if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
+    partialFinalizeTimerRef.current = null;
     setLastTranscript(transcript);
     setPartialTranscript('');
     setErrorMessage('');
@@ -78,13 +89,13 @@ export default function AIVoiceCall() {
       if (error) throw error;
       const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
       if (!reply) throw new Error('AI did not return a voice response.');
-      if (!activeRef.current) return;
+      if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
       const spoken = speakReply(reply, detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
     } catch (error) {
-      if (!activeRef.current) return;
+      if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
       setErrorMessage(message);
       setCallState('error');
@@ -97,7 +108,13 @@ export default function AIVoiceCall() {
     if (!activeRef.current) return;
     const detail = (event as CustomEvent<{ text?: string }>).detail;
     const text = detail?.text?.trim();
-    if (text) setPartialTranscript(text);
+    if (!text || text === lastSubmittedTranscriptRef.current) return;
+    setPartialTranscript(text);
+    if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
+    partialFinalizeTimerRef.current = setTimeout(() => {
+      if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
+      window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: navigator.language || 'und', source: 'partial-fallback' } }));
+    }, 1400);
   }, []);
 
   const handleNativeStatus = useCallback((event: Event) => {
@@ -117,14 +134,23 @@ export default function AIVoiceCall() {
     }
   }, [startRecognition, muted]);
 
-  const handleBargeIn = useCallback((event: Event) => {
+  const handleBargeIn = useCallback((_event: Event) => {
     if (!activeRef.current || muted) return;
-    const detail = (event as CustomEvent<{ languageTag?: string }>).detail;
+    // Invalidate any reply still being generated so an interrupted turn can never speak later.
+    conversationTurnRef.current += 1;
+    if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
+    partialFinalizeTimerRef.current = null;
+    lastSubmittedTranscriptRef.current = '';
+    setPartialTranscript('');
+    setCallState('listening');
     stopReply();
-    const started = startRecognition('auto');
-    if (started) setCallState('listening');
-    else { setCallState('error'); toast.error('Could not listen after interruption.'); }
-  }, [startRecognition, stopReply, muted]);
+    stopRecognition();
+    window.setTimeout(() => {
+      if (!activeRef.current || muted) return;
+      const started = startRecognition('auto');
+      if (!started) { setCallState('error'); toast.error('Could not listen after interruption.'); }
+    }, 180);
+  }, [startRecognition, stopRecognition, stopReply, muted]);
 
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -164,6 +190,9 @@ export default function AIVoiceCall() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((track) => track.stop());
       activeRef.current = true;
+      if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
+      partialFinalizeTimerRef.current = null;
+      lastSubmittedTranscriptRef.current = '';
       setLastReply('');
       setLastTranscript('');
       setPartialTranscript('');
