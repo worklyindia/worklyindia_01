@@ -24,6 +24,7 @@ export interface WorklyAndroidBridge {
   isOnDeviceVoiceRecognitionAvailable?(): boolean;
   startOnDeviceVoiceRecognition?(languageTag: string): boolean;
   stopOnDeviceVoiceRecognition?(): boolean;
+  prepareVoiceTts?(): boolean;
   speakVoiceReply?(text: string, languageTag: string): boolean;
   stopVoiceReply?(): boolean;
 }
