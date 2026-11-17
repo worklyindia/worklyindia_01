@@ -154,7 +154,7 @@ export default function AIVoiceCall() {
       setVoiceStage('AI Chat reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
-      const spoken = await speakReply(reply, /[\\u0900-\\u097F]/.test(reply) ? 'hi-IN' : 'en-IN');
+      const spoken = await speakReply(reply, /[\u0900-\u097F]/.test(reply) ? 'hi-IN' : 'en-IN');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
       setVoiceStage('TTS playback started');
