@@ -1878,11 +1878,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
         @JavascriptInterface
         fun startOnDeviceVoiceRecognition(languageTag: String): Boolean {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-                !SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
-                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Offline speech recognition is not available. Enable or install an on-device speech recognition service and offline language data in Android settings. Workly will not upload microphone audio for transcription.").toString())
-                return false
-            }
             if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 // Native SpeechRecognizer does not trigger WebChromeClient's getUserMedia
                 // permission flow. Request RECORD_AUDIO explicitly, then start recognition
@@ -1898,6 +1893,11 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     }
                 }
                 return true
+            }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                !SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity)) {
+                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Microphone permission is available, but this phone does not provide a supported on-device speech recognizer. Enable or install an offline speech recognition service and language data in Android settings. Workly will not upload microphone audio for transcription.").toString())
+                return false
             }
             runOnUiThread {
                 runCatching {
