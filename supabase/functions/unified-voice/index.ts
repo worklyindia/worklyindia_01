@@ -296,16 +296,16 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   // even when the caller speaks Gujarati, Hindi, or another language.
   const languageInstruction = 'Identify the language from the actual words and writing system, not from the device/browser locale. The locale hint is ' + languageTag + '. The text script suggests ' + scriptDetected + ' where applicable. Reply naturally in the caller’s actual language, mirror code-switching, and never switch to English solely because the device locale is English. Do not translate unless asked. For Indian languages, use the normal native script unless the caller clearly requests Roman transliteration.';
   const detectLanguageTag = (value: string, fallback: string): string => {
-    if (/[\\u0A80-\\u0AFF]/.test(value)) return 'gu-IN';
-    if (/[\\u0B80-\\u0BFF]/.test(value)) return 'ta-IN';
-    if (/[\\u0C00-\\u0C7F]/.test(value)) return 'te-IN';
-    if (/[\\u0C80-\\u0CFF]/.test(value)) return 'kn-IN';
-    if (/[\\u0D00-\\u0D7F]/.test(value)) return 'ml-IN';
-    if (/[\\u0980-\\u09FF]/.test(value)) return 'bn-IN';
-    if (/[\\u0A00-\\u0A7F]/.test(value)) return 'pa-IN';
-    if (/[\\u0B00-\\u0B7F]/.test(value)) return 'or-IN';
-    if (/[\\u0900-\\u097F]/.test(value)) return fallback.startsWith('mr') ? 'mr-IN' : fallback.startsWith('ne') ? 'ne-NP' : 'hi-IN';
-    if (/[\\u0600-\\u06FF]/.test(value)) return 'ur-IN';
+    if (/[\u0A80-\u0AFF]/.test(value)) return 'gu-IN';
+    if (/[\u0B80-\u0BFF]/.test(value)) return 'ta-IN';
+    if (/[\u0C00-\u0C7F]/.test(value)) return 'te-IN';
+    if (/[\u0C80-\u0CFF]/.test(value)) return 'kn-IN';
+    if (/[\u0D00-\u0D7F]/.test(value)) return 'ml-IN';
+    if (/[\u0980-\u09FF]/.test(value)) return 'bn-IN';
+    if (/[\u0A00-\u0A7F]/.test(value)) return 'pa-IN';
+    if (/[\u0B00-\u0B7F]/.test(value)) return 'or-IN';
+    if (/[\u0900-\u097F]/.test(value)) return fallback.startsWith('mr') ? 'mr-IN' : fallback.startsWith('ne') ? 'ne-NP' : 'hi-IN';
+    if (/[\u0600-\u06FF]/.test(value)) return 'ur-IN';
     return fallback !== 'und' && fallback !== 'auto' ? fallback : 'en-IN';
   };
   const result = await runAiChain([
