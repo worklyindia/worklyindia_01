@@ -209,7 +209,7 @@ export default function AIVoiceCall() {
       const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
       if (detail?.status) setShrutiStatus(detail.status);
       if (detail?.status === 'downloading' && detail.total) setShrutiMessage('Downloading Shruti · ' + (detail.loaded / 1e6).toFixed(1) + ' / ' + (detail.total / 1e6).toFixed(1) + ' MB');
-      else if (detail?.status === 'ready') setShrutiMessage('Shruti is ready. Hindi, English and Hinglish speech is processed on this device.');
+      else if (detail?.status === 'ready') { setNativeAvailable(true); setShrutiMessage('Shruti is ready. Hindi, English and Hinglish speech is processed on this device.'); }
       else if (detail?.status === 'listening') setShrutiMessage('Microphone is listening locally. Audio stays on this device.');
       else if (detail?.status === 'transcribing') setShrutiMessage('Converting speech to text on this device…');
       else if (detail?.status === 'error') setShrutiMessage(detail.message || 'Shruti could not start.');
@@ -234,6 +234,7 @@ export default function AIVoiceCall() {
       setShrutiMessage('Downloading and verifying the 29.5 MB Shruti model. Keep this page open.');
       await prepareShrutiRecognition();
       setShrutiEnabled(true);
+      setNativeAvailable(true);
       setShrutiStatus('ready');
       setShrutiMessage('Shruti is ready. Hindi, English and Hinglish speech-to-text is on-device.');
       try { localStorage.setItem('workly_shruti_enabled', 'true'); } catch { /* storage may be disabled */ }
@@ -313,10 +314,8 @@ export default function AIVoiceCall() {
       setBrowserRemoteAllowed(true);
     }
     try {
-      // The native Android SpeechRecognizer owns the microphone directly.
-      // Do not open and immediately close a WebView getUserMedia stream first:
-      // on some Android devices this races the native audio input and leaves
-      // SpeechRecognizer listening without receiving microphone frames.
+      // Shruti captures audio in the shared WebView page. The legacy native
+      // SpeechRecognizer path keeps its existing permission and microphone flow.
       if (!bridge && !shrutiEnabled) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((track) => track.stop());
@@ -395,7 +394,7 @@ export default function AIVoiceCall() {
 
         <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
-          <p className="mt-2 text-sm text-white/70">Speak naturally in your language. The call will use the detected language when your phone's offline speech service supports it.</p>
+          <p className="mt-2 text-sm text-white/70">Speak naturally in Hindi, English or Hinglish. When Shruti is enabled, speech is converted to text on this device.</p>
         </div>
 
         <div className="mt-5 w-full rounded-2xl border border-cyan-300/20 bg-cyan-400/[0.06] p-4 text-left">
