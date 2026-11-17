@@ -1,0 +1,160 @@
+name: Upload Gujarati voice models to Cloudflare R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_upload:
+        description: "Upload Gujarati TTS and STT model files (approximately 230 MB; first use downloads them to a device)"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workly-gujarati-models-r2
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    if: inputs.confirm_upload
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Download Gujarati TTS and STT model assets
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet -U huggingface_hub
+          ROOT="$RUNNER_TEMP/workly-gujarati-models"
+          mkdir -p "$ROOT/tts" "$ROOT/stt"
+          python - <<'PY'
+          import os
+          from huggingface_hub import snapshot_download, hf_hub_download
+          root = os.path.join(os.environ["RUNNER_TEMP"], "workly-gujarati-models")
+          snapshot_download(
+              repo_id="sulabhkatiyar/indic-tiny-tts-gujarati",
+              local_dir=os.path.join(root, "tts"),
+              allow_patterns=[
+                  "onnx/*.onnx", "indic_tiny_tts/**", "config.json",
+                  "LICENSE*", "README.md", "pyproject.toml", "*.txt"
+              ],
+          )
+          for filename in ("model.int8.onnx", "vocab.txt", "config.json"):
+              hf_hub_download(
+                  repo_id="OpenVoiceOS/ai4bharat-indicconformer-gu-onnx",
+                  filename=filename,
+                  local_dir=os.path.join(root, "stt"),
+              )
+          PY
+          test -s "$ROOT/tts/onnx/text_encoder.onnx"
+          test -s "$ROOT/tts/onnx/flow_decoder.onnx"
+          test -s "$ROOT/tts/onnx/vocoder.onnx"
+          test -s "$ROOT/stt/model.int8.onnx"
+          test -s "$ROOT/stt/vocab.txt"
+          test -s "$ROOT/stt/config.json"
+
+      - name: Verify licenses, hashes and upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: "07937ccf8d5c6398c657c170018f8f80"
+          R2_BUCKET: workly-ai-models
+          MODEL_DIR: ${{ runner.temp }}/workly-gujarati-models
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet boto3
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          import boto3
+          from boto3.s3.transfer import TransferConfig
+
+          root = Path(os.environ["MODEL_DIR"])
+          bucket = os.environ["R2_BUCKET"]
+          endpoint = f'https://{os.environ["R2_ACCOUNT_ID"]}.r2.cloudflarestorage.com'
+          tts = root / "tts"
+          stt = root / "stt"
+          required_tts = [
+              tts / "onnx/text_encoder.onnx",
+              tts / "onnx/flow_decoder.onnx",
+              tts / "onnx/vocoder.onnx",
+          ]
+          required_stt = [stt / "model.int8.onnx", stt / "vocab.txt", stt / "config.json"]
+          for path in required_tts + required_stt:
+              if not path.is_file() or path.stat().st_size < 1000:
+                  raise SystemExit(f"Missing or invalid required asset: {path}")
+          if (stt / "model.int8.onnx").stat().st_size < 50_000_000:
+              raise SystemExit("Gujarati INT8 ASR model is unexpectedly small.")
+
+          files = []
+          for path in sorted(tts.rglob("*")):
+              if path.is_file() and ".cache" not in path.parts:
+                  files.append((path, "gujarati/tts/" + path.relative_to(tts).as_posix()))
+          for path in required_stt:
+              files.append((path, "gujarati/stt/" + path.name))
+
+          manifest = {
+              "formatVersion": 1,
+              "language": "Gujarati",
+              "models": [
+                  {
+                      "name": "Indic Tiny TTS Gujarati",
+                      "source": "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-gujarati",
+                      "license": "CC-BY-4.0 acoustic weights; MIT code; MIT Vocos vocoder",
+                      "credit": "Sulabh Katiyar; AI4Bharat Rasa dataset; Vocos authors"
+                  },
+                  {
+                      "name": "AI4Bharat IndicConformer Gujarati INT8 ONNX",
+                      "source": "https://huggingface.co/OpenVoiceOS/ai4bharat-indicconformer-gu-onnx",
+                      "license": "MIT"
+                  }
+              ],
+              "files": []
+          }
+          s3 = boto3.client(
+              "s3", endpoint_url=endpoint,
+              aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+              region_name="auto",
+          )
+          config = TransferConfig(
+              multipart_threshold=64*1024*1024,
+              multipart_chunksize=64*1024*1024,
+              max_concurrency=4,
+              use_threads=True,
+          )
+          for path, key in files:
+              digest = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(8*1024*1024), b""):
+                      digest.update(chunk)
+              item = {"key": key, "sizeBytes": path.stat().st_size, "sha256": digest.hexdigest()}
+              print(f"Uploading {key} ({item['sizeBytes']} bytes)")
+              s3.upload_file(str(path), bucket, key, ExtraArgs={
+                  "ContentType": "application/octet-stream",
+                  "CacheControl": "public, max-age=31536000, immutable",
+              }, Config=config)
+              head = s3.head_object(Bucket=bucket, Key=key)
+              if head["ContentLength"] != item["sizeBytes"]:
+                  raise SystemExit(f"R2 size verification failed: {key}")
+              manifest["files"].append(item)
+
+          manifest_path = root / "manifest-gujarati.json"
+          manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\\n")
+          s3.upload_file(str(manifest_path), bucket, "gujarati/manifest.json", ExtraArgs={
+              "ContentType": "application/json", "CacheControl": "public, max-age=300"
+          })
+          head = s3.head_object(Bucket=bucket, Key="gujarati/manifest.json")
+          if head["ContentLength"] != manifest_path.stat().st_size:
+              raise SystemExit("Gujarati manifest verification failed")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("## Gujarati model upload verified\\n\\n")
+              summary.write("| R2 object | Size (MB) | SHA-256 |\\n|---|---:|---|\\n")
+              for item in manifest["files"]:
+                  summary.write(f"| {item['key']} | {item['sizeBytes']/1_000_000:.2f} | {item['sha256']} |\\n")
+          print("All Gujarati model uploads and R2 object-size checks passed.")
+          PY
