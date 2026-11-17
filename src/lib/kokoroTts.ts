@@ -54,9 +54,24 @@ async function getEngine() {
         });
         report("ready", "Kokoro-82M is ready. Speech is generated on this device.");
         return engine;
-      } catch (error) {
-        report("error", error instanceof Error ? error.message : "Kokoro model could not be loaded on this device.");
-        throw error;
+      } catch (gpuError) {
+        // Some Android WebViews do not expose WebGPU. Retry with the CPU bundle
+        // rather than failing outright on those devices.
+        report("downloading", "GPU voice is unavailable here. Trying Kokoro CPU mode…");
+        const cpuModelUrl = "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm";
+        try {
+          const engine = await mediaPipe.TextToSpeech.createFromOptions(fileset, {
+            baseOptions: { modelAssetPath: cpuModelUrl, delegate: "CPU" },
+            defaultVoiceId: "af_heart",
+            speakingRate: 1,
+          });
+          report("ready", "Kokoro-82M is ready in CPU mode. Speech is generated on this device.");
+          return engine;
+        } catch (cpuError) {
+          const detail = cpuError instanceof Error ? cpuError.message : (gpuError instanceof Error ? gpuError.message : "Unsupported device");
+          report("error", `Kokoro could not start in GPU or CPU mode: ${detail}`);
+          throw cpuError;
+        }
       }
     })().catch((error) => {
       enginePromise = null;
