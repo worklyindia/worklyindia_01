@@ -7,7 +7,6 @@ type MediaPipeAudioModule = {
       fileset: unknown,
       options: {
         baseOptions: { modelAssetPath: string; delegate: "GPU" | "CPU" };
-        defaultVoiceId: string;
         speakingRate: number;
       },
     ): Promise<{
@@ -23,7 +22,7 @@ type MediaPipeAudioModule = {
 const MODEL_URL =
   "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_gpu_fp16.litertlm";
 const WASM_URL =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@latest/wasm";
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-audio@1.2.3/wasm";
 
 // Kokoro LiteRT bundles must retain their original filename inside MediaPipe's
 // Wasm filesystem. Without this, some Tasks Audio versions save every model as
