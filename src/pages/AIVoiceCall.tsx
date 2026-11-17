@@ -213,8 +213,14 @@ export default function AIVoiceCall() {
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
+      // The native Android SpeechRecognizer owns the microphone directly.
+      // Do not open and immediately close a WebView getUserMedia stream first:
+      // on some Android devices this races the native audio input and leaves
+      // SpeechRecognizer listening without receiving microphone frames.
+      if (!bridge) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      }
       activeRef.current = true;
       if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
       partialFinalizeTimerRef.current = null;
@@ -230,11 +236,12 @@ export default function AIVoiceCall() {
       if (!startRecognition('auto')) {
         activeRef.current = false;
         setVoiceStage('Could not start speech recognition');
-        setErrorMessage('Could not start on-device speech recognition. Check the offline speech service and try again.');
+        setErrorMessage('Could not start on-device speech recognition. Check microphone permission and the offline speech service, then try again.');
         setCallState('error');
         toast.error('Could not start on-device speech recognition.');
       }
     } catch {
+      activeRef.current = false;
       setErrorMessage('Microphone permission was denied. Allow microphone access in app settings, then try again.');
       setCallState('error');
       toast.error('Microphone permission was denied. Allow microphone access in app settings.');
