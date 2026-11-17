@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -7,7 +7,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
-import { supabase } from '@/integrations/supabase/client';
+import { callAICareerChat } from '@/lib/aiChatTransport';
+import { chatStorage, type StoredMessage } from '@/lib/chatStorage';
 import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition } from '@/lib/shrutiSpeech';
 
@@ -15,6 +16,9 @@ type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
 export default function AIVoiceCall() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedAudience = searchParams.get('audience');
+  const chatAudience = requestedAudience === 'employer' || requestedAudience === 'developer' ? requestedAudience : 'job_seeker';
   const { user } = useAuth();
   const { data: settings } = useAIChatSettings();
   const [callState, setCallState] = useState<CallState>('idle');
@@ -95,7 +99,7 @@ export default function AIVoiceCall() {
   }, [stopRecognition, stopReply]);
 
   const handleTranscript = useCallback(async (event: Event) => {
-    if (!activeRef.current) return;
+    if (!activeRef.current || !user?.id) return;
     const detail = (event as CustomEvent<{ text?: string; languageTag?: string }>).detail;
     const transcript = detail?.text?.trim();
     if (!transcript || transcript === lastSubmittedTranscriptRef.current) return;
@@ -107,34 +111,66 @@ export default function AIVoiceCall() {
     setPartialTranscript('');
     setErrorMessage('');
     setCallState('thinking');
-    setVoiceStage('Recognized speech; sending text to AI…');
+    setVoiceStage('Sending your message to Workly AI Chat…');
     setAiRequestStatus('Sending');
+    const userMessage: StoredMessage = {
+      id: `voice-user-${crypto.randomUUID()}`,
+      role: 'user',
+      content: transcript,
+      timestamp: new Date().toISOString(),
+      status: 'sent',
+    };
     try {
-      const { data, error } = await supabase.functions.invoke('unified-voice', {
-        body: { action: 'ai-voice-chat', text: transcript, languageTag: detail?.languageTag || 'und' },
-      });
-      if (error) throw error;
-      const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
-      if (!reply) throw new Error('AI did not return a voice response.');
+      chatStorage.setCurrentUserId(user.id);
+      chatStorage.setAudience(chatAudience === 'developer' ? 'developer' : 'default');
+      const history = chatStorage.loadMessages().filter((message) => message.role === 'user' || message.role === 'assistant');
+      const nextHistory = [...history, userMessage];
+      chatStorage.saveMessages(nextHistory);
+      const result = await callAICareerChat(
+        {
+          messages: nextHistory.map(({ role, content }) => ({ role, content })),
+          user_id: user.id,
+          audience: chatAudience,
+          hasImages: false,
+          currentPage: '/ai-assistant',
+          pageContext: { path: '/ai-assistant', page: 'AI Chat', audience: chatAudience },
+          voiceMode: true,
+        },
+        {
+          onStatus: (status) => { if (activeRef.current && turnId === conversationTurnRef.current) setVoiceStage(status); },
+          onProgressMessage: (status) => { if (activeRef.current && turnId === conversationTurnRef.current) setVoiceStage(status); },
+        },
+      );
+      const reply = result.fullText.trim();
+      if (!reply) throw new Error('Workly AI Chat returned an empty reply.');
+      const assistantMessage: StoredMessage = {
+        id: `voice-ai-${crypto.randomUUID()}`,
+        role: 'assistant',
+        content: reply,
+        timestamp: new Date().toISOString(),
+      };
+      chatStorage.saveMessages([...nextHistory, assistantMessage]);
       setAiRequestStatus('Reply received');
-      setVoiceStage('AI reply received; starting speech playback…');
+      setVoiceStage('AI Chat reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
-      const spoken = await speakReply(reply, data?.languageTag || detail?.languageTag || 'und');
+      const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
       setVoiceStage('TTS playback started');
     } catch (error) {
+      chatStorage.saveMessages(chatStorage.loadMessages().map((message) =>
+        message.id === userMessage.id ? { ...message, status: 'failed' as const } : message
+      ));
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
+      const message = error instanceof Error ? error.message : 'AI Chat voice reply failed. Please try again.';
       setErrorMessage(message);
       setAiRequestStatus((current) => current === 'Sending' ? 'Request failed' : current);
       setVoiceStage(`Error: ${message}`);
       setCallState('error');
       toast.error(message);
     }
-    // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [speakReply]);
+  }, [speakReply, user?.id, chatAudience]);
 
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -240,6 +276,8 @@ export default function AIVoiceCall() {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
     startingCallRef.current = true;
     try {
+      chatStorage.setCurrentUserId(user.id);
+      chatStorage.setAudience(chatAudience === 'developer' ? 'developer' : 'default');
       // Prepare both supported speech outputs before starting the call.
       setVoiceStage('Checking Hindi and English voice data…');
       await prepareVoiceOutput();
@@ -318,7 +356,7 @@ export default function AIVoiceCall() {
           <p className="mt-2 text-xs text-white/80">Microphone / recognition: {voiceStage}</p>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${micLevel}%` }} /></div>
           <p className="mt-2 text-xs text-white/65">AI request: {aiRequestStatus}</p>
-          <p className="mt-1 text-[10px] text-white/40">Only recognized speech text is sent to AI. Workly India does not save call audio.</p>
+          <p className="mt-1 text-[10px] text-white/40">Only recognized speech text is sent to Workly AI Chat. Call audio is not saved.</p>
         </div>}
 
         {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
@@ -330,8 +368,8 @@ export default function AIVoiceCall() {
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
           <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Voice privacy</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : 'On-device speech'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">Shruti converts speech to text on this device. Only recognized text is sent to the AI provider. Workly India does not save call audio or transcripts.</p>
-          {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only · not saved</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
+          <p className="mt-2 text-xs leading-5 text-white/55">Shruti converts speech to text on this device. Recognized messages and AI replies are saved in your AI Chat history. Call audio is not saved.</p>
+          {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Saved in AI Chat history</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
         <div className="mt-auto w-full pt-8">
