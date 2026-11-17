@@ -5,60 +5,58 @@ Tracking: https://github.com/worklyindia/worklyindia_01/issues/174
 
 ## Boundary
 
-This contract defines a separate inference service behind a Cloudflare Worker gateway. It does not replace or modify the existing `unified-voice` function. Do not deploy until the runtime, model identity/license checks, privacy controls and benchmark gates pass.
+Separate inference service behind a Cloudflare Worker gateway. This does not replace or modify the existing `unified-voice` function. Do not deploy until runtime, model identity/license, privacy and benchmark gates pass.
 
-The service must not receive Supabase service-role credentials. The application backend authenticates the user and forwards a short-lived, audience-bound service token. The inference service validates that token before accepting work.
+The inference service must not receive Supabase service-role credentials. The application backend authenticates the user and forwards a short-lived, audience-bound service token.
 
 ## Endpoints
 
 ### `GET /api/speech/health`
 
-Returns operational status and each model's actual readiness. A model is `ready` only after its weights are loaded and a local smoke test succeeds. Otherwise return `unavailable`. Never mark a model ready because its files merely exist.
+Returns actual readiness per model. A model is `ready` only after weights load and a local smoke test succeeds; otherwise `unavailable`.
 
 ### `POST /api/speech/transcribe`
 
-Accepts a documented audio MIME type and format, with:
+Accepts documented audio MIME type/format and:
 - `Authorization: Bearer <short-lived-service-token>`
 - `X-Audio-Language: auto|hi|gu|en|...` (hint only)
 - `X-Request-ID: <random-id>`
 
-Returns language-tagged recognized text, selected STT model, confidence where supported, and processing duration. IndicConformer is STT primary. The known Shruti model may be a separately tested Hindi/English/Hinglish STT fallback only; never TTS.
+Returns language-tagged recognized text, selected model, confidence where supported and processing duration. IndicConformer is primary STT. Shruti is backup STT only for separately validated Hindi/English/Hinglish cases. Never use either as TTS.
 
 ### `POST /api/speech/synthesize`
 
-Accepts JSON containing text, language, requested model/voice and audio format. Returns audio bytes with accurate `Content-Type`, model and duration headers.
+Accepts text, language, requested model/voice and audio format; returns audio bytes with accurate `Content-Type`, model and duration headers.
 
-Indic Tiny TTS Hindi/Gujarati checkpoints are language-specific candidates; Kokoro is English-focused. The requested "Shruti TTS" is blocked until an exact TTS repository/model and license are verified. Never silently substitute a model with a different task or unsupported language.
+Indic Tiny TTS Hindi/Gujarati checkpoints are language-specific candidates; Kokoro is English-focused. Do not route unsupported languages.
 
 ## Required controls
 
-- Require short-lived, signed, audience-restricted tokens; reject missing, expired, wrong-audience and malformed tokens.
-- Enforce maximum audio bytes, duration, text length, per-user concurrency and request timeout before inference.
-- Validate model selection against a server-side allowlist; never accept arbitrary repository IDs from clients.
-- Allow only documented audio MIME types and formats; reject malformed media with HTTP 400.
-- Return stable errors: `UNAUTHORIZED` (401), `INVALID_AUDIO` (400), `PAYLOAD_TOO_LARGE` (413), `RATE_LIMITED` (429), `MODEL_UNAVAILABLE` (503), `INFERENCE_TIMEOUT` (504).
-- Add idempotency/request deduplication for retries; cache TTS only with a privacy-safe key and explicit retention policy.
+- Require short-lived signed audience-restricted tokens.
+- Enforce maximum audio bytes/duration, text length, per-user concurrency and request timeout.
+- Validate model selection against server-side allowlist; never accept arbitrary repo IDs from clients.
+- Allow only documented audio MIME types/formats.
+- Stable errors: `UNAUTHORIZED` (401), `INVALID_AUDIO` (400), `PAYLOAD_TOO_LARGE` (413), `RATE_LIMITED` (429), `MODEL_UNAVAILABLE` (503), `INFERENCE_TIMEOUT` (504).
+- Add idempotency for retries; cache TTS only with privacy-safe keys and explicit retention policy.
 - Never log request bodies, audio, transcripts, TTS text, generated audio, auth tokens or user identifiers.
-- Do not persist private audio/transcripts by default. Clear temporary buffers after completion, cancellation or disconnect.
-- Model files must remain outside Git and outside browser/mobile bundles.
-- Protect the inference origin so public traffic reaches it only through the authenticated Cloudflare gateway.
+- Do not persist private audio/transcripts by default; clear buffers after completion, cancellation or disconnect.
+- Keep model files outside Git and browser/mobile bundles.
+- Protect origin so public traffic reaches it only through authenticated Cloudflare gateway.
 
-## Acceptance tests before connecting clients
+## Acceptance tests
 
-1. No-token, expired-token and wrong-audience requests are rejected.
-2. Oversized and malformed audio are rejected before model execution.
-3. Gujarati, Hindi and English STT produce language-tagged output; measure WER/CER against labelled samples.
-4. Hindi, Gujarati and English TTS are tested separately for pronunciation and naturalness.
-5. Report cold start, warm latency, real-time factor, peak RAM/VRAM and concurrent request capacity for every deployable model.
-6. Model absence, quota exhaustion, overload, timeout, retry, duplicate request and cancellation return stable outcomes.
-7. Confirm no payload appears in application, platform, proxy or observability logs and no speech payload is persisted without explicit approval.
-8. Confirm existing `unified-voice`, charging notification sounds and unrelated audio features remain unchanged during the trial.
-9. Verify Android playback, slow network, interruption, loading/error UI, and APK size before/after.
-10. Rollback consists of disabling the new route; legacy/local behavior remains available until parity is proven.
+1. Missing/expired/wrong-audience tokens rejected.
+2. Oversized/malformed audio rejected before inference.
+3. Gujarati, Hindi and English STT evaluated against labelled samples; measure WER/CER for primary IndicConformer.
+4. Shruti fallback tested separately for Hindi/English/Hinglish; verify fallback routing and ensure no Gujarati fallback unless validated.
+5. Hindi, Gujarati and English TTS tested separately for pronunciation and naturalness.
+6. Record cold/warm latency, RTF, peak RAM/VRAM and concurrent capacity.
+7. Test unavailable model, quota exhaustion, overload, timeout, retry, duplicate request and cancellation.
+8. Confirm no speech payload in logs or persisted storage by default.
+9. Confirm existing `unified-voice`, charging notification sounds and unrelated audio features remain unchanged.
+10. Verify Android playback, slow network, interruption, loading/error UI and APK size before/after.
+11. Rollback by disabling new route; legacy/local behavior remains available until parity is proven.
 
 ## Explicitly out of scope until all gates pass
 
-- No production DNS route, Cloudflare Worker, Queue, R2 object, secret, Supabase function, model deployment or billing change.
-- No client is switched away from local/browser speech.
-- No model weights are removed from Android before endpoint verification.
-- No promise of unlimited or always-on free compute.
+No production DNS route, Worker, Queue, R2 object, secret, Supabase function, model deployment, billing change, client switch or model-weight removal. No promise of unlimited/always-on free compute.
