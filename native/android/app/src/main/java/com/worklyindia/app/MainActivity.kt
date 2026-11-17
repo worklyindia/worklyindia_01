@@ -96,6 +96,7 @@ class MainActivity : FragmentActivity() {
     private lateinit var rootLayout: FrameLayout
     private lateinit var loadingOverlay: FrameLayout
     private var voiceRecognizer: SpeechRecognizer? = null
+    private var pendingVoiceRecognitionLanguage: String? = null
     private var voiceTts: TextToSpeech? = null
     private var voiceTtsReady = false
     private var voiceCallActive = false
@@ -1883,8 +1884,20 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 return false
             }
             if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Microphone permission is required.").toString())
-                return false
+                // Native SpeechRecognizer does not trigger WebChromeClient's getUserMedia
+                // permission flow. Request RECORD_AUDIO explicitly, then start recognition
+                // only after Android returns GRANTED.
+                runOnUiThread {
+                    if (pendingVoiceRecognitionLanguage == null) {
+                        pendingVoiceRecognitionLanguage = languageTag
+                        ActivityCompat.requestPermissions(
+                            this@MainActivity,
+                            arrayOf(Manifest.permission.RECORD_AUDIO),
+                            REQUEST_VOICE_MIC
+                        )
+                    }
+                }
+                return true
             }
             runOnUiThread {
                 runCatching {
@@ -2733,7 +2746,19 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_MEDIA) {
+        if (requestCode == REQUEST_VOICE_MIC) {
+            val language = pendingVoiceRecognitionLanguage
+            pendingVoiceRecognitionLanguage = null
+            val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+            if (granted && !language.isNullOrBlank()) {
+                WorklyWebBridge().startOnDeviceVoiceRecognition(language)
+            } else {
+                dispatchNativeEvent(
+                    "workly-voice-error",
+                    JSONObject().put("message", "Microphone permission was denied. Allow microphone access for Workly India in Android settings, then try again.").toString()
+                )
+            }
+        } else if (requestCode == REQUEST_MEDIA) {
             val request = pendingWebPermission
             pendingWebPermission = null
             if (request != null) {
@@ -3742,6 +3767,7 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         private const val REQUEST_FILE_CHOOSER = 4103
         private const val REQUEST_VAULT_IMPORT = 4105
         private const val REQUEST_MEDIA = 702
+        private const val REQUEST_VOICE_MIC = 703
         private const val REQUEST_LOCATION = 703
     }
 }
