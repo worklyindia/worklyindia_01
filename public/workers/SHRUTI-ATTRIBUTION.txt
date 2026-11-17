@@ -1,0 +1,10 @@
+Shruti speech-to-text model and WebAssembly engine attribution
+
+Shruti model: Copyright 2026 Udgam Labs. Apache License 2.0.
+Model source: https://huggingface.co/udgamlabs/Shruti
+Project and model documentation: https://github.com/udgamlabs/shruti
+
+The browser speech runtime is the Cactus needle WebAssembly build by Cactus Compute, Inc., Apache License 2.0. It is loaded at runtime from:
+https://github.com/udgamlabs/shruti/tree/main/examples/browser/needle
+
+The engine's upstream LICENSE.txt and NOTICE.txt are available in that directory. Workly India does not bundle the engine binary or model weights in the Android APK or website build; they are downloaded on demand to the user's device.
