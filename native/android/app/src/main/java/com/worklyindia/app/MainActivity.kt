@@ -2132,19 +2132,27 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 }
                 if (!voiceTtsReady) return@runOnUiThread
                 voiceCallActive = true
-                val locale = Locale.forLanguageTag(languageTag)
-                val availability = voiceTts?.isLanguageAvailable(locale) ?: TextToSpeech.LANG_NOT_SUPPORTED
-                if (availability < TextToSpeech.LANG_AVAILABLE) {
-                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "Selected language voice is not installed on this phone.").toString())
+                val requestedTag = languageTag.takeIf { it.isNotBlank() && it != "und" && it != "auto" }
+                    ?: Locale.getDefault().toLanguageTag()
+                val requestedLocale = Locale.forLanguageTag(requestedTag)
+                val tts = voiceTts ?: return@runOnUiThread
+                val availableVoices = tts.voices.orEmpty()
+                // Prefer an exact locale voice, then any installed voice for the
+                // same language. Never select an unrelated default voice.
+                val matchingVoice = availableVoices.firstOrNull {
+                    it.locale.toLanguageTag().equals(requestedTag, ignoreCase = true)
+                } ?: availableVoices.firstOrNull {
+                    it.locale.language.equals(requestedLocale.language, ignoreCase = true)
+                }
+                val languageResult = tts.setLanguage(requestedLocale)
+                if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    dispatchNativeEvent("workly-voice-error", JSONObject().put("message", "The " + requestedLocale.displayLanguage + " text-to-speech voice is not installed or supported on this phone. Install its speech voice in Android Text-to-speech settings and try again.").toString())
                     return@runOnUiThread
                 }
-                // Prefer a female-sounding installed voice when the device exposes one;
-                // otherwise keep the system's default voice for this language.
-                val preferredVoice = voiceTts?.voices?.firstOrNull {
-                    it.locale.language == locale.language &&
-                        (it.name.contains("female", ignoreCase = true) || it.name.contains("woman", ignoreCase = true))
+                if (matchingVoice != null) {
+                    runCatching { tts.voice = matchingVoice }
                 }
-                if (preferredVoice != null) voiceTts?.voice = preferredVoice else voiceTts?.language = locale
                 voiceTts?.setSpeechRate(0.96f)
                 voiceTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
