@@ -1761,8 +1761,13 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                     dispatchVoiceTtsReady(false, "Android text-to-speech is unavailable.")
                     return@runOnUiThread
                 }
-                val hindi = tts.isLanguageAvailable(Locale.forLanguageTag("hi-IN")) >= TextToSpeech.LANG_AVAILABLE
-                val english = tts.isLanguageAvailable(Locale.forLanguageTag("en-IN")) >= TextToSpeech.LANG_AVAILABLE
+                val installedLanguages = tts.voices.orEmpty().map { it.locale.language.lowercase(Locale.ROOT) }.toSet()
+                val hindi = "hi" in installedLanguages ||
+                    tts.isLanguageAvailable(Locale("hi")) >= TextToSpeech.LANG_AVAILABLE ||
+                    tts.isLanguageAvailable(Locale.forLanguageTag("hi-IN")) >= TextToSpeech.LANG_AVAILABLE
+                val english = "en" in installedLanguages ||
+                    tts.isLanguageAvailable(Locale("en")) >= TextToSpeech.LANG_AVAILABLE ||
+                    tts.isLanguageAvailable(Locale.forLanguageTag("en-IN")) >= TextToSpeech.LANG_AVAILABLE
                 if (hindi && english) {
                     dispatchVoiceTtsReady(true)
                 } else if (allowInstaller && !ttsDataInstallPending) {
