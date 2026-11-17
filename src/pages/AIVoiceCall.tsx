@@ -299,8 +299,8 @@ export default function AIVoiceCall() {
         {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
 
         <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
-          <p className="mt-2 text-sm text-white/70">Speak naturally. Speech is converted to text on this device.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Device-language speech recognition</p>
+          <p className="mt-2 text-sm text-white/70">Gujarati device language uses IndicConformer INT8. Hindi and English use Shruti.</p>
         </div>
 
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
