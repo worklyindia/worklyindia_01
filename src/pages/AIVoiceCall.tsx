@@ -23,6 +23,9 @@ export default function AIVoiceCall() {
   const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
+  const [voiceStage, setVoiceStage] = useState('Waiting for microphone…');
+  const [micLevel, setMicLevel] = useState(0);
+  const [aiRequestStatus, setAiRequestStatus] = useState('Not sent');
   const [isNativeApp] = useState(() => !!getWorklyAndroidBridge());
   const activeRef = useRef(false);
   const partialFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,6 +65,9 @@ export default function AIVoiceCall() {
     stopRecognition();
     stopReply();
     setCallState('idle');
+    setVoiceStage('Call ended');
+    setMicLevel(0);
+    setAiRequestStatus('Not sent');
     setLastReply('');
     setLastTranscript('');
     setPartialTranscript('');
@@ -82,6 +88,8 @@ export default function AIVoiceCall() {
     setPartialTranscript('');
     setErrorMessage('');
     setCallState('thinking');
+    setVoiceStage('Recognized speech; sending text to AI…');
+    setAiRequestStatus('Sending');
     try {
       const { data, error } = await supabase.functions.invoke('unified-voice', {
         body: { action: 'ai-voice-chat', text: transcript, languageTag: detail?.languageTag || 'und' },
@@ -89,15 +97,20 @@ export default function AIVoiceCall() {
       if (error) throw error;
       const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
       if (!reply) throw new Error('AI did not return a voice response.');
+      setAiRequestStatus('Reply received');
+      setVoiceStage('AI reply received; starting phone TTS…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
       const spoken = speakReply(reply, detail?.languageTag || 'und');
       if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
       setCallState('speaking');
+      setVoiceStage('TTS playback started');
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
       setErrorMessage(message);
+      setAiRequestStatus((current) => current === 'Sending' ? 'Request failed' : current);
+      setVoiceStage(`Error: ${message}`);
       setCallState('error');
       toast.error(message);
     }
@@ -110,6 +123,7 @@ export default function AIVoiceCall() {
     const text = detail?.text?.trim();
     if (!text || text === lastSubmittedTranscriptRef.current) return;
     setPartialTranscript(text);
+    setVoiceStage('Speech recognized; waiting for a pause…');
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
     partialFinalizeTimerRef.current = setTimeout(() => {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
@@ -120,7 +134,8 @@ export default function AIVoiceCall() {
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const status = (event as CustomEvent<{ status?: string }>).detail?.status;
-    if (status === 'listening') setCallState('listening');
+    if (status === 'listening') { setCallState('listening'); setVoiceStage('Microphone is listening'); }
+    if (status === 'processing') setVoiceStage('Speech ended; waiting for transcript…');
     if (status === 'processing') setCallState('thinking');
     if (status === 'speaking') setCallState('speaking');
     if (status === 'finished' && activeRef.current && !muted) {
@@ -155,6 +170,7 @@ export default function AIVoiceCall() {
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const message = (event as CustomEvent<{ message?: string }>).detail?.message || 'Voice service error.';
+    setVoiceStage(`Recognition error: ${message}`);
     setErrorMessage(message);
     setCallState('error');
     toast.error(message);
@@ -162,12 +178,22 @@ export default function AIVoiceCall() {
 
   useEffect(() => {
     setNativeAvailable(recognitionAvailable());
+    const handleSpeechStart = () => { if (activeRef.current) setVoiceStage('Speech detected by microphone'); };
+    const handleMicLevel = (event: Event) => {
+      if (!activeRef.current) return;
+      const level = Number((event as CustomEvent<{ level?: number }>).detail?.level ?? 0);
+      setMicLevel(Math.max(0, Math.min(100, level)));
+    };
+    window.addEventListener('workly-voice-speech-start', handleSpeechStart);
+    window.addEventListener('workly-voice-mic-level', handleMicLevel);
     window.addEventListener('workly-voice-transcript', handleTranscript);
     window.addEventListener('workly-voice-partial-transcript', handlePartialTranscript);
     window.addEventListener('workly-voice-status', handleNativeStatus);
     window.addEventListener('workly-voice-error', handleNativeError);
     window.addEventListener('workly-voice-barge-in', handleBargeIn);
     return () => {
+      window.removeEventListener('workly-voice-speech-start', handleSpeechStart);
+      window.removeEventListener('workly-voice-mic-level', handleMicLevel);
       window.removeEventListener('workly-voice-transcript', handleTranscript);
       window.removeEventListener('workly-voice-partial-transcript', handlePartialTranscript);
       window.removeEventListener('workly-voice-status', handleNativeStatus);
@@ -198,8 +224,12 @@ export default function AIVoiceCall() {
       setPartialTranscript('');
       setErrorMessage('');
       setCallState('listening');
+      setVoiceStage('Starting on-device microphone…');
+      setMicLevel(0);
+      setAiRequestStatus('Not sent');
       if (!startRecognition('auto')) {
         activeRef.current = false;
+        setVoiceStage('Could not start speech recognition');
         setErrorMessage('Could not start on-device speech recognition. Check the offline speech service and try again.');
         setCallState('error');
         toast.error('Could not start on-device speech recognition.');
@@ -245,6 +275,14 @@ export default function AIVoiceCall() {
           <span className={`h-2 w-2 rounded-full ${callState === 'listening' ? 'bg-emerald-400 animate-pulse' : callState === 'thinking' ? 'bg-amber-300 animate-pulse' : callState === 'speaking' ? 'bg-blue-300 animate-pulse' : 'bg-white/30'}`} />
           {callState === 'listening' ? 'Listening on this device' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
         </div>
+
+        {activeRef.current && <div className="mt-4 w-full rounded-xl border border-cyan-300/20 bg-cyan-400/[0.06] px-4 py-3 text-left" aria-live="polite">
+          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-100/80">Live voice diagnostics</p>
+          <p className="mt-2 text-xs text-white/80">Microphone / recognition: {voiceStage}</p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${micLevel}%` }} /></div>
+          <p className="mt-2 text-xs text-white/65">AI request: {aiRequestStatus}</p>
+          <p className="mt-1 text-[10px] text-white/40">Only speech text is sent to AI. Audio is not saved or uploaded by this call.</p>
+        </div>}
 
         {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
 
