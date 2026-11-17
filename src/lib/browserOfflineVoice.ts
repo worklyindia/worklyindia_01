@@ -70,10 +70,12 @@ export async function startBrowserLocalRecognition(language = 'en-US', allowBrow
   next.lang = lang;
   next.continuous = false;
   next.interimResults = true;
+  let receivedSpeechResult = false;
   next.onresult = (event) => {
     const resultIndex = event.resultIndex ?? 0;
     for (let index = resultIndex; index < (event.results?.length ?? 0); index += 1) {
       const result = event.results[index];
+      receivedSpeechResult = true;
       const text = result?.[0]?.transcript?.trim();
       if (!text) continue;
       window.dispatchEvent(new CustomEvent(result.isFinal ? 'workly-voice-transcript' : 'workly-voice-partial-transcript', {
@@ -91,7 +93,7 @@ export async function startBrowserLocalRecognition(language = 'en-US', allowBrow
   };
   next.onend = () => {
     if (recognition === next) recognition = null;
-    window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
+    window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: receivedSpeechResult ? 'recognition-ended' : 'finished' } }));
   };
   recognition = next;
   try {
