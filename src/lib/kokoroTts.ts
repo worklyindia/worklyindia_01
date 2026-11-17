@@ -131,6 +131,22 @@ async function getEngine() {
   return enginePromise;
 }
 
+/** Force a clean engine reload while reusing the browser's cached model file when available. */
+export async function reloadKokoroTts(): Promise<void> {
+  stopKokoroTts();
+  if (enginePromise) {
+    try {
+      const currentEngine = await enginePromise;
+      currentEngine.close();
+    } catch {
+      // A failed initialization has no engine to close; allow a clean retry.
+    }
+  }
+  enginePromise = null;
+  activeModelUrl = MODEL_URL;
+  await prepareKokoroTts();
+}
+
 export function isKokoroLanguageSupported(languageTag: string): boolean {
   const language = languageTag.toLowerCase().split("-")[0];
   return language === "en" || language === "hi";
