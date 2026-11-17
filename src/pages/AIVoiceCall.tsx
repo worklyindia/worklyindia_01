@@ -43,10 +43,32 @@ export default function AIVoiceCall() {
     return true;
   }, []);
   const stopRecognition = useCallback(() => { stopShrutiRecognition(); }, []);
+  const prepareVoiceOutput = useCallback(async () => {
+    if (!bridge?.prepareVoiceTts) return;
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        window.removeEventListener('workly-tts-ready', handleReady);
+        if (error) reject(error);
+        else resolve();
+      };
+      const handleReady = (event: Event) => {
+        const detail = (event as CustomEvent<{ ready?: boolean; message?: string }>).detail;
+        if (detail?.ready) finish();
+        else finish(new Error(detail?.message || 'Hindi and English TTS voices are not ready.'));
+      };
+      const timeout = window.setTimeout(() => finish(new Error('Voice language setup timed out. Please try again.')), 240000);
+      window.addEventListener('workly-tts-ready', handleReady);
+      if (!bridge.prepareVoiceTts?.()) finish(new Error('Could not prepare Hindi and English voice data.'));
+    });
+  }, [bridge]);
   const speakReply = useCallback(async (text: string, language: string) => {
-    const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
-    if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
-    return speakBrowserLocalReply(text, resolvedLanguage);
+    const supportedLanguage = language.toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-IN';
+    if (bridge) return bridge.speakVoiceReply?.(text, supportedLanguage) ?? false;
+    return speakBrowserLocalReply(text, supportedLanguage);
   }, [bridge]);
   const stopReply = useCallback(() => {
     if (bridge) bridge.stopVoiceReply?.();
@@ -218,7 +240,10 @@ export default function AIVoiceCall() {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
     startingCallRef.current = true;
     try {
-      // Load the offline model only after the user taps Start AI Call.
+      // Prepare both supported speech outputs before starting the call.
+      setVoiceStage('Checking Hindi and English voice data…');
+      await prepareVoiceOutput();
+      // Load the offline recognition model only after the user taps Start AI Call.
       // The model is persisted in IndexedDB and reused on later visits.
       try { await navigator.storage?.persist?.(); } catch { /* browser may deny persistent storage */ }
       await prepareShrutiRecognition();
@@ -245,7 +270,7 @@ export default function AIVoiceCall() {
     } catch (error) {
       startingCallRef.current = false;
       activeRef.current = false;
-      const message = error instanceof Error ? error.message : 'Shruti could not start. Check microphone permission and try again.';
+      const message = error instanceof Error ? error.message : 'Hindi and English voice setup or Shruti could not start. Check permissions and try again.';
       setErrorMessage(message);
       setVoiceStage(`Error: ${message}`);
       setCallState('error');
