@@ -19,6 +19,7 @@ export default function AIVoiceCall() {
   const [callState, setCallState] = useState<CallState>('idle');
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
+  const [partialTranscript, setPartialTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
   const [nativeAvailable, setNativeAvailable] = useState(false);
@@ -56,6 +57,7 @@ export default function AIVoiceCall() {
     setCallState('idle');
     setLastReply('');
     setLastTranscript('');
+    setPartialTranscript('');
     setErrorMessage('');
     setMuted(false);
   }, [stopRecognition, stopReply]);
@@ -66,6 +68,7 @@ export default function AIVoiceCall() {
     const transcript = detail?.text?.trim();
     if (!transcript) return;
     setLastTranscript(transcript);
+    setPartialTranscript('');
     setErrorMessage('');
     setCallState('thinking');
     try {
@@ -89,6 +92,13 @@ export default function AIVoiceCall() {
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
   }, [speakReply]);
+
+  const handlePartialTranscript = useCallback((event: Event) => {
+    if (!activeRef.current) return;
+    const detail = (event as CustomEvent<{ text?: string }>).detail;
+    const text = detail?.text?.trim();
+    if (text) setPartialTranscript(text);
+  }, []);
 
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -127,11 +137,13 @@ export default function AIVoiceCall() {
   useEffect(() => {
     setNativeAvailable(recognitionAvailable());
     window.addEventListener('workly-voice-transcript', handleTranscript);
+    window.addEventListener('workly-voice-partial-transcript', handlePartialTranscript);
     window.addEventListener('workly-voice-status', handleNativeStatus);
     window.addEventListener('workly-voice-error', handleNativeError);
     window.addEventListener('workly-voice-barge-in', handleBargeIn);
     return () => {
       window.removeEventListener('workly-voice-transcript', handleTranscript);
+      window.removeEventListener('workly-voice-partial-transcript', handlePartialTranscript);
       window.removeEventListener('workly-voice-status', handleNativeStatus);
       window.removeEventListener('workly-voice-error', handleNativeError);
       window.removeEventListener('workly-voice-barge-in', handleBargeIn);
@@ -139,7 +151,7 @@ export default function AIVoiceCall() {
       stopRecognition();
       stopReply();
     };
-  }, [recognitionAvailable, stopRecognition, stopReply, handleTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
+  }, [recognitionAvailable, stopRecognition, stopReply, handleTranscript, handlePartialTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
 
   const startCall = async () => {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
@@ -154,6 +166,7 @@ export default function AIVoiceCall() {
       activeRef.current = true;
       setLastReply('');
       setLastTranscript('');
+      setPartialTranscript('');
       setErrorMessage('');
       setCallState('listening');
       if (!startRecognition('auto')) {
@@ -214,7 +227,7 @@ export default function AIVoiceCall() {
         <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
           <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Privacy-first call</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : isNativeApp ? 'Offline speech setup needed' : 'Browser voice input unavailable'}</span></div>
           <p className="mt-2 text-xs leading-5 text-white/55">{nativeAvailable ? 'Audio is recognized on your phone. Only recognized text is sent to the AI provider. Workly India does not save call audio, transcript or AI replies in chat history, database or storage. Provider retention is governed by that provider.' : isNativeApp ? 'This phone is not currently reporting a supported on-device speech recognizer. The call will not start and microphone audio will not be sent to a speech-to-text service. Enable or install offline speech recognition and language data in Android settings, then reopen this page.' : 'This browser must support on-device speech recognition and have a local language pack. Remote transcription is never used; browser support and language coverage vary.'}</p>
-          {(lastTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only</p>{lastTranscript && <p className="text-xs text-white/65">You: {lastTranscript}</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
+          {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only · not saved</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
         </div>
 
         <div className="mt-auto w-full pt-8">
