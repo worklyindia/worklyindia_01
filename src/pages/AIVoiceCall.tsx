@@ -165,7 +165,7 @@ export default function AIVoiceCall() {
     if (status === 'listening') { setCallState('listening'); setVoiceStage('Microphone is listening'); }
     if (status === 'processing') setVoiceStage('Speech ended; waiting for transcript…');
     if (status === 'processing') setCallState('thinking');
-    if (status === 'speaking') setCallState('speaking');
+    if (status === 'speaking') { stopRecognition(); setCallState('speaking'); }
     if (status === 'finished' && activeRef.current && !muted) {
       window.setTimeout(() => {
         if (activeRef.current && !muted) {
