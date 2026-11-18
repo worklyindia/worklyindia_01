@@ -5,6 +5,8 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Build
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -18,6 +20,7 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -40,6 +43,21 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var listenButton: Button
     private lateinit var pairingCodeInput: EditText
     private lateinit var relayStatusText: TextView
+    private lateinit var offlineModelStatusText: TextView
+    private lateinit var offlineModelProgressBar: ProgressBar
+    private lateinit var offlineModelActionButton: Button
+    private val offlineModelManager by lazy { OfflineModelManager(this) }
+    private val offlineModelHandler = Handler(Looper.getMainLooper())
+    private val offlineModelPoll = object : Runnable {
+        override fun run() {
+            refreshOfflineModelUi()
+            val state = runCatching { offlineModelManager.snapshot().state }.getOrNull()
+            if (state == OfflineModelManager.State.RUNNING ||
+                state == OfflineModelManager.State.PENDING ||
+                state == OfflineModelManager.State.PAUSED
+            ) offlineModelHandler.postDelayed(this, 1000L)
+        }
+    }
     private val relayExecutor = Executors.newSingleThreadExecutor()
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
@@ -140,8 +158,34 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         ).also { it.setPadding(0, dp(10), 0, 0) })
 
         page.addView(space(22))
+
         page.addView(space(22))
-        page.addView(sectionTitle("3. Connect this phone as a voice server"))
+        page.addView(sectionTitle("3. Offline Workly AI"))
+        val offlineCard = card()
+        offlineCard.addView(label("Qwen2.5-3B-Instruct · Q4_K_M", 16, 0xFF142033.toInt(), true))
+        offlineCard.addView(label(
+            "On-demand model download · about 2.1 GB. The model is downloaded only after you tap the button and is stored in this app's private storage. It is not included in the APK.",
+            12, 0xFF536276.toInt(), false
+        ).also { it.setPadding(0, dp(7), 0, dp(10)) })
+        offlineModelStatusText = label("Checking offline model…", 13, 0xFF174B36.toInt(), true)
+        offlineCard.addView(offlineModelStatusText)
+        offlineModelProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+        }
+        offlineCard.addView(offlineModelProgressBar, matchWrap().also { it.topMargin = dp(10) })
+        offlineModelActionButton = button("Download offline AI model")
+        offlineModelActionButton.setOnClickListener { onOfflineModelAction() }
+        offlineCard.addView(offlineModelActionButton, matchWrap().also { it.topMargin = dp(10) })
+        offlineCard.addView(label(
+            "Important: this step downloads and verifies the model file. The on-device inference/chat engine is not connected yet, so downloading alone does not activate offline AI. Voice input/output above still uses Android's installed speech services.",
+            12, 0xFF65748B.toInt(), false
+        ).also { it.setPadding(0, dp(10), 0, 0) })
+        page.addView(offlineCard)
+
+        page.addView(space(22))
+        page.addView(sectionTitle("4. Connect this phone as a voice server"))
         val relayCard = card()
         relayCard.addView(label("Secure Workly phone pairing", 16, 0xFF142033.toInt(), true))
         relayCard.addView(label(
@@ -190,6 +234,84 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         setContentView(scroll)
     }
 
+
+
+    private fun onOfflineModelAction() {
+        try {
+            when (offlineModelManager.snapshot().state) {
+                OfflineModelManager.State.READY -> {
+                    offlineModelManager.deleteDownloadedModel()
+                    setOfflineModelStatus("Downloaded model deleted. You can download it again whenever needed.")
+                }
+                OfflineModelManager.State.PENDING,
+                OfflineModelManager.State.RUNNING,
+                OfflineModelManager.State.PAUSED -> {
+                    offlineModelManager.cancelAndDelete()
+                    setOfflineModelStatus("Model download cancelled.")
+                }
+                else -> {
+                    offlineModelManager.startDownload()
+                    setOfflineModelStatus("Starting secure download from Hugging Face…")
+                }
+            }
+            refreshOfflineModelUi()
+            startOfflineModelPolling()
+        } catch (error: Exception) {
+            setOfflineModelStatus(error.message ?: "Could not start model download.")
+        }
+    }
+
+    private fun refreshOfflineModelUi() {
+        if (!::offlineModelStatusText.isInitialized) return
+        try {
+            val snapshot = offlineModelManager.snapshot()
+            val active = snapshot.state == OfflineModelManager.State.RUNNING ||
+                snapshot.state == OfflineModelManager.State.PENDING ||
+                snapshot.state == OfflineModelManager.State.PAUSED
+            offlineModelProgressBar.visibility = if (active || snapshot.state == OfflineModelManager.State.READY) View.VISIBLE else View.GONE
+            offlineModelProgressBar.progress = snapshot.progressPercent
+            when (snapshot.state) {
+                OfflineModelManager.State.NOT_DOWNLOADED -> {
+                    offlineModelStatusText.text = "Model not downloaded · about 2.1 GB required"
+                    offlineModelActionButton.text = "Download offline AI model"
+                }
+                OfflineModelManager.State.PENDING -> {
+                    offlineModelStatusText.text = "Download queued… \${snapshot.progressPercent}%"
+                    offlineModelActionButton.text = "Cancel download"
+                }
+                OfflineModelManager.State.RUNNING -> {
+                    val downloaded = snapshot.downloadedBytes / 1_000_000_000.0
+                    val total = snapshot.totalBytes / 1_000_000_000.0
+                    offlineModelStatusText.text = "Downloading… \${snapshot.progressPercent}% (%.2f / %.2f GB)".format(java.util.Locale.US, downloaded, total)
+                    offlineModelActionButton.text = "Cancel download"
+                }
+                OfflineModelManager.State.PAUSED -> {
+                    offlineModelStatusText.text = "Download paused by Android/network. It may resume automatically when the connection is available."
+                    offlineModelActionButton.text = "Cancel download"
+                }
+                OfflineModelManager.State.FAILED -> {
+                    offlineModelStatusText.text = "Download failed or file verification failed. Try again."
+                    offlineModelActionButton.text = "Retry download"
+                }
+                OfflineModelManager.State.READY -> {
+                    offlineModelStatusText.text = "Model downloaded and GGUF file verified · 2.1 GB"
+                    offlineModelActionButton.text = "Delete downloaded model"
+                }
+            }
+        } catch (error: Exception) {
+            offlineModelStatusText.text = error.message ?: "Offline model storage is unavailable."
+            offlineModelActionButton.text = "Try again"
+        }
+    }
+
+    private fun setOfflineModelStatus(message: String) {
+        if (::offlineModelStatusText.isInitialized) offlineModelStatusText.text = message
+    }
+
+    private fun startOfflineModelPolling() {
+        offlineModelHandler.removeCallbacks(offlineModelPoll)
+        offlineModelHandler.post(offlineModelPoll)
+    }
 
     private fun pairPhone() {
         val code = pairingCodeInput.text?.toString()?.trim()?.uppercase(Locale.ROOT).orEmpty()
@@ -242,6 +364,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         if (::relayStatusText.isInitialized) refreshRelayStatus()
+        if (::offlineModelStatusText.isInitialized) startOfflineModelPolling()
     }
 
     private fun speakText() {
@@ -378,10 +501,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onPause() {
         super.onPause()
+        offlineModelHandler.removeCallbacks(offlineModelPoll)
         if (listening) stopListening()
     }
 
     override fun onDestroy() {
+        offlineModelHandler.removeCallbacksAndMessages(null)
         stopListening()
         tts?.stop()
         tts?.shutdown()
