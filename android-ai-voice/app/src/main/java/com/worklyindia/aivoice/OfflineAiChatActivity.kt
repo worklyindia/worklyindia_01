@@ -31,7 +31,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private val worker = Executors.newSingleThreadExecutor()
     private val modelManager by lazy { QwenModelManager(this) }
     private lateinit var qwenModelPicker: Spinner
-    private lateinit var downloadModelButton: Button
     private var selectedQwenModel: QwenModelManager.Model? = null
     private var userHasChosenQwenModel = false
     private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
@@ -275,7 +274,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         modelLoadInProgress = true
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
-        downloadModelButton.text = "Checking model download…"
         status.text = "Checking Qwen model and phone memory…"
         worker.execute {
             try {
@@ -307,7 +305,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
                     sendButton.alpha = 1f
-                    downloadModelButton.text = "Manage model downloads"
                 }
             } catch (error: Exception) {
                 runOnUiThread {
@@ -315,7 +312,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                     modelLoadInProgress = false
                     status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
                     sendButton.isEnabled = false
-                    downloadModelButton.text = "Open Downloads / Retry model"
                 }
             }
         }
