@@ -50,8 +50,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var sendButton: Button
     private lateinit var micButton: Button
     private lateinit var status: TextView
-    private lateinit var languagePicker: Spinner
-    private lateinit var speechEnginePicker: Spinner
     private lateinit var chatScroll: ScrollView
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -164,13 +162,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 }
             }
         }
-        languagePicker = Spinner(this).apply { adapter = readableSpinnerAdapter(languages) }
-        speechEnginePicker = Spinner(this).apply {
-            adapter = readableSpinnerAdapter(listOf("Android speech service", "AI4Bharat IndicConformer · offline", "Shruti ONNX · offline"))
-        }
-        downloadModelButton = button("Manage model downloads").apply {
-            setOnClickListener { startActivity(Intent(this@OfflineAiChatActivity, SpeechDownloadsActivity::class.java)) }
-        }
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -255,30 +246,13 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
-            menu.add("Download / change AI model").setOnMenuItemClickListener {
-                startActivity(Intent(this@OfflineAiChatActivity, SpeechDownloadsActivity::class.java)); true
-            }
-            menu.add("Chat language").setOnMenuItemClickListener {
-                showChoiceDialog("Chat language", languages.map { it.label }, languagePicker.selectedItemPosition) { languagePicker.setSelection(it) }; true
-            }
-            menu.add("Voice recognition engine").setOnMenuItemClickListener {
-                showChoiceDialog("Voice recognition", listOf("Android speech service", "AI4Bharat IndicConformer · offline", "Shruti ONNX · offline"), speechEnginePicker.selectedItemPosition) { speechEnginePicker.setSelection(it) }; true
-            }
-            menu.add("Model status").setOnMenuItemClickListener {
-                status.text = "Selected: ${selectedQwenModel?.title ?: "Checking"} · ${if (engine.isLoaded) "AI ready" else "Model not loaded"}"
-                true
+            menu.add("Settings").setOnMenuItemClickListener {
+                startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
             show()
         }
     }
 
-    private fun showChoiceDialog(title: String, choices: List<String>, selected: Int, onChosen: (Int) -> Unit) {
-        android.app.AlertDialog.Builder(this)
-            .setTitle(title)
-            .setSingleChoiceItems(choices.toTypedArray(), selected) { dialog, which -> onChosen(which); dialog.dismiss() }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
 
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
         object : ArrayAdapter<T>(this, android.R.layout.simple_spinner_item, items) {
@@ -383,10 +357,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
             return
-        }
-        when (speechEnginePicker.selectedItemPosition) {
-            1 -> { startOfflineVoiceInput(shruti = false); return }
-            2 -> { startOfflineVoiceInput(shruti = true); return }
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             status.text = "No speech recognition service is installed. Install or enable one in Android settings."
@@ -579,7 +549,9 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         if (!modelLoadInProgress && savedId != null && savedId != loadedModelId) loadModel()
     }
 
-    private fun selectedLanguage() = languages.getOrElse(languagePicker.selectedItemPosition) { languages.first() }
+    // Language follows the device locale; recognition is allowed to detect the spoken language.
+    private fun selectedLanguage(): VoiceLanguage = languages.firstOrNull { it.locale.language == Locale.getDefault().language }
+        ?: VoiceLanguage("Device language", Locale.getDefault().toLanguageTag(), Locale.getDefault())
 
     override fun onInit(result: Int) { ttsReady = result == TextToSpeech.SUCCESS }
 
