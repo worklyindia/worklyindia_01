@@ -139,7 +139,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             return
         }
         engine.setLanguage(locale)
-        engine.speak(text.take(4000), TextToSpeech.QUEUE_ADD, null, jobId)
+        engine.speak(text.take(1000), TextToSpeech.QUEUE_ADD, null, jobId)
     }
 
     override fun onInit(status: Int) {
