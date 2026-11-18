@@ -77,6 +77,7 @@ class KokoroSpeechEngine private constructor(
     companion object {
         const val MODEL_FILE_NAME = "kokoro_int8_fp16.litertlm"
         const val MODEL_SIZE_BYTES = 294_783_298L
+        const val MODEL_SHA256 = "e7b931ee5d4b7104012a838c9eee240d19ea69cb3ca269041a3274f83dbb7fa1"
         const val MODEL_URL =
             "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm"
         const val HINDI_VOICE = "hf_alpha"
