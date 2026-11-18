@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, VolumeX, Info } from 'lucide-react';
+import { Mic, PhoneOff } from 'lucide-react';
 import LottieSearchIcon from '@/components/LottieSearchIcon';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,9 +35,6 @@ export default function AIVoiceCall() {
   const conversationTurnRef = useRef(0);
   const replyAudioRef = useRef<HTMLAudioElement | null>(null);
   const replyAudioUrlRef = useRef<string | null>(null);
-  const aiName = 'ChatWork';
-  const showBadge = settings?.verification_enabled;
-  const badgeColor = (settings?.verification_color || 'blue') as 'gold' | 'blue' | 'green' | 'silver';
   const bridge = getWorklyAndroidBridge();
   const startRecognition = useCallback((_language = 'auto') => {
     void startShrutiRecognition().catch((error) => window.dispatchEvent(new CustomEvent('workly-voice-error', {
@@ -334,72 +330,49 @@ export default function AIVoiceCall() {
 
   return (
     <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[#080D1B] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,rgba(37,99,235,0.24),transparent_48%)]" />
-      <header className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
-        <Button variant="ghost" size="icon" onClick={() => { endCall(); navigate('/ai-assistant'); }} aria-label="Back to AI Chat" className="text-white hover:bg-white/10 hover:text-white"><ArrowLeft className="h-5 w-5" /></Button>
-        <span className="h-10 w-10" aria-hidden="true" />
-      </header>
-
-      <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pt-6 pb-8 text-center">
-        <div className="relative flex h-48 w-48 items-center justify-center">
-          <div className="absolute inset-1 rounded-full border border-cyan-300/10" style={{ animation: 'chatwork-pulse 3.6s ease-in-out infinite' }} />
-          <div className="absolute inset-4 rounded-full border border-blue-300/15" style={{ animation: 'chatwork-pulse 3.1s ease-in-out .35s infinite' }} />
-          <div className="absolute inset-8 rounded-full border border-fuchsia-300/10" style={{ animation: 'chatwork-pulse 2.7s ease-in-out .7s infinite' }} />
-          <div className="absolute h-36 w-36 rounded-full bg-gradient-to-r from-cyan-400/10 via-blue-500/15 to-fuchsia-500/10 blur-2xl" style={{ animation: 'chatwork-breathe 2.8s ease-in-out infinite' }} />
-          <div className="absolute inset-2" style={{ animation: 'chatwork-orbit 9s linear infinite' }}>
+      <style>{`
+        @keyframes chatwork-orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes chatwork-orbit-reverse { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes chatwork-pulse { 0%,100% { transform: scale(.92); opacity:.35; } 50% { transform: scale(1.08); opacity:.75; } }
+        @keyframes chatwork-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+        @keyframes chatwork-float { 0%,100% { transform: translate3d(0,0,0); opacity:.2; } 50% { transform: translate3d(0,-12px,0); opacity:.65; } }
+      `}</style>
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute left-1/2 top-[22%] h-80 w-80 -translate-x-1/2 rounded-full bg-blue-600/10 blur-3xl" style={{ animation: "chatwork-pulse 4s ease-in-out infinite" }} />
+        <div className="absolute left-[12%] top-[34%] h-2 w-2 rounded-full bg-cyan-300/70" style={{ animation: "chatwork-float 3.2s ease-in-out infinite" }} />
+        <div className="absolute right-[14%] top-[30%] h-1.5 w-1.5 rounded-full bg-fuchsia-300/70" style={{ animation: "chatwork-float 4.1s ease-in-out .6s infinite" }} />
+        <div className="absolute left-[20%] top-[58%] h-1.5 w-1.5 rounded-full bg-blue-300/60" style={{ animation: "chatwork-float 3.7s ease-in-out 1s infinite" }} />
+        <div className="absolute right-[22%] top-[52%] h-2 w-2 rounded-full bg-indigo-300/60" style={{ animation: "chatwork-float 4.4s ease-in-out .3s infinite" }} />
+      </div>
+      <section className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-md flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+        <div className="relative flex h-56 w-56 items-center justify-center">
+          <div className="absolute inset-2 rounded-full border border-cyan-300/10" style={{ animation: "chatwork-pulse 3.6s ease-in-out infinite" }} />
+          <div className="absolute inset-8 rounded-full border border-blue-300/15" style={{ animation: "chatwork-pulse 3.1s ease-in-out .35s infinite" }} />
+          <div className="absolute inset-14 rounded-full bg-gradient-to-r from-cyan-400/10 via-blue-500/15 to-fuchsia-500/10 blur-2xl" style={{ animation: "chatwork-breathe 2.8s ease-in-out infinite" }} />
+          <div className="absolute inset-5" style={{ animation: "chatwork-orbit 9s linear infinite" }}>
             <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-cyan-200 shadow-[0_0_14px_rgba(103,232,249,.95)]" />
           </div>
-          <div className="absolute inset-5" style={{ animation: 'chatwork-orbit-reverse 12s linear infinite' }}>
+          <div className="absolute inset-10" style={{ animation: "chatwork-orbit-reverse 12s linear infinite" }}>
             <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-fuchsia-200 shadow-[0_0_12px_rgba(232,121,249,.9)]" />
           </div>
-          <div className="relative z-10" style={{ animation: 'chatwork-breathe 3s ease-in-out infinite' }}>
+          <div className="relative z-10" style={{ animation: "chatwork-breathe 3s ease-in-out infinite" }}>
             <LottieSearchIcon size={132} />
           </div>
         </div>
-        <div className="mt-3 flex items-center justify-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">ChatWork</h1>{showBadge && <VerificationBadge color={badgeColor} size={17} />}</div>
-        <div className="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-white/65">
-          <span className={`h-2 w-2 rounded-full ${callState === 'listening' ? 'bg-emerald-400' : callState === 'thinking' ? 'bg-amber-300' : callState === 'speaking' ? 'bg-cyan-300' : 'bg-white/30'}`} style={{ animation: callState === 'idle' || callState === 'error' ? undefined : 'chatwork-pulse 1.5s ease-in-out infinite' }} />
-          {callState === 'listening' ? 'Listening' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
-        </div>
-        <div className="mt-3 flex h-8 items-center justify-center gap-1.5" aria-hidden="true">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <span key={index} className={`w-1 rounded-full ${callState === 'listening' ? 'bg-cyan-300/75' : callState === 'speaking' ? 'bg-blue-300/75' : 'bg-white/15'}`} style={{ height: `${6 + Math.round(Math.max(micLevel, callState === 'speaking' ? 45 : 0) * (0.28 + ((index + 1) % 4) * 0.09))}px`, transition: 'height 120ms ease-out', animation: callState === 'idle' || callState === 'error' ? undefined : `chatwork-pulse ${0.8 + index * 0.07}s ease-in-out ${index * 0.06}s infinite` }} />
-          ))}
-        </div>
-
-        {activeRef.current && <div className="mt-4 w-full rounded-xl border border-cyan-300/20 bg-cyan-400/[0.06] px-4 py-3 text-left" aria-live="polite">
-          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-100/80">Live voice diagnostics</p>
-          <p className="mt-2 text-xs text-white/80">Microphone / recognition: {voiceStage}</p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${micLevel}%` }} /></div>
-          <p className="mt-2 text-xs text-white/65">AI request: {aiRequestStatus}</p>
-          <p className="mt-1 text-[10px] text-white/40">Only recognized speech text is sent to AI. Workly India does not save call audio.</p>
-        </div>}
-
-        {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
-
-        <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
-          <p className="mt-2 text-sm text-white/70">Speak naturally. Speech is converted to text on this device.</p>
-        </div>
-
-        <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
-          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Voice privacy</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : 'On-device speech'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">Shruti converts speech to text on this device. Only recognized text is sent to the AI provider. Workly India does not save call audio or transcripts.</p>
-          {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only · not saved</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
-        </div>
-
-        <div className="mt-auto w-full pt-8">
-          <div className="relative mb-5 grid grid-cols-3 items-start justify-items-center gap-6">
-            <div className="pointer-events-none absolute -inset-x-8 -top-5 h-20 bg-gradient-to-r from-transparent via-blue-500/[0.06] to-transparent" style={{ animation: 'chatwork-shimmer 5s linear infinite' }} />
-            <button type="button" onClick={toggleMute} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className={`flex h-14 w-14 items-center justify-center rounded-full border border-white/10 ${muted ? 'bg-blue-500/80' : 'bg-white/5'}`}>{muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}</span><span className="text-[11px]">{muted ? 'Unmute' : 'Mute'}</span></button>
-            <button type="button" onClick={toggleSpeaker} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className={`flex h-14 w-14 items-center justify-center rounded-full border border-white/10 ${speakerOn ? 'bg-blue-500/80' : 'bg-white/5'}`}>{speakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}</span><span className="text-[11px]">{speakerOn ? 'Speaker on' : 'Speaker off'}</span></button>
-            <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
-          </div>
-          {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Shruti runs on this device. Internet is required for AI replies and reliable voice playback.</span></div>
+        {errorMessage && <p role="alert" className="mt-6 max-w-xs text-sm text-red-300/90">{errorMessage}</p>}
+        <div className="mt-10 w-full">
+          {!activeRef.current ? (
+            <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">
+              <Mic className="mr-2 h-5 w-5" />
+              Start AI Call
+            </Button>
+          ) : (
+            <button type="button" onClick={endCall} className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-600 text-white shadow-[0_8px_30px_rgba(220,38,38,.35)] transition-transform active:scale-95 hover:bg-red-500" aria-label="End call">
+              <PhoneOff className="h-7 w-7" />
+            </button>
+          )}
         </div>
       </section>
-      
     </main>
-  );
+  )
 }
