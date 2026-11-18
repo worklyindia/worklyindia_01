@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Info } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
+import LottieProfileIcon from '@/components/LottieProfileIcon';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import VerificationBadge from '@/components/VerificationBadge';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +18,10 @@ export default function AIVoiceCall() {
   const { user } = useAuth();
   const { data: settings } = useAIChatSettings();
   const [callState, setCallState] = useState<CallState>('idle');
+  const [callDuration, setCallDuration] = useState(0);
+  const [speakerOn, setSpeakerOn] = useState(false);
+  const [microphoneOn, setMicrophoneOn] = useState(true);
+  const connectedAtRef = useRef<number | null>(null);
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
   const [partialTranscript, setPartialTranscript] = useState('');
@@ -33,8 +37,6 @@ export default function AIVoiceCall() {
   const lastSubmittedTranscriptRef = useRef('');
   const conversationTurnRef = useRef(0);
   const aiName = settings?.name || 'Workly India AI';
-  const showBadge = settings?.verification_enabled;
-  const badgeColor = (settings?.verification_color || 'blue') as 'gold' | 'blue' | 'green' | 'silver';
   const bridge = getWorklyAndroidBridge();
   const startRecognition = useCallback((_language = 'auto') => {
     void startShrutiRecognition().catch((error) => window.dispatchEvent(new CustomEvent('workly-voice-error', {
@@ -62,6 +64,8 @@ export default function AIVoiceCall() {
     stopRecognition();
     stopReply();
     setCallState('idle');
+    connectedAtRef.current = null;
+    setCallDuration(0);
     setVoiceStage('Call ended');
     setMicLevel(0);
     setAiRequestStatus('Not sent');
@@ -70,6 +74,8 @@ export default function AIVoiceCall() {
     setPartialTranscript('');
     setErrorMessage('');
     setMuted(false);
+    setMicrophoneOn(true);
+    setSpeakerOn(false);
   }, [stopRecognition, stopReply]);
 
   const handleTranscript = useCallback(async (event: Event) => {
@@ -230,6 +236,8 @@ export default function AIVoiceCall() {
       setLastTranscript('');
       setPartialTranscript('');
       setErrorMessage('');
+      connectedAtRef.current = Date.now();
+      setCallDuration(0);
       setCallState('listening');
       setVoiceStage('Starting secure on-device microphone…');
       setMicLevel(0);
@@ -253,73 +261,107 @@ export default function AIVoiceCall() {
     }
   };
 
+  useEffect(() => {
+    if (!activeRef.current || !connectedAtRef.current) return;
+    const timer = window.setInterval(() => {
+      if (connectedAtRef.current) setCallDuration(Math.floor((Date.now() - connectedAtRef.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [callState]);
+
   const toggleMute = () => {
+    if (!activeRef.current) return;
     const next = !muted;
     setMuted(next);
+    setMicrophoneOn(!next);
     if (next) {
       stopRecognition();
       stopReply();
-    } else if (activeRef.current) {
+      setCallState('listening');
+    } else {
       startRecognition('auto');
       setCallState('listening');
     }
   };
 
+  const toggleMicrophone = () => {
+    if (!activeRef.current) return;
+    const next = !microphoneOn;
+    setMicrophoneOn(next);
+    setMuted(!next);
+    if (next) {
+      startRecognition('auto');
+      setCallState('listening');
+    } else {
+      stopRecognition();
+      setCallState('listening');
+    }
+  };
+
+  const toggleSpeaker = () => {
+    if (!activeRef.current) return;
+    const next = !speakerOn;
+    setSpeakerOn(next);
+    try {
+      const bridgeAny = bridge as (typeof bridge & { setSpeakerphoneOn?: (enabled: boolean) => boolean }) | null;
+      if (bridgeAny?.setSpeakerphoneOn) bridgeAny.setSpeakerphoneOn(next);
+    } catch { /* browser audio routing is controlled by the browser/device */ }
+  };
+
+  const formattedDuration = `${String(Math.floor(callDuration / 60)).padStart(2, '0')}:${String(callDuration % 60).padStart(2, '0')}`;
+
+  const CallAction = ({ icon: Icon, label, onClick, active = false }: { icon: typeof Mic; label: string; onClick: () => void; active?: boolean }) => (
+    <button type="button" onClick={onClick} aria-label={label}
+      className="flex min-w-[88px] flex-col items-center gap-2 text-foreground active:scale-95">
+      <span className={`flex h-[68px] w-[68px] items-center justify-center rounded-full border border-border ${active ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
+        <Icon className="h-7 w-7" strokeWidth={1.8} />
+      </span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </button>
+  );
+
   return (
-    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[#080D1B] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,rgba(37,99,235,0.24),transparent_48%)]" />
-      <header className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
-        <Button variant="ghost" size="icon" onClick={() => { endCall(); navigate('/ai-assistant'); }} aria-label="Back to AI Chat" className="text-white hover:bg-white/10 hover:text-white"><ArrowLeft className="h-5 w-5" /></Button>
-        <div className="text-center"><p className="text-xs font-medium uppercase tracking-[0.22em] text-blue-200/70">Workly India</p><p className="mt-1 text-sm text-white/70">AI Voice Call</p></div>
+    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+      <header className="relative z-10 flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))]">
+        <Button variant="ghost" size="icon" onClick={() => { endCall(); navigate('/ai-assistant'); }} aria-label="Back" className="text-foreground/80 hover:bg-muted">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
         <span className="h-10 w-10" aria-hidden="true" />
       </header>
 
-      <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pt-6 pb-8 text-center">
-        <div className="relative flex h-44 w-44 items-center justify-center">
-          <div className="absolute inset-0 rounded-full border border-blue-400/15" />
-          <div className="absolute inset-3 rounded-full border border-blue-400/20" />
-          <div className="absolute inset-6 rounded-full bg-blue-500/10 blur-xl" />
-          <div className="relative flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-[0_12px_60px_rgba(37,99,235,0.42)] ring-1 ring-white/20"><AudioLines className="h-14 w-14 text-white" strokeWidth={2.1} /></div>
-        </div>
-        <div className="mt-6 flex items-center justify-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">{aiName}</h1>{showBadge && <VerificationBadge color={badgeColor} size={17} />}</div>
-        <p className="mt-2 text-sm text-blue-100/65">Voice assistant</p>
-        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white/70">
-          <span className={`h-2 w-2 rounded-full ${callState === 'listening' ? 'bg-emerald-400 animate-pulse' : callState === 'thinking' ? 'bg-amber-300 animate-pulse' : callState === 'speaking' ? 'bg-blue-300 animate-pulse' : 'bg-white/30'}`} />
-          {callState === 'listening' ? 'Listening on this device' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
-        </div>
-
-        {activeRef.current && <div className="mt-4 w-full rounded-xl border border-cyan-300/20 bg-cyan-400/[0.06] px-4 py-3 text-left" aria-live="polite">
-          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-100/80">Live voice diagnostics</p>
-          <p className="mt-2 text-xs text-white/80">Microphone / recognition: {voiceStage}</p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-cyan-300 transition-all" style={{ width: `${micLevel}%` }} /></div>
-          <p className="mt-2 text-xs text-white/65">AI request: {aiRequestStatus}</p>
-          <p className="mt-1 text-[10px] text-white/40">Only recognized speech text is sent to AI. Workly India does not save call audio.</p>
-        </div>}
-
-        {errorMessage && <div role="alert" className="mt-4 w-full rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"><p className="font-semibold">Voice call error</p><p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p></div>}
-
-        <div className="mt-8 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/55">Automatic language detection</p>
-          <p className="mt-2 text-sm text-white/70">Speak naturally. Speech is converted to text on this device.</p>
-        </div>
-
-        <div className="mt-6 w-full rounded-2xl border border-white/10 bg-white/[0.045] p-4 text-left">
-          <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-emerald-300" /><p className="text-sm font-semibold">Voice privacy</p><span className="ml-auto text-xs text-white/50">{nativeAvailable ? 'On-device mic ready' : 'On-device speech'}</span></div>
-          <p className="mt-2 text-xs leading-5 text-white/55">Shruti converts speech to text on this device. Only recognized text is sent to the AI provider. Workly India does not save call audio or transcripts.</p>
-          {(lastTranscript || partialTranscript || lastReply) && <div className="mt-3 space-y-2 rounded-xl bg-black/20 p-3"><p className="text-[11px] text-white/45">Current call only · not saved</p>{(lastTranscript || partialTranscript) && <p className="text-xs text-white/65">You: {lastTranscript || partialTranscript}</p>}{partialTranscript && !lastTranscript && <p className="text-[10px] text-amber-200/70">Hearing your words…</p>}{lastReply && <p className="text-sm text-white">AI: {lastReply}</p>}</div>}
-        </div>
-
-        <div className="mt-auto w-full pt-8">
-          <div className="mb-5 flex items-center justify-center gap-7">
-            <button type="button" onClick={toggleMute} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5">{muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}</span><span className="text-[11px]">{muted ? 'Unmute' : 'Mute'}</span></button>
-            <div className="flex flex-col items-center gap-2 text-white/35"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5"><Volume2 className="h-5 w-5" /></span><span className="text-[11px]">Speaker</span></div>
-            <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
+      <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center">
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border border-border bg-muted shadow-lg">
+            <LottieProfileIcon size={76} />
+            {activeRef.current && <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-primary/35 animate-pulse" />}
           </div>
-          {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Shruti runs on this device. Internet is required only for AI replies; voice playback uses your existing phone/browser TTS.</span></div>
+          <h1 className="mt-6 text-[28px] font-semibold tracking-tight">ChatWork</h1>
+          {activeRef.current && <p className="mt-3 font-mono text-sm tabular-nums text-muted-foreground">{formattedDuration}</p>}
+          {!activeRef.current && callState === 'idle' && <p className="mt-3 text-sm text-muted-foreground">Ready to call</p>}
+          {errorMessage && (
+            <div role="alert" className="mt-5 max-w-sm rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-left text-xs text-destructive">
+              <p className="font-semibold">Call failed</p>
+              <p className="mt-1">{errorMessage}</p>
+            </div>
+          )}
         </div>
+
+        {activeRef.current ? (
+          <div className="w-full pb-2">
+            <div className="mx-auto mb-10 grid max-w-[330px] grid-cols-2 gap-x-12 gap-y-7">
+              <CallAction icon={muted ? MicOff : Mic} label={muted ? 'Unmute' : 'Mute'} onClick={toggleMute} active={muted} />
+              <CallAction icon={Volume2} label={speakerOn ? 'Speaker on' : 'Speaker'} onClick={toggleSpeaker} active={speakerOn} />
+              <CallAction icon={microphoneOn ? Mic : MicOff} label={microphoneOn ? 'Microphone' : 'Microphone off'} onClick={toggleMicrophone} active={microphoneOn} />
+              <CallAction icon={PhoneOff} label="End call" onClick={endCall} />
+            </div>
+          </div>
+        ) : (
+          <div className="w-full pb-2">
+            <Button onClick={startCall} className="h-[60px] w-full rounded-full text-base font-semibold">
+              <Mic className="mr-2 h-5 w-5" /> Start AI Call
+            </Button>
+          </div>
+        )}
       </section>
-      
     </main>
-  );
-}
+  );}

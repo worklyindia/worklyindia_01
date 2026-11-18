@@ -26,6 +26,7 @@ export interface WorklyAndroidBridge {
   stopOnDeviceVoiceRecognition?(): boolean;
   speakVoiceReply?(text: string, languageTag: string): boolean;
   stopVoiceReply?(): boolean;
+  setSpeakerphoneOn?(enabled: boolean): boolean;
 }
 
 type WorklyWindow = Window & { WorklyAndroid?: WorklyAndroidBridge };
