@@ -234,6 +234,18 @@ Deno.serve(async (req: Request) => {
       return json({ job: data });
     }
 
+    if (action === "list_devices") {
+      const user = await authenticatedUser(req);
+      if (!user) return json({ error: "Authentication required" }, 401);
+      const { data, error } = await db.from("workly_ai_voice_devices")
+        .select("id,device_name,last_seen_at,created_at,revoked_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return json({ devices: data ?? [] });
+    }
+
     if (action === "revoke_device") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
