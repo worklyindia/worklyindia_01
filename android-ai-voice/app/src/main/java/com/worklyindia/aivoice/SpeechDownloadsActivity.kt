@@ -68,7 +68,8 @@ class SpeechDownloadsActivity : Activity() {
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false }
         card.addView(status); card.addView(progress); card.addView(action)
-        val row=DownloadRow(status,progress,action) {
+        lateinit var row: DownloadRow
+        row=DownloadRow(status,progress,action) {
             val snap=runCatching { qwenManager.snapshot(model) }.getOrNull() ?: return@DownloadRow
             val supported=qwenManager.isSupported(model,availableRam)
             val now=android.os.SystemClock.elapsedRealtime()
