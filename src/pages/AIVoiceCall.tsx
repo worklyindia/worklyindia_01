@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
-import LottieIcon from '@/components/LottieIcon';
-import callAnimation from '@/assets/lottie/call.json';
+import LottieProfileIcon from '@/components/LottieProfileIcon';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -333,7 +332,7 @@ export default function AIVoiceCall() {
       <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center">
         <div className="flex flex-1 flex-col items-center justify-center">
           <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full border border-border bg-muted shadow-lg">
-            <LottieIcon animationData={callAnimation} size={76} loop />
+            <LottieProfileIcon size={76} />
             {activeRef.current && <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-primary/35 animate-pulse" />}
           </div>
           <h1 className="mt-6 text-[28px] font-semibold tracking-tight">ChatWork</h1>
