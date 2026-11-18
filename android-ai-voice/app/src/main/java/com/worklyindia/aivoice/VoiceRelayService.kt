@@ -29,13 +29,13 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                 setStatus("Speaking a website voice request on this phone…")
             }
             override fun onDone(utteranceId: String?) {
-                val parts = utteranceId?.split("|", limit = 2) ?: return
-                if (parts.size != 2) return
+                val jobId = utteranceId ?: return
+                val token = activeToken ?: return
                 Thread {
                     try {
                         VoiceRelayApi.complete(
-                            parts[0],
-                            parts[1],
+                            token,
+                            jobId,
                             JSONObject().put("played_on_phone", true)
                                 .put("message", "Text was spoken by this phone. No audio file was uploaded.")
                         )
@@ -47,10 +47,10 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             }
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
-                val parts = utteranceId?.split("|", limit = 2) ?: return
-                if (parts.size != 2) return
+                val jobId = utteranceId ?: return
+                val token = activeToken ?: return
                 Thread {
-                    runCatching { VoiceRelayApi.fail(parts[0], parts[1], "Android text-to-speech playback failed.") }
+                    runCatching { VoiceRelayApi.fail(token, jobId, "Android text-to-speech playback failed.") }
                     setStatus("A voice request failed on this phone.")
                 }.start()
             }
@@ -125,7 +125,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             return
         }
         engine.setLanguage(locale)
-        engine.speak(text.take(4000), TextToSpeech.QUEUE_FLUSH, null, "$token|$jobId")
+        engine.speak(text.take(4000), TextToSpeech.QUEUE_ADD, null, jobId)
     }
 
     override fun onInit(status: Int) {
@@ -137,7 +137,9 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         pollThread?.interrupt()
         tts?.stop()
         tts?.shutdown()
-        setStatus("Phone server stopped.")
+        getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, "Phone server stopped.").apply()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+        else @Suppress("DEPRECATION") stopForeground(true)
         super.onDestroy()
     }
 
