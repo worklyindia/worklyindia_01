@@ -16,10 +16,6 @@ The Indic Tiny TTS model code is MIT licensed. This app uses the published ONNX 
 
 ONNX Runtime Android is distributed by Microsoft under its applicable open-source license. See https://github.com/microsoft/onnxruntime.
 
-## Kokoro
-
-Kokoro 82M LiteRT model is downloaded from https://huggingface.co/litert-community/Kokoro-82M. Refer to that repository and its model card for applicable model license and attribution.
-
 ## Sherpa-ONNX
 
 The Sherpa-ONNX Android runtime is used for offline speech recognition. See https://github.com/k2-fsa/sherpa-onnx and its license notices.
