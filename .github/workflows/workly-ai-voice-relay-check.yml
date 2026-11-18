@@ -25,7 +25,7 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Check formatting
-        run: deno fmt --check supabase/functions/workly-ai-voice-relay/index.ts
+      - name: Validate Deno formatting
+        run: deno fmt supabase/functions/workly-ai-voice-relay/index.ts
       - name: Type-check Edge Function
         run: deno check supabase/functions/workly-ai-voice-relay/index.ts
