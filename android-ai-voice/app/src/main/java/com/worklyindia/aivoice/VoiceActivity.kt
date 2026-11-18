@@ -122,17 +122,6 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             it.setPadding(0, dp(5), 0, dp(4))
         })
         page.addView(label("Hindi · English · Gujarati", 15, 0xFF65748B.toInt(), false))
-        val quickActions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        quickActions.addView(button("Model downloads").apply {
-            setOnClickListener { startActivity(Intent(this@VoiceActivity, SpeechDownloadsActivity::class.java)) }
-        }, LinearLayout.LayoutParams(0, dp(48), 1f).also { it.rightMargin = dp(6) })
-        quickActions.addView(button("Offline AI Chat").apply {
-            setOnClickListener { startActivity(Intent(this@VoiceActivity, OfflineAiChatActivity::class.java)) }
-        }, LinearLayout.LayoutParams(0, dp(48), 1f).also { it.leftMargin = dp(6) })
-        page.addView(quickActions, matchWrap().also { it.topMargin = dp(12) })
         page.addView(space(18))
 
         val statusCard = card()
@@ -217,91 +206,6 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
 
         page.addView(space(22))
 
-        page.addView(space(22))
-        page.addView(sectionTitle("3. Offline Workly AI"))
-        val offlineCard = card()
-        offlineCard.addView(label("Qwen2.5-3B-Instruct · Q4_K_M", 16, 0xFF142033.toInt(), true))
-        offlineCard.addView(label(
-            "Automatic first-launch download · about 2.1 GB. Wi-Fi or mobile data can be used based on your saved choice. The model stays in app storage, not inside the APK.",
-            12, 0xFF536276.toInt(), false
-        ).also { it.setPadding(0, dp(7), 0, dp(10)) })
-        offlineModelStatusText = label("Checking offline model…", 13, 0xFF174B36.toInt(), true)
-        offlineCard.addView(offlineModelStatusText)
-        offlineModelProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            progress = 0
-            visibility = View.GONE
-        }
-        offlineCard.addView(offlineModelProgressBar, matchWrap().also { it.topMargin = dp(10) })
-        offlineModelActionButton = button("Automatic download")
-        offlineModelActionButton.setOnClickListener { onOfflineModelAction() }
-        offlineCard.addView(offlineModelActionButton, matchWrap().also { it.topMargin = dp(10) })
-        offlineModelChatButton = button("Open offline AI chat").apply {
-            isEnabled = false
-            setOnClickListener { startActivity(Intent(this@VoiceActivity, OfflineAiChatActivity::class.java)) }
-        }
-        offlineCard.addView(offlineModelChatButton, matchWrap().also { it.topMargin = dp(8) })
-        offlineCard.addView(label(
-            "After the model is downloaded, open Offline AI Chat to run Qwen on this phone. Chat runs locally. Voice input asks Android for offline speech recognition; offline language packs must be installed. Voice playback uses the installed Android TTS voice.",
-            12, 0xFF65748B.toInt(), false
-        ).also { it.setPadding(0, dp(10), 0, 0) })
-        page.addView(offlineCard)
-
-        val kokoroCard = card()
-        kokoroCard.addView(label("Kokoro 82M · Hindi + English", 16, 0xFF142033.toInt(), true))
-        kokoroCard.addView(label("Automatic download · about 295 MB. Wi-Fi or approved mobile data can be used. Kokoro provides on-device Hindi and English speech. Gujarati uses the Android voice until Indic Tiny TTS is integrated.", 12, 0xFF536276.toInt(), false).also { it.setPadding(0, dp(7), 0, dp(10)) })
-        kokoroModelStatusText = label("Waiting for Qwen download to finish…", 13, 0xFF174B36.toInt(), true)
-        kokoroCard.addView(kokoroModelStatusText)
-        kokoroModelProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
-        kokoroCard.addView(kokoroModelProgressBar, matchWrap().also { it.topMargin = dp(10) })
-        kokoroModelActionButton = button("Automatic download")
-        kokoroModelActionButton.setOnClickListener { onKokoroModelAction() }
-        kokoroCard.addView(kokoroModelActionButton, matchWrap().also { it.topMargin = dp(10) })
-        page.addView(kokoroCard)
-
-        page.addView(space(22))
-        page.addView(sectionTitle("4. Connect this phone as a voice server"))
-        val relayCard = card()
-        relayCard.addView(label("Secure Workly phone pairing", 16, 0xFF142033.toInt(), true))
-        relayCard.addView(label(
-            "Sign in to Workly India on the website, open AI Voice Server, generate a one-time pairing code, then enter it below. The code expires after 5 minutes and can be used once.",
-            12, 0xFF536276.toInt(), false
-        ).also { it.setPadding(0, dp(7), 0, dp(10)) })
-        pairingCodeInput = EditText(this).apply {
-            hint = "24-character pairing code"
-            maxLines = 1
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-            setTextColor(adaptColor(0xFF142033.toInt()))
-            setHintTextColor(adaptColor(0xFF8491A3.toInt()))
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(adaptColor(0xFFF4F7FB.toInt()))
-        }
-        relayCard.addView(pairingCodeInput, matchWrap())
-        relayCard.addView(button("Pair this phone securely").apply {
-            setOnClickListener { pairPhone() }
-        }, matchWrap().also { it.topMargin = dp(10) })
-        relayStatusText = label(
-            getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
-                .getString(VoiceRelayService.STATUS_KEY, "Phone is not paired.") ?: "Phone is not paired.",
-            13, 0xFF174B36.toInt(), true
-        ).also { it.setPadding(0, dp(14), 0, dp(8)) }
-        relayCard.addView(relayStatusText)
-        relayCard.addView(button("Start phone server").apply {
-            setOnClickListener { requestNotificationAndStart() }
-        }, matchWrap())
-        relayCard.addView(button("Stop phone server").apply {
-            setBackgroundColor(adaptColor(0xFFE8EDF4.toInt()))
-            setTextColor(adaptColor(0xFF26364B.toInt()))
-            setOnClickListener {
-                stopService(Intent(this@VoiceActivity, VoiceRelayService::class.java))
-                refreshRelayStatus()
-            }
-        }, matchWrap().also { it.topMargin = dp(8) })
-        relayCard.addView(label(
-            "The phone makes outbound HTTPS connections, so Jio mobile CGNAT does not need an incoming port. Keep this foreground service notification visible while the phone is serving. The service holds a partial wake lock to keep its relay polling responsive, which can increase battery use. On Android 15 and newer, data-sync foreground services have a 6-hour total limit per 24 hours; after that Android stops this server until you open the app again. Website TTS jobs currently play on this phone; remote audio-file STT and audio-file return are not ready yet.",
-            12, 0xFF536276.toInt(), false
-        ).also { it.setPadding(0, dp(10), 0, 0) })
-        page.addView(relayCard)
         page.addView(space(10))
         page.addView(label("WORKLY VOICE · VERSION 1.0.0", 11, 0xFF8491A3.toInt(), true).also {
             it.gravity = Gravity.CENTER
