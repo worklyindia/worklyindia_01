@@ -271,12 +271,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (!::offlineModelStatusText.isInitialized) return
         try {
             val snapshot = offlineModelManager.snapshot()
-            if (snapshot.state == OfflineModelManager.State.NOT_DOWNLOADED ||
-                snapshot.state == OfflineModelManager.State.FAILED
-            ) {
+            val downloadPrefs = getSharedPreferences(DOWNLOAD_PREFS, MODE_PRIVATE)
+            if (!downloadPrefs.contains(KEY_ALLOW_MOBILE_DATA)) {
                 requestDownloadNetworkChoice { allowMobile ->
                     startOfflineModelDownload(allowMobile)
                 }
+            } else if (snapshot.state == OfflineModelManager.State.NOT_DOWNLOADED ||
+                snapshot.state == OfflineModelManager.State.FAILED
+            ) {
+                startOfflineModelDownload(isMobileDataDownloadAllowed())
             } else {
                 refreshOfflineModelUi()
                 if (snapshot.state == OfflineModelManager.State.PENDING ||
