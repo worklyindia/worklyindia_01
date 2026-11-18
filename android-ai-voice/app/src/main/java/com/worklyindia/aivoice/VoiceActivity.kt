@@ -60,6 +60,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
     private var recognizer: SpeechRecognizer? = null
     private var ttsReady = false
     private var listening = false
+    private var downloadNetworkChoiceShowing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -298,6 +299,31 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
                 speechPackStatusText.text = it.message ?: "Speech model download failed to start."
             }
         }
+    }
+
+    private fun requestDownloadNetworkChoice(action: (Boolean) -> Unit) {
+        val prefs = getSharedPreferences(DOWNLOAD_PREFS, MODE_PRIVATE)
+        if (prefs.contains(KEY_ALLOW_MOBILE_DATA)) {
+            action(prefs.getBoolean(KEY_ALLOW_MOBILE_DATA, false))
+            return
+        }
+        if (downloadNetworkChoiceShowing) return
+        downloadNetworkChoiceShowing = true
+        AlertDialog.Builder(this)
+            .setTitle("Allow mobile data for speech downloads?")
+            .setMessage("Speech model downloads can use a large amount of data. Choose Wi-Fi only to avoid mobile data charges.")
+            .setNegativeButton("Wi-Fi only") { _, _ ->
+                prefs.edit().putBoolean(KEY_ALLOW_MOBILE_DATA, false).apply()
+                downloadNetworkChoiceShowing = false
+                action(false)
+            }
+            .setPositiveButton("Allow mobile data") { _, _ ->
+                prefs.edit().putBoolean(KEY_ALLOW_MOBILE_DATA, true).apply()
+                downloadNetworkChoiceShowing = false
+                action(true)
+            }
+            .setOnCancelListener { downloadNetworkChoiceShowing = false }
+            .show()
     }
 
     private fun refreshSpeechPackStatus() {
