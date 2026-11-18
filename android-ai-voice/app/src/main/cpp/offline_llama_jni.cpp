@@ -91,7 +91,7 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     llama_context * context = llama_init_from_model(model, context_params);
     if (context == nullptr) return env->NewStringUTF("Not enough memory to start offline AI on this phone.");
 
-    llama_sampler_chain_params sampler_params = llama_sampler_chain_default_params();
+    struct llama_sampler_chain_params sampler_params = llama_sampler_chain_default_params();
     llama_sampler * sampler = llama_sampler_chain_init(sampler_params);
     llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.7f));
     llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
