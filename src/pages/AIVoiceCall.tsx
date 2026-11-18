@@ -290,7 +290,7 @@ export default function AIVoiceCall() {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: historyReply || reply,
-        timestamp: new Date().toISOString(),
+        timestamp: formatChatStamp(),
         status: 'read',
       };
       chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
