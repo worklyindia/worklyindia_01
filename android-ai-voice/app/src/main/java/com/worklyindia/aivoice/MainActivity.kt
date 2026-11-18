@@ -372,6 +372,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
+    // Queue Kokoro only after the larger Qwen download completes, keeping model transfers sequential.
     private fun ensureAutomaticKokoroModelDownload() {
         if (!::kokoroModelStatusText.isInitialized) return
         if (offlineModelManager.snapshot().state != OfflineModelManager.State.READY) return
