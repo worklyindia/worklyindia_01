@@ -60,7 +60,7 @@ jobs:
             echo "| Field | Details |"
             echo "|---|---|"
             echo "| **Version name** | 1.0.0 |"
-            echo "| **Version code** | 1 |"
+            echo "| **Version code** | $GITHUB_RUN_NUMBER |"
             echo "| **Minimum supported version code** | 1 |"
             echo "| **Application ID** | `com.worklyindia.aivoice` |"
             echo
