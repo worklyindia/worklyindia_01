@@ -91,9 +91,9 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list, "Shruti Gujarati", "Shruti ONNX · Gujarati offline speech-to-text", SpeechModelCatalog.shruti("gu"))
 
         list.addView(label("TEXT TO SPEECH", 17, primary, true).apply { setPadding(0, dp(16), 0, dp(6)) })
-        addSpeechPack(list, "Indic Tiny TTS Hindi", "Indic Tiny TTS · Hindi model pack (download only; Android inference integration is pending)", SpeechModelCatalog.indicTinyTts("hi"), inferencePending = true)
-        addSpeechPack(list, "Indic Tiny TTS Gujarati", "Indic Tiny TTS · Gujarati model pack (download only; Android inference integration is pending)", SpeechModelCatalog.indicTinyTts("gu"), inferencePending = true)
-        addSpeechPack(list, "Indic Tiny TTS English", "Indic Tiny TTS · English model pack (download only; Android inference integration is pending)", SpeechModelCatalog.indicTinyTts("en"), inferencePending = true)
+        addSpeechPack(list, "Indic Tiny TTS Hindi", "Indic Tiny TTS · Hindi offline text-to-speech", SpeechModelCatalog.indicTinyTts("hi"))
+        addSpeechPack(list, "Indic Tiny TTS Gujarati", "Indic Tiny TTS · Gujarati offline text-to-speech", SpeechModelCatalog.indicTinyTts("gu"))
+        addSpeechPack(list, "Indic Tiny TTS English", "Indic Tiny TTS · English offline text-to-speech", SpeechModelCatalog.indicTinyTts("en"))
         addKokoroCard(list)
         list.addView(label("OFFLINE AI CHAT", 17, primary, true).apply { setPadding(0, dp(16), 0, dp(6)) })
         addQwenCard(list)
@@ -120,7 +120,7 @@ class SpeechDownloadsActivity : Activity() {
             } else {
                 val ready = snapshot.state == SpeechPackDownloadManager.State.COMPLETE
                 status.text = when (snapshot.state) {
-                    SpeechPackDownloadManager.State.COMPLETE -> if (inferencePending) "Downloaded · inference integration pending" else "Ready · already installed"
+                    SpeechPackDownloadManager.State.COMPLETE -> "Ready · already installed"
                     SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${snapshot.percent}%"
                     SpeechPackDownloadManager.State.PENDING -> "Waiting for network…"
                     SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for Wi-Fi/network"
