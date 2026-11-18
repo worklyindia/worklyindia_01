@@ -12,6 +12,8 @@ on:
       - "src/App.tsx"
       - "src/pages/WorklyAIVoiceDevices.tsx"
       - "src/pages/Settings.tsx"
+      - "src/pages/owner-portal/**"
+      - "src/lib/nativeAppBridge.ts"
       - ".github/workflows/workly-ai-voice-web-check.yml"
   pull_request:
     paths:
