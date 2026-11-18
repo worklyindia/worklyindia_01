@@ -12,6 +12,7 @@ on:
     paths:
       - "src/App.tsx"
       - "src/pages/WorklyAIVoiceDevices.tsx"
+      - "src/pages/Settings.tsx"
       - ".github/workflows/workly-ai-voice-web-check.yml"
   workflow_dispatch:
 
