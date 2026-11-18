@@ -45,7 +45,7 @@ class OfflineModelManager(context: Context) {
         get() = File(downloadDirectory, MODEL_FILENAME)
 
     @Throws(IOException::class)
-    fun startDownload(): Long {
+    fun startDownload(allowMobileData: Boolean = false): Long {
         val current = snapshot()
         if (current.state == State.READY) return -1L
         if (current.state == State.RUNNING || current.state == State.PENDING || current.state == State.PAUSED) {
@@ -71,10 +71,10 @@ class OfflineModelManager(context: Context) {
         modelFile.delete()
         val request = DownloadManager.Request(Uri.parse(MODEL_URL))
             .setTitle("Workly AI offline model")
-            .setDescription("Automatic Wi-Fi download · Qwen2.5-3B-Instruct (about 2.1 GB)")
+            .setDescription(if (allowMobileData) "Automatic Wi-Fi or mobile data download · Qwen2.5-3B-Instruct (about 2.1 GB)" else "Automatic Wi-Fi download · Qwen2.5-3B-Instruct (about 2.1 GB)")
             .setMimeType("application/octet-stream")
-            .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI)
-            .setAllowedOverMetered(false)
+            .setAllowedNetworkTypes(if (allowMobileData) DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE else DownloadManager.Request.NETWORK_WIFI)
+            .setAllowedOverMetered(allowMobileData)
             .setAllowedOverRoaming(false)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(
