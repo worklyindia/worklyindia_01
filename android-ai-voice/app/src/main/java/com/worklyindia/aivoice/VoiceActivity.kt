@@ -563,15 +563,6 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         speechPackStatusText.text = "IndicConformer ${language.uppercase()}: ${snapshot.state} (${snapshot.percent}%)"
     }
 
-    private fun startOfflineListening() {
-        val language = runCatching { selectedSpeechLanguageCode() }.getOrElse {
-            setStatus(it.message ?: "Select a supported language.")
-            return
-        }
-        val pack = runCatching { SpeechModelCatalog.indicConformer(language) }.getOrElse {
-            setStatus(it.message ?: "Could not select offline speech model.")
-            return
-        }
     private fun startOfflineListening(shruti: Boolean) {
         val language = when {
             selectedLanguage().tag.startsWith("hi") -> "hi"
