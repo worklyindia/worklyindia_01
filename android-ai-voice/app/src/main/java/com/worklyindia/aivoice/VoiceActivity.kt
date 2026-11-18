@@ -184,7 +184,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             adapter = ArrayAdapter(
                 this@VoiceActivity,
                 android.R.layout.simple_spinner_dropdown_item,
-                listOf("Android speech provider", "AI4Bharat IndicConformer INT8 · offline", "Shruti ONNX · offline")
+                listOf("AI4Bharat IndicConformer INT8 · offline")
             )
         }
         page.addView(offlineSpeechEnginePicker, matchWrap().also { it.topMargin = dp(8) })
