@@ -658,7 +658,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             return
         }
         when (offlineSpeechEnginePicker.selectedItemPosition) {
-            0 -> { startOfflineListening(); return }
+            0 -> { startOfflineListening(shruti = false); return }
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             setStatus("No speech recognition service is installed on this phone.")
