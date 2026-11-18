@@ -8,7 +8,7 @@ import android.os.StatFs
 import java.io.File
 import java.io.IOException
 
-/** Wi-Fi-only downloader for the optional Kokoro multilingual TTS bundle. */
+/** User-consented Wi-Fi/mobile downloader for the optional Kokoro multilingual TTS bundle. */
 class KokoroModelManager(context: Context) {
     enum class State { NOT_DOWNLOADED, PENDING, RUNNING, PAUSED, FAILED, READY }
     data class Snapshot(
@@ -32,7 +32,7 @@ class KokoroModelManager(context: Context) {
         )
     val modelFile: File get() = File(directory, KokoroSpeechEngine.MODEL_FILE_NAME)
 
-    fun startDownload(): Long {
+    fun startDownload(allowMobileData: Boolean = false): Long {
         val current = snapshot()
         if (current.state == State.READY) return -1L
         if (current.state == State.PENDING || current.state == State.RUNNING || current.state == State.PAUSED) {
@@ -49,10 +49,10 @@ class KokoroModelManager(context: Context) {
         modelFile.delete()
         val request = DownloadManager.Request(Uri.parse(KokoroSpeechEngine.MODEL_URL))
             .setTitle("Workly Voice · Kokoro speech model")
-            .setDescription("Kokoro Hindi and English voice · Wi-Fi only · about 295 MB")
+            .setDescription(if (allowMobileData) "Kokoro Hindi and English voice · Wi-Fi or mobile data · about 295 MB" else "Kokoro Hindi and English voice · Wi-Fi only · about 295 MB")
             .setMimeType("application/octet-stream")
-            .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI)
-            .setAllowedOverMetered(false)
+            .setAllowedNetworkTypes(if (allowMobileData) DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE else DownloadManager.Request.NETWORK_WIFI)
+            .setAllowedOverMetered(allowMobileData)
             .setAllowedOverRoaming(false)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(app, Environment.DIRECTORY_DOWNLOADS, "workly-voice/${KokoroSpeechEngine.MODEL_FILE_NAME}")
