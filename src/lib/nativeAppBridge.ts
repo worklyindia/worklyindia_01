@@ -33,7 +33,7 @@ type WorklyWindow = Window & { WorklyAndroid?: WorklyAndroidBridge };
 export const isWorklyAndroidApp = (): boolean =>
   typeof window !== 'undefined' &&
   /WorklyIndiaApp\/1\.0/i.test(navigator.userAgent) &&
-  !!(window as WorklyWindow).WorklyAndroid;
+  !!(window as unknown as WorklyWindow).WorklyAndroid;
 
 export const getWorklyAndroidBridge = (): WorklyAndroidBridge | null =>
   isWorklyAndroidApp() ? (window as WorklyWindow).WorklyAndroid ?? null : null;
