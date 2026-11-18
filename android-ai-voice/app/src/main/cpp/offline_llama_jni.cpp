@@ -72,7 +72,7 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     const llama_vocab * vocab = llama_model_get_vocab(model);
     const int required = -llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-        nullptr, 0, true, false);
+        nullptr, 0, true, true);
     if (required <= 0 || required > 1800) {
         return env->NewStringUTF("Message is too long for the offline model. Please shorten it.");
     }
@@ -80,7 +80,7 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     std::vector<llama_token> tokens(static_cast<size_t>(required));
     const int token_count = llama_tokenize(
         vocab, prompt.c_str(), static_cast<int32_t>(prompt.size()),
-        tokens.data(), static_cast<int32_t>(tokens.size()), true, false);
+        tokens.data(), static_cast<int32_t>(tokens.size()), true, true);
     if (token_count < 0) return env->NewStringUTF("Could not prepare the message for the model.");
 
     llama_context_params context_params = llama_context_default_params();
