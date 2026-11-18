@@ -7,7 +7,7 @@ import java.io.File
  * Call loadModel/generate from a background executor, never the Android main thread.
  */
 class OfflineAiEngine {
-    companion object { const val MIN_VALID_MODEL_BYTES = 2_000_000_000L }
+    companion object { const val MIN_VALID_MODEL_BYTES = 400_000_000L }
     @Volatile
     var isLoaded: Boolean = false
         private set
