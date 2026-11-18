@@ -47,8 +47,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = 0xFF101827.toInt()
-        window.navigationBarColor = 0xFF101827.toInt()
+        val dark = isSystemDarkMode()
+        window.statusBarColor = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
+        window.navigationBarColor = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
+        if (Build.VERSION.SDK_INT >= 23) {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (dark) 0 else
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
         buildScreen()
         tts = TextToSpeech(this, this)
         updateSpeechAvailability()
@@ -58,7 +64,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(24), dp(20), dp(24))
-            setBackgroundColor(0xFFF4F7FB.toInt())
+            setBackgroundColor(adaptColor(0xFFF4F7FB.toInt()))
         }
         val scroll = ScrollView(this).apply { addView(page) }
         page.addView(label("WORKLY INDIA", 12, 0xFF2878D0.toInt(), true))
@@ -88,18 +94,18 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             minLines = 3
             maxLines = 6
             gravity = Gravity.TOP or Gravity.START
-            setTextColor(0xFF142033.toInt())
-            setHintTextColor(0xFF8491A3.toInt())
+            setTextColor(adaptColor(0xFF142033.toInt()))
+            setHintTextColor(adaptColor(0xFF8491A3.toInt()))
             setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(adaptColor(0xFFFFFFFF.toInt()))
         }
         page.addView(inputText, matchWrap().also { it.topMargin = dp(10) })
         val speakButton = button("▶  Speak text")
         speakButton.setOnClickListener { speakText() }
         page.addView(speakButton, matchWrap().also { it.topMargin = dp(10) })
         page.addView(button("■  Stop voice").apply {
-            setBackgroundColor(0xFFE8EDF4.toInt())
-            setTextColor(0xFF26364B.toInt())
+            setBackgroundColor(adaptColor(0xFFE8EDF4.toInt()))
+            setTextColor(adaptColor(0xFF26364B.toInt()))
             setOnClickListener { tts?.stop(); setStatus("Voice playback stopped.") }
         }, matchWrap().also { it.topMargin = dp(8) })
 
@@ -114,10 +120,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             minLines = 4
             maxLines = 8
             gravity = Gravity.TOP or Gravity.START
-            setTextColor(0xFF142033.toInt())
-            setHintTextColor(0xFF8491A3.toInt())
+            setTextColor(adaptColor(0xFF142033.toInt()))
+            setHintTextColor(adaptColor(0xFF8491A3.toInt()))
             setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(0xFFFFFFFF.toInt())
+            setBackgroundColor(adaptColor(0xFFFFFFFF.toInt()))
         }
         page.addView(transcriptText, matchWrap().also { it.topMargin = dp(10) })
         page.addView(label(
@@ -138,10 +144,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             hint = "24-character pairing code"
             maxLines = 1
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-            setTextColor(0xFF142033.toInt())
-            setHintTextColor(0xFF8491A3.toInt())
+            setTextColor(adaptColor(0xFF142033.toInt()))
+            setHintTextColor(adaptColor(0xFF8491A3.toInt()))
             setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(0xFFF4F7FB.toInt())
+            setBackgroundColor(adaptColor(0xFFF4F7FB.toInt()))
         }
         relayCard.addView(pairingCodeInput, matchWrap())
         relayCard.addView(button("Pair this phone securely").apply {
@@ -157,8 +163,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             setOnClickListener { requestNotificationAndStart() }
         }, matchWrap())
         relayCard.addView(button("Stop phone server").apply {
-            setBackgroundColor(0xFFE8EDF4.toInt())
-            setTextColor(0xFF26364B.toInt())
+            setBackgroundColor(adaptColor(0xFFE8EDF4.toInt()))
+            setTextColor(adaptColor(0xFF26364B.toInt()))
             setOnClickListener {
                 stopService(Intent(this@MainActivity, VoiceRelayService::class.java))
                 refreshRelayStatus()
@@ -375,10 +381,24 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         super.onDestroy()
     }
 
+    private fun isSystemDarkMode(): Boolean =
+        (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    private fun adaptColor(color: Int): Int {
+        if (!isSystemDarkMode()) return color
+        return when (color) {
+            0xFFF4F7FB.toInt(), 0xFFFFFFFF.toInt(), 0xFFE8EDF4.toInt() -> 0xFF1B2636.toInt()
+            0xFF142033.toInt(), 0xFF26364B.toInt() -> 0xFFE8EEF7.toInt()
+            0xFF65748B.toInt(), 0xFF536276.toInt(), 0xFF8491A3.toInt() -> 0xFFAFBBCB.toInt()
+            else -> color
+        }
+    }
+
     private fun label(text: String, size: Int, color: Int, bold: Boolean) = TextView(this).apply {
         this.text = text
         textSize = size.toFloat()
-        setTextColor(color)
+        setTextColor(adaptColor(color))
         if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
     }
     private fun sectionTitle(text: String) = label(text, 19, 0xFF142033.toInt(), true).apply {
@@ -387,7 +407,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun card() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(16), dp(16), dp(16), dp(16))
-        setBackgroundColor(0xFFFFFFFF.toInt())
+        setBackgroundColor(adaptColor(0xFFFFFFFF.toInt()))
         elevation = dp(2).toFloat()
     }
     private fun button(text: String) = Button(this).apply {
