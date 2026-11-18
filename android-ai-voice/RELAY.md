@@ -15,6 +15,8 @@ This is a separate Android app and an isolated relay backend. The relay source i
 - `claim_device`: Android app exchanges the code for a device token.
 - `create_job`: authenticated website user creates a `tts` or `stt` request (payload limit 20 KB; maximum three active jobs per user).
 - `get_job`: authenticated website user retrieves only their own job status/result.
+- `list_devices`: authenticated website user lists their own paired phones.
+- `revoke_device`: authenticated website user revokes a paired phone token.
 - `poll`: paired phone receives one queued job and sends a heartbeat.
 - `complete_job`: paired phone returns a result (limit 32 KB).
 - `fail_job`: paired phone marks an unsupported or failed request with an explicit error.
@@ -23,7 +25,7 @@ This is a separate Android app and an isolated relay backend. The relay source i
 ## Current limitations
 - This is the relay API contract/backend foundation, not yet a complete working website-to-phone voice server.
 - The Android app now includes pairing UI, Android Keystore AES-GCM token storage, a user-started foreground service, polling/reconnect logic, and on-device TTS playback for remote TTS jobs.
-- The website now includes a signed-in pairing-code generator at `/settings/ai-voice-server`. A general website voice-job composer/integration still needs to be built.
+- The website now includes a signed-in pairing-code generator, paired-phone listing/revocation, and a test TTS request page at `/settings/ai-voice-server`.
 - Android's current `SpeechRecognizer` listens to the phone microphone; it does not transcribe an arbitrary audio file uploaded by a website. Remote STT requires a separately implemented/tested audio-input model or a supported external-audio recognition path.
 - Remote TTS currently plays text through the paired phone speaker and returns a playback confirmation, not an audio file. Audio-file synthesis/upload and remote audio-file STT still need implementation and device testing.
 - Phone availability depends on power, network, Android background limits, and the user keeping the foreground server enabled. No 24/7 uptime guarantee.
