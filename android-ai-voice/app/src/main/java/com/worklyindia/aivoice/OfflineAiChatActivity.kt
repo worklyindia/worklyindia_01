@@ -32,6 +32,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var qwenModelPicker: Spinner
     private lateinit var downloadModelButton: Button
     private var selectedQwenModel: QwenModelManager.Model? = null
+    private var userHasChosenQwenModel = false
     private val kokoroModelManager by lazy { KokoroModelManager(this) }
     private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
     private val engine by lazy { OfflineAiEngine() }
@@ -115,6 +116,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         status = text("Loading Qwen model…", 13, 0xFF2E9D72.toInt())
         root.addView(status)
         qwenModelPicker = Spinner(this).apply {
+            setOnTouchListener { _, _ -> userHasChosenQwenModel = true; false }
             adapter = ArrayAdapter(this@OfflineAiChatActivity, android.R.layout.simple_spinner_dropdown_item, modelManager.models)
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -131,7 +133,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             worker.execute {
                 try {
                     modelManager.startDownload(selected)
-                    runOnUiThread { status.text = "Downloading ${selected.title} over Wi-Fi. Check notification for progress." }
+                    runOnUiThread { status.text = "Downloading ${selected.title} over Wi-Fi. When complete, reopen Offline Chat to load it." }
                 } catch (error: Exception) {
                     runOnUiThread { status.text = error.message ?: "Could not start model download." }
                 }
@@ -198,7 +200,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 val memoryInfo = ActivityManager.MemoryInfo()
                 (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memoryInfo)
                 val recommended = modelManager.recommendedModel(memoryInfo.availMem)
-                val chosen = selectedQwenModel ?: recommended
+                val chosen = if (userHasChosenQwenModel) selectedQwenModel ?: recommended else recommended
+                selectedQwenModel = chosen
                 runOnUiThread {
                     val index = modelManager.models.indexOf(chosen)
                     if (index >= 0 && qwenModelPicker.selectedItemPosition != index) qwenModelPicker.setSelection(index)
