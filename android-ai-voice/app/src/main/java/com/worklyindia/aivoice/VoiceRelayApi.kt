@@ -1,8 +1,6 @@
 package com.worklyindia.aivoice
 
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -30,7 +28,7 @@ object VoiceRelayApi {
             connection.outputStream.use { it.write(request.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val raw = stream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
+            val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             val json = try { JSONObject(raw) } catch (_: Exception) { JSONObject().put("error", "Invalid relay response") }
             return ApiResult(json, code)
         } finally {
@@ -44,7 +42,7 @@ object VoiceRelayApi {
             JSONObject().put("pairing_code", pairingCode).put("device_name", deviceName)
         )
         if (result.statusCode !in 200..299) {
-            throw IllegalStateException(result.body.optString("error", "Pairing failed"))
+            throw RelayApiException(result.statusCode, result.body.optString("error", "Pairing failed"))
         }
         return result.body.getString("device_token")
     }
@@ -70,6 +68,6 @@ object VoiceRelayApi {
             JSONObject().put("job_id", jobId).put("reason", reason.take(500)),
             token
         )
-        if (response.statusCode !in 200..299) throw IllegalStateException(response.body.optString("error", "Could not report voice job failure"))
+        if (response.statusCode !in 200..299) throw RelayApiException(response.statusCode, response.body.optString("error", "Could not report voice job failure"))
     }
 }
