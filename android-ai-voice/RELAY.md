@@ -7,13 +7,14 @@ This is a separate Android app and an isolated relay backend. The relay source i
 - Website users authenticate with their normal Supabase session and request a short-lived pairing code.
 - The Android app claims the one-time code and receives a random device token. Only its SHA-256 hash is stored in the database; the token is returned once and must be stored in Android Keystore-backed encrypted storage before production use.
 - The phone polls the Edge Function over an outbound HTTPS connection, so Jio/mobile CGNAT does not need an inbound port.
-- The Edge Function stores jobs in a private schema and returns results only to the owning website user.
+- The Edge Function stores jobs in a dedicated tables in the public schema and returns results only to the owning website user.
 - No service-role key, database password, or private API secret belongs in the Android APK or browser bundle.
 
 ## Actions in `workly-ai-voice-relay`
 - `create_pairing`: authenticated website user; returns a one-time 24-character hex code valid for 5 minutes.
 - `claim_device`: Android app exchanges the code for a device token.
-- `create_job`: authenticated website user creates a `tts` or `stt` request (payload limit 20 KB).
+- `create_job`: authenticated website user creates a `tts` or `stt` request (payload limit 20 KB; maximum three active jobs per user).
+- `get_job`: authenticated website user retrieves only their own job status/result.
 - `poll`: paired phone receives one queued job and sends a heartbeat.
 - `complete_job`: paired phone returns a result (limit 32 KB).
 - `revoke_device`: authenticated owner revokes the phone token.
