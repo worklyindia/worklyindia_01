@@ -195,6 +195,24 @@ Deno.serve(async (req: Request) => {
       return json({ job: claimed ?? null, heartbeat_at: new Date().toISOString() });
     }
 
+    if (action === "fail_job") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const jobId = typeof body?.job_id === "string" ? body.job_id : "";
+      const reason = typeof body?.reason === "string" ? body.reason.slice(0, 500) : "Voice request failed";
+      if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
+      const { data, error } = await db.from("workly_ai_voice_jobs")
+        .update({ status: "failed", result: { error: reason }, completed_at: new Date().toISOString() })
+        .eq("id", jobId)
+        .eq("device_id", device.id)
+        .eq("status", "running")
+        .select("id,status")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return json({ error: "Job not found or already finished" }, 404);
+      return json({ job: data });
+    }
+
     if (action === "complete_job") {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
