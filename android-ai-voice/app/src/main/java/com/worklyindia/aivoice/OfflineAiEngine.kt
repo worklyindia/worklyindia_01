@@ -28,7 +28,9 @@ class OfflineAiEngine {
     fun generate(prompt: String): String {
         check(isLoaded) { "Load the offline AI model first." }
         require(prompt.isNotBlank()) { "Enter a message first." }
-        return nativeGenerate(prompt.trim().take(6000), 192)
+        val result = nativeGenerate(prompt.trim().take(4000), 96).trim()
+        check(result.isNotEmpty()) { "The model returned an empty response. Try a shorter message or reload the model." }
+        return result
     }
 
     @Synchronized
