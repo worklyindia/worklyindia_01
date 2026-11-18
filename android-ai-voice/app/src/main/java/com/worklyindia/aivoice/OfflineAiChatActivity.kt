@@ -90,8 +90,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         micButton.setOnClickListener { startVoiceInput() }
         actions.addView(micButton, LinearLayout.LayoutParams(0, dp(52), 1f))
         sendButton = button("Send")
-        val contextPrompt = if (conversationHistory.isEmpty()) prompt else
-            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
         sendButton.isEnabled = false
         sendButton.setOnClickListener { sendPrompt() }
         actions.addView(sendButton, LinearLayout.LayoutParams(0, dp(52), 1f))
@@ -134,6 +132,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         promptInput.setText("")
         append("\n\nYou: $prompt\n\nWorkly AI: thinking…")
         sendButton.isEnabled = false
+        val contextPrompt = if (conversationHistory.isEmpty()) prompt else
+            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
         worker.execute {
             val answer = try {
                 engine.generate(contextPrompt)
