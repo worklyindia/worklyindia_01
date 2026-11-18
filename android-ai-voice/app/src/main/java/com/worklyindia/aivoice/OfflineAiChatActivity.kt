@@ -36,6 +36,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var languagePicker: Spinner
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private val conversationHistory = StringBuilder()
     private var recognizer: SpeechRecognizer? = null
 
     private data class VoiceLanguage(val label: String, val tag: String, val locale: Locale) {
@@ -137,6 +138,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             } catch (error: Exception) {
                 "Sorry, offline AI could not answer: ${error.message ?: "please try again"}"
             }
+            conversationHistory.append("User: ").append(prompt).append("\\nAssistant: ").append(answer).append("\\n")
+            if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
             runOnUiThread {
                 replaceThinking(answer)
                 sendButton.isEnabled = engine.isLoaded
