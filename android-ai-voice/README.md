@@ -45,7 +45,19 @@ The Android project now also contains a pinned llama.cpp native runtime build an
 
 ## Speech model integration status
 
-The app UI currently uses Android's installed SpeechRecognizer and TextToSpeech providers. AI4Bharat IndicConformer INT8, Indic Tiny TTS, Kokoro and Shruti are **not yet integrated as native Android inference engines or auto-downloaded model packs**. They must not be presented as available offline engines until the Sherpa-ONNX/ONNX Runtime integration, model-specific preprocessing, model checksums, and real-device Hindi/Gujarati/English tests are completed. The automatic first-launch Wi-Fi download in this milestone applies to Qwen only.
+The Sherpa-ONNX Android runtime (v2.0.1) is now added to the Android project, with file-backed Kotlin adapters for:
+- AI4Bharat IndicConformer INT8 CTC (separate Hindi and Gujarati model files plus shared tokens).
+- Shruti's sherpa-onnx/Moonshine pack (separate Hindi and Gujarati packs; each also handles English and code-switching).
+
+These adapters accept 16 kHz mono Float32 PCM and expose offline transcription, but they are not yet connected to the microphone UI or an automatic speech-pack downloader. The app still uses Android's installed SpeechRecognizer and TextToSpeech until that wiring and device tests are completed.
+
+The two TTS models still need separate integration work:
+- Kokoro 82M has a 295 MB LiteRT-LM / MediaPipe TTS bundle for Hindi and English. Its Android sample currently targets Android 8.0+ (API 26); this project currently supports API 24+, so compatibility must be resolved without silently dropping older devices.
+- Indic Tiny TTS is not a drop-in Sherpa Matcha model. Its three ONNX graphs require the model's own character tokenizer, text normalizer, duration/flow decoding and Vocos ISTFT post-processing. The Hindi, Gujarati and English packs are about 91 MB each. Merely downloading the graphs would not make TTS work.
+
+Approximate model weights for the requested speech stack: IndicConformer Hindi+Gujarati ~395 MB; Shruti Hindi+Gujarati ~108 MB; Indic Tiny TTS Hindi+Gujarati+English ~273 MB; Kokoro ~295 MB. Total is about 1.07 GB, in addition to the existing Qwen model (~2.1 GB). Model licensing/attribution must be retained: AI4Bharat MIT, Shruti Apache-2.0 (NOTICE required), Indic Tiny TTS CC-BY-4.0 for acoustic weights plus MIT Vocos, and Kokoro LiteRT bundle Apache-2.0.
+
+Do not mark these speech engines as available offline until model downloads, checksum/size validation, microphone/playback wiring, and real-device Hindi/Gujarati/English inference tests pass. The automatic first-launch Wi-Fi download currently applies to Qwen only.
 
 ## Supabase phone relay (review branch only)
 
