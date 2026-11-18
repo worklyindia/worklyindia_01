@@ -207,6 +207,7 @@ export default function AIVoiceCall() {
       chatStorage.saveMessages(historyWithUser);
 
       let reply = '';
+      let historyReply = '';
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         if (!activeRef.current || turnId !== conversationTurnRef.current) return;
@@ -223,7 +224,13 @@ export default function AIVoiceCall() {
               hasImages: false,
               currentPage: '/ai-assistant',
               audience: 'default',
-              pageContext: { path: '/ai-assistant', page: 'AI Chat', audience: 'default', source: 'AI Voice Call' },
+              pageContext: {
+                path: '/ai-assistant',
+                page: 'AI Chat',
+                audience: 'default',
+                source: 'AI Voice Call',
+                voiceResponseInstruction: 'Reply in exactly the language and writing style used by the user in their latest message. If the user uses one language, stay in that language. If the user intentionally mixes languages, preserve that mix. Do not add an unrelated language.'
+              },
             },
             {
               onStatus: () => undefined,
@@ -232,8 +239,12 @@ export default function AIVoiceCall() {
             }
           );
           candidate = result.fullText || candidate;
+          // Keep the original AI answer for the normal AI Chat history so
+          // emojis, dates, formatting and rich chat presentation remain intact.
+          // Only the audio copy is cleaned for reliable speech playback.
           const cleaned = cleanVoiceText(candidate);
           if (cleaned) {
+            historyReply = candidate.trim();
             reply = cleaned;
             break;
           }
@@ -247,7 +258,7 @@ export default function AIVoiceCall() {
       const assistantMessage: StoredMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: reply,
+        content: historyReply || reply,
         timestamp: new Date().toISOString(),
         status: 'read',
       };
