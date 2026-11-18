@@ -17,6 +17,10 @@ export default function WorklyAIVoiceDevices() {
   const [pairing, setPairing] = useState<PairingResponse | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [voiceText, setVoiceText] = useState("Namaste! Workly AI Voice phone server is connected.");
+  const [voiceLanguage, setVoiceLanguage] = useState("hi-IN");
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("");
 
   useEffect(() => {
     if (!pairing) return;
@@ -46,6 +50,47 @@ export default function WorklyAIVoiceDevices() {
       toast.error(message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const sendVoiceTest = async () => {
+    if (!user || !voiceText.trim()) {
+      toast.error("Enter text and make sure you are signed in.");
+      return;
+    }
+    setVoiceBusy(true);
+    setVoiceStatus("Sending a voice request to your paired phone…");
+    try {
+      const { data: created, error: createError } = await supabase.functions.invoke<{ job: { id: string } }>("workly-ai-voice-relay", {
+        body: { action: "create_job", job_type: "tts", payload: { text: voiceText.trim().slice(0, 4000), language: voiceLanguage } },
+      });
+      if (createError) throw createError;
+      const jobId = created?.job?.id;
+      if (!jobId) throw new Error("The relay did not return a voice job ID.");
+      setVoiceStatus("Request queued. Waiting for the phone to speak…");
+      for (let attempt = 0; attempt < 45; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 3000));
+        const { data: statusData, error: statusError } = await supabase.functions.invoke<{ job: { status: string; result?: { message?: string; error?: string } } }>("workly-ai-voice-relay", {
+          body: { action: "get_job", job_id: jobId },
+        });
+        if (statusError) throw statusError;
+        const job = statusData?.job;
+        if (job?.status === "completed") {
+          setVoiceStatus(job.result?.message || "The phone completed the voice request.");
+          toast.success("Phone voice request completed.");
+          return;
+        }
+        if (job?.status === "failed" || job?.status === "expired") {
+          throw new Error(job.result?.error || `Voice request ${job.status}.`);
+        }
+      }
+      setVoiceStatus("Still waiting. Check that the Android phone server is online and the app notification is active.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Voice request failed.";
+      setVoiceStatus(message);
+      toast.error(message);
+    } finally {
+      setVoiceBusy(false);
     }
   };
 
@@ -100,6 +145,32 @@ export default function WorklyAIVoiceDevices() {
           <p className="text-xs text-muted-foreground">
             The code expires after 5 minutes and can be used once. Never share it with anyone else. Your phone receives a separate device token, stored encrypted with Android Keystore.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Test phone voice from this website</CardTitle>
+          <CardDescription>Send text to your paired phone. The phone will speak it using its installed Android TTS voice.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <label className="block space-y-1 text-sm font-medium">
+            Voice language
+            <select value={voiceLanguage} onChange={(event) => setVoiceLanguage(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2">
+              <option value="hi-IN">Hindi</option>
+              <option value="en-IN">English (India)</option>
+              <option value="gu-IN">Gujarati</option>
+            </select>
+          </label>
+          <label className="block space-y-1 text-sm font-medium">
+            Text to speak
+            <textarea value={voiceText} onChange={(event) => setVoiceText(event.target.value)} rows={3} maxLength={4000} className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm" />
+          </label>
+          <Button onClick={sendVoiceTest} disabled={voiceBusy || !user || !voiceText.trim()} className="w-full">
+            {voiceBusy ? "Waiting for phone…" : "Send voice test to phone"}
+          </Button>
+          {voiceStatus ? <p role="status" className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">{voiceStatus}</p> : null}
+          <p className="text-xs text-muted-foreground">The phone must be paired and its foreground server running. This test plays sound on the phone speaker; it does not stream an audio file back to this website.</p>
         </CardContent>
       </Card>
 
