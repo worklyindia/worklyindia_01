@@ -52,6 +52,23 @@ class SettingsActivity : Activity() {
             setOnClickListener { finish() }
         })
         page.addView(label("Settings", 28, primary, true))
+        val aiModelCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            setBackgroundColor(surface)
+            elevation = dp(2).toFloat()
+        }
+        aiModelCard.addView(label("AI model downloads", 18, primary, true))
+        aiModelCard.addView(label(
+            "Download, verify and select the on-device AI model here. Chat stays focused on messaging; language is detected automatically.",
+            13, secondary, false
+        ))
+        aiModelCard.addView(button("Manage AI model downloads").apply {
+            setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, SpeechDownloadsActivity::class.java))
+            }
+        })
+        page.addView(aiModelCard)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
