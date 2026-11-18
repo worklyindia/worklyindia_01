@@ -19,6 +19,9 @@ type InstallRow = {
   device_model: string | null; os_version: string | null; app_version: string | null;
   last_seen_at: string; created_at: string;
 };
+type AnonymousInstallRow = { installation_id: string; last_seen_at: string; device_model: string | null; app_version: string | null };
+type AnonymousSessionEventRow = { session_id: string; installation_id: string; event_type: string; created_at: string };
+
 type SessionRow = {
   id: string; session_id: string; user_id: string | null; installation_id: string; platform: string;
   device_model: string; os_version: string; app_version: string;
@@ -41,11 +44,11 @@ export default function AppUserDetails() {
   const load = useCallback(async () => {
     setLoading(true);
     const [u, i, s, a, ae] = await Promise.all([
-      supabase.rpc("get_owner_app_user_details"),
+      (supabase as any).rpc("get_owner_app_user_details"),
       supabase.from("app_installations").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
       supabase.from("app_sessions").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
-      supabase.from("app_anonymous_installations").select("installation_id,last_seen_at,device_model,app_version").order("last_seen_at", { ascending: false }).limit(10000),
-      supabase.from("app_anonymous_sessions").select("session_id,installation_id,event_type,created_at").order("created_at", { ascending: false }).limit(10000),
+      (supabase as any).from("app_anonymous_installations").select("installation_id,last_seen_at,device_model,app_version").order("last_seen_at", { ascending: false }).limit(10000),
+      (supabase as any).from("app_anonymous_sessions").select("session_id,installation_id,event_type,created_at").order("created_at", { ascending: false }).limit(10000),
     ]);
     if (u.error) toast.error("Unable to load app users: " + u.error.message);
     if (i.error) toast.error("Unable to load Android app installations: " + i.error.message);
