@@ -340,7 +340,12 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         worker.execute {
             val startedAt = System.currentTimeMillis()
             val answer = try {
-                engine.generate(contextPrompt).trim().ifBlank {
+                engine.generate(contextPrompt) { partial ->
+                    runOnUiThread {
+                        thinkingBubble?.text = partial
+                        chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+                    }
+                }.trim().ifBlank {
                     "AI ne empty response diya. Please shorter message bhejkar dobara try karein."
                 }
             } catch (error: Throwable) {
