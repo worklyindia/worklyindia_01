@@ -49,7 +49,7 @@ The Sherpa-ONNX Android runtime (v2.0.1) is included, with file-backed Kotlin ad
 - AI4Bharat IndicConformer INT8 CTC (Hindi and Gujarati model files plus shared tokens).
 - Shruti sherpa-onnx/Moonshine (Hindi and Gujarati packs; each can also recognize English and code-switching).
 
-Both adapters accept 16 kHz mono Float32 PCM and expose offline transcription. They are not yet connected to the microphone UI, and their model packs are not downloaded automatically. Android SpeechRecognizer remains the active STT path until the adapters, model downloads and real-device tests are complete.
+Both adapters accept 16 kHz mono Float32 PCM and expose offline transcription. The Voice-to-Text screen now exposes separate Hindi/Gujarati download actions for both packs, backed by Android DownloadManager and the saved Wi-Fi/mobile-data consent. Pack readiness checks verify every expected file size before the adapter factory opens a model. However, the microphone still uses Android SpeechRecognizer: native microphone PCM capture, switching to the downloaded Sherpa engines, and real-device inference tests remain pending.
 
 Kokoro 82M is now integrated through MediaPipe Tasks Audio:
 - The 294,783,298-byte kokoro_int8_fp16.litertlm bundle downloads automatically after the Qwen model is ready, using the user's saved Wi-Fi/mobile-data choice.
@@ -57,7 +57,7 @@ Kokoro 82M is now integrated through MediaPipe Tasks Audio:
 - The main Speak button uses Kokoro for Hindi and English when the model is ready, and falls back to Android TTS while downloading or if synthesis fails. Gujarati still uses Android TTS.
 - Kokoro's Android integration requires API 26+, so the app minimum was raised from API 24 to API 26 (Android 8.0).
 
-Indic Tiny TTS is still not integrated into Android inference. It is not a drop-in Sherpa Matcha model: its three ONNX graphs require the model's own character tokenizer, text normalizer, duration/flow decoding and Vocos ISTFT post-processing. Hindi, Gujarati and English packs are about 91 MB each. They must not be downloaded until that inference path is implemented.
+Indic Tiny TTS is still not integrated into Android inference and is not exposed as a download yet. It is not a drop-in Sherpa Matcha model: its three ONNX graphs require the model's own character tokenizer, text normalizer, duration/flow decoding and Vocos ISTFT post-processing. Hindi, Gujarati and English packs are about 91 MB each. They must not be downloaded until that inference path is implemented and validated.
 
 Approximate model weights for the requested speech stack: IndicConformer Hindi+Gujarati ~395 MB; Shruti Hindi+Gujarati ~108 MB; Indic Tiny TTS Hindi+Gujarati+English ~273 MB; Kokoro ~295 MB. Total is about 1.07 GB, in addition to Qwen (~2.1 GB). Model licensing/attribution must be retained: AI4Bharat MIT, Shruti Apache-2.0 (NOTICE required), Indic Tiny TTS CC-BY-4.0 for acoustic weights plus MIT Vocos, and Kokoro LiteRT bundle Apache-2.0.
 
