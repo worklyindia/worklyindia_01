@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+type PairedDevice = { id: string; device_name: string; last_seen_at: string | null; created_at: string; revoked_at: string | null };
+
 type PairingResponse = {
   pairing_code: string;
   expires_at: string;
@@ -21,6 +23,8 @@ export default function WorklyAIVoiceDevices() {
   const [voiceLanguage, setVoiceLanguage] = useState("hi-IN");
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState("");
+  const [devices, setDevices] = useState<PairedDevice[]>([]);
+  const [devicesBusy, setDevicesBusy] = useState(false);
 
   useEffect(() => {
     if (!pairing) return;
@@ -29,6 +33,38 @@ export default function WorklyAIVoiceDevices() {
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [pairing]);
+
+  const refreshDevices = async () => {
+    if (!user) return;
+    setDevicesBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ devices: PairedDevice[] }>("workly-ai-voice-relay", {
+        body: { action: "list_devices" },
+      });
+      if (error) throw error;
+      setDevices(data?.devices ?? []);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load paired phones.");
+    } finally {
+      setDevicesBusy(false);
+    }
+  };
+
+  const revokeDevice = async (deviceId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke<{ revoked: boolean }>("workly-ai-voice-relay", {
+        body: { action: "revoke_device", device_id: deviceId },
+      });
+      if (error) throw error;
+      if (!data?.revoked) throw new Error("This device could not be revoked.");
+      toast.success("Phone access revoked.");
+      await refreshDevices();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not revoke phone.");
+    }
+  };
+
+  useEffect(() => { if (user) void refreshDevices(); }, [user?.id]);
 
   const generateCode = async () => {
     if (!user) {
@@ -145,6 +181,25 @@ export default function WorklyAIVoiceDevices() {
           <p className="text-xs text-muted-foreground">
             The code expires after 5 minutes and can be used once. Never share it with anyone else. Your phone receives a separate device token, stored encrypted with Android Keystore.
           </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div><CardTitle>Paired phones</CardTitle><CardDescription>Review and revoke phones connected to your account.</CardDescription></div>
+          <Button variant="outline" size="sm" onClick={refreshDevices} disabled={devicesBusy}>{devicesBusy ? "Loading…" : "Refresh"}</Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {devices.length === 0 ? <p className="text-sm text-muted-foreground">No paired phones found yet. Pair your Android app to see it here.</p> : devices.map((device) => (
+            <div key={device.id} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-medium">{device.device_name}</p>
+                <p className="text-xs text-muted-foreground">Last seen: {device.last_seen_at ? new Date(device.last_seen_at).toLocaleString() : "Not connected yet"}</p>
+                <p className="text-xs">{device.revoked_at ? "Access revoked" : "Paired device"}</p>
+              </div>
+              {!device.revoked_at ? <Button variant="destructive" size="sm" onClick={() => revokeDevice(device.id)}>Revoke access</Button> : null}
+            </div>
+          ))}
         </CardContent>
       </Card>
 
