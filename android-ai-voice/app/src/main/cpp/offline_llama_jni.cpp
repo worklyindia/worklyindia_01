@@ -6,6 +6,8 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <cstdint>
+#include <thread>
 
 #define LOG_TAG "WorklyOfflineAI"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -28,6 +30,40 @@ std::string from_java(JNIEnv * env, jstring value) {
     std::string result(chars);
     env->ReleaseStringUTFChars(value, chars);
     return result;
+}
+
+// Convert ordinary UTF-8 model output to UTF-16 safely before calling Java.
+// This keeps Hindi/Gujarati characters intact even when a token ends mid-word.
+jstring to_java_string(JNIEnv * env, const std::string & value) {
+    std::vector<jchar> utf16;
+    for (size_t i = 0; i < value.size();) {
+        const unsigned char lead = static_cast<unsigned char>(value[i]);
+        uint32_t cp = 0;
+        size_t count = 0;
+        if (lead < 0x80) { cp = lead; count = 1; }
+        else if ((lead & 0xE0) == 0xC0) { cp = lead & 0x1F; count = 2; }
+        else if ((lead & 0xF0) == 0xE0) { cp = lead & 0x0F; count = 3; }
+        else if ((lead & 0xF8) == 0xF0) { cp = lead & 0x07; count = 4; }
+        else { utf16.push_back(0xFFFD); ++i; continue; }
+        if (i + count > value.size()) { utf16.push_back(0xFFFD); break; }
+        bool valid = true;
+        for (size_t j = 1; j < count; ++j) {
+            const unsigned char next = static_cast<unsigned char>(value[i + j]);
+            if ((next & 0xC0) != 0x80) { valid = false; break; }
+            cp = (cp << 6) | (next & 0x3F);
+        }
+        if (!valid || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            utf16.push_back(0xFFFD); ++i; continue;
+        }
+        if (cp <= 0xFFFF) utf16.push_back(static_cast<jchar>(cp));
+        else {
+            cp -= 0x10000;
+            utf16.push_back(static_cast<jchar>(0xD800 + (cp >> 10)));
+            utf16.push_back(static_cast<jchar>(0xDC00 + (cp & 0x3FF)));
+        }
+        i += count;
+    }
+    return env->NewString(utf16.data(), static_cast<jsize>(utf16.size()));
 }
 }
 
@@ -54,7 +90,7 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeLoadModel(
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
-        JNIEnv * env, jobject, jstring user_prompt, jint max_tokens) {
+        JNIEnv * env, jobject thiz, jstring user_prompt, jint max_tokens) {
     const std::string question = from_java(env, user_prompt);
     if (question.empty()) return env->NewStringUTF("Please enter a message.");
 
@@ -64,8 +100,10 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     // Qwen2.5 uses the ChatML conversation format.
     const std::string prompt =
         "<|im_start|>system\n"
-        "You are Workly AI, a helpful offline assistant. Answer clearly and briefly. "
-        "You can help with normal questions and simple tasks. If you do not know, say so.\n"
+        "You are Workly AI, a helpful offline assistant. Answer the user's latest message directly. "
+        "Use the previous conversation as context, remember details already provided, and do not ask for information the user already gave. "
+        "Stay on the exact topic and follow the user's language. Give a useful, specific answer, not a generic greeting. "
+        "Keep simple answers concise; explain more only when the question needs it. If unsure, say so honestly.\n"
         "<|im_end|>\n<|im_start|>user\n" + question +
         "\n<|im_end|>\n<|im_start|>assistant\n";
 
@@ -86,8 +124,10 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     llama_context_params context_params = llama_context_default_params();
     context_params.n_ctx = 2048;
     context_params.n_batch = std::max(1, token_count);
-    context_params.n_threads = 4;
-    context_params.n_threads_batch = 4;
+    const unsigned int cpu_count = std::thread::hardware_concurrency();
+    const int worker_threads = std::clamp(static_cast<int>(cpu_count == 0 ? 4 : cpu_count), 2, 6);
+    context_params.n_threads = worker_threads;
+    context_params.n_threads_batch = worker_threads;
     llama_context * context = llama_init_from_model(model, context_params);
     if (context == nullptr) return env->NewStringUTF("Not enough memory to start offline AI on this phone.");
 
@@ -98,6 +138,9 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
 
     llama_batch batch = llama_batch_get_one(tokens.data(), token_count);
     std::string output;
+    jclass engine_class = env->GetObjectClass(thiz);
+    jmethodID token_callback = engine_class == nullptr ? nullptr :
+        env->GetMethodID(engine_class, "onNativeToken", "(Ljava/lang/String;)V");
     const int limit = std::clamp(static_cast<int>(max_tokens), 16, 256);
 
     if (llama_decode(context, batch) != 0) {
@@ -112,7 +155,17 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
 
         char piece[512];
         const int piece_size = llama_token_to_piece(vocab, next, piece, sizeof(piece), 0, true);
-        if (piece_size > 0) output.append(piece, static_cast<size_t>(piece_size));
+        if (piece_size > 0) {
+            output.append(piece, static_cast<size_t>(piece_size));
+            if (token_callback != nullptr) {
+                jstring partial = to_java_string(env, output);
+                if (partial != nullptr) {
+                    env->CallVoidMethod(thiz, token_callback, partial);
+                    env->DeleteLocalRef(partial);
+                    if (env->ExceptionCheck()) env->ExceptionClear();
+                }
+            }
+        }
 
         batch = llama_batch_get_one(&next, 1);
         if (llama_decode(context, batch) != 0) break;
