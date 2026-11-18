@@ -178,7 +178,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val offlineCard = card()
         offlineCard.addView(label("Qwen2.5-3B-Instruct · Q4_K_M", 16, 0xFF142033.toInt(), true))
         offlineCard.addView(label(
-            "Automatic first-launch download · about 2.1 GB over Wi-Fi only. The model is stored in this app's private storage, not inside the APK. No mobile data is used.",
+            "Automatic first-launch download · about 2.1 GB. Wi-Fi or mobile data can be used based on your saved choice. The model stays in app storage, not inside the APK.",
             12, 0xFF536276.toInt(), false
         ).also { it.setPadding(0, dp(7), 0, dp(10)) })
         offlineModelStatusText = label("Checking offline model…", 13, 0xFF174B36.toInt(), true)
@@ -189,7 +189,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             visibility = View.GONE
         }
         offlineCard.addView(offlineModelProgressBar, matchWrap().also { it.topMargin = dp(10) })
-        offlineModelActionButton = button("Automatic download · Wi-Fi only")
+        offlineModelActionButton = button("Automatic download")
         offlineModelActionButton.setOnClickListener { onOfflineModelAction() }
         offlineCard.addView(offlineModelActionButton, matchWrap().also { it.topMargin = dp(10) })
         offlineModelChatButton = button("Open offline AI chat").apply {
@@ -205,7 +205,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         val kokoroCard = card()
         kokoroCard.addView(label("Kokoro 82M · Hindi + English", 16, 0xFF142033.toInt(), true))
-        kokoroCard.addView(label("Automatic Wi-Fi-only download · about 295 MB. Kokoro provides on-device Hindi and English speech. Gujarati uses the Android voice until Indic Tiny TTS is integrated.", 12, 0xFF536276.toInt(), false).also { it.setPadding(0, dp(7), 0, dp(10)) })
+        kokoroCard.addView(label("Automatic download · about 295 MB. Wi-Fi or approved mobile data can be used. Kokoro provides on-device Hindi and English speech. Gujarati uses the Android voice until Indic Tiny TTS is integrated.", 12, 0xFF536276.toInt(), false).also { it.setPadding(0, dp(7), 0, dp(10)) })
         kokoroModelStatusText = label("Waiting for Qwen download to finish…", 13, 0xFF174B36.toInt(), true)
         kokoroCard.addView(kokoroModelStatusText)
         kokoroModelProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
