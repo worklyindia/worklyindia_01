@@ -36,5 +36,9 @@ android {
 }
 dependencies {
     // Offline ASR runtime for AI4Bharat IndicConformer and Shruti model packs.
-    implementation("com.github.k2-fsa:sherpa-onnx:2.0.1")
+    implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
+        // The Android AAR already contains the Kotlin/JVM API classes.
+        // JitPack also publishes a separate JVM JAR; exclude it to avoid duplicate classes.
+        exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
+    }
 }
