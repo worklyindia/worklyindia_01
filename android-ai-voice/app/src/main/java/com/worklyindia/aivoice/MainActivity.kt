@@ -673,24 +673,26 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             var recorder: AudioRecord? = null
             var engine: OfflineSpeechRecognizer? = null
             try {
-                engine = if (shruti) OfflineSpeechEngineFactory.openShruti(this, language)
+                val speechEngine = if (shruti) OfflineSpeechEngineFactory.openShruti(this, language)
                     else OfflineSpeechEngineFactory.openIndicConformer(this, language)
-                recorder = AudioRecord(
+                engine = speechEngine
+                val audio = AudioRecord(
                     MediaRecorder.AudioSource.VOICE_RECOGNITION,
                     OfflineSpeechRecognizer.SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO,
                     AudioFormat.ENCODING_PCM_16BIT,
                     maxOf(minBuffer * 2, 8192)
                 )
-                check(recorder.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
-                activeAudioRecord = recorder
-                recorder.startRecording()
+                recorder = audio
+                check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
+                activeAudioRecord = audio
+                audio.startRecording()
                 runOnUiThread { setStatus("Recording offline in ${selectedLanguage().label}. Tap Stop when finished (maximum 90 seconds).") }
                 val buffer = ShortArray(4096)
                 val samples = ArrayList<Float>(OfflineSpeechRecognizer.SAMPLE_RATE * 20)
                 val maxSamples = OfflineSpeechRecognizer.SAMPLE_RATE * 90
                 while (offlineRecording && samples.size < maxSamples) {
-                    val count = recorder.read(buffer, 0, buffer.size)
+                    val count = audio.read(buffer, 0, buffer.size)
                     if (count > 0) {
                         for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
                     } else if (count < 0) {
@@ -698,10 +700,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     }
                 }
                 offlineRecording = false
-                runCatching { if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) recorder.stop() }
+                runCatching { if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
                 if (samples.isEmpty()) throw IllegalStateException("No audio was recorded.")
                 runOnUiThread { setStatus("Transcribing locally with ${pack.title}…") }
-                val result = engine.transcribe(samples.toFloatArray())
+                val result = speechEngine.transcribe(samples.toFloatArray())
                 runOnUiThread {
                     if (result.isNotBlank()) {
                         transcriptText.setText(result)
