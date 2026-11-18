@@ -365,7 +365,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         recognizer?.destroy()
         recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { speech ->
             speech.setRecognitionListener(object : android.speech.RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) { status.text = "Listening in ${selectedLanguage().label}…" }
+                override fun onReadyForSpeech(params: Bundle?) { status.text = "Listening… detecting language automatically" }
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
@@ -398,11 +398,10 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
         }
-        val language = selectedLanguage()
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, language.tag)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, language.tag)
+            // No fixed language: let the installed speech provider detect it.
+            if (Build.VERSION.SDK_INT >= 34) putExtra("android.speech.extra.LANGUAGE_DETECTION_ALLOWED", true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             // Do not force EXTRA_PREFER_OFFLINE: some Android speech providers reject
@@ -504,7 +503,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun speakAnswer(value: String) {
-        val language = selectedLanguage()
+        val language = selectedLanguage(value)
         val code = when {
             language.tag.startsWith("hi") -> "hi"
             language.tag.startsWith("gu") -> "gu"
@@ -550,8 +549,15 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     // Language follows the device locale; recognition is allowed to detect the spoken language.
-    private fun selectedLanguage(): VoiceLanguage = languages.firstOrNull { it.locale.language == Locale.getDefault().language }
-        ?: VoiceLanguage("Device language", Locale.getDefault().toLanguageTag(), Locale.getDefault())
+    private fun selectedLanguage(sample: String? = null): VoiceLanguage {
+        val text = sample.orEmpty()
+        val detected = when {
+            text.any { it.code in 0x0900..0x097F } -> "hi"
+            text.any { it.code in 0x0A80..0x0AFF } -> "gu"
+            else -> "en"
+        }
+        return languages.first { it.tag.startsWith(detected) }
+    }
 
     override fun onInit(result: Int) { ttsReady = result == TextToSpeech.SUCCESS }
 
