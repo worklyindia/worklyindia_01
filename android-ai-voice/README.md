@@ -14,7 +14,7 @@ Voice quality and language availability depend on the TTS/recognition engines in
 
 ## Important: public website server is a later milestone
 
-This first milestone is an on-device speech app, not yet a public internet inference server. A phone on mobile data is commonly behind carrier-grade NAT, so a website cannot reliably call the phone directly by its mobile IP. Public Workly website access needs a secure outbound relay/gateway and device authentication. Do not expose an unauthenticated phone port or put credentials in the website bundle.
+This first milestone is an on-device speech app. A separate Supabase relay foundation has now been added to the review branch, but it is not deployed or connected to the app/website yet. A phone on mobile data is commonly behind carrier-grade NAT, so a website cannot reliably call the phone directly by its mobile IP. The relay uses outbound HTTPS and one-time pairing; do not expose an unauthenticated phone port or put credentials in the website bundle.
 
 ## Build
 
