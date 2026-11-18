@@ -333,20 +333,28 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         addMessage(prompt, true)
         thinkingBubble = addMessage("Thinking…", false)
         sendButton.isEnabled = false
+        sendButton.alpha = 0.55f
+        status.text = "Generating a reply on this phone…"
         val contextPrompt = if (conversationHistory.isEmpty()) prompt else
             "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
         worker.execute {
+            val startedAt = System.currentTimeMillis()
             val answer = try {
-                engine.generate(contextPrompt)
-            } catch (error: Exception) {
-                "Sorry, offline AI could not answer: ${error.message ?: "please try again"}"
+                engine.generate(contextPrompt).trim().ifBlank {
+                    "AI ne empty response diya. Please shorter message bhejkar dobara try karein."
+                }
+            } catch (error: Throwable) {
+                "AI reply failed: ${error.message ?: error.javaClass.simpleName}. Model ko Settings se reload karke try karein."
             }
+            val elapsedSeconds = ((System.currentTimeMillis() - startedAt) / 1000L).coerceAtLeast(1)
             conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
             runOnUiThread {
                 replaceThinking(answer)
+                status.text = "Reply completed in ${elapsedSeconds}s"
                 sendButton.isEnabled = engine.isLoaded
-                speakAnswer(answer)
+                sendButton.alpha = if (engine.isLoaded) 1f else 0.55f
+                if (!answer.startsWith("AI reply failed:")) speakAnswer(answer)
             }
         }
     }
