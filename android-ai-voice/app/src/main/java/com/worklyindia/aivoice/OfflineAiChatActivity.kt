@@ -116,6 +116,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         qwenModelPicker = Spinner(this).apply {
             setOnTouchListener { _, _ -> userHasChosenQwenModel = true; false }
             adapter = ArrayAdapter(this@OfflineAiChatActivity, android.R.layout.simple_spinner_dropdown_item, modelManager.models)
+            isEnabled = false // Choose and activate a model from the Downloads screen; the chat runs exactly one model.
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
