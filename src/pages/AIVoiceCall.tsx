@@ -12,6 +12,7 @@ import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOffl
 import { callAICareerChat } from '@/lib/aiChatTransport';
 import { chatStorage, type StoredMessage } from '@/lib/chatStorage';
 import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition } from '@/lib/shrutiSpeech';
+import { formatChatStamp } from '@/utils/chatTimestamp';
 
 
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -110,6 +111,7 @@ export default function AIVoiceCall() {
       replyAudioRef.current = audio;
       const speechWords = text.split(/\s+/).filter(Boolean);
       const wordsPerLine = 7;
+      setSpokenLines(speechWords.slice(0, wordsPerLine).join(' ').trim() ? [speechWords.slice(0, wordsPerLine).join(' ')] : []);
       audio.ontimeupdate = () => {
         if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
         const progress = Math.min(1, audio.currentTime / audio.duration);
@@ -228,7 +230,7 @@ export default function AIVoiceCall() {
         id: crypto.randomUUID(),
         role: 'user',
         content: transcript,
-        timestamp: new Date().toISOString(),
+        timestamp: formatChatStamp(),
         status: 'read',
       };
       const historyWithUser = [...storedHistory, userMessage].slice(-40);
@@ -254,10 +256,10 @@ export default function AIVoiceCall() {
               audience: 'default',
               pageContext: {
                 path: '/ai-assistant',
-                page: 'AI Chat',
+                page: 'AI Voice Call',
                 audience: 'default',
                 source: 'AI Voice Call',
-                voiceResponseInstruction: 'Reply in exactly the language and writing style used by the user in their latest message. If the user uses one language, stay in that language. If the user intentionally mixes languages, preserve that mix. Do not add an unrelated language.'
+                voiceResponseInstruction: 'You are speaking with the user on a live phone call, not chatting by text. Reply like a warm, natural human caller: conversational, concise, direct, and easy to say aloud. Usually use one to three short sentences. Ask one question at a time. Avoid markdown, headings, bullet lists, emoji, links, long explanations, and phrases that sound like written chat. Match the exact language and natural speaking style of the latest user utterance (Hindi, Gujarati, English, or their intentional mix). Keep context from the call, respond to what they just said, and do not announce that you are an AI unless asked.'
               },
             },
             {
@@ -572,7 +574,7 @@ export default function AIVoiceCall() {
         >
           {spokenLines.length > 0 ? spokenLines.map((line, index) => (
             <p
-              key={index}
+              key={`${line}-${index}`}
               className="w-full text-xl font-semibold leading-7 tracking-wide text-white drop-shadow-[0_0_14px_rgba(103,232,249,.35)] transition-all duration-300"
               style={{ animation: "chatwork-line-in 280ms ease-out both" }}
             >
