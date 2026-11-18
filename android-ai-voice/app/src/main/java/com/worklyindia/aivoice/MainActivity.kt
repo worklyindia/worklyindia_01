@@ -2,6 +2,7 @@ package com.worklyindia.aivoice
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -237,23 +238,38 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
 
     private fun onOfflineModelAction() {
-        try {
-            when (offlineModelManager.snapshot().state) {
-                OfflineModelManager.State.READY -> {
-                    offlineModelManager.deleteDownloadedModel()
-                    setOfflineModelStatus("Downloaded model deleted. You can download it again whenever needed.")
-                }
-                OfflineModelManager.State.PENDING,
-                OfflineModelManager.State.RUNNING,
-                OfflineModelManager.State.PAUSED -> {
-                    offlineModelManager.cancelAndDelete()
-                    setOfflineModelStatus("Model download cancelled.")
-                }
-                else -> {
-                    offlineModelManager.startDownload()
-                    setOfflineModelStatus("Starting secure download from Hugging Face…")
-                }
+        val state = try {
+            offlineModelManager.snapshot().state
+        } catch (error: Exception) {
+            setOfflineModelStatus(error.message ?: "Offline model storage is unavailable.")
+            return
+        }
+        when (state) {
+            OfflineModelManager.State.READY -> {
+                offlineModelManager.deleteDownloadedModel()
+                setOfflineModelStatus("Downloaded model deleted. You can download it again whenever needed.")
+                refreshOfflineModelUi()
             }
+            OfflineModelManager.State.PENDING,
+            OfflineModelManager.State.RUNNING,
+            OfflineModelManager.State.PAUSED -> {
+                offlineModelManager.cancelAndDelete()
+                setOfflineModelStatus("Model download cancelled.")
+                refreshOfflineModelUi()
+            }
+            else -> AlertDialog.Builder(this)
+                .setTitle("Download Workly AI model?")
+                .setMessage("This download is about 2.1 GB. Wi-Fi is recommended. Mobile data charges may apply if you continue using mobile data.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Download") { _, _ -> startOfflineModelDownload() }
+                .show()
+        }
+    }
+
+    private fun startOfflineModelDownload() {
+        try {
+            offlineModelManager.startDownload()
+            setOfflineModelStatus("Starting download from the official Hugging Face model repository…")
             refreshOfflineModelUi()
             startOfflineModelPolling()
         } catch (error: Exception) {
