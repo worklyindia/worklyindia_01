@@ -19,6 +19,23 @@ This is an independent Android project. This feature branch also adds a separate
 
 Voice quality and language availability depend on the TTS/recognition engines installed on the device. Gujarati may be unavailable on some Android engines. Speech recognition may use internet and the device's configured recognition provider; this app does not promise offline recognition.
 
+
+## Offline Workly AI model (on-demand download milestone)
+
+The Android app now includes an on-demand downloader for the official
+`Qwen/Qwen2.5-3B-Instruct-GGUF` model using the `Q4_K_M` quantization:
+
+- Model file: `qwen2.5-3b-instruct-q4_k_m.gguf`
+- Exact Hub file size: 2,104,932,768 bytes (about 2.1 GB decimal).
+- Source: https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF
+- Direct download from Hugging Face; no Cloudflare/R2 dependency.
+- The model is not bundled in the APK. Users explicitly start the download.
+- DownloadManager handles the background transfer and retry behavior; the app shows progress and can cancel/delete the model.
+- Stored in app-specific external storage. No broad storage permission is requested.
+- Before download, the app checks for the model size plus 512 MB free-space headroom; after download it checks the exact size and GGUF magic.
+
+**Important implementation boundary:** this milestone downloads and verifies the GGUF file only. The native llama.cpp inference runtime and offline chat/task UI are not connected yet. The existing Android SpeechRecognizer/TextToSpeech controls remain separate and may require the phone's speech provider/internet. Do not describe offline chat or offline voice recognition as working until the native runtime and offline speech components are integrated and device-tested.
+
 ## Supabase phone relay (review branch only)
 
 The separate relay foundation includes an authenticated website pairing-code page at `/settings/ai-voice-server`, one-time 5-minute pairing codes, a paired-device token encrypted with Android Keystore, and a user-started Android foreground service that polls over outbound HTTPS. The migration and Edge Function remain review-only and have NOT been deployed to the live Supabase project. A phone on Jio/mobile data is commonly behind carrier-grade NAT, so the website cannot call the phone directly by its mobile IP.
