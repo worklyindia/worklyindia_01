@@ -107,14 +107,14 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     }
 
     for (int i = 0; i < limit; ++i) {
-        const llama_token next = llama_sampler_sample(sampler, context, -1);
+        llama_token next = llama_sampler_sample(sampler, context, -1);
         if (llama_vocab_is_eog(vocab, next)) break;
 
         char piece[512];
         const int piece_size = llama_token_to_piece(vocab, next, piece, sizeof(piece), 0, true);
         if (piece_size > 0) output.append(piece, static_cast<size_t>(piece_size));
 
-        batch = llama_batch_get_one(const_cast<llama_token *>(&next), 1);
+        batch = llama_batch_get_one(&next, 1);
         if (llama_decode(context, batch) != 0) break;
     }
 
