@@ -40,7 +40,6 @@ async function deviceFor(req: Request) {
   if (token.length < 40 || token.length > 200) return null;
   const tokenHash = await sha256(token);
   const { data, error } = await supabase
-    .schema("workly_ai_private")
     .from("workly_ai_voice_devices")
     .select("id,user_id,revoked_at")
     .eq("token_hash", tokenHash)
@@ -57,13 +56,14 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const action = typeof body?.action === "string" ? body.action : "";
-    const db = supabase.schema("workly_ai_private");
+    const db = supabase;
 
     if (action === "create_pairing") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
 
       // 12 random bytes -> 24 hex characters; short-lived and single-use.
+      await db.from("workly_ai_voice_pairings").delete().lt("expires_at", new Date().toISOString());
       const code = randomHex(12).toUpperCase();
       const codeHash = await sha256(code);
       const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
@@ -126,6 +126,7 @@ Deno.serve(async (req: Request) => {
         .select("id")
         .eq("user_id", user.id)
         .is("revoked_at", null)
+        .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
