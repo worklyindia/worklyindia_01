@@ -102,7 +102,6 @@ class IndicTinyTtsEngine private constructor(
             "gu" -> listOf("શૂન્ય", "એક", "બે", "ત્રણ", "ચાર", "પાંચ", "છ", "સાત", "આઠ", "નવ")
             else -> listOf("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
         }
-        val nativeZero = when (language) { "hi" -> '०'; "gu" -> '૦'; else -> '0' }
         val expanded = buildString {
             for (character in text) {
                 val digit = when {
@@ -171,13 +170,13 @@ class IndicTinyTtsEngine private constructor(
 
         val tokenCount = logW[0][0].size
         val durations = FloatArray(tokenCount)
-        var yLength = 0
+        var totalDuration = 0.0
         for (i in 0 until tokenCount) {
             val frames = ceil(exp(logW[0][0][i].toDouble())).toFloat() * scale
             durations[i] = frames
-            yLength += frames.toInt().coerceAtLeast(0)
+            totalDuration += frames.toDouble()
         }
-        yLength = max(1, yLength)
+        val yLength = max(1, totalDuration.toInt())
         val padded = ((yLength + 1) / 2) * 2
         require(padded <= MAX_FRAMES) { "The text would generate too much audio. Split it into shorter messages." }
 
@@ -185,9 +184,9 @@ class IndicTinyTtsEngine private constructor(
         val mask = Array(1) { Array(1) { FloatArray(padded) } }
         var cumulative = 0.0
         for (token in 0 until tokenCount) {
-            val count = durations[token].toInt().coerceAtLeast(0)
+            val start = ceil(cumulative).toInt().coerceAtLeast(0)
             val end = min(yLength, ceil(cumulative + durations[token].toDouble()).toInt())
-            for (frame in cumulative.toInt().coerceAtLeast(0) until end) {
+            for (frame in start until end) {
                 if (frame >= yLength) break
                 mask[0][0][frame] = 1f
                 for (channel in 0 until MEL_CHANNELS) muY[0][channel][frame] = muX[0][channel][token]
@@ -234,7 +233,7 @@ class IndicTinyTtsEngine private constructor(
     }
 
     private fun inverseStft(real: Array<FloatArray>, imag: Array<FloatArray>): FloatArray {
-        val frames = real[0].size
+        val frames = real[0][0].size
         require(frames >= 2) { "TTS generated too few audio frames." }
         val total = FFT_SIZE + HOP_SIZE * (frames - 1)
         val output = DoubleArray(total)
