@@ -5,6 +5,9 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.content.res.Configuration
 import android.os.Bundle
 import android.speech.RecognizerIntent
@@ -27,8 +30,12 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private val worker = Executors.newSingleThreadExecutor()
     private val modelManager by lazy { OfflineModelManager(this) }
     private val kokoroModelManager by lazy { KokoroModelManager(this) }
+    private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
     private val engine by lazy { OfflineAiEngine() }
     private var kokoroEngine: KokoroSpeechEngine? = null
+    private var tinyTtsEngine: IndicTinyTtsEngine? = null
+    private var activeAudioRecord: AudioRecord? = null
+    @Volatile private var offlineRecording = false
     private val languages = listOf(
         VoiceLanguage("Hindi · हिन्दी", "hi-IN", Locale.forLanguageTag("hi-IN")),
         VoiceLanguage("English · India", "en-IN", Locale.forLanguageTag("en-IN")),
@@ -40,6 +47,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var micButton: Button
     private lateinit var status: TextView
     private lateinit var languagePicker: Spinner
+    private lateinit var speechEnginePicker: Spinner
     private lateinit var chatScroll: ScrollView
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -107,6 +115,14 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             adapter = ArrayAdapter(this@OfflineAiChatActivity, android.R.layout.simple_spinner_dropdown_item, languages)
         }
         root.addView(languagePicker, LinearLayout.LayoutParams(-1, -2))
+        speechEnginePicker = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@OfflineAiChatActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                listOf("Android speech service", "AI4Bharat IndicConformer · offline", "Shruti ONNX · offline")
+            )
+        }
+        root.addView(speechEnginePicker, LinearLayout.LayoutParams(-1, -2))
 
         transcript = text("Welcome to Workly AI.\n\nType a message below and tap Send. Your text chat runs locally on this phone.", 15, primaryText)
         transcript.setPadding(dp(14), dp(14), dp(14), dp(14))
@@ -132,7 +148,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             gravity = Gravity.CENTER_VERTICAL
         }
         micButton = button("🎙 Voice")
-        micButton.setOnClickListener { startVoiceInput() }
+        micButton.setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startVoiceInput() }
         actions.addView(micButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
         sendButton = button("Send")
         sendButton.isEnabled = false
@@ -141,7 +157,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(actions)
 
         root.addView(text(
-            "AI text generation runs offline. Voice recognition uses your Android speech service; availability may depend on its installed language pack and network support.",
+            "Select Android speech or a downloaded offline model. IndicConformer and Shruti recognize speech locally; choose Hindi or Gujarati and install the pack from Downloads first.",
             12, secondaryText
         ))
         setContentView(root)
@@ -209,6 +225,10 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
             return
         }
+        when (speechEnginePicker.selectedItemPosition) {
+            1 -> { startOfflineVoiceInput(shruti = false); return }
+            2 -> { startOfflineVoiceInput(shruti = true); return }
+        }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             status.text = "No speech recognition service is installed. Install or enable one in Android settings."
             return
@@ -264,33 +284,144 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         recognizer?.startListening(intent)
     }
 
+    private fun startOfflineVoiceInput(shruti: Boolean) {
+        val language = when {
+            selectedLanguage().tag.startsWith("hi") -> "hi"
+            selectedLanguage().tag.startsWith("gu") -> "gu"
+            else -> {
+                status.text = "Downloaded offline IndicConformer/Shruti packs support Hindi and Gujarati. Choose one of those languages."
+                return
+            }
+        }
+        val pack = if (shruti) SpeechModelCatalog.shruti(language) else SpeechModelCatalog.indicConformer(language)
+        if (!OfflineSpeechEngineFactory.isReady(this, pack)) {
+            status.text = "${pack.title} is not installed. Open Model Downloads and download this language pack first."
+            return
+        }
+        val minBuffer = AudioRecord.getMinBufferSize(
+            OfflineSpeechRecognizer.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+        )
+        if (minBuffer <= 0) {
+            status.text = "This phone does not support 16 kHz microphone recording."
+            return
+        }
+        recognizer?.cancel()
+        recognizer?.destroy()
+        recognizer = null
+        offlineRecording = true
+        micButton.text = "■ Stop recording"
+        status.text = "Recording offline in ${selectedLanguage().label}. Tap Stop when finished (maximum 60 seconds)."
+        worker.execute {
+            var recorder: AudioRecord? = null
+            var speech: OfflineSpeechRecognizer? = null
+            try {
+                speech = if (shruti) OfflineSpeechEngineFactory.openShruti(this, language)
+                    else OfflineSpeechEngineFactory.openIndicConformer(this, language)
+                val audio = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    OfflineSpeechRecognizer.SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    maxOf(minBuffer * 2, 8192)
+                )
+                recorder = audio
+                check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize microphone." }
+                activeAudioRecord = audio
+                audio.startRecording()
+                val buffer = ShortArray(4096)
+                val samples = ArrayList<Float>(OfflineSpeechRecognizer.SAMPLE_RATE * 15)
+                val maxSamples = OfflineSpeechRecognizer.SAMPLE_RATE * 60
+                while (offlineRecording && samples.size < maxSamples) {
+                    val count = audio.read(buffer, 0, buffer.size)
+                    if (count > 0) for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
+                    else if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
+                }
+                offlineRecording = false
+                runCatching { if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
+                check(samples.isNotEmpty()) { "No audio was recorded. Tap Voice and speak." }
+                runOnUiThread { status.text = "Transcribing locally with ${pack.title}…" }
+                val result = speech.transcribe(samples.toFloatArray())
+                runOnUiThread {
+                    if (result.isNotBlank()) {
+                        promptInput.setText(result)
+                        promptInput.setSelection(promptInput.text.length)
+                        status.text = "Offline speech recognized. Tap Send to ask Workly AI."
+                    } else status.text = "No speech recognized. Speak clearly and try again."
+                    micButton.text = "🎙 Voice"
+                    micButton.isEnabled = true
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    status.text = error.message ?: "Offline speech recognition failed."
+                    micButton.text = "🎙 Voice"
+                    micButton.isEnabled = true
+                }
+            } finally {
+                offlineRecording = false
+                activeAudioRecord = null
+                runCatching { recorder?.release() }
+                runCatching { speech?.close() }
+            }
+        }
+    }
+
+    private fun stopOfflineVoiceInput() {
+        offlineRecording = false
+        runCatching {
+            activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
+        }
+        micButton.isEnabled = false
+        status.text = "Stopping microphone and transcribing…"
+    }
+
     private fun speakAnswer(value: String) {
         val language = selectedLanguage()
-        val isKokoroLanguage = language.tag.startsWith("hi") || language.tag.startsWith("en")
+        val code = when {
+            language.tag.startsWith("hi") -> "hi"
+            language.tag.startsWith("gu") -> "gu"
+            else -> "en"
+        }
+        val tinyPack = SpeechModelCatalog.indicTinyTts(code)
+        val tinyReady = runCatching { speechPackManager.snapshot(tinyPack).state == SpeechPackDownloadManager.State.COMPLETE }.getOrDefault(false)
+        if (tinyReady) {
+            status.text = "Generating reply with downloaded Indic Tiny TTS…"
+            worker.execute {
+                try {
+                    tinyTtsEngine?.close()
+                    val tiny = IndicTinyTtsEngine.create(this, code)
+                    tinyTtsEngine = tiny
+                    tiny.speak(value)
+                    runOnUiThread { status.text = "Reply spoken with downloaded Indic Tiny TTS." }
+                } catch (error: Exception) {
+                    runOnUiThread { status.text = "Downloaded Indic Tiny TTS failed: ${error.message ?: "inference error"}. No fallback voice was substituted." }
+                }
+            }
+            return
+        }
+        val isKokoroLanguage = code == "hi" || code == "en"
         if (isKokoroLanguage && runCatching { kokoroModelManager.snapshot().state == KokoroModelManager.State.READY }.getOrDefault(false)) {
             status.text = "Generating speech with downloaded Kokoro…"
             worker.execute {
                 try {
                     val kokoro = kokoroEngine ?: KokoroSpeechEngine.create(this, kokoroModelManager.modelFile).also { kokoroEngine = it }
-                    val voiceId = if (language.tag.startsWith("hi")) KokoroSpeechEngine.HINDI_VOICE else KokoroSpeechEngine.ENGLISH_US_VOICE
+                    val voiceId = if (code == "hi") KokoroSpeechEngine.HINDI_VOICE else KokoroSpeechEngine.ENGLISH_US_VOICE
                     kokoro.speak(value, voiceId)
                     runOnUiThread { status.text = "Spoken with downloaded Kokoro voice." }
                 } catch (error: Exception) {
-                    runOnUiThread { status.text = "Downloaded Kokoro could not play: ${error.message ?: "engine error"}. Android TTS was not substituted." }
+                    runOnUiThread { status.text = "Downloaded Kokoro failed: ${error.message ?: "engine error"}. Android TTS was not substituted." }
                 }
             }
             return
         }
         val voice = tts
         if (!ttsReady || voice == null) {
-            status.text = "Speech output is not ready. Install the selected Android voice or download Kokoro for Hindi/English."
+            status.text = "Speech output is not ready. Download the selected Indic Tiny TTS pack."
             return
         }
         if (voice.isLanguageAvailable(language.locale) >= TextToSpeech.LANG_AVAILABLE) {
             voice.setLanguage(language.locale)
             voice.speak(value, TextToSpeech.QUEUE_FLUSH, null, "workly-chat-${System.currentTimeMillis()}")
-            status.text = if (language.tag.startsWith("gu")) "Gujarati is using Android TTS; Indic Tiny TTS is not integrated yet." else
-                "Kokoro is not downloaded for this language; using Android TTS."
+            status.text = "Using installed Android TTS. Download Indic Tiny TTS to use its offline voice."
         } else status.text = "No installed TTS voice supports ${language.label}."
     }
 
@@ -338,12 +469,15 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        offlineRecording = false
+        activeAudioRecord?.let { runCatching { it.stop() }; it.release() }
         recognizer?.destroy()
         tts?.stop()
         tts?.shutdown()
         worker.execute { engine.unload() }
         worker.shutdown()
         kokoroEngine?.close()
+        tinyTtsEngine?.close()
         super.onDestroy()
     }
 
