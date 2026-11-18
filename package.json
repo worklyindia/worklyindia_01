@@ -19,6 +19,9 @@
     "protobufjs": true,
     "sharp": true
   },
+  "overrides": {
+    "@supabase/storage-js": "2.119.0"
+  },
   "dependencies": {
     "@100mslive/hms-video-store": "^0.12.39",
     "@100mslive/react-sdk": "^0.10.39",
@@ -49,7 +52,7 @@
     "@radix-ui/react-toast": "^1.2.14",
     "@radix-ui/react-toggle": "^1.1.9",
     "@radix-ui/react-toggle-group": "^1.1.10",
-    "@radix-ui/react-tooltip": "^1.2.7",
+    "@radix-ui/react-tooltip": "^2.2.7",
     "@sentry/react": "^10.26.0",
     "@simplewebauthn/browser": "^13.2.2",
     "@supabase/supabase-js": "^2.118.0",
