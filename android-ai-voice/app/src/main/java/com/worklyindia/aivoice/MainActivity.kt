@@ -49,14 +49,22 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var offlineModelActionButton: Button
     private lateinit var offlineModelChatButton: Button
     private val offlineModelManager by lazy { OfflineModelManager(this) }
+    private val kokoroModelManager by lazy { KokoroModelManager(this) }
+    private var kokoroEngine: KokoroSpeechEngine? = null
+    private val kokoroExecutor = Executors.newSingleThreadExecutor()
+    private lateinit var kokoroModelStatusText: TextView
+    private lateinit var kokoroModelProgressBar: ProgressBar
+    private lateinit var kokoroModelActionButton: Button
+    private var kokoroAutoDownloadAttempted = false
     private val offlineModelHandler = Handler(Looper.getMainLooper())
     private val offlineModelPoll = object : Runnable {
         override fun run() {
             refreshOfflineModelUi()
             val state = runCatching { offlineModelManager.snapshot().state }.getOrNull()
-            if (state == OfflineModelManager.State.RUNNING ||
-                state == OfflineModelManager.State.PENDING ||
-                state == OfflineModelManager.State.PAUSED
+            val kokoroState = runCatching { kokoroModelManager.snapshot().state }.getOrNull()
+            if (state == OfflineModelManager.State.RUNNING || state == OfflineModelManager.State.PENDING ||
+                state == OfflineModelManager.State.PAUSED || kokoroState == KokoroModelManager.State.RUNNING ||
+                kokoroState == KokoroModelManager.State.PENDING || kokoroState == KokoroModelManager.State.PAUSED
             ) offlineModelHandler.postDelayed(this, 1000L)
         }
     }
@@ -137,7 +145,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         page.addView(button("■  Stop voice").apply {
             setBackgroundColor(adaptColor(0xFFE8EDF4.toInt()))
             setTextColor(adaptColor(0xFF26364B.toInt()))
-            setOnClickListener { tts?.stop(); setStatus("Voice playback stopped.") }
+            setOnClickListener { tts?.stop(); kokoroEngine?.stop(); setStatus("Voice playback stopped.") }
         }, matchWrap().also { it.topMargin = dp(8) })
 
         page.addView(space(22))
@@ -193,6 +201,18 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             12, 0xFF65748B.toInt(), false
         ).also { it.setPadding(0, dp(10), 0, 0) })
         page.addView(offlineCard)
+
+        val kokoroCard = card()
+        kokoroCard.addView(label("Kokoro 82M · Hindi + English", 16, 0xFF142033.toInt(), true))
+        kokoroCard.addView(label("Automatic Wi-Fi-only download · about 295 MB. Kokoro provides on-device Hindi and English speech. Gujarati uses the Android voice until Indic Tiny TTS is integrated.", 12, 0xFF536276.toInt(), false).also { it.setPadding(0, dp(7), 0, dp(10)) })
+        kokoroModelStatusText = label("Waiting for Qwen download to finish…", 13, 0xFF174B36.toInt(), true)
+        kokoroCard.addView(kokoroModelStatusText)
+        kokoroModelProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
+        kokoroCard.addView(kokoroModelProgressBar, matchWrap().also { it.topMargin = dp(10) })
+        kokoroModelActionButton = button("Automatic download · Wi-Fi only")
+        kokoroModelActionButton.setOnClickListener { onKokoroModelAction() }
+        kokoroCard.addView(kokoroModelActionButton, matchWrap().also { it.topMargin = dp(10) })
+        page.addView(kokoroCard)
 
         page.addView(space(22))
         page.addView(sectionTitle("4. Connect this phone as a voice server"))
@@ -257,8 +277,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             refreshOfflineModelUi()
             val state = offlineModelManager.snapshot().state
-            if (state == OfflineModelManager.State.PENDING ||
-                state == OfflineModelManager.State.RUNNING ||
+            if (state == OfflineModelManager.State.PENDING || state == OfflineModelManager.State.RUNNING ||
                 state == OfflineModelManager.State.PAUSED
             ) startOfflineModelPolling()
         } catch (error: Exception) {
@@ -345,10 +364,67 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     offlineModelActionButton.text = "Delete downloaded model"
                 }
             }
+            ensureAutomaticKokoroModelDownload()
+            refreshKokoroModelUi()
         } catch (error: Exception) {
             offlineModelStatusText.text = error.message ?: "Offline model storage is unavailable."
             offlineModelActionButton.text = "Try again"
         }
+    }
+
+    private fun ensureAutomaticKokoroModelDownload() {
+        if (!::kokoroModelStatusText.isInitialized) return
+        if (offlineModelManager.snapshot().state != OfflineModelManager.State.READY) return
+        if (kokoroAutoDownloadAttempted) return
+        kokoroAutoDownloadAttempted = true
+        val prefs = getSharedPreferences("workly_kokoro_model", MODE_PRIVATE)
+        if (prefs.getBoolean("auto_attempted", false)) return
+        prefs.edit().putBoolean("auto_attempted", true).apply()
+        if (kokoroModelManager.snapshot().state == KokoroModelManager.State.NOT_DOWNLOADED) {
+            runCatching { kokoroModelManager.startDownload() }
+                .onFailure { kokoroModelStatusText.text = it.message ?: "Kokoro download could not start. Tap retry." }
+        }
+        startOfflineModelPolling()
+    }
+
+    private fun refreshKokoroModelUi() {
+        if (!::kokoroModelStatusText.isInitialized) return
+        val snapshot = kokoroModelManager.snapshot()
+        val active = snapshot.state == KokoroModelManager.State.PENDING || snapshot.state == KokoroModelManager.State.RUNNING || snapshot.state == KokoroModelManager.State.PAUSED
+        kokoroModelProgressBar.visibility = if (active || snapshot.state == KokoroModelManager.State.READY) View.VISIBLE else View.GONE
+        kokoroModelProgressBar.progress = snapshot.progressPercent
+        when (snapshot.state) {
+            KokoroModelManager.State.NOT_DOWNLOADED -> {
+                kokoroModelStatusText.text = if (offlineModelManager.snapshot().state == OfflineModelManager.State.READY) "Ready to download · Wi-Fi only" else "Waiting for Qwen download to finish…"
+                kokoroModelActionButton.text = "Download Kokoro · Wi-Fi only"
+            }
+            KokoroModelManager.State.PENDING -> { kokoroModelStatusText.text = "Kokoro download queued… ${snapshot.progressPercent}%"; kokoroModelActionButton.text = "Cancel Kokoro download" }
+            KokoroModelManager.State.RUNNING -> { kokoroModelStatusText.text = "Downloading Kokoro… ${snapshot.progressPercent}%"; kokoroModelActionButton.text = "Cancel Kokoro download" }
+            KokoroModelManager.State.PAUSED -> { kokoroModelStatusText.text = "Kokoro download paused until Wi-Fi is available."; kokoroModelActionButton.text = "Cancel Kokoro download" }
+            KokoroModelManager.State.FAILED -> { kokoroModelStatusText.text = "Kokoro download failed or file is incomplete. Tap retry."; kokoroModelActionButton.text = "Retry Kokoro download" }
+            KokoroModelManager.State.READY -> { kokoroModelStatusText.text = "Kokoro model downloaded and file size verified. Hindi and English offline TTS ready."; kokoroModelActionButton.text = "Delete Kokoro model" }
+        }
+    }
+
+    private fun onKokoroModelAction() {
+        when (kokoroModelManager.snapshot().state) {
+            KokoroModelManager.State.READY -> {
+                kokoroEngine?.close(); kokoroEngine = null
+                kokoroModelManager.cancelAndDelete()
+                getSharedPreferences("workly_kokoro_model", MODE_PRIVATE).edit().putBoolean("auto_attempted", true).apply()
+            }
+            KokoroModelManager.State.PENDING, KokoroModelManager.State.RUNNING, KokoroModelManager.State.PAUSED -> {
+                kokoroModelManager.cancelAndDelete()
+                getSharedPreferences("workly_kokoro_model", MODE_PRIVATE).edit().putBoolean("auto_attempted", true).apply()
+            }
+            else -> {
+                getSharedPreferences("workly_kokoro_model", MODE_PRIVATE).edit().putBoolean("auto_attempted", true).apply()
+                runCatching { kokoroModelManager.startDownload() }
+                    .onFailure { kokoroModelStatusText.text = it.message ?: "Could not start Kokoro download." }
+                startOfflineModelPolling()
+            }
+        }
+        refreshKokoroModelUi()
     }
 
     private fun setOfflineModelStatus(message: String) {
@@ -415,24 +491,36 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun speakText() {
-        val engine = tts
-        if (!ttsReady || engine == null) {
-            setStatus("Text-to-speech engine is still loading.")
-            return
-        }
         val text = inputText.text?.toString()?.trim().orEmpty()
-        if (text.isEmpty()) {
-            inputText.error = "Enter text to speak"
+        if (text.isEmpty()) { inputText.error = "Enter text to speak"; return }
+        val lang = selectedLanguage()
+        val kokoroReady = runCatching { kokoroModelManager.snapshot().state == KokoroModelManager.State.READY }.getOrDefault(false)
+        if (kokoroReady && (lang.tag.startsWith("hi") || lang.tag.startsWith("en"))) {
+            val voiceId = if (lang.tag.startsWith("hi")) KokoroSpeechEngine.HINDI_VOICE else KokoroSpeechEngine.ENGLISH_US_VOICE
+            setStatus("Preparing offline Kokoro voice for ${lang.label}…")
+            kokoroExecutor.execute {
+                try {
+                    val engine = kokoroEngine ?: KokoroSpeechEngine.create(this, kokoroModelManager.modelFile).also { kokoroEngine = it }
+                    engine.speak(text, voiceId)
+                    runOnUiThread { setStatus("Offline Kokoro speech finished.") }
+                } catch (error: Exception) {
+                    runOnUiThread { speakWithAndroidTts(text, lang, "Kokoro failed; using Android voice.") }
+                }
+            }
             return
         }
-        val lang = selectedLanguage()
+        speakWithAndroidTts(text, lang, if (lang.tag.startsWith("gu")) "Gujarati offline TTS pack is not ready; using Android voice." else "Kokoro is downloading; using Android voice for now.")
+    }
+
+    private fun speakWithAndroidTts(text: String, lang: VoiceLanguage, prefix: String? = null) {
+        val engine = tts
+        if (!ttsReady || engine == null) { setStatus("Text-to-speech engine is still loading."); return }
         if (engine.isLanguageAvailable(lang.locale) < TextToSpeech.LANG_AVAILABLE) {
-            setStatus("Installed voice engine does not support ${lang.label}. Install this voice in Android Text-to-speech settings.")
-            return
+            setStatus("Installed voice engine does not support ${lang.label}. Install this voice in Android text-to-speech settings."); return
         }
         engine.setLanguage(lang.locale)
         engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "workly-${System.currentTimeMillis()}")
-        setStatus("Speaking ${lang.label}…")
+        setStatus("${prefix?.let { "$it " } ?: ""}Speaking ${lang.label}…")
     }
 
     private fun startListening() {
@@ -557,6 +645,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         stopListening()
         tts?.stop()
         tts?.shutdown()
+        kokoroEngine?.close()
+        kokoroExecutor.shutdownNow()
         relayExecutor.shutdownNow()
         super.onDestroy()
     }
