@@ -108,7 +108,12 @@
     "terser": "^5.43.1",
     "vaul": "^0.9.9",
     "web-vitals": "^5.1.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/network": "^7.0.2",
+    "@capacitor/push-notifications": "^7.0.2",
+    "@capacitor/splash-screen": "^7.0.2",
+    "@capacitor/haptics": "^7.0.2"
   },
   "devDependencies": {
     "@babel/core": "^8.0.6",
