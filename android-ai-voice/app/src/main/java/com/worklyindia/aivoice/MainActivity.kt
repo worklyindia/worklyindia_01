@@ -6,6 +6,9 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
 import android.os.Build
@@ -42,6 +45,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var transcriptText: EditText
     private lateinit var statusText: TextView
     private lateinit var listenButton: Button
+    private lateinit var offlineSpeechEnginePicker: Spinner
     private lateinit var pairingCodeInput: EditText
     private lateinit var relayStatusText: TextView
     private lateinit var offlineModelStatusText: TextView
@@ -72,6 +76,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
     private val relayExecutor = Executors.newSingleThreadExecutor()
+    private val offlineSpeechExecutor = Executors.newSingleThreadExecutor()
+    @Volatile private var offlineRecording = false
+    @Volatile private var activeAudioRecord: AudioRecord? = null
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
     private var ttsReady = false
@@ -169,9 +176,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         page.addView(transcriptText, matchWrap().also { it.topMargin = dp(10) })
         page.addView(label(
-            "Speech recognition may use your phone's configured recognition provider and may require internet.",
+            "Choose the speech engine. Android provider may require internet; downloaded Sherpa engines run locally.",
             12, 0xFF65748B.toInt(), false
         ).also { it.setPadding(0, dp(10), 0, 0) })
+        offlineSpeechEnginePicker = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                listOf("Android speech provider", "AI4Bharat IndicConformer INT8 · offline", "Shruti ONNX · offline")
+            )
+        }
+        page.addView(offlineSpeechEnginePicker, matchWrap().also { it.topMargin = dp(8) })
         val offlineSpeechCard = card()
         offlineSpeechCard.addView(label("Offline Hindi / Gujarati recognition", 16, 0xFF142033.toInt(), true))
         speechPackStatusText = label("Optional model packs are not downloaded.", 12, 0xFF536276.toInt(), false)
@@ -621,7 +636,103 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun startOfflineListening(shruti: Boolean) {
+        val language = when {
+            selectedLanguage().tag.startsWith("hi") -> "hi"
+            selectedLanguage().tag.startsWith("gu") -> "gu"
+            else -> {
+                setStatus("Offline IndicConformer and Shruti currently have Hindi and Gujarati packs only.")
+                return
+            }
+        }
+        val pack = runCatching {
+            if (shruti) SpeechModelCatalog.shruti(language) else SpeechModelCatalog.indicConformer(language)
+        }.getOrElse {
+            setStatus(it.message ?: "Could not select offline speech model.")
+            return
+        }
+        if (!OfflineSpeechEngineFactory.isReady(this, pack)) {
+            setStatus("${pack.title} is not fully downloaded yet. Download it below first.")
+            return
+        }
+        val minBuffer = AudioRecord.getMinBufferSize(
+            OfflineSpeechRecognizer.SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        if (minBuffer <= 0) {
+            setStatus("This phone does not support 16 kHz microphone capture.")
+            return
+        }
+        stopListening()
+        offlineRecording = true
+        listening = true
+        listenButton.text = "■  Stop offline listening"
+        listenButton.setOnClickListener { stopListening(); setStatus("Stopping offline recording…") }
+        offlineSpeechExecutor.execute {
+            var recorder: AudioRecord? = null
+            var engine: OfflineSpeechRecognizer? = null
+            try {
+                engine = if (shruti) OfflineSpeechEngineFactory.openShruti(this, language)
+                    else OfflineSpeechEngineFactory.openIndicConformer(this, language)
+                recorder = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    OfflineSpeechRecognizer.SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    maxOf(minBuffer * 2, 8192)
+                )
+                check(recorder.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
+                activeAudioRecord = recorder
+                recorder.startRecording()
+                runOnUiThread { setStatus("Recording offline in ${selectedLanguage().label}. Tap Stop when finished (maximum 90 seconds).") }
+                val buffer = ShortArray(4096)
+                val samples = ArrayList<Float>(OfflineSpeechRecognizer.SAMPLE_RATE * 20)
+                val maxSamples = OfflineSpeechRecognizer.SAMPLE_RATE * 90
+                while (offlineRecording && samples.size < maxSamples) {
+                    val count = recorder.read(buffer, 0, buffer.size)
+                    if (count > 0) {
+                        for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
+                    } else if (count < 0) {
+                        throw IllegalStateException("Microphone read failed ($count).")
+                    }
+                }
+                offlineRecording = false
+                runCatching { if (recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING) recorder.stop() }
+                if (samples.isEmpty()) throw IllegalStateException("No audio was recorded.")
+                runOnUiThread { setStatus("Transcribing locally with ${pack.title}…") }
+                val result = engine.transcribe(samples.toFloatArray())
+                runOnUiThread {
+                    if (result.isNotBlank()) {
+                        transcriptText.setText(result)
+                        setStatus("Offline transcription complete · ${pack.title}.")
+                    } else setStatus("No speech recognized. Try speaking more clearly.")
+                }
+            } catch (error: Exception) {
+                runOnUiThread { setStatus(error.message ?: "Offline speech recognition failed.") }
+            } finally {
+                offlineRecording = false
+                activeAudioRecord = null
+                runCatching { recorder?.release() }
+                runCatching { engine?.close() }
+                listening = false
+                runOnUiThread {
+                    listenButton.text = "🎙  Start listening"
+                    listenButton.setOnClickListener { startListening() }
+                }
+            }
+        }
+    }
+
     private fun startListening() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
+            return
+        }
+        when (offlineSpeechEnginePicker.selectedItemPosition) {
+            1 -> { startOfflineListening(shruti = false); return }
+            2 -> { startOfflineListening(shruti = true); return }
+        }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             setStatus("No speech recognition service is installed on this phone.")
             return
@@ -673,6 +784,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun stopListening() {
+        offlineRecording = false
+        runCatching {
+            activeAudioRecord?.let { audio ->
+                if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop()
+            }
+        }
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
@@ -761,6 +878,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         kokoroEngine?.close()
         kokoroExecutor.shutdownNow()
         relayExecutor.shutdownNow()
+        offlineSpeechExecutor.shutdownNow()
         super.onDestroy()
     }
 
