@@ -1,0 +1,353 @@
+package com.worklyindia.aivoice
+
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
+import org.json.JSONObject
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
+import java.nio.LongBuffer
+import java.text.Normalizer
+import java.util.Random
+import kotlin.math.ceil
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.PI
+
+/**
+ * ONNX Runtime implementation of Indic Tiny TTS (Matcha acoustic model + Vocos).
+ * Each language pack is loaded only when speech is requested and all three sessions
+ * are closed after playback to keep memory bounded on 6 GB phones.
+ */
+class IndicTinyTtsEngine private constructor(
+    private val env: OrtEnvironment,
+    private val encoder: OrtSession,
+    private val flow: OrtSession,
+    private val vocoder: OrtSession,
+    private val language: String,
+    private val speakerId: Long,
+    private val languageId: Long,
+    private val styleId: Long,
+    private val tokenIds: Map<String, Long>,
+    private val mean: Float,
+    private val std: Float,
+    private val lengthScale: Float,
+    private val timesteps: Int,
+    private val temperature: Float,
+    private val pauseSamples: Int
+) : AutoCloseable {
+    @Volatile private var activeTrack: AudioTrack? = null
+
+    fun speak(text: String, voice: String = "female", speed: Float = 1.0f) {
+        require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
+        val speaker = when (voice.lowercase()) {
+            "female" -> speakerId
+            "male" -> speakerId + 1L
+            else -> throw IllegalArgumentException("Choose female or male voice.")
+        }
+        val normalized = Normalizer.normalize(text.trim(), Normalizer.Form.NFC)
+        require(normalized.isNotBlank()) { "Enter text to speak." }
+        val pieces = splitChunks(normalized)
+        val audioParts = ArrayList<FloatArray>()
+        val random = Random(System.nanoTime())
+        for (chunk in pieces) {
+            val ids = encodeCharacters(chunk)
+            if (ids.size > MAX_TOKENS) throw IllegalArgumentException("Text is too long. Split it into shorter sentences.")
+            val spoken = synthesizeChunk(ids, speaker, random, lengthScale / speed)
+            if (spoken.isNotEmpty()) {
+                if (audioParts.isNotEmpty()) audioParts.add(FloatArray(pauseSamples))
+                audioParts.add(spoken)
+            }
+        }
+        val total = audioParts.sumOf { it.size }
+        require(total > 0) { "No supported speech characters found. Use Hindi, Gujarati or English script matching the selected voice." }
+        val waveform = FloatArray(total)
+        var offset = 0
+        audioParts.forEach { part -> part.copyInto(waveform, offset); offset += part.size }
+        play(waveform)
+    }
+
+    private fun splitChunks(text: String): List<String> {
+        val result = ArrayList<String>()
+        val sentences = text.split(Regex("(?<=[।?!.])\\s+"))
+        for (sentenceValue in sentences) {
+            var sentence = sentenceValue.trim()
+            while (sentence.length > 250) {
+                var cut = sentence.lastIndexOf(',', 250)
+                if (cut <= 0) cut = sentence.lastIndexOf(' ', 250)
+                if (cut <= 0) cut = 250
+                result.add(sentence.substring(0, cut).trim())
+                sentence = sentence.substring(cut).trim()
+            }
+            if (sentence.isNotBlank()) result.add(sentence)
+        }
+        return result
+    }
+
+    private fun encodeCharacters(text: String): LongArray {
+        val chars = ArrayList<Long>()
+        for (character in text) {
+            val id = tokenIds["c:$character"]
+                ?: throw IllegalArgumentException("Character '$character' is not supported by the selected $language voice. Use the language's native script and supported punctuation.")
+            chars.add(id)
+        }
+        require(chars.isNotEmpty()) { "Enter text in the selected language." }
+        val withBlank = LongArray(chars.size * 2 + 1)
+        chars.forEachIndexed { index, id -> withBlank[index * 2 + 1] = id }
+        return withBlank
+    }
+
+    private fun synthesizeChunk(ids: LongArray, speaker: Long, random: Random, scale: Float): FloatArray {
+        val tokenTensor = OnnxTensor.createTensor(env, arrayOf(ids))
+        val lengthTensor = OnnxTensor.createTensor(env, longArrayOf(ids.size.toLong()))
+        val languageTensor = OnnxTensor.createTensor(env, longArrayOf(languageId))
+        val speakerTensor = OnnxTensor.createTensor(env, longArrayOf(speaker))
+        val styleTensor = OnnxTensor.createTensor(env, longArrayOf(styleId))
+        val encoderInputs = mapOf(
+            "tokens" to tokenTensor, "token_lengths" to lengthTensor, "language" to languageTensor,
+            "speaker" to speakerTensor, "style" to styleTensor
+        )
+        val encoded = try { encoder.run(encoderInputs) } finally {
+            tokenTensor.close(); lengthTensor.close(); languageTensor.close(); speakerTensor.close(); styleTensor.close()
+        }
+        val muX: Array<Array<FloatArray>>
+        val logW: Array<Array<FloatArray>>
+        val condition: Array<FloatArray>
+        try {
+            muX = encoded.get("mu_x").get().value as Array<Array<FloatArray>>
+            logW = encoded.get("logw").get().value as Array<Array<FloatArray>>
+            condition = encoded.get("cond").get().value as Array<FloatArray>
+        } finally { encoded.close() }
+
+        val tokenCount = logW[0][0].size
+        val durations = FloatArray(tokenCount)
+        var yLength = 0
+        for (i in 0 until tokenCount) {
+            val frames = ceil(exp(logW[0][0][i].toDouble())).toFloat() * scale
+            durations[i] = frames
+            yLength += frames.toInt().coerceAtLeast(0)
+        }
+        yLength = max(1, yLength)
+        val padded = ((yLength + 1) / 2) * 2
+        require(padded <= MAX_FRAMES) { "The text would generate too much audio. Split it into shorter messages." }
+
+        val muY = Array(1) { Array(MEL_CHANNELS) { FloatArray(padded) } }
+        val mask = Array(1) { Array(1) { FloatArray(padded) } }
+        var cumulative = 0.0
+        for (token in 0 until tokenCount) {
+            val count = durations[token].toInt().coerceAtLeast(0)
+            val end = min(yLength, ceil(cumulative + durations[token].toDouble()).toInt())
+            for (frame in cumulative.toInt().coerceAtLeast(0) until end) {
+                if (frame >= yLength) break
+                mask[0][0][frame] = 1f
+                for (channel in 0 until MEL_CHANNELS) muY[0][channel][frame] = muX[0][channel][token]
+            }
+            cumulative += durations[token]
+        }
+
+        val latent = Array(1) { Array(MEL_CHANNELS) { FloatArray(padded) } }
+        for (channel in 0 until MEL_CHANNELS) for (frame in 0 until padded) {
+            latent[0][channel][frame] = (random.nextGaussian() * temperature).toFloat()
+        }
+        val timePoints = FloatArray(timesteps + 1) { it.toFloat() / timesteps.toFloat() }
+        for (step in 0 until timesteps) {
+            val xTensor = OnnxTensor.createTensor(env, latent)
+            val maskTensor = OnnxTensor.createTensor(env, mask)
+            val muTensor = OnnxTensor.createTensor(env, muY)
+            val timeTensor = OnnxTensor.createTensor(env, floatArrayOf(timePoints[step]))
+            val condTensor = OnnxTensor.createTensor(env, condition)
+            val result = try {
+                flow.run(mapOf("x" to xTensor, "mask" to maskTensor, "mu" to muTensor, "t" to timeTensor, "cond" to condTensor))
+            } finally {
+                xTensor.close(); maskTensor.close(); muTensor.close(); timeTensor.close(); condTensor.close()
+            }
+            val velocity = try { result.get("v").get().value as Array<Array<FloatArray>> } finally { result.close() }
+            val delta = timePoints[step + 1] - timePoints[step]
+            for (channel in 0 until MEL_CHANNELS) for (frame in 0 until padded) {
+                latent[0][channel][frame] += delta * velocity[0][channel][frame]
+            }
+        }
+
+        val mel = Array(1) { Array(MEL_CHANNELS) { FloatArray(yLength) } }
+        for (channel in 0 until MEL_CHANNELS) for (frame in 0 until yLength) {
+            mel[0][channel][frame] = latent[0][channel][frame] * std + mean
+        }
+        val melTensor = OnnxTensor.createTensor(env, mel)
+        val decoded = try { vocoder.run(mapOf("mel" to melTensor)) } finally { melTensor.close() }
+        val real: Array<Array<FloatArray>>
+        val imag: Array<Array<FloatArray>>
+        try {
+            real = decoded.get("real").get().value as Array<Array<FloatArray>>
+            imag = decoded.get("imag").get().value as Array<Array<FloatArray>>
+        } finally { decoded.close() }
+        return inverseStft(real[0], imag[0])
+    }
+
+    private fun inverseStft(real: Array<FloatArray>, imag: Array<FloatArray>): FloatArray {
+        val frames = real[0].size
+        require(frames >= 2) { "TTS generated too few audio frames." }
+        val total = FFT_SIZE + HOP_SIZE * (frames - 1)
+        val output = DoubleArray(total)
+        val envelope = DoubleArray(total)
+        val window = DoubleArray(FFT_SIZE) { 0.5 - 0.5 * cos(2.0 * PI * it / FFT_SIZE) }
+        for (frame in 0 until frames) {
+            val re = DoubleArray(FFT_SIZE)
+            val im = DoubleArray(FFT_SIZE)
+            for (k in 0..FFT_SIZE / 2) {
+                re[k] = real[k][frame].toDouble()
+                im[k] = imag[k][frame].toDouble()
+                if (k != 0 && k != FFT_SIZE / 2) {
+                    re[FFT_SIZE - k] = re[k]
+                    im[FFT_SIZE - k] = -im[k]
+                }
+            }
+            fftInverse(re, im)
+            val start = frame * HOP_SIZE
+            for (i in 0 until FFT_SIZE) {
+                output[start + i] += re[i] * window[i]
+                envelope[start + i] += window[i] * window[i]
+            }
+        }
+        val cut = FFT_SIZE / 2
+        val waveform = FloatArray(total - FFT_SIZE)
+        for (i in waveform.indices) {
+            val divisor = envelope[i + cut]
+            check(divisor > 1e-11) { "Audio reconstruction failed (invalid overlap)." }
+            waveform[i] = (output[i + cut] / divisor).toFloat().coerceIn(-1f, 1f)
+        }
+        return waveform
+    }
+
+    private fun fftInverse(real: DoubleArray, imag: DoubleArray) {
+        val n = real.size
+        var j = 0
+        for (i in 1 until n) {
+            var bit = n shr 1
+            while ((j and bit) != 0) { j = j xor bit; bit = bit shr 1 }
+            j = j xor bit
+            if (i < j) {
+                val tr = real[i]; real[i] = real[j]; real[j] = tr
+                val ti = imag[i]; imag[i] = imag[j]; imag[j] = ti
+            }
+        }
+        var len = 2
+        while (len <= n) {
+            val angle = 2.0 * PI / len
+            val wLenRe = cos(angle)
+            val wLenIm = kotlin.math.sin(angle)
+            var start = 0
+            while (start < n) {
+                var wr = 1.0; var wi = 0.0
+                for (k in 0 until len / 2) {
+                    val even = start + k
+                    val odd = even + len / 2
+                    val vr = real[odd] * wr - imag[odd] * wi
+                    val vi = real[odd] * wi + imag[odd] * wr
+                    real[odd] = real[even] - vr; imag[odd] = imag[even] - vi
+                    real[even] += vr; imag[even] += vi
+                    val nextWr = wr * wLenRe - wi * wLenIm
+                    wi = wr * wLenIm + wi * wLenRe
+                    wr = nextWr
+                }
+                start += len
+            }
+            len = len shl 1
+        }
+        for (i in 0 until n) { real[i] /= n; imag[i] /= n }
+    }
+
+    private fun play(samples: FloatArray) {
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+            .setBufferSizeInBytes(samples.size * Float.SIZE_BYTES)
+            .setTransferMode(AudioTrack.MODE_STATIC)
+            .build()
+        try {
+            activeTrack = track
+            check(track.state == AudioTrack.STATE_INITIALIZED) { "Could not initialize audio playback." }
+            check(track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING) == samples.size) { "Could not write generated audio." }
+            track.play()
+            val deadline = android.os.SystemClock.elapsedRealtime() + samples.size * 1000L / SAMPLE_RATE + 1000L
+            while (track.playState == AudioTrack.PLAYSTATE_PLAYING && android.os.SystemClock.elapsedRealtime() < deadline) Thread.sleep(30L)
+        } finally {
+            activeTrack = null
+            runCatching { track.stop() }
+            track.release()
+        }
+    }
+
+    fun stop() { runCatching { activeTrack?.stop() } }
+
+    override fun close() {
+        stop()
+        encoder.close()
+        flow.close()
+        vocoder.close()
+    }
+
+    companion object {
+        private const val SAMPLE_RATE = 24_000
+        private const val MEL_CHANNELS = 100
+        private const val FFT_SIZE = 1024
+        private const val HOP_SIZE = 256
+        private const val MAX_TOKENS = 2048
+        private const val MAX_FRAMES = 12_000
+
+        fun create(context: Context, language: String): IndicTinyTtsEngine {
+            val code = language.lowercase()
+            require(code in listOf("hi", "gu", "en")) { "Indic Tiny TTS supports Hindi, Gujarati and English." }
+            val pack = SpeechModelCatalog.indicTinyTts(code)
+            check(OfflineSpeechEngineFactory.isReady(context, pack)) { "Indic Tiny TTS $code is not fully downloaded." }
+            val directory = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "workly-voice-models/${pack.id}")
+            val config = JSONObject(File(directory, "config.json").readText())
+            val symbols = config.getJSONObject("vocab").getJSONArray("symbols")
+            val tokens = HashMap<String, Long>(symbols.length())
+            for (index in 0 until symbols.length()) tokens[symbols.getString(index)] = index.toLong()
+            val ids = config.getJSONObject("ids")
+            val voices = ids.getJSONObject("speakers")
+            val voicePrefix = when (code) { "hi" -> "hi_"; "gu" -> "gu_"; else -> "en_lim_" }
+            val femaleName = voices.keys().asSequence().firstOrNull { it.startsWith(voicePrefix) && it.endsWith("_F") }
+                ?: voices.keys().asSequence().firstOrNull { it.startsWith(voicePrefix) && it.endsWith("_M") }
+                ?: throw IllegalStateException("Speaker IDs are missing from the model config.")
+            val maleName = voices.keys().asSequence().firstOrNull { it.startsWith(voicePrefix) && it.endsWith("_M") } ?: femaleName
+            val env = OrtEnvironment.getEnvironment()
+            val options = OrtSession.SessionOptions().apply {
+                setIntraOpNumThreads(2)
+                setInterOpNumThreads(1)
+            }
+            try {
+                val base = File(directory, "onnx")
+                val encoderFile = File(base, "text_encoder.onnx")
+                val flowFile = File(base, "flow_decoder.onnx")
+                val vocoderFile = File(base, "vocoder.onnx")
+                check(listOf(encoderFile, flowFile, vocoderFile).all { it.isFile && it.length() > 1_000_000L }) { "Indic Tiny TTS ONNX files are missing or incomplete." }
+                val encoder = env.createSession(encoderFile.absolutePath, options)
+                val flow = env.createSession(flowFile.absolutePath, options)
+                val vocoder = env.createSession(vocoderFile.absolutePath, options)
+                val stats = config.getJSONArray("mel_stats")
+                val synthesis = config.getJSONObject("synthesis")
+                val scaleObject = synthesis.getJSONObject("length_scale")
+                val scale = scaleObject.optDouble(femaleName, 1.0).toFloat()
+                return IndicTinyTtsEngine(
+                    env, encoder, flow, vocoder, code,
+                    voices.getLong(femaleName), ids.getLong("language"), ids.getJSONObject("styles").getLong("read"),
+                    tokens, stats.getDouble(0).toFloat(), stats.getDouble(1).toFloat(), scale,
+                    synthesis.optInt("n_timesteps", 4), synthesis.optDouble("temperature", 0.667).toFloat(),
+                    (synthesis.optDouble("sentence_pause_s", 0.15) * SAMPLE_RATE).toInt()
+                )
+            } catch (error: Exception) {
+                options.close()
+                throw error
+            }
+        }
+    }
+}
