@@ -16,6 +16,23 @@ import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition
 
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
+function normalizeVoiceWords(value: string): string[] {
+  return cleanVoiceText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0900-\u097f\s]/gi, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length > 1);
+}
+
+function isLikelyAiEcho(candidate: string, aiText: string): boolean {
+  const candidateWords = normalizeVoiceWords(candidate);
+  const aiWords = normalizeVoiceWords(aiText);
+  if (candidateWords.length < 2 || aiWords.length < 3) return false;
+  const aiSet = new Set(aiWords);
+  const overlap = candidateWords.filter((word) => aiSet.has(word)).length / candidateWords.length;
+  return overlap >= 0.78 || (candidateWords.length >= 4 && candidateWords.every((word) => aiSet.has(word)));
+}
+
 function cleanVoiceText(value: string): string {
   return value
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
@@ -58,7 +75,7 @@ export default function AIVoiceCall() {
       detail: { message: error instanceof Error ? error.message : 'Shruti microphone could not start.' },
     })));
     return true;
-  }, []);
+  }, [callState]);
   const stopRecognition = useCallback(() => { stopShrutiRecognition(); }, []);
   const speakReply = useCallback(async (text: string, language: string) => {
     const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
@@ -135,7 +152,7 @@ export default function AIVoiceCall() {
     setMuted(false);
     setSpeakerOn(true);
     chatStorage.setCurrentUserId(user?.id ?? null);
-    chatStorage.setAudience('job_seeker');
+    chatStorage.setAudience('default');
     navigate('/ai-assistant');
   }, [stopRecognition, stopReply, user?.id, navigate]);
 
@@ -144,6 +161,23 @@ export default function AIVoiceCall() {
     const detail = (event as CustomEvent<{ text?: string; languageTag?: string }>).detail;
     const transcript = detail?.text?.trim();
     if (!transcript || transcript === lastSubmittedTranscriptRef.current) return;
+
+    if (callState === 'speaking') {
+      if (isLikelyAiEcho(transcript, lastReply)) {
+        setPartialTranscript('');
+        setCallState('speaking');
+        setVoiceStage('AI is speaking…');
+        return;
+      }
+      // Real user speech while AI is talking: stop the current voice immediately,
+      // invalidate the old turn, then process the new user utterance.
+      stopReply();
+      conversationTurnRef.current += 1;
+      setPartialTranscript('');
+      setCallState('listening');
+      setVoiceStage('You are speaking…');
+    }
+
     lastSubmittedTranscriptRef.current = transcript;
     const turnId = ++conversationTurnRef.current;
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
@@ -160,7 +194,7 @@ export default function AIVoiceCall() {
     setAiRequestStatus('Sending');
     try {
       chatStorage.setCurrentUserId(user.id);
-      chatStorage.setAudience('job_seeker');
+      chatStorage.setAudience('default');
       const storedHistory = chatStorage.loadMessages();
       const userMessage: StoredMessage = {
         id: crypto.randomUUID(),
@@ -188,8 +222,8 @@ export default function AIVoiceCall() {
               user_id: user.id,
               hasImages: false,
               currentPage: '/ai-assistant',
-              audience: 'job_seeker',
-              pageContext: { path: '/ai-assistant', page: 'AI Chat', audience: 'job_seeker', source: 'AI Voice Call' },
+              audience: 'default',
+              pageContext: { path: '/ai-assistant', page: 'AI Chat', audience: 'default', source: 'AI Voice Call' },
             },
             {
               onStatus: () => undefined,
@@ -232,6 +266,11 @@ export default function AIVoiceCall() {
         lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
         setVoiceStage('AI is speaking…');
+        if (activeRef.current && !muted) {
+          window.setTimeout(() => {
+            if (activeRef.current && !muted) startRecognition('auto');
+          }, 120);
+        }
       } else {
         // TTS failure must never end or navigate away from the call screen.
         setCallState('listening');
@@ -260,7 +299,7 @@ export default function AIVoiceCall() {
     const text = detail?.text?.trim();
     if (!text || text === lastSubmittedTranscriptRef.current) return;
     setPartialTranscript(text);
-    setVoiceStage('Speech recognized; waiting for a pause…');
+    if (callState !== 'speaking') setVoiceStage('Speech recognized; waiting for a pause…');
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
     partialFinalizeTimerRef.current = setTimeout(() => {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
@@ -274,7 +313,7 @@ export default function AIVoiceCall() {
     if (status === 'listening') { setCallState('listening'); setVoiceStage('Microphone is listening'); }
     if (status === 'processing') setVoiceStage('Speech ended; waiting for transcript…');
     if (status === 'processing') setCallState('thinking');
-    if (status === 'speaking') { stopRecognition(); setCallState('speaking'); }
+    if (status === 'speaking') { setCallState('speaking'); setVoiceStage('AI is speaking…'); }
     if (status === 'finished' && activeRef.current && !muted) {
       window.setTimeout(() => {
         if (activeRef.current && !muted) {
@@ -380,7 +419,7 @@ export default function AIVoiceCall() {
       setMicLevel(0);
       setAiRequestStatus('Not sent');
       chatStorage.setCurrentUserId(user.id);
-      chatStorage.setAudience('job_seeker');
+      chatStorage.setAudience('default');
       startingCallRef.current = false;
       if (!startRecognition('auto')) {
         activeRef.current = false;
