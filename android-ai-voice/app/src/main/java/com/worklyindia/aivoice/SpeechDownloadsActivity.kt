@@ -68,13 +68,14 @@ class SpeechDownloadsActivity : Activity() {
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false }
         card.addView(status); card.addView(progress); card.addView(action)
-        lateinit var row: DownloadRow
-        row=DownloadRow(status,progress,action) {
+        var lastBytes = 0L
+        var lastAt = 0L
+        val row=DownloadRow(status,progress,action) {
             val snap=runCatching { qwenManager.snapshot(model) }.getOrNull() ?: return@DownloadRow
             val supported=qwenManager.isSupported(model,availableRam)
             val now=android.os.SystemClock.elapsedRealtime()
-            val speed=if(row.lastAt>0 && now>row.lastAt && snap.downloaded>=row.lastBytes) (snap.downloaded-row.lastBytes)*1000L/(now-row.lastAt) else 0L
-            row.lastAt=now; row.lastBytes=snap.downloaded
+            val speed=if(lastAt>0 && now>lastAt && snap.downloaded>=lastBytes) (snap.downloaded-lastBytes)*1000L/(now-lastAt) else 0L
+            lastAt=now; lastBytes=snap.downloaded
             val transferred="%.1f / %.1f MB".format(Locale.US,snap.downloaded/1e6,snap.total/1e6)
             val speedText=if(snap.state==QwenModelManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
             status.text=when(snap.state) {
@@ -103,12 +104,13 @@ class SpeechDownloadsActivity : Activity() {
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         card.addView(status);card.addView(progress);card.addView(action)
-        lateinit var row: DownloadRow
-        row=DownloadRow(status,progress,action) {
+        var lastBytes = 0L
+        var lastAt = 0L
+        val row=DownloadRow(status,progress,action) {
             val s=runCatching { speechManager.snapshot(pack) }.getOrNull() ?: return@DownloadRow
             val now=android.os.SystemClock.elapsedRealtime()
-            val speed=if(row.lastAt>0 && now>row.lastAt && s.downloadedBytes>=row.lastBytes) (s.downloadedBytes-row.lastBytes)*1000L/(now-row.lastAt) else 0L
-            row.lastAt=now; row.lastBytes=s.downloadedBytes
+            val speed=if(lastAt>0 && now>lastAt && s.downloadedBytes>=lastBytes) (s.downloadedBytes-lastBytes)*1000L/(now-lastAt) else 0L
+            lastAt=now; lastBytes=s.downloadedBytes
             val speedText=if(s.state==SpeechPackDownloadManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
             status.text=when(s.state) {
                 SpeechPackDownloadManager.State.COMPLETE -> "Ready · installed"
