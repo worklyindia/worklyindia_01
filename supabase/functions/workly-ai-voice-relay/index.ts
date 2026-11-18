@@ -1,3 +1,4 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 
 const corsHeaders = {
@@ -121,6 +122,15 @@ Deno.serve(async (req: Request) => {
       const payload = body?.payload;
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
+
+      const { count: activeJobs, error: countError } = await db.from("workly_ai_voice_jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .in("status", ["pending", "running"])
+        .gt("expires_at", new Date().toISOString());
+      if (countError) throw countError;
+      if ((activeJobs ?? 0) >= 3) return json({ error: "Queue is full. Wait for the current voice request to finish." }, 429);
+      await db.from("workly_ai_voice_jobs").delete().lt("expires_at", new Date().toISOString());
 
       const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id")
