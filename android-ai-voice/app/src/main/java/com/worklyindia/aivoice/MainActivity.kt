@@ -585,7 +585,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     engine.speak(text, voiceId)
                     runOnUiThread { setStatus("Offline Kokoro speech finished.") }
                 } catch (error: Exception) {
-                    runOnUiThread { speakWithAndroidTts(text, lang, "Kokoro failed; using Android voice.") }
+                    runOnUiThread {
+                        setStatus("Downloaded Kokoro could not play: ${error.message ?: "engine error"}. Android TTS was not substituted.")
+                    }
                 }
             }
             return
