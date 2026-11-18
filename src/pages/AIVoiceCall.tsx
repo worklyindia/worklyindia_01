@@ -240,7 +240,6 @@ export default function AIVoiceCall() {
       }
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
       setErrorMessage('');
       lastSubmittedTranscriptRef.current = '';
       setAiRequestStatus('Retrying');
@@ -253,7 +252,7 @@ export default function AIVoiceCall() {
       }
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [speakReply]);
+  }, [speakReply, stopRecognition, user?.id]);
 
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
