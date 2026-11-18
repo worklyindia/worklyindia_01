@@ -43,7 +43,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         VoiceLanguage("English · India", "en-IN", Locale.forLanguageTag("en-IN")),
         VoiceLanguage("Gujarati · ગુજરાતી", "gu-IN", Locale.forLanguageTag("gu-IN"))
     )
-    private lateinit var transcript: TextView
+    private lateinit var chatMessages: LinearLayout
+    private var thinkingBubble: TextView? = null
     private lateinit var promptInput: EditText
     private lateinit var sendButton: Button
     private lateinit var micButton: Button
@@ -155,22 +156,30 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         }
         root.addView(speechEnginePicker, LinearLayout.LayoutParams(-1, -2))
 
-        transcript = text("Welcome to Workly AI.\n\nAsk me in Hindi, English or Gujarati. Your chat runs locally on this phone.", 15, primaryText)
-        transcript.setPadding(dp(14), dp(14), dp(14), dp(14))
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
-            addView(transcript)
+            clipToPadding = false
+            setPadding(0, dp(8), 0, dp(8))
+            chatMessages = LinearLayout(this@OfflineAiChatActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(2), dp(4), dp(2), dp(8))
+            }
+            addView(chatMessages)
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        addMessage("Welcome to Workly AI.\nAsk me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
 
         promptInput = EditText(this).apply {
-            hint = "Ask in Hindi, English or Gujarati…"
-            minLines = 2
-            maxLines = 5
+            hint = "Message Workly AI…"
+            minLines = 1
+            maxLines = 4
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
             setPadding(dp(14), dp(12), dp(14), dp(12))
-            setBackgroundColor(surface)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) 0xFF243449.toInt() else 0xFFF1F4F8.toInt())
+                cornerRadius = dp(18).toFloat()
+            }
         }
         root.addView(promptInput, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
 
@@ -261,7 +270,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             return
         }
         promptInput.setText("")
-        append("\n\nYou: $prompt\n\nWorkly AI: thinking…")
+        addMessage(prompt, true)
+        thinkingBubble = addMessage("Thinking…", false)
         sendButton.isEnabled = false
         val contextPrompt = if (conversationHistory.isEmpty()) prompt else
             "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
@@ -475,16 +485,32 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onInit(result: Int) { ttsReady = result == TextToSpeech.SUCCESS }
 
-    private fun append(value: String) {
-        transcript.append(value)
+    private fun addMessage(value: String, fromUser: Boolean): TextView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (fromUser) Gravity.END else Gravity.START
+            setPadding(dp(2), dp(4), dp(2), dp(4))
+        }
+        val bubble = TextView(this).apply {
+            text = value
+            textSize = 15f
+            setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (fromUser) 0xFF1769C2.toInt() else surface)
+                cornerRadius = dp(18).toFloat()
+            }
+        }
+        row.addView(bubble, LinearLayout.LayoutParams((resources.displayMetrics.widthPixels * 0.78f).toInt(), -2))
+        chatMessages.addView(row, LinearLayout.LayoutParams(-1, -2))
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+        return bubble
     }
 
     private fun replaceThinking(answer: String) {
-        val current = transcript.text.toString()
-        val marker = "Workly AI: thinking…"
-        val index = current.lastIndexOf(marker)
-        transcript.text = if (index >= 0) current.substring(0, index) + "Workly AI: $answer" else "$current\n\nWorkly AI: $answer"
+        val bubble = thinkingBubble
+        if (bubble != null) bubble.text = answer else addMessage(answer, false)
+        thinkingBubble = null
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
     }
 
