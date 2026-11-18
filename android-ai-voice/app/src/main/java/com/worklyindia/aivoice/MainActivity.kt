@@ -644,6 +644,19 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::offlineModelStatusText.isInitialized) {
+            refreshOfflineModelUi()
+            val qwenState = runCatching { offlineModelManager.snapshot().state }.getOrNull()
+            val kokoroState = runCatching { kokoroModelManager.snapshot().state }.getOrNull()
+            if (qwenState == OfflineModelManager.State.PENDING || qwenState == OfflineModelManager.State.RUNNING ||
+                qwenState == OfflineModelManager.State.PAUSED || kokoroState == KokoroModelManager.State.PENDING ||
+                kokoroState == KokoroModelManager.State.RUNNING || kokoroState == KokoroModelManager.State.PAUSED
+            ) startOfflineModelPolling()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         offlineModelHandler.removeCallbacks(offlineModelPoll)
