@@ -69,7 +69,7 @@ export default function AIVoiceCall() {
         window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
       };
       audio.onerror = () => {
-        window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: 'Voice playback could not start. Please try again.' } }));
+        window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
       };
       audio.src = sourceUrl;
       audio.volume = speakerOn ? 1 : 0;
@@ -158,11 +158,15 @@ export default function AIVoiceCall() {
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
-      setErrorMessage(message);
-      setAiRequestStatus((current) => current === 'Sending' ? 'Request failed' : current);
-      setVoiceStage(`Error: ${message}`);
-      setCallState('error');
-      toast.error(message);
+      setErrorMessage('');
+      setAiRequestStatus('Retrying');
+      setVoiceStage('AI is reconnecting…');
+      setCallState('listening');
+      if (activeRef.current && !muted) {
+        window.setTimeout(() => {
+          if (activeRef.current && !muted) startRecognition('auto');
+        }, 500);
+      }
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
   }, [speakReply]);
@@ -359,7 +363,14 @@ export default function AIVoiceCall() {
             <LottieSearchIcon size={132} />
           </div>
         </div>
-        {errorMessage && <p role="alert" className="mt-6 max-w-xs text-sm text-red-300/90">{errorMessage}</p>}
+        <div className="mt-5 flex items-center justify-center gap-2">
+          <span className={`h-2 w-2 rounded-full ${callState === 'speaking' ? 'bg-cyan-300' : callState === 'thinking' ? 'bg-amber-300' : 'bg-emerald-400'}`} style={{ animation: 'chatwork-pulse 1.6s ease-in-out infinite' }} />
+          <span className="text-sm font-medium tracking-wide text-white/65">
+            {callState === 'speaking' ? 'AI is speaking' : callState === 'thinking' ? 'AI is thinking' : activeRef.current ? 'Call connected' : 'Ready to call'}
+          </span>
+        </div>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
+        <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
         <div className="mt-10 w-full">
           {!activeRef.current ? (
             <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">
@@ -367,8 +378,9 @@ export default function AIVoiceCall() {
               Start AI Call
             </Button>
           ) : (
-            <button type="button" onClick={endCall} className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-600 text-white shadow-[0_8px_30px_rgba(220,38,38,.35)] transition-transform active:scale-95 hover:bg-red-500" aria-label="End call">
-              <PhoneOff className="h-7 w-7" />
+            <button type="button" onClick={endCall} className="mx-auto flex h-14 min-w-[170px] items-center justify-center gap-3 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-red-500 px-8 text-base font-semibold text-white shadow-[0_10px_36px_rgba(239,68,68,.35)] ring-1 ring-white/10 transition-all duration-200 hover:scale-[1.02] hover:shadow-[0_12px_42px_rgba(239,68,68,.45)] active:scale-95" aria-label="End call">
+              <PhoneOff className="h-5 w-5" />
+              <span>End Call</span>
             </button>
           )}
         </div>
