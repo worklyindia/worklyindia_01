@@ -36,10 +36,10 @@ class KokoroModelManager(context: Context) {
         val current = snapshot()
         if (current.state == State.READY) return -1L
         if (current.state == State.RUNNING || current.state == State.PENDING || current.state == State.PAUSED) {
-            val savedNetworkChoice = preferences.getBoolean(KEY_ALLOW_MOBILE_DATA, false)
+            val savedNetworkChoice = prefs.getBoolean(KEY_ALLOW_MOBILE_DATA, false)
             if (savedNetworkChoice == allowMobileData) return current.downloadId
             if (current.downloadId > 0L) manager.remove(current.downloadId)
-            preferences.edit().remove(KEY_ID).apply()
+            prefs.edit().remove(KEY_ID).apply()
         }
         if (!directory.exists() && !directory.mkdirs()) {
             throw IOException("Could not create the Kokoro model folder.")
