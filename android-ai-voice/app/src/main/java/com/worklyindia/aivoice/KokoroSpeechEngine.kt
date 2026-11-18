@@ -1,6 +1,7 @@
 package com.worklyindia.aivoice
 
 import android.content.Context
+import android.os.Build
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -83,6 +84,9 @@ class KokoroSpeechEngine private constructor(
         const val ENGLISH_UK_VOICE = "bf_emma"
 
         fun create(context: Context, modelFile: File): KokoroSpeechEngine {
+            require(Build.SUPPORTED_ABIS.any { it == "arm64-v8a" }) {
+                "Kokoro requires a 64-bit ARM Android device. Android TTS fallback remains available."
+            }
             require(modelFile.isFile && modelFile.length() == MODEL_SIZE_BYTES) {
                 "Kokoro model is missing or incomplete."
             }
