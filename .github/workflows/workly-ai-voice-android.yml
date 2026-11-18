@@ -37,8 +37,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          # Keep Gradle on the latest supported 8.x line for AGP 8.7.3.
-          gradle-version: "8.14.7"
+          gradle-version: "9.9.1"
 
       - name: Build debug APK
         working-directory: android-ai-voice
