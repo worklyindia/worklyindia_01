@@ -112,7 +112,7 @@ class IndicTinyTtsEngine private constructor(
                 }
                 if (digit >= 0) append(' ').append(digitWords[digit]).append(' ')
                 else append(when (character) {
-                    '\\n', '\\r', '\\t' -> ' '
+                    '\n', '\r', '\t' -> ' '
                     '“', '”' -> '"'
                     '’', '‘' -> '\''
                     '—', '–' -> '-'
@@ -233,7 +233,7 @@ class IndicTinyTtsEngine private constructor(
     }
 
     private fun inverseStft(real: Array<FloatArray>, imag: Array<FloatArray>): FloatArray {
-        val frames = real[0][0].size
+        val frames = real[0].size
         require(frames >= 2) { "TTS generated too few audio frames." }
         val total = FFT_SIZE + HOP_SIZE * (frames - 1)
         val output = DoubleArray(total)
