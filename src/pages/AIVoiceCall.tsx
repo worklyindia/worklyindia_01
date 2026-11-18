@@ -135,18 +135,36 @@ export default function AIVoiceCall() {
     setVoiceStage('Recognized speech; sending text to AI…');
     setAiRequestStatus('Sending');
     try {
-      const { data, error } = await supabase.functions.invoke('unified-voice', {
-        body: { action: 'ai-voice-chat', text: transcript, languageTag: detail?.languageTag || 'und' },
-      });
-      if (error) throw error;
+      let data: any = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (!activeRef.current || turnId !== conversationTurnRef.current) return;
+        setAiRequestStatus(attempt === 0 ? 'Sending' : `Retrying ${attempt}/2`);
+        try {
+          const result = await supabase.functions.invoke('unified-voice', {
+            body: { action: 'ai-voice-chat', text: transcript, languageTag: detail?.languageTag || 'und' },
+          });
+          if (result.error) throw result.error;
+          const candidate = typeof result.data?.reply === 'string' ? result.data.reply.trim() : '';
+          if (candidate) {
+            data = result.data;
+            break;
+          }
+          throw new Error('AI returned an empty reply.');
+        } catch (retryError) {
+          lastError = retryError;
+          if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+        }
+      }
+      if (!data) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
       const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
-      if (!reply) throw new Error('AI did not return a voice response.');
       setAiRequestStatus('Reply received');
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
       const spoken = await speakReply(reply, data?.languageTag || detail?.languageTag || 'und');
       if (spoken) {
+        lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
         setVoiceStage('Voice playback started');
       } else {
@@ -159,6 +177,7 @@ export default function AIVoiceCall() {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
       setErrorMessage('');
+      lastSubmittedTranscriptRef.current = '';
       setAiRequestStatus('Retrying');
       setVoiceStage('AI is reconnecting…');
       setCallState('listening');
@@ -243,7 +262,12 @@ export default function AIVoiceCall() {
     // Warm browser speech voices before the first AI reply needs playback.
     if (!bridge && 'speechSynthesis' in window) window.speechSynthesis.getVoices();
     setNativeAvailable(false);
-    const handleSpeechStart = () => { if (activeRef.current) setVoiceStage('Speech detected by microphone'); };
+    const handleSpeechStart = () => {
+      if (activeRef.current) {
+        setCallState('listening');
+        setVoiceStage('Speech detected by microphone');
+      }
+    };
     const handleMicLevel = (event: Event) => {
       if (!activeRef.current) return;
       const level = Number((event as CustomEvent<{ level?: number }>).detail?.level ?? 0);
@@ -363,11 +387,8 @@ export default function AIVoiceCall() {
             <LottieSearchIcon size={132} />
           </div>
         </div>
-        <div className="mt-5 flex items-center justify-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${callState === 'speaking' ? 'bg-cyan-300' : callState === 'thinking' ? 'bg-amber-300' : 'bg-emerald-400'}`} style={{ animation: 'chatwork-pulse 1.6s ease-in-out infinite' }} />
-          <span className="text-sm font-medium tracking-wide text-white/65">
-            {callState === 'speaking' ? 'AI is speaking' : callState === 'thinking' ? 'AI is thinking' : activeRef.current ? 'Call connected' : 'Ready to call'}
-          </span>
+        <div className="mt-5 min-h-6 text-sm font-medium tracking-wide text-white/70">
+          {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'You are speaking…' : ''}
         </div>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
