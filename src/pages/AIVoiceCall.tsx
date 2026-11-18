@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
+import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, Volume2, Grid3X3, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -280,66 +280,68 @@ export default function AIVoiceCall() {
   };
 
   const formattedDuration = `${String(Math.floor(callDuration / 60)).padStart(2, '0')}:${String(callDuration % 60).padStart(2, '0')}`;
-  const callStatus = callState === 'listening' ? 'Connected' : callState === 'thinking' ? 'Calling…' : callState === 'speaking' ? 'Workly AI speaking' : callState === 'error' ? 'Call failed' : 'Ready to call';
+  const callStatus = callState === 'listening' ? 'Connected' : callState === 'thinking' ? 'Calling…' : callState === 'speaking' ? 'Speaking' : callState === 'error' ? 'Call failed' : 'Ready';
+
+  const CallAction = ({ icon: Icon, label, onClick, disabled = false, active = false }: { icon: typeof Mic; label: string; onClick?: () => void; disabled?: boolean; active?: boolean }) => (
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={label}
+      className="flex min-w-[76px] flex-col items-center gap-2 text-white disabled:opacity-45 active:scale-95">
+      <span className={`flex h-16 w-16 items-center justify-center rounded-full ${active ? 'bg-white text-slate-900' : 'bg-white/10'}`}>
+        <Icon className="h-6 w-6" strokeWidth={1.8} />
+      </span>
+      <span className="text-xs text-white/80">{label}</span>
+    </button>
+  );
 
   return (
-    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[#111827] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_28%,rgba(59,130,246,0.20),transparent_54%)]" />
-      <header className="relative z-10 flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
-        <Button variant="ghost" size="icon" onClick={() => { endCall(); navigate('/ai-assistant'); }} aria-label="Back to AI Chat" className="text-white/80 hover:bg-white/10 hover:text-white">
+    <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[#121212] text-white">
+      <header className="relative z-10 flex items-center justify-between px-5 pt-[max(1rem,env(safe-area-inset-top))]">
+        <Button variant="ghost" size="icon" onClick={() => { endCall(); navigate('/ai-assistant'); }} aria-label="Back" className="text-white/80 hover:bg-white/10 hover:text-white">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div className="text-center">
-          <p className="text-sm font-semibold tracking-wide text-white">Workly India</p>
-          <p className="text-[11px] text-white/45">AI calling</p>
-        </div>
-        <span className="h-10 w-10" aria-hidden="true" />
+        <span className="text-xs text-white/40">AI call</span>
+        <span className="h-10 w-10" />
       </header>
-      <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-7 pb-[max(2rem,env(safe-area-inset-bottom))] text-center">
-        <div className="flex flex-1 flex-col items-center justify-center pb-8">
-          <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-[#2875D8] to-[#5146A8] shadow-[0_12px_48px_rgba(37,99,235,0.32)] ring-4 ring-white/10">
-            <AudioLines className="h-14 w-14 text-white" strokeWidth={1.8} />
-            {activeRef.current && <span className="absolute inset-0 rounded-full border border-white/35 animate-ping" />}
+
+      <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center">
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#4b5563] to-[#1f2937] shadow-xl ring-1 ring-white/15">
+            <AudioLines className="h-12 w-12 text-white/90" strokeWidth={1.7} />
+            {activeRef.current && <span className="absolute inset-0 rounded-full border-2 border-white/20 animate-pulse" />}
           </div>
-          <div className="mt-7 flex items-center justify-center gap-2">
-            <h1 className="text-[27px] font-semibold tracking-tight">{aiName}</h1>
-            {showBadge && <VerificationBadge color={badgeColor} size={17} />}
+          <h1 className="mt-6 text-[28px] font-semibold tracking-tight">{aiName}</h1>
+          <div className="mt-2 flex items-center gap-1.5 text-sm text-white/55">
+            <span>Workly India</span>
+            {showBadge && <VerificationBadge color={badgeColor} size={15} />}
           </div>
-          <p className="mt-2 text-sm text-white/55">Workly India</p>
-          <p className="mt-8 text-base font-medium text-white/90" aria-live="polite">{callStatus}</p>
-          {activeRef.current && <p className="mt-2 font-mono text-sm tabular-nums tracking-widest text-white/60">{formattedDuration}</p>}
-          {!activeRef.current && callState === 'idle' && <p className="mt-2 text-xs text-white/40">Tap the green button to start your AI call</p>}
+          <p className="mt-5 text-sm font-medium text-white/80" aria-live="polite">{callStatus}</p>
+          {activeRef.current && <p className="mt-1 font-mono text-sm tabular-nums text-white/55">{formattedDuration}</p>}
           {errorMessage && (
-            <div role="alert" className="mt-6 w-full rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100">
+            <div role="alert" className="mt-5 max-w-sm rounded-xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-left text-xs text-red-100">
               <p className="font-semibold">Call failed</p>
-              <p className="mt-1 break-words text-xs leading-5 text-red-100/80">{errorMessage}</p>
+              <p className="mt-1 text-red-100/75">{errorMessage}</p>
             </div>
           )}
         </div>
+
         {activeRef.current ? (
-          <div className="w-full">
-            <div className="mb-10 grid grid-cols-2 gap-x-10 gap-y-7 px-5">
-              <button type="button" onClick={toggleMute} aria-label={muted ? 'Unmute microphone' : 'Mute microphone'} className="mx-auto flex w-24 flex-col items-center gap-2 text-white/85">
-                <span className={`flex h-[66px] w-[66px] items-center justify-center rounded-full ${muted ? 'bg-white text-slate-900' : 'border border-white/10 bg-white/10'}`}>
-                  {muted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-                </span>
-                <span className="text-xs">{muted ? 'Unmute' : 'Mute'}</span>
-              </button>
-              <div className="mx-auto flex w-24 flex-col items-center gap-2 text-white/45" aria-label="Speaker output uses phone audio settings">
-                <span className="flex h-[66px] w-[66px] items-center justify-center rounded-full border border-white/10 bg-white/10">
-                  <Volume2 className="h-6 w-6" />
-                </span>
-                <span className="text-xs">Phone audio</span>
-              </div>
+          <div className="w-full pb-2">
+            <div className="mx-auto mb-8 grid max-w-[330px] grid-cols-3 gap-y-7">
+              <CallAction icon={Mic} label={muted ? 'Unmute' : 'Mute'} onClick={toggleMute} active={muted} />
+              <CallAction icon={Grid3X3} label="Keypad" disabled />
+              <CallAction icon={Volume2} label="Speaker" disabled />
+              <CallAction icon={UserPlus} label="Add call" disabled />
+              <CallAction icon={AudioLines} label="AI voice" active />
+              <CallAction icon={MicOff} label="Microphone" disabled />
             </div>
-            <button type="button" onClick={endCall} aria-label="End AI call" className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-full bg-[#E5484D] text-white shadow-lg shadow-red-950/40 active:scale-95">
+            <button type="button" onClick={endCall} aria-label="End AI call"
+              className="mx-auto flex h-[70px] w-[70px] items-center justify-center rounded-full bg-[#e5484d] text-white shadow-xl shadow-red-950/40 active:scale-95">
               <PhoneOff className="h-7 w-7" />
             </button>
             <p className="mt-3 text-xs font-medium text-white/65">End call</p>
           </div>
         ) : (
           <div className="w-full pb-2">
-            <Button onClick={startCall} className="h-[62px] w-full rounded-full bg-[#20A464] text-base font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-[#198653]">
+            <Button onClick={startCall} className="h-[60px] w-full rounded-full bg-[#20a464] text-base font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-[#198653]">
               <Mic className="mr-2 h-5 w-5" /> Start AI Call
             </Button>
           </div>
