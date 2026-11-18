@@ -34,7 +34,14 @@ The Android app now includes an on-demand downloader for the official
 - Stored in app-specific external storage. No broad storage permission is requested.
 - Before download, the app checks for the model size plus 512 MB free-space headroom; after download it checks the exact size and GGUF magic.
 
-**Important implementation boundary:** this milestone downloads and verifies the GGUF file only. The native llama.cpp inference runtime and offline chat/task UI are not connected yet. The existing Android SpeechRecognizer/TextToSpeech controls remain separate and may require the phone's speech provider/internet. Do not describe offline chat or offline voice recognition as working until the native runtime and offline speech components are integrated and device-tested.
+The Android project now also contains a pinned llama.cpp native runtime build and a local Qwen chat screen:
+
+- The `llama.cpp` runtime is pinned to release tag `b5046` and built with Android NDK/CMake; the model is loaded from the app-private model file at runtime.
+- After download, the user can open **Offline AI Chat** from the main screen. The chat runs locally and keeps a limited recent conversation context on the phone.
+- The chat screen provides microphone input and spoken replies for Hindi, Indian English and Gujarati. Android speech recognition is asked to prefer offline mode; this is only a preference, not a guarantee. Offline recognition and TTS require compatible language packs/voices installed on the phone.
+- Qwen loading is blocked on devices reporting less than 6 GB total RAM. Actual performance still depends on the phone's chipset, free RAM and thermal limits.
+- Basic chat and text-based tasks work locally; web browsing, live job search, external integrations and server-side tools are not available while offline.
+- The APK build and real-device inference/voice tests are still required before calling this feature verified.
 
 ## Supabase phone relay (review branch only)
 
