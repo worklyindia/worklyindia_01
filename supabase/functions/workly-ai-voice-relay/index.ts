@@ -58,6 +58,10 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const action = typeof body?.action === "string" ? body.action : "";
     const db = supabase;
+    const now = new Date().toISOString();
+    // Keep relay data short-lived even when the website stops polling.
+    await db.from("workly_ai_voice_pairings").delete().lt("expires_at", now);
+    await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
 
     if (action === "create_pairing") {
       const user = await authenticatedUser(req);
