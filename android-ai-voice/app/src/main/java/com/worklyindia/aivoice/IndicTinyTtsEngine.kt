@@ -302,6 +302,19 @@ class IndicTinyTtsEngine private constructor(
         private const val MAX_TOKENS = 2048
         private const val MAX_FRAMES = 12_000
 
+        private fun sha256(file: File): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().buffered().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
+
         fun create(context: Context, language: String): IndicTinyTtsEngine {
             val code = language.lowercase()
             require(code in listOf("hi", "gu", "en")) { "Indic Tiny TTS supports Hindi, Gujarati and English." }
@@ -329,7 +342,15 @@ class IndicTinyTtsEngine private constructor(
                 val encoderFile = File(base, "text_encoder.onnx")
                 val flowFile = File(base, "flow_decoder.onnx")
                 val vocoderFile = File(base, "vocoder.onnx")
-                check(listOf(encoderFile, flowFile, vocoderFile).all { it.isFile && it.length() > 1_000_000L }) { "Indic Tiny TTS ONNX files are missing or incomplete." }
+                val expectedHashes = when (code) {
+                    "hi" -> listOf("38df505ea822800d91a13bdc4a670f81ee964e9e0fe24a705590859fe7cfd08f", "923a0472ec4d4c05c43bfc8ea512f8f762cf447b9f6ce1f01043144e1f6d1252", "44d36238a761750447038895ab194e2378f6f4ba2c2d089a4766fa52810ef353")
+                    "gu" -> listOf("275820514eace183d8028a8a726cd69c8c3fe2eeec9ba8bbc71cc03162b5bc63", "4bd15fafdc493974198a6cfa9e9797da3b6c7b00ff12536ae8a1283e2aa58f19", "44d36238a761750447038895ab194e2378f6f4ba2c2d089a4766fa52810ef353")
+                    else -> listOf("e2e6f4cac08a0b4f8a39e4306df42066930b90fbce27a70453aaa68f91c74873", "5b6a911751f8dfd8e01feb05ae281c4bfde7cb6df2e90ae7870b3685dc582d05", "44d36238a761750447038895ab194e2378f6f4ba2c2d089a4766fa52810ef353")
+                }
+                listOf(encoderFile, flowFile, vocoderFile).zip(expectedHashes).forEach { (file, expected) ->
+                    check(file.isFile && file.length() > 1_000_000L) { "Indic Tiny TTS model file is missing: ${file.name}" }
+                    check(sha256(file) == expected) { "Indic Tiny TTS checksum failed for ${file.name}. Delete this pack and download it again." }
+                }
                 val encoder = env.createSession(encoderFile.absolutePath, options)
                 val flow = env.createSession(flowFile.absolutePath, options)
                 val vocoder = env.createSession(vocoderFile.absolutePath, options)
