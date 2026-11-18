@@ -71,12 +71,10 @@ class OfflineModelManager(context: Context) {
         modelFile.delete()
         val request = DownloadManager.Request(Uri.parse(MODEL_URL))
             .setTitle("Workly AI offline model")
-            .setDescription("Downloading Qwen2.5-3B-Instruct (about 2.1 GB)")
+            .setDescription("Automatic Wi-Fi download · Qwen2.5-3B-Instruct (about 2.1 GB)")
             .setMimeType("application/octet-stream")
-            .setAllowedNetworkTypes(
-                DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE
-            )
-            .setAllowedOverMetered(true)
+            .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI)
+            .setAllowedOverMetered(false)
             .setAllowedOverRoaming(false)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(
