@@ -531,12 +531,12 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         setStatus("${prefix?.let { "$it " } ?: ""}Speaking ${lang.label}…")
     }
 
-    private fun downloadSelectedSpeechPack(shruti: Boolean) {
+    private fun downloadSelectedSpeechPack(shruti: Boolean = false) {
         val language = when {
             selectedLanguage().tag.startsWith("hi") -> "hi"
             selectedLanguage().tag.startsWith("gu") -> "gu"
             else -> {
-                setStatus("Select Hindi or Gujarati to download this offline recognition model.")
+                setStatus("Select Hindi, English or Gujarati to download this offline recognition model.")
                 return
             }
         }
@@ -579,7 +579,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             selectedLanguage().tag.startsWith("hi") -> "hi"
             selectedLanguage().tag.startsWith("gu") -> "gu"
             else -> {
-                setStatus("Offline IndicConformer and Shruti currently have Hindi and Gujarati packs only.")
+                setStatus("Select Hindi, English or Gujarati for offline recognition.")
                 return
             }
         }
