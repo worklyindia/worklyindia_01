@@ -43,7 +43,7 @@ class MainActivity : Activity() {
         page.addView(label("Choose what you want to do", 15, secondary, false).apply { setPadding(0, dp(24), 0, dp(12)) })
         addDestination(page, "Voice", "Text to speech and speech to text", VoiceActivity::class.java)
         addDestination(page, "AI Chat", "Chat with offline Qwen AI and use voice input", OfflineAiChatActivity::class.java)
-        addDestination(page, "Downloads", "Manage AI4Bharat, Indic Tiny TTS, Kokoro, Shruti and Qwen models", SpeechDownloadsActivity::class.java)
+        addDestination(page, "Downloads", "Manage AI4Bharat, Indic Tiny TTS, Shruti and Qwen models", SpeechDownloadsActivity::class.java)
         addDestination(page, "Settings", "Pair this phone and manage the secure voice server", SettingsActivity::class.java)
         page.addView(label("WORKLY VOICE · VERSION 1.0.0", 11, secondary, true).apply {
             gravity = Gravity.CENTER
