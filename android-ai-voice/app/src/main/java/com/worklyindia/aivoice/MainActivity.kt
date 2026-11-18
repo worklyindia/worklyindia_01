@@ -210,7 +210,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         kokoroCard.addView(kokoroModelStatusText)
         kokoroModelProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
         kokoroCard.addView(kokoroModelProgressBar, matchWrap().also { it.topMargin = dp(10) })
-        kokoroModelActionButton = button("Automatic download · Wi-Fi only")
+        kokoroModelActionButton = button("Automatic download")
         kokoroModelActionButton.setOnClickListener { onKokoroModelAction() }
         kokoroCard.addView(kokoroModelActionButton, matchWrap().also { it.topMargin = dp(10) })
         page.addView(kokoroCard)
