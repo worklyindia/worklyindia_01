@@ -1,4 +1,5 @@
 name: Workly AI Voice Website Checks
+# Validates the authenticated pairing page and its Workly Settings entry point.
 
 on:
   push:
