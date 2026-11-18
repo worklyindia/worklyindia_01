@@ -86,9 +86,8 @@ class SpeechDownloadsActivity : Activity() {
 
         list.addView(label("VOICE RECOGNITION", 17, primary, true).apply { setPadding(0, dp(12), 0, dp(6)) })
         addSpeechPack(list, "IndicConformer Hindi", "AI4Bharat IndicConformer INT8 · Hindi offline speech-to-text", SpeechModelCatalog.indicConformer("hi"))
+        addSpeechPack(list, "IndicConformer English", "AI4Bharat IndicConformer INT8 · English offline speech-to-text", SpeechModelCatalog.indicConformer("en"))
         addSpeechPack(list, "IndicConformer Gujarati", "AI4Bharat IndicConformer INT8 · Gujarati offline speech-to-text", SpeechModelCatalog.indicConformer("gu"))
-        addSpeechPack(list, "Shruti Hindi", "Shruti ONNX · Hindi offline speech-to-text", SpeechModelCatalog.shruti("hi"))
-        addSpeechPack(list, "Shruti Gujarati", "Shruti ONNX · Gujarati offline speech-to-text", SpeechModelCatalog.shruti("gu"))
 
         list.addView(label("TEXT TO SPEECH", 17, primary, true).apply { setPadding(0, dp(16), 0, dp(6)) })
         addSpeechPack(list, "Indic Tiny TTS Hindi", "Indic Tiny TTS · Hindi offline text-to-speech", SpeechModelCatalog.indicTinyTts("hi"))
