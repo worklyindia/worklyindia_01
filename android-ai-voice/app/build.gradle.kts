@@ -36,7 +36,7 @@ android {
 }
 dependencies {
     // Offline ASR runtime for AI4Bharat IndicConformer and Shruti model packs.
-    implementation("com.google.mediapipe:tasks-audio:1.1.1")
+    implementation("com.google.mediapipe:tasks-audio:1.2.2")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         // The Android AAR already contains the Kotlin/JVM API classes.
         // JitPack also publishes a separate JVM JAR; exclude it to avoid duplicate classes.
