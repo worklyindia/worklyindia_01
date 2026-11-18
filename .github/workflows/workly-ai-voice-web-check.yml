@@ -15,6 +15,10 @@ on:
       - ".github/workflows/workly-ai-voice-web-check.yml"
   pull_request:
     paths:
+      - "package.json"
+      - "src/hooks/**"
+      - "src/integrations/supabase/types.ts"
+      - "tsconfig.app.json"
       - "src/App.tsx"
       - "src/pages/WorklyAIVoiceDevices.tsx"
       - "src/pages/Settings.tsx"
