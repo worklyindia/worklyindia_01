@@ -12,15 +12,15 @@ This is an independent Android project. This feature branch also adds a separate
 ## First milestone
 
 - Hindi (hi-IN), Indian English (en-IN), and Gujarati (gu-IN) language selection.
-- Text-to-speech using the Android TTS engine installed on the phone.
-- Speech-to-text using the Android speech-recognition service installed on the phone.
-- Microphone permission requested only when the user starts speech recognition.
-- No model download, paid API key, analytics, or background microphone capture.
+- Kokoro 82M on-device neural TTS for Hindi and English after its model pack is downloaded; Gujarati currently falls back to the Android TTS engine.
+- Android SpeechRecognizer remains the microphone fallback while the offline IndicConformer and Shruti adapters are not yet connected to the microphone UI.
+- Microphone permission is requested only when the user starts speech recognition.
+- No paid API key, analytics, or background microphone capture.
 
-Voice quality and language availability depend on the TTS/recognition engines installed on the device. Gujarati may be unavailable on some Android engines. Speech recognition may use internet and the device's configured recognition provider; this app does not promise offline recognition.
+Speech recognition is not yet guaranteed to work offline. Gujarati neural TTS is not yet integrated; its availability depends on the installed Android TTS engine.
 
 
-## Offline Workly AI model (on-demand download milestone)
+## Offline Workly AI model (automatic Wi-Fi download)
 
 The Android app now includes an on-demand downloader for the official
 `Qwen/Qwen2.5-3B-Instruct-GGUF` model using the `Q4_K_M` quantization:
@@ -45,19 +45,23 @@ The Android project now also contains a pinned llama.cpp native runtime build an
 
 ## Speech model integration status
 
-The Sherpa-ONNX Android runtime (v2.0.1) is now added to the Android project, with file-backed Kotlin adapters for:
-- AI4Bharat IndicConformer INT8 CTC (separate Hindi and Gujarati model files plus shared tokens).
-- Shruti's sherpa-onnx/Moonshine pack (separate Hindi and Gujarati packs; each also handles English and code-switching).
+The Sherpa-ONNX Android runtime (v2.0.1) is included, with file-backed Kotlin adapters for:
+- AI4Bharat IndicConformer INT8 CTC (Hindi and Gujarati model files plus shared tokens).
+- Shruti sherpa-onnx/Moonshine (Hindi and Gujarati packs; each can also recognize English and code-switching).
 
-These adapters accept 16 kHz mono Float32 PCM and expose offline transcription, but they are not yet connected to the microphone UI or an automatic speech-pack downloader. The app still uses Android's installed SpeechRecognizer and TextToSpeech until that wiring and device tests are completed.
+Both adapters accept 16 kHz mono Float32 PCM and expose offline transcription. They are not yet connected to the microphone UI, and their model packs are not downloaded automatically. Android SpeechRecognizer remains the active STT path until the adapters, model downloads and real-device tests are complete.
 
-The two TTS models still need separate integration work:
-- Kokoro 82M has a 295 MB LiteRT-LM / MediaPipe TTS bundle for Hindi and English. Its Android sample currently targets Android 8.0+ (API 26); this project currently supports API 24+, so compatibility must be resolved without silently dropping older devices.
-- Indic Tiny TTS is not a drop-in Sherpa Matcha model. Its three ONNX graphs require the model's own character tokenizer, text normalizer, duration/flow decoding and Vocos ISTFT post-processing. The Hindi, Gujarati and English packs are about 91 MB each. Merely downloading the graphs would not make TTS work.
+Kokoro 82M is now integrated through MediaPipe Tasks Audio:
+- The 294,783,298-byte kokoro_int8_fp16.litertlm bundle downloads automatically over unmetered Wi-Fi after the Qwen model is ready.
+- Hindi uses the hf_alpha voice; Indian English currently uses af_heart.
+- The main Speak button uses Kokoro for Hindi and English when the model is ready, and falls back to Android TTS while downloading or if synthesis fails. Gujarati still uses Android TTS.
+- Kokoro's Android integration requires API 26+, so the app minimum was raised from API 24 to API 26 (Android 8.0).
 
-Approximate model weights for the requested speech stack: IndicConformer Hindi+Gujarati ~395 MB; Shruti Hindi+Gujarati ~108 MB; Indic Tiny TTS Hindi+Gujarati+English ~273 MB; Kokoro ~295 MB. Total is about 1.07 GB, in addition to the existing Qwen model (~2.1 GB). Model licensing/attribution must be retained: AI4Bharat MIT, Shruti Apache-2.0 (NOTICE required), Indic Tiny TTS CC-BY-4.0 for acoustic weights plus MIT Vocos, and Kokoro LiteRT bundle Apache-2.0.
+Indic Tiny TTS is still not integrated into Android inference. It is not a drop-in Sherpa Matcha model: its three ONNX graphs require the model's own character tokenizer, text normalizer, duration/flow decoding and Vocos ISTFT post-processing. Hindi, Gujarati and English packs are about 91 MB each. They must not be downloaded until that inference path is implemented.
 
-Do not mark these speech engines as available offline until model downloads, checksum/size validation, microphone/playback wiring, and real-device Hindi/Gujarati/English inference tests pass. The automatic first-launch Wi-Fi download currently applies to Qwen only.
+Approximate model weights for the requested speech stack: IndicConformer Hindi+Gujarati ~395 MB; Shruti Hindi+Gujarati ~108 MB; Indic Tiny TTS Hindi+Gujarati+English ~273 MB; Kokoro ~295 MB. Total is about 1.07 GB, in addition to Qwen (~2.1 GB). Model licensing/attribution must be retained: AI4Bharat MIT, Shruti Apache-2.0 (NOTICE required), Indic Tiny TTS CC-BY-4.0 for acoustic weights plus MIT Vocos, and Kokoro LiteRT bundle Apache-2.0.
+
+Do not mark IndicConformer, Shruti or Indic Tiny TTS as available offline until their download flows, checksum/size validation, UI wiring and real-device Hindi/Gujarati/English inference tests pass. Qwen and Kokoro are the only model packs currently queued for automatic Wi-Fi download.
 
 ## Supabase phone relay (review branch only)
 
@@ -69,9 +73,9 @@ Current remote behavior is deliberately limited: TTS jobs are spoken through the
 
 Open the `android-ai-voice/` folder as a standalone Gradle project in Android Studio, or use the repository GitHub Actions workflow to build a debug APK.
 
-- Minimum Android: API 24
+- Minimum Android: API 26 (Android 8.0)
 - Target SDK: 35
 - Java: 17
-- Gradle: 8.9
+- Gradle: 8.14.4
 - Android NDK: 27.2.12479018
 - CMake: 3.22.1
