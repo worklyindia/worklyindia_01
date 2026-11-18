@@ -136,7 +136,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         ).also { it.setPadding(0, dp(7), 0, dp(10)) })
         pairingCodeInput = EditText(this).apply {
             hint = "24-character pairing code"
-            singleLine = true
+            maxLines = 1
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
             setTextColor(0xFF142033.toInt())
             setHintTextColor(0xFF8491A3.toInt())
@@ -149,7 +149,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }, matchWrap().also { it.topMargin = dp(10) })
         relayStatusText = label(
             getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
-                .getString(VoiceRelayService.STATUS_KEY, "Phone is not paired."),
+                .getString(VoiceRelayService.STATUS_KEY, "Phone is not paired.") ?: "Phone is not paired.",
             13, 0xFF174B36.toInt(), true
         ).also { it.setPadding(0, dp(14), 0, dp(8)) }
         relayCard.addView(relayStatusText)
