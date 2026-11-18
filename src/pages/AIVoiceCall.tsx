@@ -325,7 +325,7 @@ export default function AIVoiceCall() {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
       window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: detail?.languageTag || 'und', source: 'partial-fallback' } }));
     }, 1400);
-  });
+  }, []);
 
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -334,19 +334,19 @@ export default function AIVoiceCall() {
     if (status === 'processing') setVoiceStage('Speech ended; waiting for transcript…');
     if (status === 'processing') setCallState('thinking');
     if (status === 'speaking') { setCallState('speaking'); setVoiceStage('AI is speaking…'); }
-    if (status === 'finished' && activeRef.current && !muted) {
+    if (status === 'finished' && activeRef.current && !mutedRef.current) {
       window.setTimeout(() => {
-        if (activeRef.current && !muted) {
+        if (activeRef.current && !mutedRef.current) {
           const started = startRecognition('auto');
           if (started) setCallState('listening');
           else { setCallState('error'); toast.error('Could not resume listening.'); }
         }
       }, 250);
     }
-  }, [startRecognition, stopRecognition, muted]);
+  }, [startRecognition, mutedRef]);
 
   const handleBargeIn = useCallback((_event: Event) => {
-    if (!activeRef.current || muted) return;
+    if (!activeRef.current || mutedRef.current) return;
     // Invalidate any reply still being generated so an interrupted turn can never speak later.
     conversationTurnRef.current += 1;
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
@@ -361,7 +361,7 @@ export default function AIVoiceCall() {
       const started = startRecognition('auto');
       if (!started) { setCallState('error'); toast.error('Could not listen after interruption.'); }
     }, 180);
-  }, [startRecognition, stopRecognition, stopReply, muted]);
+  }, [startRecognition, stopRecognition, stopReply]);
 
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -415,9 +415,6 @@ export default function AIVoiceCall() {
       window.removeEventListener('workly-voice-status', handleNativeStatus);
       window.removeEventListener('workly-voice-error', handleNativeError);
       window.removeEventListener('workly-voice-barge-in', handleBargeIn);
-      activeRef.current = false;
-      stopRecognition();
-      stopReply();
     };
   }, [bridge, stopRecognition, stopReply, handleTranscript, handlePartialTranscript, handleNativeStatus, handleNativeError, handleBargeIn]);
 
@@ -520,7 +517,7 @@ export default function AIVoiceCall() {
           </div>
         </div>
         <div className="mt-5 min-h-6 text-sm font-medium tracking-wide text-white/70">
-          {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'You are speaking…' : ''}
+          {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'Listening…' : ''}
         </div>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
