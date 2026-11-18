@@ -67,6 +67,11 @@ Deno.serve(async (req: Request) => {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
 
+      // Only the newest unused code for this account should remain valid.
+      await db.from("workly_ai_voice_pairings")
+        .delete()
+        .eq("user_id", user.id)
+        .is("consumed_at", null);
       // 12 random bytes -> 24 hex characters; short-lived and single-use.
       await db.from("workly_ai_voice_pairings").delete().lt("expires_at", new Date().toISOString());
       const code = randomHex(12).toUpperCase();
