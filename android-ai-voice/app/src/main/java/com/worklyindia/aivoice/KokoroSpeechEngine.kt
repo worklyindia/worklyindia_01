@@ -29,6 +29,10 @@ class KokoroSpeechEngine private constructor(
         return result.samples to result.sampleRateHz
     }
 
+    @Volatile private var activeTrack: AudioTrack? = null
+
+    fun stop() { runCatching { activeTrack?.stop() } }
+
     fun speak(text: String, voiceId: String) {
         val (samples, sampleRate) = synthesize(text, voiceId)
         require(samples.isNotEmpty()) { "Kokoro returned no audio samples." }
@@ -50,20 +54,24 @@ class KokoroSpeechEngine private constructor(
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
         try {
+            activeTrack = track
             check(track.state == AudioTrack.STATE_INITIALIZED) { "Could not initialize audio playback." }
             check(track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING) == samples.size) {
                 "Could not write all Kokoro audio samples."
             }
             track.play()
-            val durationMs = samples.size * 1000L / sampleRate
-            Thread.sleep(durationMs + 100L)
+            val deadline = android.os.SystemClock.elapsedRealtime() + samples.size * 1000L / sampleRate + 500L
+            while (track.playState == AudioTrack.PLAYSTATE_PLAYING && android.os.SystemClock.elapsedRealtime() < deadline) {
+                Thread.sleep(40L)
+            }
         } finally {
+            activeTrack = null
             runCatching { track.stop() }
             track.release()
         }
     }
 
-    override fun close() = engine.close()
+    override fun close() { stop(); engine.close() }
 
     companion object {
         const val MODEL_FILE_NAME = "kokoro_int8_fp16.litertlm"
