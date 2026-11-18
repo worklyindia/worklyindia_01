@@ -16,7 +16,7 @@
         android:label="Workly Voice"
         android:roundIcon="@drawable/ic_workly_voice"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@android:style/Theme.Material.DayNight.NoActionBar">
         <service
             android:name=".VoiceRelayService"
             android:exported="false"
