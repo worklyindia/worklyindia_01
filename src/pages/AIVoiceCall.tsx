@@ -305,7 +305,7 @@ export default function AIVoiceCall() {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
       window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: detail?.languageTag || 'und', source: 'partial-fallback' } }));
     }, 1400);
-  }, []);
+  }, [callState]);
 
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
