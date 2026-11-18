@@ -5,6 +5,10 @@ on:
   push:
     branches: [feature/workly-ai-voice-server-app]
     paths:
+      - "package.json"
+      - "src/hooks/**"
+      - "src/integrations/supabase/types.ts"
+      - "tsconfig.app.json"
       - "src/App.tsx"
       - "src/pages/WorklyAIVoiceDevices.tsx"
       - "src/pages/Settings.tsx"
