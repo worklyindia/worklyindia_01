@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      app_installations: {
+        Row: {
+          app_version: string | null
+          created_at: string
+          device_model: string | null
+          id: string
+          installation_id: string
+          last_seen_at: string
+          os_version: string | null
+          platform: string
+          user_id: string
+        }
+        Insert: {
+          app_version?: string | null
+          created_at?: string
+          device_model?: string | null
+          id?: string
+          installation_id: string
+          last_seen_at?: string
+          os_version?: string | null
+          platform?: string
+          user_id: string
+        }
+        Update: {
+          app_version?: string | null
+          created_at?: string
+          device_model?: string | null
+          id?: string
+          installation_id?: string
+          last_seen_at?: string
+          os_version?: string | null
+          platform?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       active_payment_sessions: {
         Row: {
           created_at: string
