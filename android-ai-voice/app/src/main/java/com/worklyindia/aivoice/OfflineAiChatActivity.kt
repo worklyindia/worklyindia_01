@@ -587,19 +587,25 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = if (fromUser) Gravity.END else Gravity.START
-            setPadding(dp(2), dp(4), dp(2), dp(4))
+            setPadding(dp(2), dp(3), dp(2), dp(3))
         }
         val bubble = TextView(this).apply {
             text = value
-            textSize = 15f
+            textSize = 16f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
             setPadding(dp(14), dp(10), dp(14), dp(10))
+            maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
+            setLineSpacing(dp(2).toFloat(), 1.04f)
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(if (fromUser) 0xFF1769C2.toInt() else surface)
-                cornerRadius = dp(18).toFloat()
+                cornerRadius = dp(19).toFloat()
             }
         }
-        row.addView(bubble, LinearLayout.LayoutParams((resources.displayMetrics.widthPixels * 0.78f).toInt(), -2))
+        val params = LinearLayout.LayoutParams(-2, -2).apply {
+            if (fromUser) marginStart = dp(42) else marginEnd = dp(28)
+        }
+        row.addView(bubble, params)
         chatMessages.addView(row, LinearLayout.LayoutParams(-1, -2))
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
         return bubble
