@@ -56,6 +56,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var kokoroModelProgressBar: ProgressBar
     private lateinit var kokoroModelActionButton: Button
     private var kokoroAutoDownloadAttempted = false
+    private var downloadChoicePromptShowing = false
     private val offlineModelHandler = Handler(Looper.getMainLooper())
     private val offlineModelPoll = object : Runnable {
         override fun run() {
@@ -94,8 +95,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         buildScreen()
         tts = TextToSpeech(this, this)
         updateSpeechAvailability()
-        // Queue the Qwen offline model automatically on first launch. Android
-        // DownloadManager is restricted to unmetered Wi-Fi by OfflineModelManager.
+        // Ask once whether large model downloads may use metered mobile data.
+        // The saved choice is reused for Qwen and the later Kokoro download.
         offlineModelHandler.postDelayed({ ensureAutomaticOfflineModelDownload() }, 1200L)
     }
 
@@ -273,17 +274,48 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             if (snapshot.state == OfflineModelManager.State.NOT_DOWNLOADED ||
                 snapshot.state == OfflineModelManager.State.FAILED
             ) {
-                offlineModelManager.startDownload()
+                requestDownloadNetworkChoice { allowMobile ->
+                    startOfflineModelDownload(allowMobile)
+                }
+            } else {
+                refreshOfflineModelUi()
+                if (snapshot.state == OfflineModelManager.State.PENDING ||
+                    snapshot.state == OfflineModelManager.State.RUNNING ||
+                    snapshot.state == OfflineModelManager.State.PAUSED
+                ) startOfflineModelPolling()
             }
-            refreshOfflineModelUi()
-            val state = offlineModelManager.snapshot().state
-            if (state == OfflineModelManager.State.PENDING || state == OfflineModelManager.State.RUNNING ||
-                state == OfflineModelManager.State.PAUSED
-            ) startOfflineModelPolling()
         } catch (error: Exception) {
             setOfflineModelStatus(error.message ?: "Automatic AI download could not start. Tap retry.")
             offlineModelActionButton.text = "Retry automatic download"
         }
+    }
+
+    private fun isMobileDataDownloadAllowed(): Boolean =
+        getSharedPreferences(DOWNLOAD_PREFS, MODE_PRIVATE).getBoolean(KEY_ALLOW_MOBILE_DATA, false)
+
+    private fun requestDownloadNetworkChoice(onChoice: (Boolean) -> Unit) {
+        val prefs = getSharedPreferences(DOWNLOAD_PREFS, MODE_PRIVATE)
+        if (prefs.contains(KEY_ALLOW_MOBILE_DATA)) {
+            onChoice(prefs.getBoolean(KEY_ALLOW_MOBILE_DATA, false))
+            return
+        }
+        if (downloadChoicePromptShowing || isFinishing) return
+        downloadChoicePromptShowing = true
+        AlertDialog.Builder(this)
+            .setTitle("Allow mobile data for AI downloads?")
+            .setMessage("Workly Voice downloads Qwen (about 2.1 GB) and Kokoro (about 295 MB). Allowing mobile data may use your data pack and may cause carrier charges. Choose Wi-Fi only to avoid mobile-data usage.")
+            .setNegativeButton("Wi-Fi only") { _, _ ->
+                prefs.edit().putBoolean(KEY_ALLOW_MOBILE_DATA, false).apply()
+                downloadChoicePromptShowing = false
+                onChoice(false)
+            }
+            .setPositiveButton("Allow mobile data") { _, _ ->
+                prefs.edit().putBoolean(KEY_ALLOW_MOBILE_DATA, true).apply()
+                downloadChoicePromptShowing = false
+                onChoice(true)
+            }
+            .setOnCancelListener { downloadChoicePromptShowing = false }
+            .show()
     }
 
     private fun onOfflineModelAction() {
@@ -306,18 +338,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 setOfflineModelStatus("Model download cancelled.")
                 refreshOfflineModelUi()
             }
-            else -> AlertDialog.Builder(this)
-                .setTitle("Download Workly AI model?")
-                .setMessage("This download is about 2.1 GB and uses Wi-Fi only. Mobile data will not be used. Continue?")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Download") { _, _ -> startOfflineModelDownload() }
-                .show()
+            else -> requestDownloadNetworkChoice { allowMobile ->
+                startOfflineModelDownload(allowMobile)
+            }
         }
     }
 
-    private fun startOfflineModelDownload() {
+    private fun startOfflineModelDownload(allowMobileData: Boolean = isMobileDataDownloadAllowed()) {
         try {
-            offlineModelManager.startDownload()
+            offlineModelManager.startDownload(allowMobileData)
             setOfflineModelStatus("Starting download from the official Hugging Face model repository…")
             refreshOfflineModelUi()
             startOfflineModelPolling()
@@ -338,7 +367,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             offlineModelChatButton.isEnabled = snapshot.state == OfflineModelManager.State.READY
             when (snapshot.state) {
                 OfflineModelManager.State.NOT_DOWNLOADED -> {
-                    offlineModelStatusText.text = "Waiting for Wi-Fi · about 2.1 GB required"
+                    offlineModelStatusText.text = "Waiting for an allowed network · about 2.1 GB required"
                     offlineModelActionButton.text = "Retry automatic download"
                 }
                 OfflineModelManager.State.PENDING -> {
@@ -387,7 +416,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (prefs.getBoolean("auto_attempted", false)) return
         prefs.edit().putBoolean("auto_attempted", true).apply()
         if (kokoroModelManager.snapshot().state == KokoroModelManager.State.NOT_DOWNLOADED) {
-            runCatching { kokoroModelManager.startDownload() }
+            runCatching { kokoroModelManager.startDownload(isMobileDataDownloadAllowed()) }
                 .onFailure { kokoroModelStatusText.text = it.message ?: "Kokoro download could not start. Tap retry." }
         }
         startOfflineModelPolling()
@@ -401,12 +430,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         kokoroModelProgressBar.progress = snapshot.progressPercent
         when (snapshot.state) {
             KokoroModelManager.State.NOT_DOWNLOADED -> {
-                kokoroModelStatusText.text = if (offlineModelManager.snapshot().state == OfflineModelManager.State.READY) "Ready to download · Wi-Fi only" else "Waiting for Qwen download to finish…"
-                kokoroModelActionButton.text = "Download Kokoro · Wi-Fi only"
+                kokoroModelStatusText.text = if (offlineModelManager.snapshot().state == OfflineModelManager.State.READY) "Ready to download · Wi-Fi or approved mobile data" else "Waiting for Qwen download to finish…"
+                kokoroModelActionButton.text = "Download Kokoro"
             }
             KokoroModelManager.State.PENDING -> { kokoroModelStatusText.text = "Kokoro download queued… ${snapshot.progressPercent}%"; kokoroModelActionButton.text = "Cancel Kokoro download" }
             KokoroModelManager.State.RUNNING -> { kokoroModelStatusText.text = "Downloading Kokoro… ${snapshot.progressPercent}%"; kokoroModelActionButton.text = "Cancel Kokoro download" }
-            KokoroModelManager.State.PAUSED -> { kokoroModelStatusText.text = "Kokoro download paused until Wi-Fi is available."; kokoroModelActionButton.text = "Cancel Kokoro download" }
+            KokoroModelManager.State.PAUSED -> { kokoroModelStatusText.text = "Kokoro download paused until an allowed network is available."; kokoroModelActionButton.text = "Cancel Kokoro download" }
             KokoroModelManager.State.FAILED -> { kokoroModelStatusText.text = "Kokoro download failed or file is incomplete. Tap retry."; kokoroModelActionButton.text = "Retry Kokoro download" }
             KokoroModelManager.State.READY -> { kokoroModelStatusText.text = "Kokoro model downloaded and file size verified. Hindi and English offline TTS ready."; kokoroModelActionButton.text = "Delete Kokoro model" }
         }
@@ -429,9 +458,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             else -> {
                 getSharedPreferences("workly_kokoro_model", MODE_PRIVATE).edit().putBoolean("auto_attempted", true).apply()
-                runCatching { kokoroModelManager.startDownload() }
-                    .onFailure { kokoroModelStatusText.text = it.message ?: "Could not start Kokoro download." }
-                startOfflineModelPolling()
+                requestDownloadNetworkChoice { allowMobile ->
+                    runCatching { kokoroModelManager.startDownload(allowMobile) }
+                        .onFailure { kokoroModelStatusText.text = it.message ?: "Could not start Kokoro download." }
+                    startOfflineModelPolling()
+                }
             }
         }
         refreshKokoroModelUi()
@@ -710,5 +741,5 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun matchWrap() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    companion object { private const val REQUEST_AUDIO = 4102; private const val REQUEST_NOTIFICATIONS = 4103 }
+    companion object { private const val REQUEST_AUDIO = 4102; private const val REQUEST_NOTIFICATIONS = 4103; private const val DOWNLOAD_PREFS = "workly_model_download_preferences"; private const val KEY_ALLOW_MOBILE_DATA = "allow_mobile_data" }
 }
