@@ -1,6 +1,6 @@
 # Workly AI Voice (separate Android app)
 
-This is an independent Android project. It does not change the existing Workly India website, production Android app, Supabase functions, or Cloudflare Workers.
+This is an independent Android project. This feature branch also adds a separate website pairing page and isolated Supabase relay source for review. It does not change the production Workly Android app, live Supabase database/functions, deployed website, or Cloudflare Workers.
 
 ## First milestone
 
