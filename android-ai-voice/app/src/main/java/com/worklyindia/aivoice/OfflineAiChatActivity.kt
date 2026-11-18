@@ -85,10 +85,21 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private val accent get() = 0xFF1769C2.toInt()
 
     private fun buildUi() {
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(12), dp(18), dp(12))
+            setPadding(dp(18), dp(20), dp(18), dp(12))
             setBackgroundColor(bg)
+            setOnApplyWindowInsetsListener { view, insets ->
+                val topInset = if (android.os.Build.VERSION.SDK_INT >= 30)
+                    insets.getInsets(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.displayCutout()).top
+                else insets.systemWindowInsetTop
+                val bottomInset = if (android.os.Build.VERSION.SDK_INT >= 30)
+                    insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
+                else insets.systemWindowInsetBottom
+                view.setPadding(dp(18), dp(12) + topInset, dp(18), dp(12) + bottomInset)
+                insets
+            }
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -115,7 +126,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(status)
         qwenModelPicker = Spinner(this).apply {
             setOnTouchListener { _, _ -> userHasChosenQwenModel = true; false }
-            adapter = ArrayAdapter(this@OfflineAiChatActivity, android.R.layout.simple_spinner_dropdown_item, modelManager.models)
+            adapter = readableSpinnerAdapter(modelManager.models)
             isEnabled = false // Choose and activate a model from the Downloads screen; the chat runs exactly one model.
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
@@ -128,19 +139,11 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, -2))
         downloadModelButton = button("Download selected AI model")
         downloadModelButton.setOnClickListener {
-            val selected = selectedQwenModel ?: modelManager.models[0]
-            worker.execute {
-                try {
-                    modelManager.startDownload(selected)
-                    runOnUiThread { status.text = "Downloading ${selected.title} over Wi-Fi. When complete, reopen Offline Chat to load it." }
-                } catch (error: Exception) {
-                    runOnUiThread { status.text = error.message ?: "Could not start model download." }
-                }
-            }
+            startActivity(Intent(this, SpeechDownloadsActivity::class.java))
         }
         root.addView(downloadModelButton, LinearLayout.LayoutParams(-1, dp(48)))
         languagePicker = Spinner(this).apply {
-            adapter = ArrayAdapter(this@OfflineAiChatActivity, android.R.layout.simple_spinner_dropdown_item, languages)
+            adapter = readableSpinnerAdapter(languages)
         }
         root.addView(languagePicker, LinearLayout.LayoutParams(-1, -2))
         speechEnginePicker = Spinner(this).apply {
@@ -152,7 +155,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         }
         root.addView(speechEnginePicker, LinearLayout.LayoutParams(-1, -2))
 
-        transcript = text("Welcome to Workly AI.\n\nType a message below and tap Send. Your text chat runs locally on this phone.", 15, primaryText)
+        transcript = text("Welcome to Workly AI.\n\nAsk me in Hindi, English or Gujarati. Your chat runs locally on this phone.", 15, primaryText)
         transcript.setPadding(dp(14), dp(14), dp(14), dp(14))
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -191,6 +194,22 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         setContentView(root)
     }
 
+    private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
+        object : ArrayAdapter<T>(this, android.R.layout.simple_spinner_item, items) {
+            private fun row(value: T) = TextView(this@OfflineAiChatActivity).apply {
+                text = value.toString()
+                textSize = 14f
+                setTextColor(primaryText)
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                setBackgroundColor(surface)
+            }
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                row(getItem(position)!!)
+            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                row(getItem(position)!!)
+        }
+
     private fun loadModel() {
         sendButton.isEnabled = false
         status.text = "Checking Qwen model and phone memory…"
@@ -218,11 +237,15 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                     "Qwen could not load. Free memory may be insufficient; try a smaller model."
                 }
                 runOnUiThread {
-                    status.text = "Ready · ${chosen.title} running locally"
+                    status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
                 }
             } catch (error: Exception) {
-                runOnUiThread { status.text = error.message ?: "Offline AI could not start." }
+                runOnUiThread {
+                    status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
+                    sendButton.isEnabled = false
+                    downloadModelButton.text = "Open Downloads / Retry model"
+                }
             }
         }
     }
