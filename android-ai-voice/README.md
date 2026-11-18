@@ -56,3 +56,6 @@ Open the `android-ai-voice/` folder as a standalone Gradle project in Android St
 - Minimum Android: API 24
 - Target SDK: 35
 - Java: 17
+- Gradle: 8.9
+- Android NDK: 27.2.12479018
+- CMake: 3.22.1
