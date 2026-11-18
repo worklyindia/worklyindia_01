@@ -106,7 +106,7 @@ export default function AndroidAppUpdates() {
         }
         const actualApkBytes = apkBlob.size;
         if (actualApkBytes !== release.apk_size_bytes) {
-          const { error: sizeUpdateError } = await supabase
+          const { error: sizeUpdateError } = await (supabase as any)
             .from("android_app_releases")
             .update({ apk_size_bytes: actualApkBytes })
             .eq("id", release.id);
