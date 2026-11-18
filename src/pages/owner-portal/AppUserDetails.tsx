@@ -46,7 +46,7 @@ export default function AppUserDetails() {
     const [u, i, s, a, ae] = await Promise.all([
       (supabase as any).rpc("get_owner_app_user_details"),
       supabase.from("app_installations").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
-      supabase.from("app_sessions").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
+      (supabase as any).from("app_sessions").select("*").eq("platform", "android_app").order("last_seen_at", { ascending: false }).limit(10000),
       (supabase as any).from("app_anonymous_installations").select("installation_id,last_seen_at,device_model,app_version").order("last_seen_at", { ascending: false }).limit(10000),
       (supabase as any).from("app_anonymous_sessions").select("session_id,installation_id,event_type,created_at").order("created_at", { ascending: false }).limit(10000),
     ]);
