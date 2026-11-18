@@ -22,6 +22,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         <activity android:name=".OfflineAiChatActivity" android:exported="false" />
+        <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
