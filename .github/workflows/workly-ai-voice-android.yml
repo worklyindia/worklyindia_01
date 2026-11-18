@@ -51,6 +51,36 @@ jobs:
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleDebug
 
+      - name: Prepare public release summary
+        shell: bash
+        run: |
+          {
+            echo "# Workly Voice — Public Release Summary"
+            echo
+            echo "| Field | Details |"
+            echo "|---|---|"
+            echo "| **Version name** | 1.0.0 |"
+            echo "| **Version code** | 1 |"
+            echo "| **Minimum supported version code** | 1 |"
+            echo "| **Application ID** | `com.worklyindia.aivoice` |"
+            echo
+            echo "## Release notes"
+            echo
+            echo "Initial Workly Voice Android preview release. Includes a separate voice-assistant app with Hindi, Indian English and Gujarati language selection; on-device Qwen 2.5 3B AI chat (model downloaded separately); Kokoro neural speech output for Hindi and English with Android TTS fallback; voice input with Android speech recognition and optional offline speech-model packs; and secure phone pairing / foreground relay controls."
+            echo
+            echo "## Important limitations"
+            echo
+            echo "- This is a **debug preview APK**, not a signed production release."
+            echo "- Large AI and speech models are downloaded separately; they are not bundled in the APK."
+            echo "- Gujarati speech output currently depends on the Android TTS engine."
+            echo "- Offline recognition accuracy, device performance and battery behavior require physical-device testing."
+            echo "- Website/Supabase relay source is review-only and has not been deployed to production."
+            echo
+            echo "## Download"
+            echo
+            echo "The `Workly-Voice-v1.0.0` APK artifact is attached to this workflow run after a successful build."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Rename APK for download
         run: cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk android-ai-voice/app/build/outputs/apk/debug/Workly-Voice-v1.0.0.apk
 
