@@ -12,9 +12,11 @@ This is an independent Android project. It does not change the existing Workly I
 
 Voice quality and language availability depend on the TTS/recognition engines installed on the device. Gujarati may be unavailable on some Android engines. Speech recognition may use internet and the device's configured recognition provider; this app does not promise offline recognition.
 
-## Important: public website server is a later milestone
+## Supabase phone relay (review branch only)
 
-This first milestone is an on-device speech app. A separate Supabase relay foundation has now been added to the review branch, but it is not deployed or connected to the app/website yet. A phone on mobile data is commonly behind carrier-grade NAT, so a website cannot reliably call the phone directly by its mobile IP. The relay uses outbound HTTPS and one-time pairing; do not expose an unauthenticated phone port or put credentials in the website bundle.
+The separate relay foundation now includes an authenticated website pairing-code page at `/settings/ai-voice-server`, one-time 5-minute pairing codes, a paired-device token encrypted with Android Keystore, and a user-started Android foreground service that polls over outbound HTTPS. The migration and Edge Function remain review-only and have NOT been deployed to the live Supabase project. A phone on Jio/mobile data is commonly behind carrier-grade NAT, so the website cannot call the phone directly by its mobile IP.
+
+Current remote behavior is deliberately limited: TTS jobs are spoken through the paired phone speaker and return a playback confirmation. Remote audio-file STT and generated audio-file delivery to the website are not implemented. The phone must remain powered, connected and running the foreground service. Android 15 applies time limits to data-sync foreground services; do not treat this as a guaranteed 24/7 host. No service-role key is included in the Android app; the embedded Supabase publishable key is public by design.
 
 ## Build
 
