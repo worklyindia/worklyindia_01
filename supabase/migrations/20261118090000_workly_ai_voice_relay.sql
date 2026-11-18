@@ -40,7 +40,7 @@ create table if not exists public.workly_ai_voice_jobs (
   created_at timestamptz not null default now(),
   started_at timestamptz,
   completed_at timestamptz,
-  expires_at timestamptz not null default (now() + interval '2 minutes')
+  expires_at timestamptz not null default (now() + interval '5 minutes')
 );
 
 create index if not exists workly_ai_voice_jobs_device_queue_idx
