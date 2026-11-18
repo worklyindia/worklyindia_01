@@ -54,6 +54,7 @@ export default function AIVoiceCall() {
   const [callState, setCallState] = useState<CallState>('idle');
   const [callStarted, setCallStarted] = useState(false);
   const [lastReply, setLastReply] = useState('');
+  const [spokenLines, setSpokenLines] = useState<string[]>([]);
   const [lastTranscript, setLastTranscript] = useState('');
   const [partialTranscript, setPartialTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -107,10 +108,27 @@ export default function AIVoiceCall() {
 
       const audio = replyAudioRef.current ?? new Audio();
       replyAudioRef.current = audio;
+      const speechWords = text.split(/\s+/).filter(Boolean);
+      const wordsPerLine = 7;
+      audio.ontimeupdate = () => {
+        if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+        const progress = Math.min(1, audio.currentTime / audio.duration);
+        const visibleWordCount = Math.max(1, Math.ceil(progress * speechWords.length));
+        const visibleWords = speechWords.slice(0, visibleWordCount);
+        const visibleLines: string[] = [];
+        for (let index = 0; index < visibleWords.length; index += wordsPerLine) {
+          visibleLines.push(visibleWords.slice(index, index + wordsPerLine).join(' '));
+        }
+        setSpokenLines(visibleLines.slice(-2));
+      };
       audio.onended = () => {
+        audio.ontimeupdate = null;
+        setSpokenLines([]);
         window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
       };
       audio.onerror = () => {
+        audio.ontimeupdate = null;
+        setSpokenLines([]);
         window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
       };
       audio.src = sourceUrl;
@@ -134,7 +152,9 @@ export default function AIVoiceCall() {
   const stopReply = useCallback(() => {
     if (bridge) bridge.stopVoiceReply?.();
     const audio = replyAudioRef.current;
+    setSpokenLines([]);
     if (audio) {
+      audio.ontimeupdate = null;
       audio.pause();
       audio.currentTime = 0;
     }
@@ -541,8 +561,26 @@ export default function AIVoiceCall() {
             <LottieSearchIcon size={132} />
           </div>
         </div>
+        <style>{`@keyframes chatwork-line-in { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }`}</style>
         <div className="mt-5 min-h-6 text-sm font-medium tracking-wide text-white/70">
           {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'Listening…' : ''}
+        </div>
+        <div
+          className="mt-5 flex min-h-[76px] w-full max-w-[340px] flex-col items-center justify-center gap-1 px-3 text-center"
+          aria-live="polite"
+          aria-atomic="false"
+        >
+          {spokenLines.length > 0 ? spokenLines.map((line, index) => (
+            <p
+              key={index}
+              className="w-full text-xl font-semibold leading-7 tracking-wide text-white drop-shadow-[0_0_14px_rgba(103,232,249,.35)] transition-all duration-300"
+              style={{ animation: "chatwork-line-in 280ms ease-out both" }}
+            >
+              {line}
+            </p>
+          )) : callState === 'speaking' && lastReply ? (
+            <p className="line-clamp-2 text-lg font-medium leading-7 text-white/80">{lastReply}</p>
+          ) : null}
         </div>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
