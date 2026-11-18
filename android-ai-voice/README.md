@@ -20,7 +20,7 @@ This is an independent Android project. This feature branch also adds a separate
 Speech recognition is not yet guaranteed to work offline. Gujarati neural TTS is not yet integrated; its availability depends on the installed Android TTS engine.
 
 
-## Offline Workly AI model (automatic Wi-Fi download)
+## Offline Workly AI model (automatic Wi-Fi or user-approved mobile-data download)
 
 The Android app now includes an on-demand downloader for the official
 `Qwen/Qwen2.5-3B-Instruct-GGUF` model using the `Q4_K_M` quantization:
@@ -29,8 +29,8 @@ The Android app now includes an on-demand downloader for the official
 - Exact Hub file size: 2,104,932,768 bytes (about 2.1 GB decimal).
 - Source: https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF
 - Direct download from Hugging Face; no Cloudflare/R2 dependency.
-- The model is not bundled in the APK. On the first app launch, the app automatically queues the download through Android DownloadManager; the transfer runs only on unmetered Wi-Fi.
-- DownloadManager handles the background transfer and retry behavior; the app shows progress and can cancel/delete the model. Mobile data and roaming are disabled for this download.
+- The model is not bundled in the APK. On first launch, the app asks whether large model downloads may use mobile data. The saved choice is applied to Qwen and the later Kokoro download. If mobile data is approved, Android DownloadManager may use Wi-Fi or mobile data; otherwise it uses unmetered Wi-Fi only.
+- DownloadManager handles the background transfer and retry behavior; the app shows progress and can cancel/delete the model. Roaming is always disabled. Mobile data is enabled only after the user explicitly approves it.
 - Stored in app-specific external storage. No broad storage permission is requested.
 - Before download, the app checks for the model size plus 512 MB free-space headroom; after download it checks the exact size and GGUF magic.
 
@@ -52,7 +52,7 @@ The Sherpa-ONNX Android runtime (v2.0.1) is included, with file-backed Kotlin ad
 Both adapters accept 16 kHz mono Float32 PCM and expose offline transcription. They are not yet connected to the microphone UI, and their model packs are not downloaded automatically. Android SpeechRecognizer remains the active STT path until the adapters, model downloads and real-device tests are complete.
 
 Kokoro 82M is now integrated through MediaPipe Tasks Audio:
-- The 294,783,298-byte kokoro_int8_fp16.litertlm bundle downloads automatically over unmetered Wi-Fi after the Qwen model is ready.
+- The 294,783,298-byte kokoro_int8_fp16.litertlm bundle downloads automatically after the Qwen model is ready, using the user's saved Wi-Fi/mobile-data choice.
 - Hindi uses the hf_alpha voice; Indian English currently uses af_heart.
 - The main Speak button uses Kokoro for Hindi and English when the model is ready, and falls back to Android TTS while downloading or if synthesis fails. Gujarati still uses Android TTS.
 - Kokoro's Android integration requires API 26+, so the app minimum was raised from API 24 to API 26 (Android 8.0).
@@ -61,7 +61,7 @@ Indic Tiny TTS is still not integrated into Android inference. It is not a drop-
 
 Approximate model weights for the requested speech stack: IndicConformer Hindi+Gujarati ~395 MB; Shruti Hindi+Gujarati ~108 MB; Indic Tiny TTS Hindi+Gujarati+English ~273 MB; Kokoro ~295 MB. Total is about 1.07 GB, in addition to Qwen (~2.1 GB). Model licensing/attribution must be retained: AI4Bharat MIT, Shruti Apache-2.0 (NOTICE required), Indic Tiny TTS CC-BY-4.0 for acoustic weights plus MIT Vocos, and Kokoro LiteRT bundle Apache-2.0.
 
-Do not mark IndicConformer, Shruti or Indic Tiny TTS as available offline until their download flows, checksum/size validation, UI wiring and real-device Hindi/Gujarati/English inference tests pass. Qwen and Kokoro are the only model packs currently queued for automatic Wi-Fi download.
+Do not mark IndicConformer, Shruti or Indic Tiny TTS as available offline until their download flows, checksum/size validation, UI wiring and real-device Hindi/Gujarati/English inference tests pass. Qwen and Kokoro are the only model packs currently queued for automatic download (Wi-Fi, or mobile data if explicitly approved).
 
 ## Supabase phone relay (review branch only)
 
