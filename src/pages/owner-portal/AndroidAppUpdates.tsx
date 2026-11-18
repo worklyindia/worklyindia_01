@@ -60,7 +60,7 @@ export default function AndroidAppUpdates() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("android_app_releases").select("*")
+    const { data, error } = await (supabase as any).from("android_app_releases").select("*")
       .order("version_code", { ascending: false }).limit(100);
     if (error) {
       toast.error("Android releases could not be loaded: " + error.message);
@@ -80,7 +80,7 @@ export default function AndroidAppUpdates() {
         body: { action: "cleanup_android_releases", public_release_id: activePublic.id },
       });
       if (!cleanupError && cleanupData?.success === true) {
-        const { data: refreshedRows, error: refreshError } = await supabase.from("android_app_releases")
+        const { data: refreshedRows, error: refreshError } = await (supabase as any).from("android_app_releases")
           .select("*").order("version_code", { ascending: false }).limit(100);
         if (!refreshError && refreshedRows) rows = refreshedRows as Release[];
       } else {
@@ -170,7 +170,7 @@ export default function AndroidAppUpdates() {
       // Publish the selected release first, then verify it is public before
       // unpublishing previous releases. The scheduled retention workflow only
       // deletes older releases after it sees this verified public row.
-      const { data: publishedRows, error: publishError } = await supabase.from("android_app_releases")
+      const { data: publishedRows, error: publishError } = await (supabase as any).from("android_app_releases")
         .update({ is_published: true, published_at: new Date().toISOString() })
         .eq("id", release.id)
         .select("id,version_code,is_published");
@@ -179,7 +179,7 @@ export default function AndroidAppUpdates() {
         throw new Error("The new Android release could not be verified as Public. Older releases were kept.");
       }
 
-      const { error: unpublishError } = await supabase.from("android_app_releases")
+      const { error: unpublishError } = await (supabase as any).from("android_app_releases")
         .update({ is_published: false, published_at: null })
         .neq("id", release.id)
         .eq("is_published", true);
@@ -233,7 +233,7 @@ export default function AndroidAppUpdates() {
     if (!release.is_published || updatingReleaseId) return;
     if (!window.confirm(`Unpublish Workly India v${release.version_name}? New downloads and update checks will no longer see it.`)) return;
     setUpdatingReleaseId(release.id);
-    const { error } = await supabase.from("android_app_releases")
+    const { error } = await (supabase as any).from("android_app_releases")
       .update({ is_published: false, published_at: null }).eq("id", release.id);
     setUpdatingReleaseId(null);
     if (error) toast.error("The release could not be unpublished: " + error.message);
