@@ -34,3 +34,7 @@ android {
     buildFeatures { buildConfig = true }
     kotlinOptions { jvmTarget = "17" }
 }
+dependencies {
+    // Offline ASR runtime for AI4Bharat IndicConformer and Shruti model packs.
+    implementation("com.github.k2-fsa:sherpa-onnx:v2.0.1")
+}
