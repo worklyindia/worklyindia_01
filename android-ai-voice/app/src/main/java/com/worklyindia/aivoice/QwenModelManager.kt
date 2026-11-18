@@ -10,8 +10,8 @@ import java.io.IOException
 import java.io.RandomAccessFile
 
 class QwenModelManager(context: Context) {
-    data class Model(val id: String, val title: String, val size: Long, val url: String, val fileName: String, val minFreeRam: Long) {
-        override fun toString() = "$title · %.1f GB".format(java.util.Locale.US, size / 1_000_000_000.0)
+    data class Model(val id: String, val title: String, val size: Long, val url: String, val fileName: String, val minFreeRam: Long, val premium: Boolean = false) {
+        override fun toString() = title + " · " + (size / 1_000_000) + " MB" + if (premium) " · Premium" else ""
     }
     enum class State { NOT_DOWNLOADED, PENDING, RUNNING, PAUSED, FAILED, READY }
     data class Snapshot(val state: State, val downloaded: Long = 0, val total: Long, val downloadId: Long = -1) {
@@ -24,18 +24,15 @@ class QwenModelManager(context: Context) {
     val models = listOf(
         Model("0.5b", "Qwen 2.5 0.5B Q4_K_M", 491400032L, "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf", "qwen2.5-0.5b-instruct-q4_k_m.gguf", 900L*1024*1024),
         Model("1.5b", "Qwen 2.5 1.5B Q4_K_M", 1117320736L, "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf", "qwen2.5-1.5b-instruct-q4_k_m.gguf", 1900L*1024*1024),
-        Model("3b", "Qwen 2.5 3B Q4_K_M", 2104932768L, "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf", "qwen2.5-3b-instruct-q4_k_m.gguf", 3500L*1024*1024)
+        Model("3b", "Qwen 2.5 3B Q4_K_M", 2104932768L, "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf", "qwen2.5-3b-instruct-q4_k_m.gguf", 3500L*1024*1024, true)
     )
     fun file(model: Model) = File(dir, model.fileName)
-    fun recommendedModel(availableRam: Long): Model = when {
-        availableRam >= models[2].minFreeRam -> models[2]
-        availableRam >= models[1].minFreeRam -> models[1]
-        else -> models[0]
-    }
+    fun recommendedModel(availableRam: Long): Model = models.lastOrNull { availableRam >= it.minFreeRam } ?: models.first()
+    fun isSupported(model: Model, availableRam: Long) = availableRam >= model.minFreeRam
     fun snapshot(model: Model): Snapshot {
-        val file=file(model)
-        if (valid(file, model)) return Snapshot(State.READY, model.size, model.size)
-        val id=prefs.getLong("download_${model.id}", -1)
+        val f=file(model)
+        if (valid(f, model)) return Snapshot(State.READY, model.size, model.size)
+        val id=prefs.getLong("download_" + model.id, -1)
         if (id <= 0) return Snapshot(State.NOT_DOWNLOADED, total=model.size)
         val c=dm.query(DownloadManager.Query().setFilterById(id)) ?: return Snapshot(State.FAILED,total=model.size,downloadId=id)
         c.use {
@@ -47,14 +44,14 @@ class QwenModelManager(context: Context) {
                 DownloadManager.STATUS_PENDING -> State.PENDING
                 DownloadManager.STATUS_RUNNING -> State.RUNNING
                 DownloadManager.STATUS_PAUSED -> State.PAUSED
-                DownloadManager.STATUS_SUCCESSFUL -> if(valid(file,model)) State.READY else State.FAILED
+                DownloadManager.STATUS_SUCCESSFUL -> if(valid(f,model)) State.READY else State.FAILED
                 else -> State.FAILED
             }
             return Snapshot(state,bytes,total,id)
         }
     }
     @Throws(IOException::class)
-    fun startDownload(model: Model): Long {
+    fun startDownload(model: Model, allowMobileData: Boolean = false): Long {
         val s=snapshot(model)
         if(s.state==State.READY) return -1
         if(s.state==State.RUNNING || s.state==State.PENDING || s.state==State.PAUSED) return s.downloadId
@@ -64,17 +61,22 @@ class QwenModelManager(context: Context) {
         if(available<required) throw IOException("Need %.1f GB free storage".format(java.util.Locale.US,required/1e9))
         file(model).delete()
         val request=DownloadManager.Request(Uri.parse(model.url))
-            .setTitle("Workly AI · ${model.title}")
+            .setTitle("Workly AI · " + model.title)
             .setDescription("Downloading offline AI model")
-            .setMimeType("application/octet-stream")
-            .setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI)
-            .setAllowedOverMetered(false)
+            .setAllowedNetworkTypes(if (allowMobileData) DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE else DownloadManager.Request.NETWORK_WIFI)
+            .setAllowedOverMetered(allowMobileData)
             .setAllowedOverRoaming(false)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalFilesDir(app,Environment.DIRECTORY_DOWNLOADS,"workly-ai/${model.fileName}")
+            .setDestinationInExternalFilesDir(app,Environment.DIRECTORY_DOWNLOADS,"workly-ai/" + model.fileName)
         val id=dm.enqueue(request)
-        prefs.edit().putLong("download_${model.id}",id).apply()
+        prefs.edit().putLong("download_" + model.id,id).apply()
         return id
+    }
+    fun cancelAndDelete(model: Model) {
+        val id=prefs.getLong("download_" + model.id,-1)
+        if(id>0) dm.remove(id)
+        file(model).delete()
+        prefs.edit().remove("download_" + model.id).apply()
     }
     fun valid(file: File, model: Model): Boolean {
         if(!file.isFile || file.length()!=model.size) return false
