@@ -49,7 +49,10 @@ class OfflineModelManager(context: Context) {
         val current = snapshot()
         if (current.state == State.READY) return -1L
         if (current.state == State.RUNNING || current.state == State.PENDING || current.state == State.PAUSED) {
-            return current.downloadId
+            val savedNetworkChoice = preferences.getBoolean(KEY_ALLOW_MOBILE_DATA, false)
+            if (savedNetworkChoice == allowMobileData) return current.downloadId
+            if (current.downloadId > 0L) downloadManager.remove(current.downloadId)
+            preferences.edit().remove(KEY_DOWNLOAD_ID).apply()
         }
 
         val directory = downloadDirectory
@@ -84,7 +87,7 @@ class OfflineModelManager(context: Context) {
             )
 
         val id = downloadManager.enqueue(request)
-        preferences.edit().putLong(KEY_DOWNLOAD_ID, id).apply()
+        preferences.edit().putLong(KEY_DOWNLOAD_ID, id).putBoolean(KEY_ALLOW_MOBILE_DATA, allowMobileData).apply()
         return id
     }
 
@@ -150,6 +153,7 @@ class OfflineModelManager(context: Context) {
 
         private const val PREFS_NAME = "workly_offline_ai_model"
         private const val KEY_DOWNLOAD_ID = "qwen25_3b_download_id"
+        private const val KEY_ALLOW_MOBILE_DATA = "allow_mobile_data_for_qwen"
         private const val MIN_FREE_SPACE_AFTER_DOWNLOAD = 512L * 1024L * 1024L
     }
 }
