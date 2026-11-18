@@ -66,7 +66,7 @@ jobs:
             echo
             echo "## Release notes"
             echo
-            echo "Initial Workly Voice Android preview release. Includes a separate voice-assistant app with Hindi, Indian English and Gujarati language selection; on-device Qwen 2.5 3B AI chat (model downloaded separately); Kokoro neural speech output for Hindi and English with Android TTS fallback; voice input with Android speech recognition and optional offline speech-model packs; and secure phone pairing / foreground relay controls."
+            echo "Initial Workly Voice Android preview release. Includes a separate voice-assistant app with Hindi, Indian English and Gujarati language selection; on-device Qwen 2.5 3B AI chat (model downloaded separately); Android TTS and optional Indic Tiny TTS speech packs; voice input with Android speech recognition and optional offline speech-model packs; and secure phone pairing / foreground relay controls."
             echo
             echo "## Important limitations"
             echo
