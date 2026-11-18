@@ -86,6 +86,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         buildScreen()
         tts = TextToSpeech(this, this)
         updateSpeechAvailability()
+        // Queue the Qwen offline model automatically on first launch. Android
+        // DownloadManager is restricted to unmetered Wi-Fi by OfflineModelManager.
+        offlineModelHandler.postDelayed({ ensureAutomaticOfflineModelDownload() }, 1200L)
     }
 
     private fun buildScreen() {
@@ -166,7 +169,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val offlineCard = card()
         offlineCard.addView(label("Qwen2.5-3B-Instruct · Q4_K_M", 16, 0xFF142033.toInt(), true))
         offlineCard.addView(label(
-            "On-demand model download · about 2.1 GB. The model is downloaded only after you tap the button and is stored in this app's private storage. It is not included in the APK.",
+            "Automatic first-launch download · about 2.1 GB over Wi-Fi only. The model is stored in this app's private storage, not inside the APK. No mobile data is used.",
             12, 0xFF536276.toInt(), false
         ).also { it.setPadding(0, dp(7), 0, dp(10)) })
         offlineModelStatusText = label("Checking offline model…", 13, 0xFF174B36.toInt(), true)
@@ -177,7 +180,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             visibility = View.GONE
         }
         offlineCard.addView(offlineModelProgressBar, matchWrap().also { it.topMargin = dp(10) })
-        offlineModelActionButton = button("Download offline AI model")
+        offlineModelActionButton = button("Automatic download · Wi-Fi only")
         offlineModelActionButton.setOnClickListener { onOfflineModelAction() }
         offlineCard.addView(offlineModelActionButton, matchWrap().also { it.topMargin = dp(10) })
         offlineModelChatButton = button("Open offline AI chat").apply {
@@ -243,6 +246,27 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
 
 
+    private fun ensureAutomaticOfflineModelDownload() {
+        if (!::offlineModelStatusText.isInitialized) return
+        try {
+            val snapshot = offlineModelManager.snapshot()
+            if (snapshot.state == OfflineModelManager.State.NOT_DOWNLOADED ||
+                snapshot.state == OfflineModelManager.State.FAILED
+            ) {
+                offlineModelManager.startDownload()
+            }
+            refreshOfflineModelUi()
+            val state = offlineModelManager.snapshot().state
+            if (state == OfflineModelManager.State.PENDING ||
+                state == OfflineModelManager.State.RUNNING ||
+                state == OfflineModelManager.State.PAUSED
+            ) startOfflineModelPolling()
+        } catch (error: Exception) {
+            setOfflineModelStatus(error.message ?: "Automatic AI download could not start. Tap retry.")
+            offlineModelActionButton.text = "Retry automatic download"
+        }
+    }
+
     private fun onOfflineModelAction() {
         val state = try {
             offlineModelManager.snapshot().state
@@ -265,7 +289,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             else -> AlertDialog.Builder(this)
                 .setTitle("Download Workly AI model?")
-                .setMessage("This download is about 2.1 GB. Wi-Fi is recommended. Mobile data charges may apply if you continue using mobile data.")
+                .setMessage("This download is about 2.1 GB and uses Wi-Fi only. Mobile data will not be used. Continue?")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Download") { _, _ -> startOfflineModelDownload() }
                 .show()
@@ -295,8 +319,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             offlineModelChatButton.isEnabled = snapshot.state == OfflineModelManager.State.READY
             when (snapshot.state) {
                 OfflineModelManager.State.NOT_DOWNLOADED -> {
-                    offlineModelStatusText.text = "Model not downloaded · about 2.1 GB required"
-                    offlineModelActionButton.text = "Download offline AI model"
+                    offlineModelStatusText.text = "Waiting for Wi-Fi · about 2.1 GB required"
+                    offlineModelActionButton.text = "Retry automatic download"
                 }
                 OfflineModelManager.State.PENDING -> {
                     offlineModelStatusText.text = "Download queued… ${snapshot.progressPercent}%"
