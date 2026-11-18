@@ -82,7 +82,7 @@ export default function AIVoiceCall() {
       detail: { message: error instanceof Error ? error.message : 'Shruti microphone could not start.' },
     })));
     return true;
-  }, [callState]);
+  }, []);
   const stopRecognition = useCallback(() => { stopShrutiRecognition(); }, []);
   const speakReply = useCallback(async (text: string, language: string) => {
     const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
@@ -317,7 +317,7 @@ export default function AIVoiceCall() {
     const text = detail?.text?.trim();
     if (!text || text === lastSubmittedTranscriptRef.current) return;
     setPartialTranscript(text);
-    if (callState !== 'speaking') setVoiceStage('Speech recognized; waiting for a pause…');
+    if (callStateRef.current !== 'speaking') setVoiceStage('Speech recognized; waiting for a pause…');
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
     partialFinalizeTimerRef.current = setTimeout(() => {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
