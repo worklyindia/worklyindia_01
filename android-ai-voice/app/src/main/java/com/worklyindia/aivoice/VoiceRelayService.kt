@@ -139,7 +139,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         tts?.shutdown()
         getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, "Phone server stopped.").apply()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
-        else @Suppress("DEPRECATION") stopForeground(true)
+        else stopForeground(true)
         super.onDestroy()
     }
 
