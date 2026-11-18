@@ -90,6 +90,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         micButton.setOnClickListener { startVoiceInput() }
         actions.addView(micButton, LinearLayout.LayoutParams(0, dp(52), 1f))
         sendButton = button("Send")
+        val contextPrompt = if (conversationHistory.isEmpty()) prompt else
+            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
         sendButton.isEnabled = false
         sendButton.setOnClickListener { sendPrompt() }
         actions.addView(sendButton, LinearLayout.LayoutParams(0, dp(52), 1f))
@@ -134,11 +136,11 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         sendButton.isEnabled = false
         worker.execute {
             val answer = try {
-                engine.generate(prompt)
+                engine.generate(contextPrompt)
             } catch (error: Exception) {
                 "Sorry, offline AI could not answer: ${error.message ?: "please try again"}"
             }
-            conversationHistory.append("User: ").append(prompt).append("\\nAssistant: ").append(answer).append("\\n")
+            conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
             runOnUiThread {
                 replaceThinking(answer)
