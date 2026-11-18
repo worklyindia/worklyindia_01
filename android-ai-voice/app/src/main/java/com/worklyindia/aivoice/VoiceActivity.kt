@@ -189,17 +189,14 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         }
         page.addView(offlineSpeechEnginePicker, matchWrap().also { it.topMargin = dp(8) })
         val offlineSpeechCard = card()
-        offlineSpeechCard.addView(label("Offline Hindi / Gujarati recognition", 16, 0xFF142033.toInt(), true))
+        offlineSpeechCard.addView(label("Offline Hindi / English / Gujarati recognition", 16, 0xFF142033.toInt(), true))
         speechPackStatusText = label("Optional model packs are not downloaded.", 12, 0xFF536276.toInt(), false)
         offlineSpeechCard.addView(speechPackStatusText)
-        offlineSpeechCard.addView(button("Download AI4Bharat IndicConformer INT8").apply {
-            setOnClickListener { downloadSelectedSpeechPack(shruti = false) }
-        }, matchWrap().also { it.topMargin = dp(8) })
-        offlineSpeechCard.addView(button("Download Shruti ONNX").apply {
-            setOnClickListener { downloadSelectedSpeechPack(shruti = true) }
+        offlineSpeechCard.addView(button("Download selected language · IndicConformer").apply {
+            setOnClickListener { downloadSelectedSpeechPack() }
         }, matchWrap().also { it.topMargin = dp(8) })
         offlineSpeechCard.addView(label(
-            "Choose Hindi or Gujarati above first. Downloads use your saved Wi-Fi/mobile-data permission. The Android online/offline provider remains the active microphone path until native audio capture is connected and tested.",
+            "Choose Hindi, English or Gujarati above first. Downloads use your saved Wi-Fi/mobile-data permission. Once downloaded, Start listening uses this offline engine.",
             12, 0xFF65748B.toInt(), false
         ).also { it.setPadding(0, dp(8), 0, 0) })
         page.addView(offlineSpeechCard)
@@ -531,26 +528,27 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         setStatus("${prefix?.let { "$it " } ?: ""}Speaking ${lang.label}…")
     }
 
-    private fun downloadSelectedSpeechPack(shruti: Boolean = false) {
-        val language = when {
-            selectedLanguage().tag.startsWith("hi") -> "hi"
-            selectedLanguage().tag.startsWith("gu") -> "gu"
-            else -> {
-                setStatus("Select Hindi, English or Gujarati to download this offline recognition model.")
-                return
-            }
+    private fun selectedSpeechLanguageCode(): String = when {
+        selectedLanguage().tag.startsWith("hi") -> "hi"
+        selectedLanguage().tag.startsWith("en") -> "en"
+        selectedLanguage().tag.startsWith("gu") -> "gu"
+        else -> error("Select Hindi, English or Gujarati.")
+    }
+
+    private fun downloadSelectedSpeechPack() {
+        val language = runCatching { selectedSpeechLanguageCode() }.getOrElse {
+            setStatus(it.message ?: "Select a supported language.")
+            return
         }
-        val pack = runCatching {
-            if (shruti) SpeechModelCatalog.shruti(language) else SpeechModelCatalog.indicConformer(language)
-        }.getOrElse {
+        val pack = runCatching { SpeechModelCatalog.indicConformer(language) }.getOrElse {
             setStatus(it.message ?: "Could not prepare speech model.")
             return
         }
         requestDownloadNetworkChoice { allowMobile ->
             runCatching {
                 val snapshot = speechPackManager.start(pack, allowMobile)
-                speechPackStatusText.text = "${pack.title}: ${snapshot.state} · about ${snapshot.totalBytes / 1_000_000} MB"
-                setStatus("Offline speech model download queued. Android will show transfer progress.")
+                speechPackStatusText.text = "${pack.title} · ${language.uppercase()} · ${snapshot.state} · about ${snapshot.totalBytes / 1_000_000} MB"
+                setStatus("Offline speech model download queued.")
             }.onFailure {
                 speechPackStatusText.text = it.message ?: "Speech model download failed to start."
             }
@@ -559,21 +557,21 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun refreshSpeechPackStatus() {
         if (!::speechPackStatusText.isInitialized) return
-        val language = when {
-            selectedLanguage().tag.startsWith("hi") -> "hi"
-            selectedLanguage().tag.startsWith("gu") -> "gu"
-            else -> return
-        }
-        val packs = listOf(
-            SpeechModelCatalog.indicConformer(language),
-            SpeechModelCatalog.shruti(language)
-        )
-        speechPackStatusText.text = packs.joinToString(" · ") { pack ->
-            val snapshot = speechPackManager.snapshot(pack)
-            "${if (pack.id.startsWith("shruti")) "Shruti" else "IndicConformer"}: ${snapshot.state} (${snapshot.percent}%)"
-        }
+        val language = runCatching { selectedSpeechLanguageCode() }.getOrNull() ?: return
+        val pack = SpeechModelCatalog.indicConformer(language)
+        val snapshot = speechPackManager.snapshot(pack)
+        speechPackStatusText.text = "IndicConformer ${language.uppercase()}: ${snapshot.state} (${snapshot.percent}%)"
     }
 
+    private fun startOfflineListening() {
+        val language = runCatching { selectedSpeechLanguageCode() }.getOrElse {
+            setStatus(it.message ?: "Select a supported language.")
+            return
+        }
+        val pack = runCatching { SpeechModelCatalog.indicConformer(language) }.getOrElse {
+            setStatus(it.message ?: "Could not select offline speech model.")
+            return
+        }
     private fun startOfflineListening(shruti: Boolean) {
         val language = when {
             selectedLanguage().tag.startsWith("hi") -> "hi"
@@ -611,8 +609,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             var recorder: AudioRecord? = null
             var engine: OfflineSpeechRecognizer? = null
             try {
-                val speechEngine = if (shruti) OfflineSpeechEngineFactory.openShruti(this, language)
-                    else OfflineSpeechEngineFactory.openIndicConformer(this, language)
+                val speechEngine = OfflineSpeechEngineFactory.openIndicConformer(this, language)
                 engine = speechEngine
                 val audio = AudioRecord(
                     MediaRecorder.AudioSource.VOICE_RECOGNITION,
@@ -670,8 +667,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             return
         }
         when (offlineSpeechEnginePicker.selectedItemPosition) {
-            1 -> { startOfflineListening(shruti = false); return }
-            2 -> { startOfflineListening(shruti = true); return }
+            0 -> { startOfflineListening(); return }
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             setStatus("No speech recognition service is installed on this phone.")
