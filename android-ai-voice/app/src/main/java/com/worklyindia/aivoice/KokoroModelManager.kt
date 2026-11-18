@@ -35,8 +35,11 @@ class KokoroModelManager(context: Context) {
     fun startDownload(allowMobileData: Boolean = false): Long {
         val current = snapshot()
         if (current.state == State.READY) return -1L
-        if (current.state == State.PENDING || current.state == State.RUNNING || current.state == State.PAUSED) {
-            return current.downloadId
+        if (current.state == State.RUNNING || current.state == State.PENDING || current.state == State.PAUSED) {
+            val savedNetworkChoice = preferences.getBoolean(KEY_ALLOW_MOBILE_DATA, false)
+            if (savedNetworkChoice == allowMobileData) return current.downloadId
+            if (current.downloadId > 0L) manager.remove(current.downloadId)
+            preferences.edit().remove(KEY_ID).apply()
         }
         if (!directory.exists() && !directory.mkdirs()) {
             throw IOException("Could not create the Kokoro model folder.")
@@ -57,7 +60,7 @@ class KokoroModelManager(context: Context) {
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(app, Environment.DIRECTORY_DOWNLOADS, "workly-voice/${KokoroSpeechEngine.MODEL_FILE_NAME}")
         val id = manager.enqueue(request)
-        prefs.edit().putLong(KEY_ID, id).apply()
+        prefs.edit().putLong(KEY_ID, id).putBoolean(KEY_ALLOW_MOBILE_DATA, allowMobileData).apply()
         return id
     }
 
@@ -97,5 +100,6 @@ class KokoroModelManager(context: Context) {
 
     companion object {
         private const val KEY_ID = "kokoro_download_id"
+        private const val KEY_ALLOW_MOBILE_DATA = "allow_mobile_data_for_kokoro"
     }
 }
