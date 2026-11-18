@@ -11,6 +11,7 @@ import com.google.mediapipe.tasks.audio.texttospeech.TextToSpeechOptions
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * On-device Kokoro 82M multilingual TTS.
@@ -91,6 +92,17 @@ class KokoroSpeechEngine private constructor(
             require(modelFile.isFile && modelFile.length() == MODEL_SIZE_BYTES) {
                 "Kokoro model is missing or incomplete."
             }
+            val digest = MessageDigest.getInstance("SHA-256")
+            modelFile.inputStream().buffered().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            val actualSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+            require(actualSha256 == MODEL_SHA256) { "Kokoro model checksum validation failed. Delete and download it again." }
             val options = TextToSpeechOptions(
                 baseOptions = BaseOptions.builder()
                     .setModelAssetPath(modelFile.absolutePath)
