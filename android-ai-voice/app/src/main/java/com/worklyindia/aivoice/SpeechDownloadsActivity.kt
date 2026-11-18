@@ -103,11 +103,16 @@ class SpeechDownloadsActivity : Activity() {
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         card.addView(status);card.addView(progress);card.addView(action)
-        rows.add(DownloadRow(status,progress,action) {
+        lateinit var row: DownloadRow
+        row=DownloadRow(status,progress,action) {
             val s=runCatching { speechManager.snapshot(pack) }.getOrNull() ?: return@DownloadRow
+            val now=android.os.SystemClock.elapsedRealtime()
+            val speed=if(row.lastAt>0 && now>row.lastAt && s.downloadedBytes>=row.lastBytes) (s.downloadedBytes-row.lastBytes)*1000L/(now-row.lastAt) else 0L
+            row.lastAt=now; row.lastBytes=s.downloadedBytes
+            val speedText=if(s.state==SpeechPackDownloadManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
             status.text=when(s.state) {
                 SpeechPackDownloadManager.State.COMPLETE -> "Ready · installed"
-                SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB"
+                SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB" + speedText
                 SpeechPackDownloadManager.State.PENDING -> "Waiting for network…"
                 SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
                 SpeechPackDownloadManager.State.FAILED -> "Download failed · tap Retry"
@@ -116,7 +121,9 @@ class SpeechDownloadsActivity : Activity() {
             progress.progress=s.percent; progress.visibility=if(s.state==SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
             action.visibility=if(s.state==SpeechPackDownloadManager.State.COMPLETE || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-        })
+        }
+        rows.add(row)
+        row.refresh()
     }
     private fun withNetworkChoice(action:(Boolean)->Unit) {
         val prefs=getSharedPreferences("workly_model_download_preferences",MODE_PRIVATE)
