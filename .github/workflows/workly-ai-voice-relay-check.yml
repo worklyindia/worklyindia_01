@@ -27,5 +27,9 @@ jobs:
           deno-version: v2.x
       - name: Validate Deno formatting
         run: deno fmt supabase/functions/workly-ai-voice-relay/index.ts
+      - name: Install Edge Function dependencies
+        working-directory: supabase/functions/workly-ai-voice-relay
+        run: deno install
       - name: Type-check Edge Function
-        run: deno check supabase/functions/workly-ai-voice-relay/index.ts
+        working-directory: supabase/functions/workly-ai-voice-relay
+        run: deno check index.ts
