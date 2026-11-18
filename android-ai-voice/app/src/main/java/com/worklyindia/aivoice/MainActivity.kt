@@ -494,12 +494,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .getString(VoiceRelayService.STATUS_KEY, "Phone server is stopped.")
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (::relayStatusText.isInitialized) refreshRelayStatus()
-        if (::offlineModelStatusText.isInitialized) startOfflineModelPolling()
-    }
-
     private fun speakText() {
         val text = inputText.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) { inputText.error = "Enter text to speak"; return }
@@ -646,6 +640,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onResume() {
         super.onResume()
+        if (::relayStatusText.isInitialized) refreshRelayStatus()
         if (::offlineModelStatusText.isInitialized) {
             refreshOfflineModelUi()
             val qwenState = runCatching { offlineModelManager.snapshot().state }.getOrNull()
