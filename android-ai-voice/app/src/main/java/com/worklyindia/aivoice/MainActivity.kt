@@ -47,6 +47,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var offlineModelStatusText: TextView
     private lateinit var offlineModelProgressBar: ProgressBar
     private lateinit var offlineModelActionButton: Button
+    private lateinit var offlineModelChatButton: Button
     private val offlineModelManager by lazy { OfflineModelManager(this) }
     private val offlineModelHandler = Handler(Looper.getMainLooper())
     private val offlineModelPoll = object : Runnable {
@@ -179,8 +180,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         offlineModelActionButton = button("Download offline AI model")
         offlineModelActionButton.setOnClickListener { onOfflineModelAction() }
         offlineCard.addView(offlineModelActionButton, matchWrap().also { it.topMargin = dp(10) })
+        offlineModelChatButton = button("Open offline AI chat").apply {
+            isEnabled = false
+            setOnClickListener { startActivity(Intent(this@MainActivity, OfflineAiChatActivity::class.java)) }
+        }
+        offlineCard.addView(offlineModelChatButton, matchWrap().also { it.topMargin = dp(8) })
         offlineCard.addView(label(
-            "Important: this step downloads and verifies the model file. The on-device inference/chat engine is not connected yet, so downloading alone does not activate offline AI. Voice input/output above still uses Android's installed speech services.",
+            "After the model is downloaded, open Offline AI Chat to run Qwen on this phone. Chat runs locally. Voice input asks Android for offline speech recognition; offline language packs must be installed. Voice playback uses the installed Android TTS voice.",
             12, 0xFF65748B.toInt(), false
         ).also { it.setPadding(0, dp(10), 0, 0) })
         page.addView(offlineCard)
@@ -286,6 +292,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 snapshot.state == OfflineModelManager.State.PAUSED
             offlineModelProgressBar.visibility = if (active || snapshot.state == OfflineModelManager.State.READY) View.VISIBLE else View.GONE
             offlineModelProgressBar.progress = snapshot.progressPercent
+            offlineModelChatButton.isEnabled = snapshot.state == OfflineModelManager.State.READY
             when (snapshot.state) {
                 OfflineModelManager.State.NOT_DOWNLOADED -> {
                     offlineModelStatusText.text = "Model not downloaded · about 2.1 GB required"
@@ -310,7 +317,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     offlineModelActionButton.text = "Retry download"
                 }
                 OfflineModelManager.State.READY -> {
-                    offlineModelStatusText.text = "Model downloaded and GGUF file verified · 2.1 GB"
+                    offlineModelStatusText.text = "Model downloaded and GGUF file verified · 2.1 GB. Offline AI chat is ready to open."
                     offlineModelActionButton.text = "Delete downloaded model"
                 }
             }
