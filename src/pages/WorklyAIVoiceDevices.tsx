@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Copy, RefreshCw, Smartphone, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ export default function WorklyAIVoiceDevices() {
     return () => window.clearInterval(timer);
   }, [pairing]);
 
-  const refreshDevices = async () => {
+  const refreshDevices = useCallback(async () => {
     if (!user) return;
     setDevicesBusy(true);
     try {
@@ -48,7 +48,7 @@ export default function WorklyAIVoiceDevices() {
     } finally {
       setDevicesBusy(false);
     }
-  };
+  }, [user]);
 
   const revokeDevice = async (deviceId: string) => {
     try {
@@ -64,7 +64,7 @@ export default function WorklyAIVoiceDevices() {
     }
   };
 
-  useEffect(() => { if (user) void refreshDevices(); }, [user?.id]);
+  useEffect(() => { if (user) void refreshDevices(); }, [user, refreshDevices]);
 
   const generateCode = async () => {
     if (!user) {
