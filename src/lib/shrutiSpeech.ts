@@ -11,9 +11,13 @@ let media: MediaStream | null = null;
 let context: AudioContext | null = null;
 let processor: ScriptProcessorNode | null = null;
 let source: MediaStreamAudioSourceNode | null = null;
+let highPass: BiquadFilterNode | null = null;
 let chunks: Float32Array[] = [];
+let preRoll: Float32Array[] = [];
 let speechStartedAt = 0;
 let lastVoiceAt = 0;
+let noiseFloor = 0.003;
+let speechThreshold = 0.018;
 let transcribing = false;
 let active = false;
 
@@ -106,42 +110,82 @@ export async function startShrutiRecognition(): Promise<boolean> {
   }
   await prepareShrutiRecognition();
   media = await navigator.mediaDevices.getUserMedia({
-    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    audio: {
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      latency: 0.02,
+    },
   });
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) throw new Error('This device does not support on-device audio capture.');
   context = new AudioContextClass();
   await context.resume();
   source = context.createMediaStreamSource(media);
+  highPass = context.createBiquadFilter();
+  highPass.type = 'highpass';
+  highPass.frequency.value = 110;
+  highPass.Q.value = 0.707;
   processor = context.createScriptProcessor(4096, 1, 1);
   const silentGain = context.createGain();
   silentGain.gain.value = 0;
-  source.connect(processor);
+  source.connect(highPass);
+  highPass.connect(processor);
   processor.connect(silentGain);
   silentGain.connect(context.destination);
   chunks = [];
+  preRoll = [];
+  noiseFloor = 0.003;
+  speechThreshold = 0.018;
   active = true;
   speechStartedAt = 0;
   lastVoiceAt = 0;
   processor.onaudioprocess = (event) => {
-    if (!active || transcribing) return;
+    if (!active) return;
     const input = event.inputBuffer.getChannelData(0);
+    const frame = new Float32Array(input);
     let energy = 0;
-    for (let i = 0; i < input.length; i += 1) energy += input[i] * input[i];
+    let peak = 0;
+    for (let i = 0; i < input.length; i += 1) {
+      const sample = Math.abs(input[i]);
+      energy += input[i] * input[i];
+      if (sample > peak) peak = sample;
+    }
     const rms = Math.sqrt(energy / input.length);
     const now = Date.now();
-    if (rms > 0.012) {
-      if (!speechStartedAt) speechStartedAt = now;
+
+    // Track the room-noise baseline only while speech is not active.
+    // A high-pass filter above removes much of low-frequency wind/handling rumble.
+    if (!speechStartedAt) {
+      noiseFloor = noiseFloor * 0.94 + Math.min(rms, 0.025) * 0.06;
+      speechThreshold = Math.max(0.012, Math.min(0.035, noiseFloor * 3.2 + 0.006));
+      preRoll.push(frame);
+      if (preRoll.length > 4) preRoll.shift();
+    }
+
+    const isVoiceFrame = rms >= speechThreshold && peak >= speechThreshold * 1.8;
+    if (isVoiceFrame) {
+      if (!speechStartedAt) {
+        speechStartedAt = now;
+        chunks = preRoll.map((part) => new Float32Array(part));
+      }
       lastVoiceAt = now;
     }
-    if (speechStartedAt) chunks.push(new Float32Array(input));
-    if (speechStartedAt && now - lastVoiceAt > 950) {
+
+    if (speechStartedAt) chunks.push(frame);
+
+    // Longer hangover prevents short wind gusts or quiet syllable gaps from
+    // chopping a sentence into multiple partial utterances.
+    if (speechStartedAt && now - lastVoiceAt > 1500) {
       speechStartedAt = 0;
       lastVoiceAt = 0;
+      preRoll = [];
       submitUtterance();
     } else if (speechStartedAt && now - speechStartedAt > 18000) {
       speechStartedAt = 0;
       lastVoiceAt = 0;
+      preRoll = [];
       submitUtterance();
     }
   };
@@ -154,10 +198,14 @@ export function stopShrutiRecognition(): void {
   active = false;
   if (processor) { processor.onaudioprocess = null; processor.disconnect(); processor = null; }
   if (source) { source.disconnect(); source = null; }
+  if (highPass) { highPass.disconnect(); highPass = null; }
   if (media) { media.getTracks().forEach((track) => track.stop()); media = null; }
   if (context) { void context.close(); context = null; }
   chunks = [];
+  preRoll = [];
   speechStartedAt = 0;
   lastVoiceAt = 0;
+  noiseFloor = 0.003;
+  speechThreshold = 0.018;
   transcribing = false;
 }
