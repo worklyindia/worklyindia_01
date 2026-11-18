@@ -1,6 +1,7 @@
 package com.worklyindia.aivoice
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -105,6 +106,11 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         sendButton.isEnabled = false
         worker.execute {
             try {
+                val memoryInfo = ActivityManager.MemoryInfo()
+                (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memoryInfo)
+                check(memoryInfo.totalMem >= 6L * 1024L * 1024L * 1024L) {
+                    "Qwen 3B needs a phone with at least 6 GB RAM. This phone may not have enough memory."
+                }
                 val snapshot = modelManager.snapshot()
                 check(snapshot.state == OfflineModelManager.State.READY) {
                     "Download the Qwen model from the previous screen first."
