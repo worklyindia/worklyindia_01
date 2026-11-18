@@ -29,8 +29,8 @@ The Android app now includes an on-demand downloader for the official
 - Exact Hub file size: 2,104,932,768 bytes (about 2.1 GB decimal).
 - Source: https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF
 - Direct download from Hugging Face; no Cloudflare/R2 dependency.
-- The model is not bundled in the APK. Users explicitly start the download.
-- DownloadManager handles the background transfer and retry behavior; the app shows progress and can cancel/delete the model.
+- The model is not bundled in the APK. On the first app launch, the app automatically queues the download through Android DownloadManager; the transfer runs only on unmetered Wi-Fi.
+- DownloadManager handles the background transfer and retry behavior; the app shows progress and can cancel/delete the model. Mobile data and roaming are disabled for this download.
 - Stored in app-specific external storage. No broad storage permission is requested.
 - Before download, the app checks for the model size plus 512 MB free-space headroom; after download it checks the exact size and GGUF magic.
 
@@ -42,6 +42,10 @@ The Android project now also contains a pinned llama.cpp native runtime build an
 - Qwen loading is blocked on devices reporting less than 6 GB total RAM. Actual performance still depends on the phone's chipset, free RAM and thermal limits.
 - Basic chat and text-based tasks work locally; web browsing, live job search, external integrations and server-side tools are not available while offline.
 - The APK build and real-device inference/voice tests are still required before calling this feature verified.
+
+## Speech model integration status
+
+The app UI currently uses Android's installed SpeechRecognizer and TextToSpeech providers. AI4Bharat IndicConformer INT8, Indic Tiny TTS, Kokoro and Shruti are **not yet integrated as native Android inference engines or auto-downloaded model packs**. They must not be presented as available offline engines until the Sherpa-ONNX/ONNX Runtime integration, model-specific preprocessing, model checksums, and real-device Hindi/Gujarati/English tests are completed. The automatic first-launch Wi-Fi download in this milestone applies to Qwen only.
 
 ## Supabase phone relay (review branch only)
 
