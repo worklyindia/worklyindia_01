@@ -98,7 +98,7 @@ export default function WorklyAIVoiceDevices() {
     setVoiceStatus("Sending a voice request to your paired phone…");
     try {
       const { data: created, error: createError } = await supabase.functions.invoke<{ job: { id: string } }>("workly-ai-voice-relay", {
-        body: { action: "create_job", job_type: "tts", payload: { text: voiceText.trim().slice(0, 4000), language: voiceLanguage } },
+        body: { action: "create_job", job_type: "tts", payload: { text: voiceText.trim().slice(0, 1000), language: voiceLanguage } },
       });
       if (createError) throw createError;
       const jobId = created?.job?.id;
@@ -219,7 +219,7 @@ export default function WorklyAIVoiceDevices() {
           </label>
           <label className="block space-y-1 text-sm font-medium">
             Text to speak
-            <textarea value={voiceText} onChange={(event) => setVoiceText(event.target.value)} rows={3} maxLength={4000} className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm" />
+            <textarea value={voiceText} onChange={(event) => setVoiceText(event.target.value)} rows={3} maxLength={1000} className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm" />
           </label>
           <Button onClick={sendVoiceTest} disabled={voiceBusy || !user || !voiceText.trim()} className="w-full">
             {voiceBusy ? "Waiting for phone…" : "Send voice test to phone"}
