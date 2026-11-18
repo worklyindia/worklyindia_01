@@ -8,5 +8,5 @@ const IST = "Asia/Kolkata";
 export const formatChatStamp = (date: string | Date = new Date()): string => {
   const d = typeof date === "string" ? new Date(date) : date;
   if (isNaN(d.getTime())) return "";
-  return formatInTimeZone(d, IST, "dd MMMM yyyy '•' hh:mm:ss a");
+  return formatInTimeZone(d, IST, "dd MMMM yyyy hh:mm:ss a");
 };
