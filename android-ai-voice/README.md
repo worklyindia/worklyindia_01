@@ -16,7 +16,7 @@ Voice quality and language availability depend on the TTS/recognition engines in
 
 The separate relay foundation now includes an authenticated website pairing-code page at `/settings/ai-voice-server`, one-time 5-minute pairing codes, a paired-device token encrypted with Android Keystore, and a user-started Android foreground service that polls over outbound HTTPS. The migration and Edge Function remain review-only and have NOT been deployed to the live Supabase project. A phone on Jio/mobile data is commonly behind carrier-grade NAT, so the website cannot call the phone directly by its mobile IP.
 
-Current remote behavior is deliberately limited: TTS jobs are spoken through the paired phone speaker and return a playback confirmation. Remote audio-file STT and generated audio-file delivery to the website are not implemented. The phone must remain powered, connected and running the foreground service. Android 15 applies time limits to data-sync foreground services; do not treat this as a guaranteed 24/7 host. No service-role key is included in the Android app; the embedded Supabase publishable key is public by design.
+Current remote behavior is deliberately limited: TTS jobs are spoken through the paired phone speaker and return a playback confirmation. Remote audio-file STT and generated audio-file delivery to the website are not implemented. The phone must remain powered, connected and running the foreground service. Android 15+ limits data-sync foreground services to a total of 6 hours per 24 hours. The service handles the OS timeout and stops cleanly; the user must reopen the app to start it again. No service-role key is included in the Android app; the embedded Supabase publishable key is public by design.
 
 ## Build
 
