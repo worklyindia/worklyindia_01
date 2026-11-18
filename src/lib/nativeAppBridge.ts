@@ -36,7 +36,7 @@ export const isWorklyAndroidApp = (): boolean =>
   !!(window as unknown as WorklyWindow).WorklyAndroid;
 
 export const getWorklyAndroidBridge = (): WorklyAndroidBridge | null =>
-  isWorklyAndroidApp() ? (window as WorklyWindow).WorklyAndroid ?? null : null;
+  isWorklyAndroidApp() ? (window as unknown as WorklyWindow).WorklyAndroid ?? null : null;
 
 export interface NativeDeviceInfo {
   manufacturer: string;
