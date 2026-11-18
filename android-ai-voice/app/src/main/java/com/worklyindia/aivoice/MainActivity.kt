@@ -13,6 +13,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.view.Gravity
 import android.view.View
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -48,6 +49,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val dark = isSystemDarkMode()
+
+        // Keep Android's normal status bar (time, signal, data and battery) visible.
+        // Clear any fullscreen/immersive window flag and let the system reserve its inset.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(true)
+        }
         window.statusBarColor = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
         window.navigationBarColor = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
         if (Build.VERSION.SDK_INT >= 23) {
