@@ -9,9 +9,26 @@ import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { supabase } from '@/integrations/supabase/client';
 import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
+import { callAICareerChat } from '@/lib/aiChatTransport';
+import { chatStorage, type StoredMessage } from '@/lib/chatStorage';
 import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition } from '@/lib/shrutiSpeech';
 
+
 type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+
+function cleanVoiceText(value: string): string {
+  return value
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\*\*?|__?|~~|#{1,6}\s*/g, '')
+    .replace(/^•\s*/gm, '')
+    .replace(/^[-*]\s+/gm, '')
+    .replace(/\`{1,3}/g, '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 
 export default function AIVoiceCall() {
   const navigate = useNavigate();
@@ -117,7 +134,10 @@ export default function AIVoiceCall() {
     setErrorMessage('');
     setMuted(false);
     setSpeakerOn(true);
-  }, [stopRecognition, stopReply]);
+    chatStorage.setCurrentUserId(user?.id ?? null);
+    chatStorage.setAudience('job_seeker');
+    navigate('/ai-assistant');
+  }, [stopRecognition, stopReply, user?.id, navigate]);
 
   const handleTranscript = useCallback(async (event: Event) => {
     if (!activeRef.current) return;
@@ -127,6 +147,10 @@ export default function AIVoiceCall() {
     lastSubmittedTranscriptRef.current = transcript;
     const turnId = ++conversationTurnRef.current;
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
+    // Stop recognition immediately once a turn is finalized. Otherwise the
+    // microphone can keep emitting events while the AI is thinking/speaking
+    // and incorrectly switch the UI back to "You are speaking…".
+    stopRecognition();
     partialFinalizeTimerRef.current = null;
     setLastTranscript(transcript);
     setPartialTranscript('');
@@ -135,38 +159,79 @@ export default function AIVoiceCall() {
     setVoiceStage('Recognized speech; sending text to AI…');
     setAiRequestStatus('Sending');
     try {
-      let data: any = null;
+      chatStorage.setCurrentUserId(user.id);
+      chatStorage.setAudience('job_seeker');
+      const storedHistory = chatStorage.loadMessages();
+      const userMessage: StoredMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: transcript,
+        timestamp: new Date().toISOString(),
+        status: 'read',
+      };
+      const historyWithUser = [...storedHistory, userMessage].slice(-40);
+      chatStorage.saveMessages(historyWithUser);
+
+      let reply = '';
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         if (!activeRef.current || turnId !== conversationTurnRef.current) return;
         setAiRequestStatus(attempt === 0 ? 'Sending' : `Retrying ${attempt}/2`);
         try {
-          const result = await supabase.functions.invoke('unified-voice', {
-            body: { action: 'ai-voice-chat', text: transcript, languageTag: detail?.languageTag || 'und' },
-          });
-          if (result.error) throw result.error;
-          const candidate = typeof result.data?.reply === 'string' ? result.data.reply.trim() : '';
-          if (candidate) {
-            data = result.data;
+          let candidate = '';
+          const result = await callAICareerChat(
+            {
+              messages: historyWithUser.map((message) => ({
+                role: message.role,
+                content: message.content,
+              })),
+              user_id: user.id,
+              hasImages: false,
+              currentPage: '/ai-assistant',
+              audience: 'job_seeker',
+              pageContext: { path: '/ai-assistant', page: 'AI Chat', audience: 'job_seeker', source: 'AI Voice Call' },
+            },
+            {
+              onStatus: () => undefined,
+              onLifecycle: () => undefined,
+              onDelta: (_delta, fullText) => { candidate = fullText; },
+            }
+          );
+          candidate = result.fullText || candidate;
+          const cleaned = cleanVoiceText(candidate);
+          if (cleaned) {
+            reply = cleaned;
             break;
           }
-          throw new Error('AI returned an empty reply.');
+          throw new Error('AI returned an empty text reply.');
         } catch (retryError) {
           lastError = retryError;
           if (attempt < 2) await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
         }
       }
-      if (!data) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
-      const reply = typeof data?.reply === 'string' ? data.reply.trim() : '';
+      if (!reply) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
+      const assistantMessage: StoredMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: reply,
+        timestamp: new Date().toISOString(),
+        status: 'read',
+      };
+      chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
       setAiRequestStatus('Reply received');
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
-      const spoken = await speakReply(reply, data?.languageTag || detail?.languageTag || 'und');
+      // Lock the UI into the speaking state before playback begins. The
+      // microphone has already been stopped above, so it cannot overwrite this
+      // state while the AI is answering.
+      setCallState('speaking');
+      setVoiceStage('AI is speaking…');
+      const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (spoken) {
         lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
-        setVoiceStage('Voice playback started');
+        setVoiceStage('AI is speaking…');
       } else {
         // TTS failure must never end or navigate away from the call screen.
         setCallState('listening');
@@ -315,6 +380,8 @@ export default function AIVoiceCall() {
       setVoiceStage('Starting secure on-device microphone…');
       setMicLevel(0);
       setAiRequestStatus('Not sent');
+      chatStorage.setCurrentUserId(user.id);
+      chatStorage.setAudience('job_seeker');
       startingCallRef.current = false;
       if (!startRecognition('auto')) {
         activeRef.current = false;
