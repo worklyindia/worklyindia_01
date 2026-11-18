@@ -14,7 +14,8 @@ object SpeechModelCatalog {
     data class ModelFile(
         val relativePath: String,
         val url: String,
-        val expectedBytes: Long
+        val expectedBytes: Long,
+        val sha256: String? = null
     )
 
     data class Pack(
@@ -94,9 +95,17 @@ object SpeechModelCatalog {
             repository = "sulabhkatiyar/indic-tiny-tts-$code",
             files = listOf(
                 ModelFile("config.json", "$base/config.json", if (code == "gu") 3_299L else if (code == "hi") 3_443L else 3_039L),
-                ModelFile("onnx/text_encoder.onnx", "$base/onnx/text_encoder.onnx", encoderBytes),
-                ModelFile("onnx/flow_decoder.onnx", "$base/onnx/flow_decoder.onnx", 19_169_253L),
-                ModelFile("onnx/vocoder.onnx", "$base/onnx/vocoder.onnx", 54_150_036L),
+                ModelFile("onnx/text_encoder.onnx", "$base/onnx/text_encoder.onnx", encoderBytes, when (code) {
+                    "hi" -> "38df505ea822800d91a13bdc4a670f81ee964e9e0fe24a705590859fe7cfd08f"
+                    "gu" -> "275820514eace183d8028a8a726cd69c8c3fe2eeec9ba8bbc71cc03162b5bc63"
+                    else -> "e2e6f4cac08a0b4f8a39e4306df42066930b90fbce27a70453aaa68f91c74873"
+                }),
+                ModelFile("onnx/flow_decoder.onnx", "$base/onnx/flow_decoder.onnx", 19_169_253L, when (code) {
+                    "hi" -> "923a0472ec4d4c05c43bfc8ea512f8f762cf447b9f6ce1f01043144e1f6d1252"
+                    "gu" -> "4bd15fafdc493974198a6cfa9e9797da3b6c7b00ff12536ae8a1283e2aa58f19"
+                    else -> "5b6a911751f8dfd8e01feb05ae281c4bfde7cb6df2e90ae7870b3685dc582d05"
+                }),
+                ModelFile("onnx/vocoder.onnx", "$base/onnx/vocoder.onnx", 54_150_036L, "44d36238a761750447038895ab194e2378f6f4ba2c2d089a4766fa52810ef353"),
                 ModelFile("onnx/onnx_manifest.json", "$base/onnx/onnx_manifest.json", if (code == "gu") 3_115L else if (code == "hi") 3_117L else 3_118L)
             )
         )
