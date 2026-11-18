@@ -20,6 +20,7 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -91,26 +92,36 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(20), dp(18), dp(12))
             setBackgroundColor(bg)
+            clipToPadding = false
             setOnApplyWindowInsetsListener { view, insets ->
-                val topInset = if (android.os.Build.VERSION.SDK_INT >= 30)
-                    insets.getInsets(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.displayCutout()).top
-                else insets.systemWindowInsetTop
-                val bottomInset = if (android.os.Build.VERSION.SDK_INT >= 30)
-                    insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
-                else insets.systemWindowInsetBottom
-                view.setPadding(dp(18), dp(12) + topInset, dp(18), dp(12) + bottomInset)
+                val topInset: Int
+                val bottomInset: Int
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    val bars = insets.getInsets(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.displayCutout())
+                    val nav = insets.getInsets(android.view.WindowInsets.Type.navigationBars())
+                    val ime = insets.getInsets(android.view.WindowInsets.Type.ime())
+                    topInset = bars.top
+                    bottomInset = maxOf(nav.bottom, ime.bottom)
+                } else {
+                    @Suppress("DEPRECATION")
+                    topInset = insets.systemWindowInsetTop
+                    @Suppress("DEPRECATION")
+                    bottomInset = insets.systemWindowInsetBottom
+                }
+                view.setPadding(dp(14), topInset, dp(14), bottomInset)
                 insets
             }
         }
+
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, dp(4))
         }
         header.addView(Button(this).apply {
             text = "‹"
-            textSize = 28f
+            textSize = 30f
             isAllCaps = false
             setTextColor(primaryText)
             setBackgroundColor(bg)
@@ -118,19 +129,33 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = "Workly AI · Offline Chat"
-            textSize = 21f
+            text = "⚡  Usage"
+            textSize = 19f
             setTextColor(primaryText)
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        root.addView(header)
+        header.addView(Button(this).apply {
+            text = "⋮"
+            textSize = 24f
+            isAllCaps = false
+            setTextColor(primaryText)
+            setBackgroundColor(bg)
+            contentDescription = "Chat settings"
+            setOnClickListener { showChatOptions(this) }
+        }, LinearLayout.LayoutParams(dp(44), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
 
-        status = text("Loading Qwen model…", 13, 0xFF2E9D72.toInt())
-        root.addView(status)
+        status = TextView(this).apply {
+            text = "Checking offline AI model…"
+            textSize = 12f
+            setTextColor(secondaryText)
+            setPadding(dp(8), dp(3), dp(8), dp(7))
+            maxLines = 2
+        }
+        root.addView(status, LinearLayout.LayoutParams(-1, -2))
+
         qwenModelPicker = Spinner(this).apply {
-            setOnTouchListener { _, _ -> userHasChosenQwenModel = true; false }
             adapter = readableSpinnerAdapter(modelManager.models)
-            isEnabled = false // Choose and activate a model from the Downloads screen; the chat runs exactly one model.
+            isEnabled = false
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -139,66 +164,120 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 }
             }
         }
-        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, -2))
-        downloadModelButton = button("Download selected AI model")
-        downloadModelButton.setOnClickListener {
-            startActivity(Intent(this, SpeechDownloadsActivity::class.java))
-        }
-        root.addView(downloadModelButton, LinearLayout.LayoutParams(-1, dp(48)))
-        languagePicker = Spinner(this).apply {
-            adapter = readableSpinnerAdapter(languages)
-        }
-        root.addView(languagePicker, LinearLayout.LayoutParams(-1, -2))
+        languagePicker = Spinner(this).apply { adapter = readableSpinnerAdapter(languages) }
         speechEnginePicker = Spinner(this).apply {
             adapter = readableSpinnerAdapter(listOf("Android speech service", "AI4Bharat IndicConformer · offline", "Shruti ONNX · offline"))
         }
-        root.addView(speechEnginePicker, LinearLayout.LayoutParams(-1, -2))
+        downloadModelButton = button("Manage model downloads").apply {
+            setOnClickListener { startActivity(Intent(this@OfflineAiChatActivity, SpeechDownloadsActivity::class.java)) }
+        }
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
-            setPadding(0, dp(8), 0, dp(8))
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(dp(2), dp(6), dp(2), dp(10))
             chatMessages = LinearLayout(this@OfflineAiChatActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(2), dp(4), dp(2), dp(8))
             }
-            addView(chatMessages)
+            addView(chatMessages, ScrollView.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addMessage("Welcome to Workly AI.\nAsk me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
+        addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
 
+        val composer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(4), dp(5), dp(4))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface)
+                setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
+                cornerRadius = dp(32).toFloat()
+            }
+        }
+        val moreButton = Button(this).apply {
+            text = "+"
+            textSize = 27f
+            isAllCaps = false
+            setTextColor(secondaryText)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            contentDescription = "More chat options"
+            setOnClickListener { showChatOptions(this) }
+        }
+        composer.addView(moreButton, LinearLayout.LayoutParams(dp(42), dp(48)))
         promptInput = EditText(this).apply {
-            hint = "Message Workly AI…"
+            hint = "Message…"
+            textSize = 16f
             minLines = 1
             maxLines = 4
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (dark) 0xFF243449.toInt() else 0xFFF1F4F8.toInt())
-                cornerRadius = dp(18).toFloat()
+            setPadding(dp(5), dp(9), dp(5), dp(9))
+            background = null
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendPrompt(); true } else false
             }
         }
-        root.addView(promptInput, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-
-        val actions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
+        micButton = Button(this).apply {
+            text = "🎙"
+            textSize = 20f
+            isAllCaps = false
+            setTextColor(primaryText)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            contentDescription = "Voice input"
+            setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startVoiceInput() }
         }
-        micButton = button("🎙 Voice")
-        micButton.setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startVoiceInput() }
-        actions.addView(micButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
-        sendButton = button("Send")
-        sendButton.isEnabled = false
-        sendButton.setOnClickListener { sendPrompt() }
-        actions.addView(sendButton, LinearLayout.LayoutParams(0, dp(52), 1f).apply { leftMargin = dp(6) })
-        root.addView(actions)
-
-        root.addView(text(
-            "Select Android speech or a downloaded offline model. IndicConformer and Shruti recognize speech locally; choose Hindi or Gujarati and install the pack from Downloads first.",
-            12, secondaryText
-        ))
+        composer.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(48)))
+        sendButton = Button(this).apply {
+            text = "➤"
+            textSize = 22f
+            isAllCaps = false
+            setTextColor(0xFFFFFFFF.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(accent)
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+            }
+            isEnabled = false
+            alpha = 0.55f
+            contentDescription = "Send message"
+            setOnClickListener { sendPrompt() }
+        }
+        composer.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
+        root.addView(composer, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(5)
+            bottomMargin = dp(6)
+        })
         setContentView(root)
+    }
+
+    private fun showChatOptions(anchor: View) {
+        PopupMenu(this, anchor).apply {
+            menu.add("Download / change AI model").setOnMenuItemClickListener {
+                startActivity(Intent(this@OfflineAiChatActivity, SpeechDownloadsActivity::class.java)); true
+            }
+            menu.add("Chat language").setOnMenuItemClickListener {
+                showChoiceDialog("Chat language", languages.map { it.label }, languagePicker.selectedItemPosition) { languagePicker.setSelection(it) }; true
+            }
+            menu.add("Voice recognition engine").setOnMenuItemClickListener {
+                showChoiceDialog("Voice recognition", listOf("Android speech service", "AI4Bharat IndicConformer · offline", "Shruti ONNX · offline"), speechEnginePicker.selectedItemPosition) { speechEnginePicker.setSelection(it) }; true
+            }
+            menu.add("Model status").setOnMenuItemClickListener {
+                status.text = "Selected: ${selectedQwenModel?.title ?: "Checking"} · ${if (engine.isLoaded) "AI ready" else "Model not loaded"}"
+                true
+            }
+            show()
+        }
+    }
+
+    private fun showChoiceDialog(title: String, choices: List<String>, selected: Int, onChosen: (Int) -> Unit) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setSingleChoiceItems(choices.toTypedArray(), selected) { dialog, which -> onChosen(which); dialog.dismiss() }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
