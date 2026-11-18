@@ -41,7 +41,7 @@ async function deviceFor(req: Request) {
   const tokenHash = await sha256(token);
   const { data, error } = await supabase
     .schema("workly_ai_private")
-    .from("voice_devices")
+    .from("workly_ai_voice_devices")
     .select("id,user_id,revoked_at")
     .eq("token_hash", tokenHash)
     .is("revoked_at", null)
@@ -68,7 +68,7 @@ Deno.serve(async (req: Request) => {
       const codeHash = await sha256(code);
       const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
 
-      const { error } = await db.from("voice_pairings").insert({
+      const { error } = await db.from("workly_ai_voice_pairings").insert({
         user_id: user.id,
         code_hash: codeHash,
         expires_at: expiresAt,
@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
       const code = typeof body?.pairing_code === "string" ? body.pairing_code.trim().toUpperCase() : "";
       if (!/^[A-F0-9]{24}$/.test(code)) return json({ error: "Invalid or expired pairing code" }, 400);
       const codeHash = await sha256(code);
-      const { data: pairing, error: pairingError } = await db.from("voice_pairings")
+      const { data: pairing, error: pairingError } = await db.from("workly_ai_voice_pairings")
         .select("id,user_id,expires_at,consumed_at")
         .eq("code_hash", codeHash)
         .is("consumed_at", null)
@@ -90,7 +90,7 @@ Deno.serve(async (req: Request) => {
       if (pairingError || !pairing) return json({ error: "Invalid or expired pairing code" }, 400);
 
       const deviceToken = randomHex(32);
-      const { data: device, error: deviceError } = await db.from("voice_devices")
+      const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
         .insert({
           user_id: pairing.user_id,
           token_hash: await sha256(deviceToken),
@@ -100,14 +100,14 @@ Deno.serve(async (req: Request) => {
         .single();
       if (deviceError) throw deviceError;
 
-      const { data: consumed, error: consumeError } = await db.from("voice_pairings")
+      const { data: consumed, error: consumeError } = await db.from("workly_ai_voice_pairings")
         .update({ consumed_at: new Date().toISOString() })
         .eq("id", pairing.id)
         .is("consumed_at", null)
         .select("id")
         .maybeSingle();
       if (consumeError || !consumed) {
-        await db.from("voice_devices").delete().eq("id", device.id);
+        await db.from("workly_ai_voice_devices").delete().eq("id", device.id);
         return json({ error: "Pairing code was already used. Generate a new code." }, 409);
       }
       return json({ device_id: device.id, device_token: deviceToken, message: "Device paired. Store this token securely; it will not be shown again." });
@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
-      const { data: device, error: deviceError } = await db.from("voice_devices")
+      const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id")
         .eq("user_id", user.id)
         .is("revoked_at", null)
@@ -131,7 +131,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (deviceError || !device) return json({ error: "No paired AI Voice phone is online or registered" }, 404);
 
-      const { data: job, error } = await db.from("voice_jobs")
+      const { data: job, error } = await db.from("workly_ai_voice_jobs")
         .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: payload ?? {} })
         .select("id,status,expires_at")
         .single();
@@ -139,12 +139,27 @@ Deno.serve(async (req: Request) => {
       return json({ job });
     }
 
+    if (action === "get_job") {
+      const user = await authenticatedUser(req);
+      if (!user) return json({ error: "Authentication required" }, 401);
+      const jobId = typeof body?.job_id === "string" ? body.job_id : "";
+      if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
+      const { data, error } = await db.from("workly_ai_voice_jobs")
+        .select("id,status,result,created_at,completed_at,expires_at")
+        .eq("id", jobId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return json({ error: "Job not found" }, 404);
+      return json({ job: data });
+    }
+
     if (action === "poll") {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
-      await db.from("voice_devices").update({ last_seen_at: new Date().toISOString() }).eq("id", device.id);
+      await db.from("workly_ai_voice_devices").update({ last_seen_at: new Date().toISOString() }).eq("id", device.id);
 
-      const { data: candidate, error: findError } = await db.from("voice_jobs")
+      const { data: candidate, error: findError } = await db.from("workly_ai_voice_jobs")
         .select("id,job_type,payload,expires_at")
         .eq("device_id", device.id)
         .eq("status", "pending")
@@ -155,7 +170,7 @@ Deno.serve(async (req: Request) => {
       if (findError) throw findError;
       if (!candidate) return json({ job: null, heartbeat_at: new Date().toISOString() });
 
-      const { data: claimed, error: claimError } = await db.from("voice_jobs")
+      const { data: claimed, error: claimError } = await db.from("workly_ai_voice_jobs")
         .update({ status: "running", started_at: new Date().toISOString() })
         .eq("id", candidate.id)
         .eq("status", "pending")
@@ -173,7 +188,7 @@ Deno.serve(async (req: Request) => {
       if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
       if (JSON.stringify(result).length > 32_000) return json({ error: "Result exceeds 32 KB" }, 413);
 
-      const { data, error } = await db.from("voice_jobs")
+      const { data, error } = await db.from("workly_ai_voice_jobs")
         .update({ status: "completed", result, completed_at: new Date().toISOString() })
         .eq("id", jobId)
         .eq("device_id", device.id)
@@ -190,7 +205,7 @@ Deno.serve(async (req: Request) => {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
       const deviceId = typeof body?.device_id === "string" ? body.device_id : "";
-      const { data, error } = await db.from("voice_devices")
+      const { data, error } = await db.from("workly_ai_voice_devices")
         .update({ revoked_at: new Date().toISOString() })
         .eq("id", deviceId)
         .eq("user_id", user.id)
