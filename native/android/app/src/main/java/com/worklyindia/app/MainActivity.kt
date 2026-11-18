@@ -12,6 +12,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.media.AudioRecord
+import android.media.AudioManager
 import android.media.AudioFormat
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
@@ -2124,6 +2125,18 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
                 voiceRecognizer = null
             }
             return true
+        }
+
+        @JavascriptInterface
+        fun setSpeakerphoneOn(enabled: Boolean): Boolean {
+            return runCatching {
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                runOnUiThread {
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                    audioManager.isSpeakerphoneOn = enabled
+                }
+                true
+            }.getOrDefault(false)
         }
 
         @JavascriptInterface
