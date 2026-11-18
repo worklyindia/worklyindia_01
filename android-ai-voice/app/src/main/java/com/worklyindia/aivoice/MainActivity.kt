@@ -165,7 +165,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
         }, matchWrap().also { it.topMargin = dp(8) })
         relayCard.addView(label(
-            "The phone makes outbound HTTPS connections, so Jio mobile CGNAT does not need an incoming port. Keep this foreground service notification visible while the phone is serving. Android may limit long-running background work. Website TTS jobs currently play on this phone; remote audio-file STT and audio-file return are not ready yet.",
+            "The phone makes outbound HTTPS connections, so Jio mobile CGNAT does not need an incoming port. Keep this foreground service notification visible while the phone is serving. On Android 15 and newer, data-sync foreground services have a 6-hour total limit per 24 hours; after that Android stops this server until you open the app again. Website TTS jobs currently play on this phone; remote audio-file STT and audio-file return are not ready yet.",
             12, 0xFF536276.toInt(), false
         ).also { it.setPadding(0, dp(10), 0, 0) })
         page.addView(relayCard)
