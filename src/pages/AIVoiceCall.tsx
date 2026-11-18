@@ -190,17 +190,16 @@ export default function AIVoiceCall() {
     lastSubmittedTranscriptRef.current = transcript;
     const turnId = ++conversationTurnRef.current;
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
-    // Stop recognition immediately once a turn is finalized. Otherwise the
-    // microphone can keep emitting events while the AI is thinking/speaking
-    // and incorrectly switch the UI back to "You are speaking…".
-    stopRecognition();
+    // Keep recognition active while the AI is thinking. A new user utterance
+    // can then cancel this pending turn and take priority immediately.
     partialFinalizeTimerRef.current = null;
     setLastTranscript(transcript);
     setPartialTranscript('');
     setErrorMessage('');
     setCallState('thinking');
-    setVoiceStage('Recognized speech; sending text to AI…');
+    setVoiceStage('Thinking…');
     setAiRequestStatus('Sending');
+    if (activeRef.current && !mutedRef.current) startRecognition('auto');
     try {
       chatStorage.setCurrentUserId(user.id);
       chatStorage.setAudience('default');
@@ -264,6 +263,7 @@ export default function AIVoiceCall() {
         }
       }
       if (!reply) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
+      if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       const assistantMessage: StoredMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -321,14 +321,33 @@ export default function AIVoiceCall() {
     const detail = (event as CustomEvent<{ text?: string; languageTag?: string }>).detail;
     const text = detail?.text?.trim();
     if (!text || text === lastSubmittedTranscriptRef.current) return;
+
+    if (callStateRef.current === 'thinking') {
+      const normalizedNew = normalizeVoiceWords(text).join(' ');
+      const normalizedOld = normalizeVoiceWords(lastTranscript).join(' ');
+      if (normalizedNew && normalizedNew !== normalizedOld) {
+        // A newer utterance wins: invalidate the in-flight answer and focus
+        // only on the latest user instruction.
+        conversationTurnRef.current += 1;
+        lastSubmittedTranscriptRef.current = '';
+        const history = chatStorage.loadMessages();
+        if (history.length && history[history.length - 1].role === 'user') {
+          chatStorage.saveMessages(history.slice(0, -1));
+        }
+        setCallState('listening');
+        setVoiceStage('Listening…');
+        setAiRequestStatus('New message received');
+      }
+    }
+
     setPartialTranscript(text);
-    if (callStateRef.current !== 'speaking') setVoiceStage('Speech recognized; waiting for a pause…');
+    if (callStateRef.current !== 'speaking' && callStateRef.current !== 'thinking') setVoiceStage('Listening…');
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
     partialFinalizeTimerRef.current = setTimeout(() => {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
       window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: detail?.languageTag || 'und', source: 'partial-fallback' } }));
     }, 1400);
-  }, []);
+  }, [lastTranscript]);
 
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
