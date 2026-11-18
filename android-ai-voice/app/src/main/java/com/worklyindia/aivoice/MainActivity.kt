@@ -375,6 +375,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     // Queue Kokoro only after the larger Qwen download completes, keeping model transfers sequential.
     private fun ensureAutomaticKokoroModelDownload() {
         if (!::kokoroModelStatusText.isInitialized) return
+        if (Build.SUPPORTED_ABIS.none { it == "arm64-v8a" }) {
+            kokoroModelStatusText.text = "Kokoro requires a 64-bit ARM device. Android TTS remains available."
+            kokoroModelActionButton.isEnabled = false
+            return
+        }
         if (offlineModelManager.snapshot().state != OfflineModelManager.State.READY) return
         if (kokoroAutoDownloadAttempted) return
         kokoroAutoDownloadAttempted = true
@@ -408,6 +413,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun onKokoroModelAction() {
+        if (Build.SUPPORTED_ABIS.none { it == "arm64-v8a" }) {
+            kokoroModelStatusText.text = "Kokoro requires a 64-bit ARM device. Android TTS remains available."
+            return
+        }
         when (kokoroModelManager.snapshot().state) {
             KokoroModelManager.State.READY -> {
                 kokoroEngine?.close(); kokoroEngine = null
