@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, AudioLines, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, Info } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, PhoneOff, ShieldCheck, Volume2, VolumeX, Info } from 'lucide-react';
+import LottieSearchIcon from '@/components/LottieSearchIcon';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +24,7 @@ export default function AIVoiceCall() {
   const [partialTranscript, setPartialTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [muted, setMuted] = useState(false);
+  const [speakerOn, setSpeakerOn] = useState(true);
   const [nativeAvailable, setNativeAvailable] = useState(false);
   const [voiceStage, setVoiceStage] = useState('Waiting for microphone…');
   const [micLevel, setMicLevel] = useState(0);
@@ -32,7 +34,9 @@ export default function AIVoiceCall() {
   const partialFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSubmittedTranscriptRef = useRef('');
   const conversationTurnRef = useRef(0);
-  const aiName = settings?.name || 'Workly India AI';
+  const replyAudioRef = useRef<HTMLAudioElement | null>(null);
+  const replyAudioUrlRef = useRef<string | null>(null);
+  const aiName = 'ChatWork';
   const showBadge = settings?.verification_enabled;
   const badgeColor = (settings?.verification_color || 'blue') as 'gold' | 'blue' | 'green' | 'silver';
   const bridge = getWorklyAndroidBridge();
@@ -46,11 +50,57 @@ export default function AIVoiceCall() {
   const speakReply = useCallback(async (text: string, language: string) => {
     const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
     if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
-    return speakBrowserLocalReply(text, resolvedLanguage);
-  }, [bridge]);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('unified-voice', {
+        body: { action: 'text-to-speech', text, provider: 'cartesia' },
+      });
+      if (error) throw error;
+
+      let sourceUrl = typeof data?.audioUrl === 'string' ? data.audioUrl : '';
+      if (!sourceUrl && typeof data?.audioContent === 'string') {
+        const binary = Uint8Array.from(atob(data.audioContent), (char) => char.charCodeAt(0));
+        const blob = new Blob([binary], { type: 'audio/mpeg' });
+        if (replyAudioUrlRef.current) URL.revokeObjectURL(replyAudioUrlRef.current);
+        replyAudioUrlRef.current = URL.createObjectURL(blob);
+        sourceUrl = replyAudioUrlRef.current;
+      }
+      if (!sourceUrl) throw new Error('No voice audio was returned.');
+
+      const audio = replyAudioRef.current ?? new Audio();
+      replyAudioRef.current = audio;
+      audio.onended = () => {
+        window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
+      };
+      audio.onerror = () => {
+        window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: 'Voice playback could not start. Please try again.' } }));
+      };
+      audio.src = sourceUrl;
+      audio.volume = speakerOn ? 1 : 0;
+      audio.currentTime = 0;
+      await audio.play();
+      window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
+      return true;
+    } catch {
+      // Last-resort browser TTS. Do not surface a browser TTS failure as a call-ending error.
+      try {
+        const fallback = speakBrowserLocalReply(text, resolvedLanguage);
+        if (fallback) return true;
+      } catch {
+        // Keep the call alive even when browser speech playback is unavailable.
+      }
+      return false;
+    }
+  }, [bridge, speakerOn]);
+
   const stopReply = useCallback(() => {
     if (bridge) bridge.stopVoiceReply?.();
-    else stopBrowserLocalReply();
+    const audio = replyAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    stopBrowserLocalReply();
   }, [bridge]);
 
   const endCall = useCallback(() => {
@@ -70,6 +120,7 @@ export default function AIVoiceCall() {
     setPartialTranscript('');
     setErrorMessage('');
     setMuted(false);
+    setSpeakerOn(true);
   }, [stopRecognition, stopReply]);
 
   const handleTranscript = useCallback(async (event: Event) => {
@@ -99,9 +150,15 @@ export default function AIVoiceCall() {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setLastReply(reply);
       const spoken = await speakReply(reply, data?.languageTag || detail?.languageTag || 'und');
-      if (!spoken) throw new Error('Phone text-to-speech is unavailable.');
-      setCallState('speaking');
-      setVoiceStage('TTS playback started');
+      if (spoken) {
+        setCallState('speaking');
+        setVoiceStage('Voice playback started');
+      } else {
+        // TTS failure must never end or navigate away from the call screen.
+        setCallState('listening');
+        setVoiceStage('AI reply received; microphone remains active');
+        if (activeRef.current && !muted) window.setTimeout(() => { if (activeRef.current && !muted) startRecognition('auto'); }, 150);
+      }
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       const message = error instanceof Error ? error.message : 'Voice reply failed. Please try again.';
@@ -257,12 +314,22 @@ export default function AIVoiceCall() {
     const next = !muted;
     setMuted(next);
     if (next) {
+      // Mute only the microphone. Never end/navigate away from the active call and never stop AI playback.
       stopRecognition();
-      stopReply();
+      setCallState('speaking');
+      setVoiceStage('Microphone muted; call remains active');
     } else if (activeRef.current) {
       startRecognition('auto');
       setCallState('listening');
+      setVoiceStage('Microphone is listening');
     }
+  };
+
+  const toggleSpeaker = () => {
+    const next = !speakerOn;
+    setSpeakerOn(next);
+    const audio = replyAudioRef.current;
+    if (audio) audio.volume = next ? 1 : 0;
   };
 
   return (
@@ -270,19 +337,14 @@ export default function AIVoiceCall() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,rgba(37,99,235,0.24),transparent_48%)]" />
       <header className="relative z-10 flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4">
         <Button variant="ghost" size="icon" onClick={() => { endCall(); navigate('/ai-assistant'); }} aria-label="Back to AI Chat" className="text-white hover:bg-white/10 hover:text-white"><ArrowLeft className="h-5 w-5" /></Button>
-        <div className="text-center"><p className="text-xs font-medium uppercase tracking-[0.22em] text-blue-200/70">Workly India</p><p className="mt-1 text-sm text-white/70">AI Voice Call</p></div>
         <span className="h-10 w-10" aria-hidden="true" />
       </header>
 
       <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pt-6 pb-8 text-center">
-        <div className="relative flex h-44 w-44 items-center justify-center">
-          <div className="absolute inset-0 rounded-full border border-blue-400/15" />
-          <div className="absolute inset-3 rounded-full border border-blue-400/20" />
-          <div className="absolute inset-6 rounded-full bg-blue-500/10 blur-xl" />
-          <div className="relative flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 shadow-[0_12px_60px_rgba(37,99,235,0.42)] ring-1 ring-white/20"><AudioLines className="h-14 w-14 text-white" strokeWidth={2.1} /></div>
+        <div className="relative flex h-40 w-40 items-center justify-center">
+          <LottieSearchIcon size={132} className="relative z-10" />
         </div>
-        <div className="mt-6 flex items-center justify-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">{aiName}</h1>{showBadge && <VerificationBadge color={badgeColor} size={17} />}</div>
-        <p className="mt-2 text-sm text-blue-100/65">Voice assistant</p>
+        <div className="mt-4 flex items-center justify-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">ChatWork</h1>{showBadge && <VerificationBadge color={badgeColor} size={17} />}</div>
         <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white/70">
           <span className={`h-2 w-2 rounded-full ${callState === 'listening' ? 'bg-emerald-400 animate-pulse' : callState === 'thinking' ? 'bg-amber-300 animate-pulse' : callState === 'speaking' ? 'bg-blue-300 animate-pulse' : 'bg-white/30'}`} />
           {callState === 'listening' ? 'Listening on this device' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
@@ -310,13 +372,13 @@ export default function AIVoiceCall() {
         </div>
 
         <div className="mt-auto w-full pt-8">
-          <div className="mb-5 flex items-center justify-center gap-7">
-            <button type="button" onClick={toggleMute} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5">{muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}</span><span className="text-[11px]">{muted ? 'Unmute' : 'Mute'}</span></button>
-            <div className="flex flex-col items-center gap-2 text-white/35"><span className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5"><Volume2 className="h-5 w-5" /></span><span className="text-[11px]">Speaker</span></div>
-            <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/70 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
+          <div className="mb-5 grid grid-cols-3 items-start justify-items-center gap-6">
+            <button type="button" onClick={toggleMute} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className={`flex h-14 w-14 items-center justify-center rounded-full border border-white/10 ${muted ? 'bg-blue-500/80' : 'bg-white/5'}`}>{muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}</span><span className="text-[11px]">{muted ? 'Unmute' : 'Mute'}</span></button>
+            <button type="button" onClick={toggleSpeaker} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className={`flex h-14 w-14 items-center justify-center rounded-full border border-white/10 ${speakerOn ? 'bg-blue-500/80' : 'bg-white/5'}`}>{speakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}</span><span className="text-[11px]">{speakerOn ? 'Speaker on' : 'Speaker off'}</span></button>
+            <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
           </div>
           {!activeRef.current ? <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500"><Mic className="mr-2 h-5 w-5" />Start AI Call</Button> : <div className="flex h-14 w-full items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-sm font-medium text-white/70">{callState === 'thinking' ? 'AI is preparing a reply…' : callState === 'speaking' ? 'Listening will resume automatically' : callState === 'listening' ? 'Speak naturally — I’m listening' : 'Call connected'}</div>}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Shruti runs on this device. Internet is required only for AI replies; voice playback uses your existing phone/browser TTS.</span></div>
+          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-left text-[11px] leading-5 text-white/40"><Info className="mt-0.5 h-4 w-4 shrink-0" /><span>Shruti runs on this device. Internet is required for AI replies and reliable voice playback.</span></div>
         </div>
       </section>
       
