@@ -24,7 +24,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(true)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(false)
         window.statusBarColor = bg
         window.navigationBarColor = bg
         if (android.os.Build.VERSION.SDK_INT >= 23) {
@@ -49,7 +49,30 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(24), 0, 0)
         })
-        setContentView(ScrollView(this).apply { addView(page) })
+        val content = ScrollView(this).apply {
+            setBackgroundColor(bg)
+            clipToPadding = true
+            addView(page)
+            // Android 15+ enforces edge-to-edge for target SDK 35. Apply the real
+            // system-bar insets to the scrolling viewport so app content never
+            // draws underneath the clock, network indicators or navigation bar.
+            setOnApplyWindowInsetsListener { view, insets ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    val bars = insets.getInsets(
+                        android.view.WindowInsets.Type.statusBars() or
+                            android.view.WindowInsets.Type.navigationBars() or
+                            android.view.WindowInsets.Type.displayCutout()
+                    )
+                    view.setPadding(0, bars.top, 0, bars.bottom)
+                } else {
+                    @Suppress("DEPRECATION")
+                    view.setPadding(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
+                }
+                insets
+            }
+        }
+        setContentView(content)
+        content.requestApplyInsets()
     }
 
     private fun addDestination(parent: LinearLayout, title: String, subtitle: String, target: Class<*>) {
