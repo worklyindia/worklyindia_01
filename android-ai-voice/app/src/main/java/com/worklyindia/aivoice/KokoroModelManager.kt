@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Environment
 import android.os.StatFs
 import java.io.File
+import java.security.MessageDigest
 import java.io.IOException
 
 /** Wi-Fi-only downloader for the optional Kokoro multilingual TTS bundle. */
@@ -63,7 +64,18 @@ class KokoroModelManager(context: Context) {
 
     fun snapshot(): Snapshot {
         if (modelFile.isFile && modelFile.length() == KokoroSpeechEngine.MODEL_SIZE_BYTES) {
-            return Snapshot(State.READY, KokoroSpeechEngine.MODEL_SIZE_BYTES)
+            val verifiedStamp = prefs.getLong(KEY_VERIFIED_STAMP, -1L)
+            if (verifiedStamp == modelFile.lastModified()) {
+                return Snapshot(State.READY, KokoroSpeechEngine.MODEL_SIZE_BYTES)
+            }
+            val valid = runCatching { modelFile.sha256Hex() == KokoroSpeechEngine.MODEL_SHA256 }.getOrDefault(false)
+            if (valid) {
+                prefs.edit().putLong(KEY_VERIFIED_STAMP, modelFile.lastModified()).apply()
+                return Snapshot(State.READY, KokoroSpeechEngine.MODEL_SIZE_BYTES)
+            }
+            modelFile.delete()
+            prefs.edit().remove(KEY_VERIFIED_STAMP).apply()
+            return Snapshot(State.FAILED)
         }
         val id = prefs.getLong(KEY_ID, -1L)
         if (id <= 0L) return Snapshot(State.NOT_DOWNLOADED)
@@ -94,5 +106,21 @@ class KokoroModelManager(context: Context) {
         prefs.edit().remove(KEY_ID).apply()
     }
 
-    companion object { private const val KEY_ID = "kokoro_download_id" }
+    private fun File.sha256Hex(): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        inputStream().buffered().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    companion object {
+        private const val KEY_ID = "kokoro_download_id"
+        private const val KEY_VERIFIED_STAMP = "kokoro_verified_last_modified"
+    }
 }
