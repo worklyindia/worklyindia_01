@@ -189,6 +189,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             .setContentText(message.take(120))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .build()
     }
 
@@ -196,7 +197,11 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Workly Voice server", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, "Workly Voice server", NotificationManager.IMPORTANCE_LOW).apply {
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
+                }
             )
         }
     }
