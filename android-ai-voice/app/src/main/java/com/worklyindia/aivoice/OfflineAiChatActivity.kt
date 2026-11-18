@@ -57,6 +57,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private val conversationHistory = StringBuilder()
     private var recognizer: SpeechRecognizer? = null
     private var dark = false
+    @Volatile private var modelLoadInProgress = false
+    @Volatile private var loadedModelId: String? = null
 
     private data class VoiceLanguage(val label: String, val tag: String, val locale: Locale) {
         override fun toString() = label
@@ -216,6 +218,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         }
 
     private fun loadModel() {
+        if (modelLoadInProgress) return
+        modelLoadInProgress = true
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         downloadModelButton.text = "Checking model download…"
@@ -245,6 +249,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                     "Qwen could not load. Free memory may be insufficient; try a smaller model."
                 }
                 runOnUiThread {
+                    loadedModelId = chosen.id
+                    modelLoadInProgress = false
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
                     sendButton.alpha = 1f
@@ -252,6 +258,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 }
             } catch (error: Exception) {
                 runOnUiThread {
+                    loadedModelId = null
+                    modelLoadInProgress = false
                     status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
                     sendButton.isEnabled = false
                     downloadModelButton.text = "Open Downloads / Retry model"
@@ -480,6 +488,16 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             voice.speak(value, TextToSpeech.QUEUE_FLUSH, null, "workly-chat-${System.currentTimeMillis()}")
             status.text = "Using installed Android TTS. Download Indic Tiny TTS to use its offline voice."
         } else status.text = "No installed TTS voice supports ${language.label}."
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Returning from Downloads must re-check the selected model and load it immediately.
+        // Previously the chat only loaded once in onCreate, so a model downloaded while
+        // this Activity remained alive never became usable until the app was reopened.
+        val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
+            .getString("selected_model_id", null)
+        if (!modelLoadInProgress && savedId != null && savedId != loadedModelId) loadModel()
     }
 
     private fun selectedLanguage() = languages.getOrElse(languagePicker.selectedItemPosition) { languages.first() }
