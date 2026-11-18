@@ -7,17 +7,17 @@ import java.io.File
  * Call loadModel/generate from a background executor, never the Android main thread.
  */
 class OfflineAiEngine {
+    companion object { const val MIN_VALID_MODEL_BYTES = 2_000_000_000L }
     @Volatile
     var isLoaded: Boolean = false
         private set
 
-    init {
-        System.loadLibrary("worklyllama")
-    }
+    private val nativeAvailable = runCatching { System.loadLibrary("worklyllama") }.isSuccess
 
     @Synchronized
     fun loadModel(file: File): Boolean {
-        if (!file.isFile || file.length() < OfflineModelManager.MIN_VALID_MODEL_BYTES) {
+        check(nativeAvailable) { "The offline AI native engine is not available in this app build." }
+        if (!file.isFile || file.length() < MIN_VALID_MODEL_BYTES) {
             throw IllegalStateException("The offline AI model file is missing or incomplete.")
         }
         isLoaded = nativeLoadModel(file.absolutePath)
