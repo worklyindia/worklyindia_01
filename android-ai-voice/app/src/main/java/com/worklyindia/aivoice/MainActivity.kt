@@ -55,6 +55,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var kokoroModelStatusText: TextView
     private lateinit var kokoroModelProgressBar: ProgressBar
     private lateinit var kokoroModelActionButton: Button
+    private lateinit var speechPackStatusText: TextView
+    private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
     private var kokoroAutoDownloadAttempted = false
     private var downloadChoicePromptShowing = false
     private val offlineModelHandler = Handler(Looper.getMainLooper())
@@ -170,6 +172,21 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             "Speech recognition may use your phone's configured recognition provider and may require internet.",
             12, 0xFF65748B.toInt(), false
         ).also { it.setPadding(0, dp(10), 0, 0) })
+        val offlineSpeechCard = card()
+        offlineSpeechCard.addView(label("Offline Hindi / Gujarati recognition", 16, 0xFF142033.toInt(), true))
+        speechPackStatusText = label("Optional model packs are not downloaded.", 12, 0xFF536276.toInt(), false)
+        offlineSpeechCard.addView(speechPackStatusText)
+        offlineSpeechCard.addView(button("Download AI4Bharat IndicConformer INT8").apply {
+            setOnClickListener { downloadSelectedSpeechPack(shruti = false) }
+        }, matchWrap().also { it.topMargin = dp(8) })
+        offlineSpeechCard.addView(button("Download Shruti ONNX").apply {
+            setOnClickListener { downloadSelectedSpeechPack(shruti = true) }
+        }, matchWrap().also { it.topMargin = dp(8) })
+        offlineSpeechCard.addView(label(
+            "Choose Hindi or Gujarati above first. Downloads use your saved Wi-Fi/mobile-data permission. The Android online/offline provider remains the active microphone path until native audio capture is connected and tested.",
+            12, 0xFF65748B.toInt(), false
+        ).also { it.setPadding(0, dp(8), 0, 0) })
+        page.addView(offlineSpeechCard)
 
         page.addView(space(22))
 
@@ -561,6 +578,49 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         setStatus("${prefix?.let { "$it " } ?: ""}Speaking ${lang.label}…")
     }
 
+    private fun downloadSelectedSpeechPack(shruti: Boolean) {
+        val language = when {
+            selectedLanguage().tag.startsWith("hi") -> "hi"
+            selectedLanguage().tag.startsWith("gu") -> "gu"
+            else -> {
+                setStatus("Select Hindi or Gujarati to download this offline recognition model.")
+                return
+            }
+        }
+        val pack = runCatching {
+            if (shruti) SpeechModelCatalog.shruti(language) else SpeechModelCatalog.indicConformer(language)
+        }.getOrElse {
+            setStatus(it.message ?: "Could not prepare speech model.")
+            return
+        }
+        requestDownloadNetworkChoice { allowMobile ->
+            runCatching {
+                val snapshot = speechPackManager.start(pack, allowMobile)
+                speechPackStatusText.text = "${pack.title}: ${snapshot.state} · about ${snapshot.totalBytes / 1_000_000} MB"
+                setStatus("Offline speech model download queued. Android will show transfer progress.")
+            }.onFailure {
+                speechPackStatusText.text = it.message ?: "Speech model download failed to start."
+            }
+        }
+    }
+
+    private fun refreshSpeechPackStatus() {
+        if (!::speechPackStatusText.isInitialized) return
+        val language = when {
+            selectedLanguage().tag.startsWith("hi") -> "hi"
+            selectedLanguage().tag.startsWith("gu") -> "gu"
+            else -> return
+        }
+        val packs = listOf(
+            SpeechModelCatalog.indicConformer(language),
+            SpeechModelCatalog.shruti(language)
+        )
+        speechPackStatusText.text = packs.joinToString(" · ") { pack ->
+            val snapshot = speechPackManager.snapshot(pack)
+            "${if (pack.id.startsWith("shruti")) "Shruti" else "IndicConformer"}: ${snapshot.state} (${snapshot.percent}%)"
+        }
+    }
+
     private fun startListening() {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             setStatus("No speech recognition service is installed on this phone.")
@@ -675,6 +735,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         if (::relayStatusText.isInitialized) refreshRelayStatus()
+        if (::speechPackStatusText.isInitialized) refreshSpeechPackStatus()
         if (::offlineModelStatusText.isInitialized) {
             refreshOfflineModelUi()
             val qwenState = runCatching { offlineModelManager.snapshot().state }.getOrNull()
