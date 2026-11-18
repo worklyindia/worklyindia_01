@@ -101,11 +101,12 @@ export const useTrendingJobs = (options?: {
     });
     setLoading(true);
     setError(null);
+    // Keep the same cache key available to both the success and offline fallback paths.
+    const cacheKey = `trending_v2_${showTopRanked ? 'top' : 'regular'}_${limit}_${pageNum}`;
 
     try {
       // Persist scrolled pages for 24h so returning visitors see the same
       // list instantly. Auto-clears after 24h.
-      const cacheKey = `trending_v2_${showTopRanked ? 'top' : 'regular'}_${limit}_${pageNum}`;
       // Skip persistent cache on explicit reset so newly posted jobs surface
       // immediately instead of waiting for the 24h TTL to expire.
       const cached = reset ? null : readPersistentJobsCache<{ jobs: TrendingJob[]; hasMore: boolean }>(cacheKey);
