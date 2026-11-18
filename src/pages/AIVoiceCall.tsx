@@ -20,6 +20,8 @@ export default function AIVoiceCall() {
   const { data: settings } = useAIChatSettings();
   const [callState, setCallState] = useState<CallState>('idle');
   const [callDuration, setCallDuration] = useState(0);
+  const [speakerOn, setSpeakerOn] = useState(false);
+  const [microphoneOn, setMicrophoneOn] = useState(true);
   const connectedAtRef = useRef<number | null>(null);
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
@@ -73,6 +75,8 @@ export default function AIVoiceCall() {
     setPartialTranscript('');
     setErrorMessage('');
     setMuted(false);
+    setMicrophoneOn(true);
+    setSpeakerOn(false);
   }, [stopRecognition, stopReply]);
 
   const handleTranscript = useCallback(async (event: Event) => {
@@ -267,23 +271,50 @@ export default function AIVoiceCall() {
   }, [callState]);
 
   const toggleMute = () => {
+    if (!activeRef.current) return;
     const next = !muted;
     setMuted(next);
+    setMicrophoneOn(!next);
     if (next) {
       stopRecognition();
       stopReply();
-    } else if (activeRef.current) {
+      setCallState('listening');
+    } else {
       startRecognition('auto');
       setCallState('listening');
     }
   };
 
+  const toggleMicrophone = () => {
+    if (!activeRef.current) return;
+    const next = !microphoneOn;
+    setMicrophoneOn(next);
+    setMuted(!next);
+    if (next) {
+      startRecognition('auto');
+      setCallState('listening');
+    } else {
+      stopRecognition();
+      setCallState('listening');
+    }
+  };
+
+  const toggleSpeaker = () => {
+    if (!activeRef.current) return;
+    const next = !speakerOn;
+    setSpeakerOn(next);
+    try {
+      const bridgeAny = bridge as (typeof bridge & { setSpeakerphoneOn?: (enabled: boolean) => boolean }) | null;
+      if (bridgeAny?.setSpeakerphoneOn) bridgeAny.setSpeakerphoneOn(next);
+    } catch { /* browser audio routing is controlled by the browser/device */ }
+  };
+
   const formattedDuration = `${String(Math.floor(callDuration / 60)).padStart(2, '0')}:${String(callDuration % 60).padStart(2, '0')}`;
 
-  const CallAction = ({ icon: Icon, label, onClick, disabled = false, active = false }: { icon: typeof Mic; label: string; onClick?: () => void; disabled?: boolean; active?: boolean }) => (
-    <button type="button" onClick={onClick} disabled={disabled} aria-label={label}
-      className="flex min-w-[76px] flex-col items-center gap-2 text-foreground disabled:opacity-45 active:scale-95">
-      <span className={`flex h-[68px] w-[68px] items-center justify-center rounded-full ${active ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
+  const CallAction = ({ icon: Icon, label, onClick, active = false }: { icon: typeof Mic; label: string; onClick: () => void; active?: boolean }) => (
+    <button type="button" onClick={onClick} aria-label={label}
+      className="flex min-w-[88px] flex-col items-center gap-2 text-foreground active:scale-95">
+      <span className={`flex h-[68px] w-[68px] items-center justify-center rounded-full border border-border ${active ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}>
         <Icon className="h-7 w-7" strokeWidth={1.8} />
       </span>
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -296,8 +327,7 @@ export default function AIVoiceCall() {
         <Button variant="ghost" size="icon" onClick={() => { endCall(); navigate('/ai-assistant'); }} aria-label="Back" className="text-foreground/80 hover:bg-muted">
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <span className="text-xs text-muted-foreground">AI call</span>
-        <span className="h-10 w-10" />
+        <span className="h-10 w-10" aria-hidden="true" />
       </header>
 
       <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center">
@@ -306,9 +336,9 @@ export default function AIVoiceCall() {
             <LottieIcon animationData={callAnimation} size={76} loop />
             {activeRef.current && <span className="pointer-events-none absolute inset-0 rounded-full border-2 border-primary/35 animate-pulse" />}
           </div>
-          <h1 className="mt-6 text-[28px] font-semibold tracking-tight">{aiName}</h1>
-          {activeRef.current && <p className="mt-4 font-mono text-sm tabular-nums text-muted-foreground">{formattedDuration}</p>}
-          {!activeRef.current && callState === 'idle' && <p className="mt-4 text-sm text-muted-foreground">Ready to start</p>}
+          <h1 className="mt-6 text-[28px] font-semibold tracking-tight">ChatWork</h1>
+          {activeRef.current && <p className="mt-3 font-mono text-sm tabular-nums text-muted-foreground">{formattedDuration}</p>}
+          {!activeRef.current && callState === 'idle' && <p className="mt-3 text-sm text-muted-foreground">Ready to call</p>}
           {errorMessage && (
             <div role="alert" className="mt-5 max-w-sm rounded-xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-left text-xs text-destructive">
               <p className="font-semibold">Call failed</p>
@@ -319,16 +349,12 @@ export default function AIVoiceCall() {
 
         {activeRef.current ? (
           <div className="w-full pb-2">
-            <div className="mx-auto mb-10 grid max-w-[340px] grid-cols-3 gap-y-7">
-              <CallAction icon={MicOff} label={muted ? 'Unmute' : 'Mute'} onClick={toggleMute} active={muted} />
-              <CallAction icon={Volume2} label="Speaker" disabled />
-              <CallAction icon={Mic} label="Microphone" disabled />
+            <div className="mx-auto mb-10 grid max-w-[330px] grid-cols-2 gap-x-12 gap-y-7">
+              <CallAction icon={muted ? MicOff : Mic} label={muted ? 'Unmute' : 'Mute'} onClick={toggleMute} active={muted} />
+              <CallAction icon={Volume2} label={speakerOn ? 'Speaker on' : 'Speaker'} onClick={toggleSpeaker} active={speakerOn} />
+              <CallAction icon={microphoneOn ? Mic : MicOff} label={microphoneOn ? 'Microphone' : 'Microphone off'} onClick={toggleMicrophone} active={microphoneOn} />
+              <CallAction icon={PhoneOff} label="End call" onClick={endCall} />
             </div>
-            <button type="button" onClick={endCall} aria-label="End call"
-              className="mx-auto flex h-[76px] w-[76px] items-center justify-center rounded-full bg-[#e5484d] text-white shadow-xl active:scale-95">
-              <PhoneOff className="h-8 w-8" />
-            </button>
-            <p className="mt-3 text-xs font-medium text-muted-foreground">End call</p>
           </div>
         ) : (
           <div className="w-full pb-2">
@@ -339,5 +365,4 @@ export default function AIVoiceCall() {
         )}
       </section>
     </main>
-  );
-}
+  );}
