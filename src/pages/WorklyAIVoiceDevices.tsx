@@ -29,7 +29,6 @@ export default function WorklyAIVoiceDevices() {
   useEffect(() => {
     if (!pairing) return;
     const tick = () => setSecondsLeft(Math.max(0, Math.ceil((new Date(pairing.expires_at).getTime() - Date.now()) / 1000)));
-    tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [pairing]);
@@ -80,6 +79,7 @@ export default function WorklyAIVoiceDevices() {
       if (error) throw error;
       if (!data?.pairing_code || !data.expires_at) throw new Error("The relay returned an invalid pairing response.");
       setPairing(data);
+      setSecondsLeft(data.expires_in_seconds);
       toast.success("A one-time phone pairing code is ready.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not create a pairing code.";
@@ -234,7 +234,9 @@ export default function WorklyAIVoiceDevices() {
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>Keep the Android app's foreground server notification active while using the phone as a relay.</p>
           <p>Website TTS requests currently play through the paired phone speaker and return a playback confirmation. Audio-file streaming and remote audio-file speech-to-text are not implemented yet.</p>
-          <p>Phone availability depends on its battery, mobile data/Wi-Fi, Android background limits, and Supabase Free quotas. This is not an unlimited or guaranteed 24/7 server.</p>
+          <p>The phone uses a partial wake lock while serving, which can increase battery use. Keep it powered and connected.</p>
+          <p>On Android 15 and newer, Android limits data-sync foreground services to 6 total hours per 24 hours. The service stops cleanly at the limit; reopen the app to start it again. This is not a guaranteed 24/7 server.</p>
+          <p>Supabase Free quotas apply. The relay is not unlimited and can pause or throttle when provider limits are reached.</p>
         </CardContent>
       </Card>
     </main>
