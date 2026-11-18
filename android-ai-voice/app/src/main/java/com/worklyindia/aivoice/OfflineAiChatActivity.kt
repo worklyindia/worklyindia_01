@@ -28,7 +28,10 @@ import java.util.concurrent.Executors
 
 class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private val worker = Executors.newSingleThreadExecutor()
-    private val modelManager by lazy { OfflineModelManager(this) }
+    private val modelManager by lazy { QwenModelManager(this) }
+    private lateinit var qwenModelPicker: Spinner
+    private lateinit var downloadModelButton: Button
+    private var selectedQwenModel: QwenModelManager.Model? = null
     private val kokoroModelManager by lazy { KokoroModelManager(this) }
     private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
     private val engine by lazy { OfflineAiEngine() }
@@ -111,6 +114,30 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
 
         status = text("Loading Qwen model…", 13, 0xFF2E9D72.toInt())
         root.addView(status)
+        qwenModelPicker = Spinner(this).apply {
+            adapter = ArrayAdapter(this@OfflineAiChatActivity, android.R.layout.simple_spinner_dropdown_item, modelManager.models)
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    selectedQwenModel = modelManager.models[position]
+                    sendButton.isEnabled = engine.isLoaded && selectedQwenModel?.let { modelManager.snapshot(it).state == QwenModelManager.State.READY } == true
+                }
+            }
+        }
+        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, -2))
+        downloadModelButton = button("Download selected AI model")
+        downloadModelButton.setOnClickListener {
+            val selected = selectedQwenModel ?: modelManager.models[0]
+            worker.execute {
+                try {
+                    modelManager.startDownload(selected)
+                    runOnUiThread { status.text = "Downloading ${selected.title} over Wi-Fi. Check notification for progress." }
+                } catch (error: Exception) {
+                    runOnUiThread { status.text = error.message ?: "Could not start model download." }
+                }
+            }
+        }
+        root.addView(downloadModelButton, LinearLayout.LayoutParams(-1, dp(48)))
         languagePicker = Spinner(this).apply {
             adapter = ArrayAdapter(this@OfflineAiChatActivity, android.R.layout.simple_spinner_dropdown_item, languages)
         }
@@ -170,17 +197,24 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             try {
                 val memoryInfo = ActivityManager.MemoryInfo()
                 (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memoryInfo)
-                check(memoryInfo.totalMem >= 6L * 1024L * 1024L * 1024L) {
-                    "Qwen 3B needs a phone with at least 6 GB RAM. Close other apps and try again."
+                val recommended = modelManager.recommendedModel(memoryInfo.availMem)
+                val chosen = selectedQwenModel ?: recommended
+                runOnUiThread {
+                    val index = modelManager.models.indexOf(chosen)
+                    if (index >= 0 && qwenModelPicker.selectedItemPosition != index) qwenModelPicker.setSelection(index)
+                    status.text = "Available RAM: %.1f GB · Recommended: ${recommended.title}".format(java.util.Locale.US, memoryInfo.availMem / 1_000_000_000.0)
                 }
-                check(modelManager.snapshot().state == OfflineModelManager.State.READY) {
-                    "Qwen is not downloaded. Open Downloads on the previous screen and finish the download."
+                check(modelManager.snapshot(chosen).state == QwenModelManager.State.READY) {
+                    "${chosen.title} is not downloaded. Select a model and tap Download selected AI model."
                 }
-                check(engine.loadModel(modelManager.modelFile)) {
-                    "Qwen could not load. The phone may not have enough free RAM."
+                check(memoryInfo.availMem >= chosen.minFreeRam) {
+                    "Not enough free RAM for ${chosen.title}. Choose a smaller Qwen model or close other apps."
+                }
+                check(engine.loadModel(modelManager.file(chosen))) {
+                    "Qwen could not load. Free memory may be insufficient; try a smaller model."
                 }
                 runOnUiThread {
-                    status.text = "Ready · Qwen2.5-3B runs on this phone"
+                    status.text = "Ready · ${chosen.title} running locally"
                     sendButton.isEnabled = true
                 }
             } catch (error: Exception) {
