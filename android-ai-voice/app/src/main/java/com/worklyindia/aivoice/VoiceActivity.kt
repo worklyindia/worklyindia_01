@@ -48,34 +48,10 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var offlineSpeechEnginePicker: Spinner
     private lateinit var pairingCodeInput: EditText
     private lateinit var relayStatusText: TextView
-    private lateinit var offlineModelStatusText: TextView
-    private lateinit var offlineModelProgressBar: ProgressBar
-    private lateinit var offlineModelActionButton: Button
-    private lateinit var offlineModelChatButton: Button
-    private val offlineModelManager by lazy { OfflineModelManager(this) }
-    private val kokoroModelManager by lazy { KokoroModelManager(this) }
-    private var kokoroEngine: KokoroSpeechEngine? = null
     private var tinyTtsEngine: IndicTinyTtsEngine? = null
-    private val kokoroExecutor = Executors.newSingleThreadExecutor()
-    private lateinit var kokoroModelStatusText: TextView
-    private lateinit var kokoroModelProgressBar: ProgressBar
-    private lateinit var kokoroModelActionButton: Button
+    private val tinyTtsExecutor = Executors.newSingleThreadExecutor()
     private lateinit var speechPackStatusText: TextView
     private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
-    private var kokoroAutoDownloadAttempted = false
-    private var downloadChoicePromptShowing = false
-    private val offlineModelHandler = Handler(Looper.getMainLooper())
-    private val offlineModelPoll = object : Runnable {
-        override fun run() {
-            refreshOfflineModelUi()
-            val state = runCatching { offlineModelManager.snapshot().state }.getOrNull()
-            val kokoroState = runCatching { kokoroModelManager.snapshot().state }.getOrNull()
-            if (state == OfflineModelManager.State.RUNNING || state == OfflineModelManager.State.PENDING ||
-                state == OfflineModelManager.State.PAUSED || kokoroState == KokoroModelManager.State.RUNNING ||
-                kokoroState == KokoroModelManager.State.PENDING || kokoroState == KokoroModelManager.State.PAUSED
-            ) offlineModelHandler.postDelayed(this, 1000L)
-        }
-    }
     private val relayExecutor = Executors.newSingleThreadExecutor()
     private val offlineSpeechExecutor = Executors.newSingleThreadExecutor()
     @Volatile private var offlineRecording = false
@@ -105,9 +81,6 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         buildScreen()
         tts = TextToSpeech(this, this)
         updateSpeechAvailability()
-        // Ask once whether large model downloads may use metered mobile data.
-        // The saved choice is reused for Qwen and the later Kokoro download.
-        offlineModelHandler.postDelayed({ ensureAutomaticOfflineModelDownload() }, 1200L)
     }
 
     private fun buildScreen() {
@@ -156,7 +129,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         page.addView(button("■  Stop voice").apply {
             setBackgroundColor(adaptColor(0xFFE8EDF4.toInt()))
             setTextColor(adaptColor(0xFF26364B.toInt()))
-            setOnClickListener { tts?.stop(); kokoroEngine?.stop(); tinyTtsEngine?.stop(); setStatus("Voice playback stopped.") }
+            setOnClickListener { tts?.stop(); tinyTtsEngine?.stop(); setStatus("Voice playback stopped.") }
         }, matchWrap().also { it.topMargin = dp(8) })
 
         page.addView(space(22))
@@ -211,219 +184,6 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
 
-
-    private fun ensureAutomaticOfflineModelDownload() {
-        if (!::offlineModelStatusText.isInitialized) return
-        try {
-            val snapshot = offlineModelManager.snapshot()
-            val downloadPrefs = getSharedPreferences(DOWNLOAD_PREFS, MODE_PRIVATE)
-            if (!downloadPrefs.contains(KEY_ALLOW_MOBILE_DATA)) {
-                requestDownloadNetworkChoice { allowMobile ->
-                    startOfflineModelDownload(allowMobile)
-                }
-            } else if (snapshot.state == OfflineModelManager.State.NOT_DOWNLOADED ||
-                snapshot.state == OfflineModelManager.State.FAILED
-            ) {
-                startOfflineModelDownload(isMobileDataDownloadAllowed())
-            } else {
-                refreshOfflineModelUi()
-                if (snapshot.state == OfflineModelManager.State.PENDING ||
-                    snapshot.state == OfflineModelManager.State.RUNNING ||
-                    snapshot.state == OfflineModelManager.State.PAUSED
-                ) startOfflineModelPolling()
-            }
-        } catch (error: Exception) {
-            setOfflineModelStatus(error.message ?: "Automatic AI download could not start. Tap retry.")
-            offlineModelActionButton.text = "Retry automatic download"
-        }
-    }
-
-    private fun isMobileDataDownloadAllowed(): Boolean =
-        getSharedPreferences(DOWNLOAD_PREFS, MODE_PRIVATE).getBoolean(KEY_ALLOW_MOBILE_DATA, false)
-
-    private fun requestDownloadNetworkChoice(onChoice: (Boolean) -> Unit) {
-        val prefs = getSharedPreferences(DOWNLOAD_PREFS, MODE_PRIVATE)
-        if (prefs.contains(KEY_ALLOW_MOBILE_DATA)) {
-            onChoice(prefs.getBoolean(KEY_ALLOW_MOBILE_DATA, false))
-            return
-        }
-        if (downloadChoicePromptShowing || isFinishing) return
-        downloadChoicePromptShowing = true
-        AlertDialog.Builder(this)
-            .setTitle("Allow mobile data for AI downloads?")
-            .setMessage("Workly Voice downloads Qwen (about 2.1 GB) and Kokoro (about 295 MB). Allowing mobile data may use your data pack and may cause carrier charges. Choose Wi-Fi only to avoid mobile-data usage.")
-            .setNegativeButton("Wi-Fi only") { _, _ ->
-                prefs.edit().putBoolean(KEY_ALLOW_MOBILE_DATA, false).apply()
-                downloadChoicePromptShowing = false
-                onChoice(false)
-            }
-            .setPositiveButton("Allow mobile data") { _, _ ->
-                prefs.edit().putBoolean(KEY_ALLOW_MOBILE_DATA, true).apply()
-                downloadChoicePromptShowing = false
-                onChoice(true)
-            }
-            .setOnCancelListener { downloadChoicePromptShowing = false }
-            .show()
-    }
-
-    private fun onOfflineModelAction() {
-        val state = try {
-            offlineModelManager.snapshot().state
-        } catch (error: Exception) {
-            setOfflineModelStatus(error.message ?: "Offline model storage is unavailable.")
-            return
-        }
-        when (state) {
-            OfflineModelManager.State.READY -> {
-                offlineModelManager.deleteDownloadedModel()
-                setOfflineModelStatus("Downloaded model deleted. You can download it again whenever needed.")
-                refreshOfflineModelUi()
-            }
-            OfflineModelManager.State.PENDING,
-            OfflineModelManager.State.RUNNING,
-            OfflineModelManager.State.PAUSED -> {
-                offlineModelManager.cancelAndDelete()
-                setOfflineModelStatus("Model download cancelled.")
-                refreshOfflineModelUi()
-            }
-            else -> requestDownloadNetworkChoice { allowMobile ->
-                startOfflineModelDownload(allowMobile)
-            }
-        }
-    }
-
-    private fun startOfflineModelDownload(allowMobileData: Boolean = isMobileDataDownloadAllowed()) {
-        try {
-            offlineModelManager.startDownload(allowMobileData)
-            setOfflineModelStatus("Starting download from the official Hugging Face model repository…")
-            refreshOfflineModelUi()
-            startOfflineModelPolling()
-        } catch (error: Exception) {
-            setOfflineModelStatus(error.message ?: "Could not start model download.")
-        }
-    }
-
-    private fun refreshOfflineModelUi() {
-        if (!::offlineModelStatusText.isInitialized) return
-        try {
-            val snapshot = offlineModelManager.snapshot()
-            val active = snapshot.state == OfflineModelManager.State.RUNNING ||
-                snapshot.state == OfflineModelManager.State.PENDING ||
-                snapshot.state == OfflineModelManager.State.PAUSED
-            offlineModelProgressBar.visibility = if (active || snapshot.state == OfflineModelManager.State.READY) View.VISIBLE else View.GONE
-            offlineModelProgressBar.progress = snapshot.progressPercent
-            offlineModelChatButton.isEnabled = snapshot.state == OfflineModelManager.State.READY
-            when (snapshot.state) {
-                OfflineModelManager.State.NOT_DOWNLOADED -> {
-                    offlineModelStatusText.text = "Waiting for an allowed network · about 2.1 GB required"
-                    offlineModelActionButton.text = "Retry automatic download"
-                }
-                OfflineModelManager.State.PENDING -> {
-                    offlineModelStatusText.text = "Download queued… ${snapshot.progressPercent}%"
-                    offlineModelActionButton.text = "Cancel download"
-                }
-                OfflineModelManager.State.RUNNING -> {
-                    val downloaded = snapshot.downloadedBytes / 1_000_000_000.0
-                    val total = snapshot.totalBytes / 1_000_000_000.0
-                    offlineModelStatusText.text = "Downloading… ${snapshot.progressPercent}% (%.2f / %.2f GB)".format(java.util.Locale.US, downloaded, total)
-                    offlineModelActionButton.text = "Cancel download"
-                }
-                OfflineModelManager.State.PAUSED -> {
-                    offlineModelStatusText.text = "Download paused by Android/network. It may resume automatically when the connection is available."
-                    offlineModelActionButton.text = "Cancel download"
-                }
-                OfflineModelManager.State.FAILED -> {
-                    offlineModelStatusText.text = "Download failed or file verification failed. Try again."
-                    offlineModelActionButton.text = "Retry download"
-                }
-                OfflineModelManager.State.READY -> {
-                    offlineModelStatusText.text = "Model downloaded and GGUF file verified · 2.1 GB. Offline AI chat is ready to open."
-                    offlineModelActionButton.text = "Delete downloaded model"
-                }
-            }
-            ensureAutomaticKokoroModelDownload()
-            refreshKokoroModelUi()
-        } catch (error: Exception) {
-            offlineModelStatusText.text = error.message ?: "Offline model storage is unavailable."
-            offlineModelActionButton.text = "Try again"
-        }
-    }
-
-    // Queue Kokoro only after the larger Qwen download completes, keeping model transfers sequential.
-    private fun ensureAutomaticKokoroModelDownload() {
-        if (!::kokoroModelStatusText.isInitialized) return
-        if (Build.SUPPORTED_ABIS.none { it == "arm64-v8a" }) {
-            kokoroModelStatusText.text = "Kokoro requires a 64-bit ARM device. Android TTS remains available."
-            kokoroModelActionButton.isEnabled = false
-            return
-        }
-        if (offlineModelManager.snapshot().state != OfflineModelManager.State.READY) return
-        if (kokoroAutoDownloadAttempted) return
-        kokoroAutoDownloadAttempted = true
-        val prefs = getSharedPreferences("workly_kokoro_model", MODE_PRIVATE)
-        if (prefs.getBoolean("auto_attempted", false)) return
-        prefs.edit().putBoolean("auto_attempted", true).apply()
-        if (kokoroModelManager.snapshot().state == KokoroModelManager.State.NOT_DOWNLOADED) {
-            runCatching { kokoroModelManager.startDownload(isMobileDataDownloadAllowed()) }
-                .onFailure { kokoroModelStatusText.text = it.message ?: "Kokoro download could not start. Tap retry." }
-        }
-        startOfflineModelPolling()
-    }
-
-    private fun refreshKokoroModelUi() {
-        if (!::kokoroModelStatusText.isInitialized) return
-        val snapshot = kokoroModelManager.snapshot()
-        val active = snapshot.state == KokoroModelManager.State.PENDING || snapshot.state == KokoroModelManager.State.RUNNING || snapshot.state == KokoroModelManager.State.PAUSED
-        kokoroModelProgressBar.visibility = if (active || snapshot.state == KokoroModelManager.State.READY) View.VISIBLE else View.GONE
-        kokoroModelProgressBar.progress = snapshot.progressPercent
-        when (snapshot.state) {
-            KokoroModelManager.State.NOT_DOWNLOADED -> {
-                kokoroModelStatusText.text = if (offlineModelManager.snapshot().state == OfflineModelManager.State.READY) "Ready to download · Wi-Fi or approved mobile data" else "Waiting for Qwen download to finish…"
-                kokoroModelActionButton.text = "Download Kokoro"
-            }
-            KokoroModelManager.State.PENDING -> { kokoroModelStatusText.text = "Kokoro download queued… ${snapshot.progressPercent}%"; kokoroModelActionButton.text = "Cancel Kokoro download" }
-            KokoroModelManager.State.RUNNING -> { kokoroModelStatusText.text = "Downloading Kokoro… ${snapshot.progressPercent}%"; kokoroModelActionButton.text = "Cancel Kokoro download" }
-            KokoroModelManager.State.PAUSED -> { kokoroModelStatusText.text = "Kokoro download paused until an allowed network is available."; kokoroModelActionButton.text = "Cancel Kokoro download" }
-            KokoroModelManager.State.FAILED -> { kokoroModelStatusText.text = "Kokoro download failed or file is incomplete. Tap retry."; kokoroModelActionButton.text = "Retry Kokoro download" }
-            KokoroModelManager.State.READY -> { kokoroModelStatusText.text = "Kokoro model downloaded and file size verified. Hindi and English offline TTS ready."; kokoroModelActionButton.text = "Delete Kokoro model" }
-        }
-    }
-
-    private fun onKokoroModelAction() {
-        if (Build.SUPPORTED_ABIS.none { it == "arm64-v8a" }) {
-            kokoroModelStatusText.text = "Kokoro requires a 64-bit ARM device. Android TTS remains available."
-            return
-        }
-        when (kokoroModelManager.snapshot().state) {
-            KokoroModelManager.State.READY -> {
-                kokoroEngine?.close(); kokoroEngine = null
-                kokoroModelManager.cancelAndDelete()
-                getSharedPreferences("workly_kokoro_model", MODE_PRIVATE).edit().putBoolean("auto_attempted", true).apply()
-            }
-            KokoroModelManager.State.PENDING, KokoroModelManager.State.RUNNING, KokoroModelManager.State.PAUSED -> {
-                kokoroModelManager.cancelAndDelete()
-                getSharedPreferences("workly_kokoro_model", MODE_PRIVATE).edit().putBoolean("auto_attempted", true).apply()
-            }
-            else -> {
-                getSharedPreferences("workly_kokoro_model", MODE_PRIVATE).edit().putBoolean("auto_attempted", true).apply()
-                requestDownloadNetworkChoice { allowMobile ->
-                    runCatching { kokoroModelManager.startDownload(allowMobile) }
-                        .onFailure { kokoroModelStatusText.text = it.message ?: "Could not start Kokoro download." }
-                    startOfflineModelPolling()
-                }
-            }
-        }
-        refreshKokoroModelUi()
-    }
-
-    private fun setOfflineModelStatus(message: String) {
-        if (::offlineModelStatusText.isInitialized) offlineModelStatusText.text = message
-    }
-
-    private fun startOfflineModelPolling() {
-        offlineModelHandler.removeCallbacks(offlineModelPoll)
-        offlineModelHandler.post(offlineModelPoll)
-    }
 
     private fun pairPhone() {
         val code = pairingCodeInput.text?.toString()?.trim()?.uppercase(Locale.ROOT).orEmpty()
@@ -486,7 +246,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         val tinyReady = runCatching { speechPackManager.snapshot(tinyPack).state == SpeechPackDownloadManager.State.COMPLETE }.getOrDefault(false)
         if (tinyReady) {
             setStatus("Loading downloaded Indic Tiny TTS for ${lang.label}…")
-            kokoroExecutor.execute {
+            tinyTtsExecutor.execute {
                 try {
                     tinyTtsEngine?.close()
                     val engine = IndicTinyTtsEngine.create(this, code)
@@ -495,21 +255,6 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
                     runOnUiThread { setStatus("Speech generated by downloaded Indic Tiny TTS (${code.uppercase()}).") }
                 } catch (error: Exception) {
                     runOnUiThread { setStatus("Downloaded Indic Tiny TTS failed: ${error.message ?: "inference error"}. No other voice was substituted.") }
-                }
-            }
-            return
-        }
-        val kokoroReady = runCatching { kokoroModelManager.snapshot().state == KokoroModelManager.State.READY }.getOrDefault(false)
-        if (kokoroReady && (code == "hi" || code == "en")) {
-            val voiceId = if (code == "hi") KokoroSpeechEngine.HINDI_VOICE else KokoroSpeechEngine.ENGLISH_US_VOICE
-            setStatus("Preparing downloaded Kokoro voice for ${lang.label}…")
-            kokoroExecutor.execute {
-                try {
-                    val engine = kokoroEngine ?: KokoroSpeechEngine.create(this, kokoroModelManager.modelFile).also { kokoroEngine = it }
-                    engine.speak(text, voiceId)
-                    runOnUiThread { setStatus("Speech generated by downloaded Kokoro.") }
-                } catch (error: Exception) {
-                    runOnUiThread { setStatus("Downloaded Kokoro failed: ${error.message ?: "inference error"}. Android TTS was not substituted.") }
                 }
             }
             return
@@ -780,31 +525,19 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         super.onResume()
         if (::relayStatusText.isInitialized) refreshRelayStatus()
         if (::speechPackStatusText.isInitialized) refreshSpeechPackStatus()
-        if (::offlineModelStatusText.isInitialized) {
-            refreshOfflineModelUi()
-            val qwenState = runCatching { offlineModelManager.snapshot().state }.getOrNull()
-            val kokoroState = runCatching { kokoroModelManager.snapshot().state }.getOrNull()
-            if (qwenState == OfflineModelManager.State.PENDING || qwenState == OfflineModelManager.State.RUNNING ||
-                qwenState == OfflineModelManager.State.PAUSED || kokoroState == KokoroModelManager.State.PENDING ||
-                kokoroState == KokoroModelManager.State.RUNNING || kokoroState == KokoroModelManager.State.PAUSED
-            ) startOfflineModelPolling()
-        }
     }
 
     override fun onPause() {
         super.onPause()
-        offlineModelHandler.removeCallbacks(offlineModelPoll)
         if (listening) stopListening()
     }
 
     override fun onDestroy() {
-        offlineModelHandler.removeCallbacksAndMessages(null)
         stopListening()
         tts?.stop()
         tts?.shutdown()
-        kokoroEngine?.close()
         tinyTtsEngine?.close()
-        kokoroExecutor.shutdownNow()
+        tinyTtsExecutor.shutdownNow()
         relayExecutor.shutdownNow()
         offlineSpeechExecutor.shutdownNow()
         super.onDestroy()
