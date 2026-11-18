@@ -194,7 +194,7 @@ export function buildAiGateways(freeOnly = false): AiGateway[] {
   // These gateways expose free-tier/free-model options; actual quota availability
   // remains provider-controlled and a request can still fail when limits are reached.
   return freeOnly
-    ? gws.filter((gw) => ["Google AI Studio", "OpenRouter", "Groq", "Cerebras"].includes(gw.name))
+    ? gws.filter((gw) => ["Google AI Studio", "OpenRouter", "Groq", "Cerebras", "Cloudflare Workers AI", "Hugging Face"].includes(gw.name))
     : gws;
 }
 
