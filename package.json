@@ -115,7 +115,7 @@
     "@capacitor/splash-screen": "^7.0.2",
     "@capacitor/haptics": "^7.0.2",
     "@lovable.dev/mcp-js": "3.0.1",
-    "@capacitor/device": "^7.4.3"
+    "@capacitor/device": "^7.0.2"
   },
   "devDependencies": {
     "@babel/core": "^8.0.6",
