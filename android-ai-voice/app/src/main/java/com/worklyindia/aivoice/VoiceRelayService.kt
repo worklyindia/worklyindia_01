@@ -98,6 +98,13 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                     setStatus("Phone server is online. Waiting for a website request…")
                 }
             } catch (error: Exception) {
+                if (error is RelayApiException && error.statusCode == 401) {
+                    SecureDeviceTokenStore.clear(this)
+                    setStatus("Phone access was revoked or the device token is invalid. Pair this phone again.")
+                    running.set(false)
+                    stopSelf()
+                    break
+                }
                 setStatus("Relay reconnecting: ${error.message ?: "network unavailable"}")
             }
             try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
@@ -130,6 +137,15 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         ttsReady = status == TextToSpeech.SUCCESS
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        running.set(false)
+        pollThread?.interrupt()
+        getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit()
+            .putString(STATUS_KEY, "Android stopped the phone server after its foreground-service time limit. Open the app to start it again.")
+            .apply()
+        stopSelf(startId)
     }
 
     override fun onDestroy() {
