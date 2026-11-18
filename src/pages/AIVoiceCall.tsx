@@ -52,6 +52,7 @@ export default function AIVoiceCall() {
   const { user } = useAuth();
   const { data: settings } = useAIChatSettings();
   const [callState, setCallState] = useState<CallState>('idle');
+  const [callStarted, setCallStarted] = useState(false);
   const [lastReply, setLastReply] = useState('');
   const [lastTranscript, setLastTranscript] = useState('');
   const [partialTranscript, setPartialTranscript] = useState('');
@@ -142,6 +143,7 @@ export default function AIVoiceCall() {
 
   const endCall = useCallback(() => {
     activeRef.current = false;
+    setCallStarted(false);
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
     partialFinalizeTimerRef.current = null;
     lastSubmittedTranscriptRef.current = '';
@@ -429,6 +431,8 @@ export default function AIVoiceCall() {
       try { await navigator.storage?.persist?.(); } catch { /* browser may deny persistent storage */ }
       await prepareShrutiRecognition();
       activeRef.current = true;
+      setCallStarted(true);
+      setCallState('listening');
       if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
       partialFinalizeTimerRef.current = null;
       lastSubmittedTranscriptRef.current = '';
@@ -436,7 +440,6 @@ export default function AIVoiceCall() {
       setLastTranscript('');
       setPartialTranscript('');
       setErrorMessage('');
-      setCallState('listening');
       setVoiceStage('Starting secure on-device microphone…');
       setMicLevel(0);
       setAiRequestStatus('Not sent');
@@ -445,6 +448,7 @@ export default function AIVoiceCall() {
       startingCallRef.current = false;
       if (!startRecognition('auto')) {
         activeRef.current = false;
+        setCallStarted(false);
         setVoiceStage('Could not start speech recognition');
         setErrorMessage('Could not start speech recognition. Check microphone permission and browser speech settings, then try again.');
         setCallState('error');
@@ -453,6 +457,7 @@ export default function AIVoiceCall() {
     } catch (error) {
       startingCallRef.current = false;
       activeRef.current = false;
+      setCallStarted(false);
       const message = error instanceof Error ? error.message : 'Shruti could not start. Check microphone permission and try again.';
       setErrorMessage(message);
       setVoiceStage(`Error: ${message}`);
@@ -520,7 +525,7 @@ export default function AIVoiceCall() {
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
         <div className="mt-10 w-full">
-          {!activeRef.current ? (
+          {!callStarted ? (
             <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">
               <Mic className="mr-2 h-5 w-5" />
               Start AI Call
