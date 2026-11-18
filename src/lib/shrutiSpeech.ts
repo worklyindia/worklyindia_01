@@ -18,6 +18,7 @@ let speechStartedAt = 0;
 let lastVoiceAt = 0;
 let noiseFloor = 0.003;
 let speechThreshold = 0.018;
+let voiceCandidateFrames = 0;
 let transcribing = false;
 let active = false;
 
@@ -138,6 +139,7 @@ export async function startShrutiRecognition(): Promise<boolean> {
   preRoll = [];
   noiseFloor = 0.003;
   speechThreshold = 0.018;
+  voiceCandidateFrames = 0;
   active = true;
   speechStartedAt = 0;
   lastVoiceAt = 0;
@@ -166,11 +168,17 @@ export async function startShrutiRecognition(): Promise<boolean> {
 
     const isVoiceFrame = rms >= speechThreshold && peak >= speechThreshold * 1.8;
     if (isVoiceFrame) {
-      if (!speechStartedAt) {
+      voiceCandidateFrames += 1;
+      // Require sustained speech energy (about 250 ms) before treating sound as
+      // a user interruption. Short clicks, gusts and isolated background peaks
+      // must not stop the AI voice.
+      if (!speechStartedAt && voiceCandidateFrames >= 3) {
         speechStartedAt = now;
         chunks = preRoll.map((part) => new Float32Array(part));
       }
-      lastVoiceAt = now;
+      if (speechStartedAt) lastVoiceAt = now;
+    } else if (!speechStartedAt) {
+      voiceCandidateFrames = 0;
     }
 
     if (speechStartedAt) chunks.push(frame);
@@ -180,6 +188,7 @@ export async function startShrutiRecognition(): Promise<boolean> {
     if (speechStartedAt && now - lastVoiceAt > 1500) {
       speechStartedAt = 0;
       lastVoiceAt = 0;
+      voiceCandidateFrames = 0;
       preRoll = [];
       submitUtterance();
     } else if (speechStartedAt && now - speechStartedAt > 18000) {
