@@ -184,7 +184,7 @@ export default function AIVoiceCall() {
       conversationTurnRef.current += 1;
       setPartialTranscript('');
       setCallState('listening');
-      setVoiceStage('You are speaking…');
+      setVoiceStage('Listening…');
     }
 
     lastSubmittedTranscriptRef.current = transcript;
@@ -281,21 +281,24 @@ export default function AIVoiceCall() {
       // state while the AI is answering.
       setCallState('speaking');
       setVoiceStage('AI is speaking…');
+
+      // Keep the microphone listening DURING AI playback so the user can
+      // interrupt naturally. Recognition is started before TTS, not after it.
+      // The transcript handler will cancel TTS immediately for real user speech.
+      if (activeRef.current && !mutedRef.current) {
+        startRecognition('auto');
+      }
+
       const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (spoken) {
         lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
         setVoiceStage('AI is speaking…');
-        if (activeRef.current && !muted) {
-          window.setTimeout(() => {
-            if (activeRef.current && !muted) startRecognition('auto');
-          }, 120);
-        }
       } else {
         // TTS failure must never end or navigate away from the call screen.
         setCallState('listening');
-        setVoiceStage('AI reply received; microphone remains active');
-        if (activeRef.current && !muted) window.setTimeout(() => { if (activeRef.current && !muted) startRecognition('auto'); }, 150);
+        setVoiceStage('Listening…');
+        if (activeRef.current && !mutedRef.current) startRecognition('auto');
       }
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
@@ -330,7 +333,10 @@ export default function AIVoiceCall() {
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const status = (event as CustomEvent<{ status?: string }>).detail?.status;
-    if (status === 'listening') { setCallState('listening'); setVoiceStage('Microphone is listening'); }
+    if (status === 'listening' && callStateRef.current !== 'speaking' && callStateRef.current !== 'thinking') {
+      setCallState('listening');
+      setVoiceStage('Listening…');
+    }
     if (status === 'processing') setVoiceStage('Speech ended; waiting for transcript…');
     if (status === 'processing') setCallState('thinking');
     if (status === 'speaking') { setCallState('speaking'); setVoiceStage('AI is speaking…'); }
