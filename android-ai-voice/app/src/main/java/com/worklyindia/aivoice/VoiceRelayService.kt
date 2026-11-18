@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
@@ -19,6 +20,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var pollThread: Thread? = null
     private var activeToken: String? = null
+    private var relayWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -66,6 +68,11 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }
         activeToken = token
         startForeground(NOTIFICATION_ID, buildNotification("Connecting to secure relay…"))
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        relayWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:WorklyVoiceRelay").apply {
+            setReferenceCounted(false)
+            acquire()
+        }
         if (running.compareAndSet(false, true)) {
             pollThread = Thread { pollLoop(token) }.apply {
                 name = "WorklyVoiceRelay"
@@ -153,6 +160,8 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         pollThread?.interrupt()
         tts?.stop()
         tts?.shutdown()
+        if (relayWakeLock?.isHeld == true) relayWakeLock?.release()
+        relayWakeLock = null
         getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, "Phone server stopped.").apply()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
         else stopForeground(true)
