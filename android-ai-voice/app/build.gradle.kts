@@ -10,7 +10,9 @@ android {
         applicationId = "com.worklyindia.aivoice"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        // GitHub Actions run number increases monotonically for each workflow run.
+        // Local Android Studio builds fall back to versionCode 1.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0.0"
         buildConfigField("String", "SUPABASE_URL", "\"https://jubwzelupbntbetpajqb.supabase.co\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o\"")
