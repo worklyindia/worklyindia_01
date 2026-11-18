@@ -33,10 +33,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var downloadModelButton: Button
     private var selectedQwenModel: QwenModelManager.Model? = null
     private var userHasChosenQwenModel = false
-    private val kokoroModelManager by lazy { KokoroModelManager(this) }
     private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
     private val engine by lazy { OfflineAiEngine() }
-    private var kokoroEngine: KokoroSpeechEngine? = null
     private var tinyTtsEngine: IndicTinyTtsEngine? = null
     private var activeAudioRecord: AudioRecord? = null
     @Volatile private var offlineRecording = false
@@ -200,7 +198,9 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 val memoryInfo = ActivityManager.MemoryInfo()
                 (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memoryInfo)
                 val recommended = modelManager.recommendedModel(memoryInfo.availMem)
-                val chosen = if (userHasChosenQwenModel) selectedQwenModel ?: recommended else recommended
+                val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE).getString("selected_model_id", null)
+                val savedModel = modelManager.models.firstOrNull { it.id == savedId }
+                val chosen = if (userHasChosenQwenModel) selectedQwenModel ?: recommended else savedModel ?: recommended
                 selectedQwenModel = chosen
                 runOnUiThread {
                     val index = modelManager.models.indexOf(chosen)
@@ -435,24 +435,9 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
             }
             return
         }
-        val isKokoroLanguage = code == "hi" || code == "en"
-        if (isKokoroLanguage && runCatching { kokoroModelManager.snapshot().state == KokoroModelManager.State.READY }.getOrDefault(false)) {
-            status.text = "Generating speech with downloaded Kokoro…"
-            worker.execute {
-                try {
-                    val kokoro = kokoroEngine ?: KokoroSpeechEngine.create(this, kokoroModelManager.modelFile).also { kokoroEngine = it }
-                    val voiceId = if (code == "hi") KokoroSpeechEngine.HINDI_VOICE else KokoroSpeechEngine.ENGLISH_US_VOICE
-                    kokoro.speak(value, voiceId)
-                    runOnUiThread { status.text = "Spoken with downloaded Kokoro voice." }
-                } catch (error: Exception) {
-                    runOnUiThread { status.text = "Downloaded Kokoro failed: ${error.message ?: "engine error"}. Android TTS was not substituted." }
-                }
-            }
-            return
-        }
         val voice = tts
         if (!ttsReady || voice == null) {
-            status.text = "Speech output is not ready. Download the selected Indic Tiny TTS pack."
+            status.text = "Speech output is not ready. Install a compatible Android TTS voice or download Indic Tiny TTS."
             return
         }
         if (voice.isLanguageAvailable(language.locale) >= TextToSpeech.LANG_AVAILABLE) {
@@ -513,7 +498,6 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         tts?.shutdown()
         worker.execute { engine.unload() }
         worker.shutdown()
-        kokoroEngine?.close()
         tinyTtsEngine?.close()
         super.onDestroy()
     }
