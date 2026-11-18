@@ -189,7 +189,6 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             .setContentText(message.take(120))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setSilent(true)
             .build()
     }
 
