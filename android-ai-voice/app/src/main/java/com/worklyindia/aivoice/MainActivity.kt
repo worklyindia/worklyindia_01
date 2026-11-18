@@ -299,13 +299,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     offlineModelActionButton.text = "Download offline AI model"
                 }
                 OfflineModelManager.State.PENDING -> {
-                    offlineModelStatusText.text = "Download queued… \${snapshot.progressPercent}%"
+                    offlineModelStatusText.text = "Download queued… ${snapshot.progressPercent}%"
                     offlineModelActionButton.text = "Cancel download"
                 }
                 OfflineModelManager.State.RUNNING -> {
                     val downloaded = snapshot.downloadedBytes / 1_000_000_000.0
                     val total = snapshot.totalBytes / 1_000_000_000.0
-                    offlineModelStatusText.text = "Downloading… \${snapshot.progressPercent}% (%.2f / %.2f GB)".format(java.util.Locale.US, downloaded, total)
+                    offlineModelStatusText.text = "Downloading… ${snapshot.progressPercent}% (%.2f / %.2f GB)".format(java.util.Locale.US, downloaded, total)
                     offlineModelActionButton.text = "Cancel download"
                 }
                 OfflineModelManager.State.PAUSED -> {
