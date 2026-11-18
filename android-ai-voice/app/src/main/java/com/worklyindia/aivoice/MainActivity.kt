@@ -62,7 +62,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         val scroll = ScrollView(this).apply { addView(page) }
         page.addView(label("WORKLY INDIA", 12, 0xFF2878D0.toInt(), true))
-        page.addView(label("AI Voice Studio", 28, 0xFF142033.toInt(), true).also {
+        page.addView(label("Workly Voice", 28, 0xFF142033.toInt(), true).also {
             it.setPadding(0, dp(5), 0, dp(4))
         })
         page.addView(label("Hindi · English · Gujarati", 15, 0xFF65748B.toInt(), false))
@@ -170,7 +170,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         ).also { it.setPadding(0, dp(10), 0, 0) })
         page.addView(relayCard)
         page.addView(space(10))
-        page.addView(label("WORKLY AI VOICE · VERSION 1.0.0", 11, 0xFF8491A3.toInt(), true).also {
+        page.addView(label("WORKLY VOICE · VERSION 1.0.0", 11, 0xFF8491A3.toInt(), true).also {
             it.gravity = Gravity.CENTER
         })
         setContentView(scroll)
@@ -186,7 +186,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         relayStatusText.text = "Pairing securely…"
         relayExecutor.execute {
             try {
-                val token = VoiceRelayApi.claimDevice(code, "Workly AI Voice Android")
+                val token = VoiceRelayApi.claimDevice(code, "Workly Voice Android")
                 SecureDeviceTokenStore.save(this, token)
                 runOnUiThread {
                     pairingCodeInput.setText("")
