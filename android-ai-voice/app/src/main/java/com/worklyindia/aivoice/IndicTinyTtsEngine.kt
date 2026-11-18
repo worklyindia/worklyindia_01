@@ -33,13 +33,15 @@ class IndicTinyTtsEngine private constructor(
     private val flow: OrtSession,
     private val vocoder: OrtSession,
     private val language: String,
-    private val speakerId: Long,
+    private val femaleSpeakerId: Long,
+    private val maleSpeakerId: Long,
     private val languageId: Long,
     private val styleId: Long,
     private val tokenIds: Map<String, Long>,
     private val mean: Float,
     private val std: Float,
-    private val lengthScale: Float,
+    private val femaleLengthScale: Float,
+    private val maleLengthScale: Float,
     private val timesteps: Int,
     private val temperature: Float,
     private val pauseSamples: Int
@@ -48,12 +50,14 @@ class IndicTinyTtsEngine private constructor(
 
     fun speak(text: String, voice: String = "female", speed: Float = 1.0f) {
         require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
-        val speaker = when (voice.lowercase()) {
-            "female" -> speakerId
-            "male" -> speakerId + 1L
+        val selectedVoice = voice.lowercase()
+        val speaker = when (selectedVoice) {
+            "female" -> femaleSpeakerId
+            "male" -> maleSpeakerId
             else -> throw IllegalArgumentException("Choose female or male voice.")
         }
-        val normalized = Normalizer.normalize(text.trim(), Normalizer.Form.NFC)
+        val scale = (if (selectedVoice == "male") maleLengthScale else femaleLengthScale) / speed
+        val normalized = normalizeInput(text)
         require(normalized.isNotBlank()) { "Enter text to speak." }
         val pieces = splitChunks(normalized)
         val audioParts = ArrayList<FloatArray>()
@@ -61,7 +65,7 @@ class IndicTinyTtsEngine private constructor(
         for (chunk in pieces) {
             val ids = encodeCharacters(chunk)
             if (ids.size > MAX_TOKENS) throw IllegalArgumentException("Text is too long. Split it into shorter sentences.")
-            val spoken = synthesizeChunk(ids, speaker, random, lengthScale / speed)
+            val spoken = synthesizeChunk(ids, speaker, random, scale)
             if (spoken.isNotEmpty()) {
                 if (audioParts.isNotEmpty()) audioParts.add(FloatArray(pauseSamples))
                 audioParts.add(spoken)
@@ -92,13 +96,51 @@ class IndicTinyTtsEngine private constructor(
         return result
     }
 
+    private fun normalizeInput(text: String): String {
+        val digitWords = when (language) {
+            "hi" -> listOf("शून्य", "एक", "दो", "तीन", "चार", "पाँच", "छह", "सात", "आठ", "नौ")
+            "gu" -> listOf("શૂન્ય", "એક", "બે", "ત્રણ", "ચાર", "પાંચ", "છ", "સાત", "આઠ", "નવ")
+            else -> listOf("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
+        }
+        val nativeZero = when (language) { "hi" -> '०'; "gu" -> '૦'; else -> '0' }
+        val expanded = buildString {
+            for (character in text) {
+                val digit = when {
+                    character in '0'..'9' -> character - '0'
+                    language == "hi" && character in '०'..'९' -> character - '०'
+                    language == "gu" && character in '૦'..'૯' -> character - '૦'
+                    else -> -1
+                }
+                if (digit >= 0) append(' ').append(digitWords[digit]).append(' ')
+                else append(when (character) {
+                    '\\n', '\\r', '\\t' -> ' '
+                    '“', '”' -> '"'
+                    '’', '‘' -> '\''
+                    '—', '–' -> '-'
+                    else -> character
+                })
+            }
+        }
+        return Normalizer.normalize(expanded, Normalizer.Form.NFC)
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
     private fun encodeCharacters(text: String): LongArray {
         val chars = ArrayList<Long>()
         for (character in text) {
             val id = tokenIds["c:$character"]
-                ?: throw IllegalArgumentException("Character '$character' is not supported by the selected $language voice. Use the language's native script and supported punctuation.")
-            chars.add(id)
+            if (id != null) {
+                chars.add(id)
+            } else if (Character.isLetter(character) || Character.getType(character) == Character.NON_SPACING_MARK.toInt() ||
+                Character.getType(character) == Character.COMBINING_SPACING_MARK.toInt()
+            ) {
+                throw IllegalArgumentException("Character '$character' is not supported by the selected $language voice. Use Hindi, Gujarati or English script matching this model.")
+            } else if (chars.isNotEmpty() && tokenIds.containsKey("c: ")) {
+                chars.add(tokenIds.getValue("c: "))
+            }
         }
+        while (chars.isNotEmpty() && chars.last() == tokenIds["c: "]) chars.removeAt(chars.lastIndex)
         require(chars.isNotEmpty()) { "Enter text in the selected language." }
         val withBlank = LongArray(chars.size * 2 + 1)
         chars.forEachIndexed { index, id -> withBlank[index * 2 + 1] = id }
@@ -357,11 +399,12 @@ class IndicTinyTtsEngine private constructor(
                 val stats = config.getJSONArray("mel_stats")
                 val synthesis = config.getJSONObject("synthesis")
                 val scaleObject = synthesis.getJSONObject("length_scale")
-                val scale = scaleObject.optDouble(femaleName, 1.0).toFloat()
+                val femaleScale = scaleObject.optDouble(femaleName, 1.0).toFloat()
+                val maleScale = scaleObject.optDouble(maleName, femaleScale.toDouble()).toFloat()
                 return IndicTinyTtsEngine(
                     env, encoder, flow, vocoder, code,
-                    voices.getLong(femaleName), ids.getLong("language"), ids.getJSONObject("styles").getLong("read"),
-                    tokens, stats.getDouble(0).toFloat(), stats.getDouble(1).toFloat(), scale,
+                    voices.getLong(femaleName), voices.getLong(maleName), ids.getLong("language"), ids.getJSONObject("styles").getLong("read"),
+                    tokens, stats.getDouble(0).toFloat(), stats.getDouble(1).toFloat(), femaleScale, maleScale,
                     synthesis.optInt("n_timesteps", 4), synthesis.optDouble("temperature", 0.667).toFloat(),
                     (synthesis.optDouble("sentence_pause_s", 0.15) * SAMPLE_RATE).toInt()
                 )
