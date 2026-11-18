@@ -341,13 +341,30 @@ export default function AIVoiceCall() {
       </header>
 
       <section className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col items-center px-6 pt-6 pb-8 text-center">
-        <div className="relative flex h-40 w-40 items-center justify-center">
-          <LottieSearchIcon size={132} className="relative z-10" />
+        <div className="relative flex h-48 w-48 items-center justify-center">
+          <div className="absolute inset-1 rounded-full border border-cyan-300/10" style={{ animation: 'chatwork-pulse 3.6s ease-in-out infinite' }} />
+          <div className="absolute inset-4 rounded-full border border-blue-300/15" style={{ animation: 'chatwork-pulse 3.1s ease-in-out .35s infinite' }} />
+          <div className="absolute inset-8 rounded-full border border-fuchsia-300/10" style={{ animation: 'chatwork-pulse 2.7s ease-in-out .7s infinite' }} />
+          <div className="absolute h-36 w-36 rounded-full bg-gradient-to-r from-cyan-400/10 via-blue-500/15 to-fuchsia-500/10 blur-2xl" style={{ animation: 'chatwork-breathe 2.8s ease-in-out infinite' }} />
+          <div className="absolute inset-2" style={{ animation: 'chatwork-orbit 9s linear infinite' }}>
+            <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-cyan-200 shadow-[0_0_14px_rgba(103,232,249,.95)]" />
+          </div>
+          <div className="absolute inset-5" style={{ animation: 'chatwork-orbit-reverse 12s linear infinite' }}>
+            <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-fuchsia-200 shadow-[0_0_12px_rgba(232,121,249,.9)]" />
+          </div>
+          <div className="relative z-10" style={{ animation: 'chatwork-breathe 3s ease-in-out infinite' }}>
+            <LottieSearchIcon size={132} />
+          </div>
         </div>
-        <div className="mt-4 flex items-center justify-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">ChatWork</h1>{showBadge && <VerificationBadge color={badgeColor} size={17} />}</div>
-        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-white/70">
-          <span className={`h-2 w-2 rounded-full ${callState === 'listening' ? 'bg-emerald-400 animate-pulse' : callState === 'thinking' ? 'bg-amber-300 animate-pulse' : callState === 'speaking' ? 'bg-blue-300 animate-pulse' : 'bg-white/30'}`} />
-          {callState === 'listening' ? 'Listening on this device' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
+        <div className="mt-3 flex items-center justify-center gap-2"><h1 className="text-2xl font-semibold tracking-tight">ChatWork</h1>{showBadge && <VerificationBadge color={badgeColor} size={17} />}</div>
+        <div className="mt-4 flex items-center justify-center gap-2 text-xs font-medium text-white/65">
+          <span className={`h-2 w-2 rounded-full ${callState === 'listening' ? 'bg-emerald-400' : callState === 'thinking' ? 'bg-amber-300' : callState === 'speaking' ? 'bg-cyan-300' : 'bg-white/30'}`} style={{ animation: callState === 'idle' || callState === 'error' ? undefined : 'chatwork-pulse 1.5s ease-in-out infinite' }} />
+          {callState === 'listening' ? 'Listening' : callState === 'thinking' ? 'AI is thinking…' : callState === 'speaking' ? 'AI is speaking' : callState === 'error' ? 'Call needs attention' : 'Ready to call'}
+        </div>
+        <div className="mt-3 flex h-8 items-center justify-center gap-1.5" aria-hidden="true">
+          {Array.from({ length: 9 }).map((_, index) => (
+            <span key={index} className={`w-1 rounded-full ${callState === 'listening' ? 'bg-cyan-300/75' : callState === 'speaking' ? 'bg-blue-300/75' : 'bg-white/15'}`} style={{ height: `${6 + Math.round(Math.max(micLevel, callState === 'speaking' ? 45 : 0) * (0.28 + ((index + 1) % 4) * 0.09))}px`, transition: 'height 120ms ease-out', animation: callState === 'idle' || callState === 'error' ? undefined : `chatwork-pulse ${0.8 + index * 0.07}s ease-in-out ${index * 0.06}s infinite` }} />
+          ))}
         </div>
 
         {activeRef.current && <div className="mt-4 w-full rounded-xl border border-cyan-300/20 bg-cyan-400/[0.06] px-4 py-3 text-left" aria-live="polite">
@@ -372,7 +389,8 @@ export default function AIVoiceCall() {
         </div>
 
         <div className="mt-auto w-full pt-8">
-          <div className="mb-5 grid grid-cols-3 items-start justify-items-center gap-6">
+          <div className="relative mb-5 grid grid-cols-3 items-start justify-items-center gap-6">
+            <div className="pointer-events-none absolute -inset-x-8 -top-5 h-20 bg-gradient-to-r from-transparent via-blue-500/[0.06] to-transparent" style={{ animation: 'chatwork-shimmer 5s linear infinite' }} />
             <button type="button" onClick={toggleMute} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className={`flex h-14 w-14 items-center justify-center rounded-full border border-white/10 ${muted ? 'bg-blue-500/80' : 'bg-white/5'}`}>{muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}</span><span className="text-[11px]">{muted ? 'Unmute' : 'Mute'}</span></button>
             <button type="button" onClick={toggleSpeaker} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className={`flex h-14 w-14 items-center justify-center rounded-full border border-white/10 ${speakerOn ? 'bg-blue-500/80' : 'bg-white/5'}`}>{speakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}</span><span className="text-[11px]">{speakerOn ? 'Speaker on' : 'Speaker off'}</span></button>
             <button type="button" onClick={endCall} disabled={!activeRef.current} className="flex flex-col items-center gap-2 text-white/80 disabled:text-white/30"><span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20 text-red-300"><PhoneOff className="h-5 w-5" /></span><span className="text-[11px]">End call</span></button>
