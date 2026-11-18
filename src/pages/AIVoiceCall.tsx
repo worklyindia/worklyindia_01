@@ -67,8 +67,15 @@ export default function AIVoiceCall() {
   const partialFinalizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSubmittedTranscriptRef = useRef('');
   const conversationTurnRef = useRef(0);
+  const callStateRef = useRef<CallState>('idle');
+  const mutedRef = useRef(false);
+  const lastReplyRef = useRef('');
   const replyAudioRef = useRef<HTMLAudioElement | null>(null);
   const replyAudioUrlRef = useRef<string | null>(null);
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { lastReplyRef.current = lastReply; }, [lastReply]);
+
   const bridge = getWorklyAndroidBridge();
   const startRecognition = useCallback((_language = 'auto') => {
     void startShrutiRecognition().catch((error) => window.dispatchEvent(new CustomEvent('workly-voice-error', {
@@ -162,8 +169,8 @@ export default function AIVoiceCall() {
     const transcript = detail?.text?.trim();
     if (!transcript || transcript === lastSubmittedTranscriptRef.current) return;
 
-    if (callState === 'speaking') {
-      if (isLikelyAiEcho(transcript, lastReply)) {
+    if (callStateRef.current === 'speaking') {
+      if (isLikelyAiEcho(transcript, lastReplyRef.current)) {
         setPartialTranscript('');
         setCallState('speaking');
         setVoiceStage('AI is speaking…');
@@ -302,7 +309,7 @@ export default function AIVoiceCall() {
       }
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [speakReply, stopRecognition, user?.id]);
+  }, [speakReply, stopRecognition, stopReply, startRecognition, user?.id]);
 
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -316,7 +323,7 @@ export default function AIVoiceCall() {
       if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
       window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: detail?.languageTag || 'und', source: 'partial-fallback' } }));
     }, 1400);
-  }, [callState]);
+  });
 
   const handleNativeStatus = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -357,11 +364,15 @@ export default function AIVoiceCall() {
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const message = (event as CustomEvent<{ message?: string }>).detail?.message || 'Voice service error.';
-    setVoiceStage(`Recognition error: ${message}`);
-    setErrorMessage(message);
-    setCallState('error');
-    toast.error(message);
-  }, []);
+    setErrorMessage('');
+    setVoiceStage('Microphone reconnecting…');
+    setCallState('listening');
+    if (activeRef.current && !mutedRef.current) {
+      window.setTimeout(() => {
+        if (activeRef.current && !mutedRef.current) startRecognition('auto');
+      }, 300);
+    }
+  }, [startRecognition]);
 
   useEffect(() => {
     const handleShrutiStatus = (event: Event) => {
@@ -377,7 +388,7 @@ export default function AIVoiceCall() {
     if (!bridge && 'speechSynthesis' in window) window.speechSynthesis.getVoices();
     setNativeAvailable(false);
     const handleSpeechStart = () => {
-      if (activeRef.current) {
+      if (activeRef.current && callStateRef.current !== 'speaking' && callStateRef.current !== 'thinking') {
         setCallState('listening');
         setVoiceStage('Speech detected by microphone');
       }
