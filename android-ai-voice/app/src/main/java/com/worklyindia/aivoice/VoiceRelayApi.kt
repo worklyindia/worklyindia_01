@@ -6,6 +6,8 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 
+class RelayApiException(val statusCode: Int, message: String) : IllegalStateException(message)
+
 object VoiceRelayApi {
     private const val TIMEOUT_MS = 15_000
     private val endpoint = "${BuildConfig.SUPABASE_URL}/functions/v1/workly-ai-voice-relay"
@@ -49,7 +51,7 @@ object VoiceRelayApi {
 
     fun poll(token: String): JSONObject {
         val result = post("poll", deviceToken = token)
-        if (result.statusCode !in 200..299) throw IllegalStateException(result.body.optString("error", "Relay poll failed"))
+        if (result.statusCode !in 200..299) throw RelayApiException(result.statusCode, result.body.optString("error", "Relay poll failed"))
         return result.body
     }
 
@@ -59,7 +61,7 @@ object VoiceRelayApi {
             JSONObject().put("job_id", jobId).put("result", result),
             token
         )
-        if (response.statusCode !in 200..299) throw IllegalStateException(response.body.optString("error", "Could not complete voice job"))
+        if (response.statusCode !in 200..299) throw RelayApiException(response.statusCode, response.body.optString("error", "Could not complete voice job"))
     }
 
     fun fail(token: String, jobId: String, reason: String) {
