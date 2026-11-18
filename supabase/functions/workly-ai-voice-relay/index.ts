@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "https://worklyindia.devs.surf",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-device-token",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info, x-device-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
 };
