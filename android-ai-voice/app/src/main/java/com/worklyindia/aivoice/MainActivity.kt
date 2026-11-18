@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -20,6 +21,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private data class VoiceLanguage(val label: String, val tag: String, val locale: Locale) {
@@ -35,6 +37,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var transcriptText: EditText
     private lateinit var statusText: TextView
     private lateinit var listenButton: Button
+    private lateinit var pairingCodeInput: EditText
+    private lateinit var relayStatusText: TextView
+    private val relayExecutor = Executors.newSingleThreadExecutor()
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
     private var ttsReady = false
@@ -121,18 +126,108 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         ).also { it.setPadding(0, dp(10), 0, 0) })
 
         page.addView(space(22))
-        val notice = card()
-        notice.addView(label("Website server connection: not enabled yet", 14, 0xFF8A4B08.toInt(), true))
-        notice.addView(label(
-            "This first build provides on-phone speech testing. Public Workly website access over mobile data needs a separate secure relay because mobile networks commonly use carrier NAT. No existing Workly app or Cloudflare service is changed.",
+        page.addView(space(22))
+        page.addView(sectionTitle("3. Connect this phone as a voice server"))
+        val relayCard = card()
+        relayCard.addView(label("Secure Workly phone pairing", 16, 0xFF142033.toInt(), true))
+        relayCard.addView(label(
+            "Sign in to Workly India on the website, open AI Voice Server, generate a one-time pairing code, then enter it below. The code expires after 5 minutes and can be used once.",
             12, 0xFF536276.toInt(), false
-        ).also { it.setPadding(0, dp(7), 0, 0) })
-        page.addView(notice)
+        ).also { it.setPadding(0, dp(7), 0, dp(10)) })
+        pairingCodeInput = EditText(this).apply {
+            hint = "24-character pairing code"
+            singleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            setTextColor(0xFF142033.toInt())
+            setHintTextColor(0xFF8491A3.toInt())
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setBackgroundColor(0xFFF4F7FB.toInt())
+        }
+        relayCard.addView(pairingCodeInput, matchWrap())
+        relayCard.addView(button("Pair this phone securely").apply {
+            setOnClickListener { pairPhone() }
+        }, matchWrap().also { it.topMargin = dp(10) })
+        relayStatusText = label(
+            getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
+                .getString(VoiceRelayService.STATUS_KEY, "Phone is not paired."),
+            13, 0xFF174B36.toInt(), true
+        ).also { it.setPadding(0, dp(14), 0, dp(8)) }
+        relayCard.addView(relayStatusText)
+        relayCard.addView(button("Start phone server").apply {
+            setOnClickListener { requestNotificationAndStart() }
+        }, matchWrap())
+        relayCard.addView(button("Stop phone server").apply {
+            setBackgroundColor(0xFFE8EDF4.toInt())
+            setTextColor(0xFF26364B.toInt())
+            setOnClickListener {
+                stopService(Intent(this@MainActivity, VoiceRelayService::class.java))
+                refreshRelayStatus()
+            }
+        }, matchWrap().also { it.topMargin = dp(8) })
+        relayCard.addView(label(
+            "The phone makes outbound HTTPS connections, so Jio mobile CGNAT does not need an incoming port. Keep this foreground service notification visible while the phone is serving. Android may limit long-running background work. Website TTS jobs currently play on this phone; remote audio-file STT and audio-file return are not ready yet.",
+            12, 0xFF536276.toInt(), false
+        ).also { it.setPadding(0, dp(10), 0, 0) })
+        page.addView(relayCard)
         page.addView(space(10))
         page.addView(label("WORKLY AI VOICE · VERSION 1.0.0", 11, 0xFF8491A3.toInt(), true).also {
             it.gravity = Gravity.CENTER
         })
         setContentView(scroll)
+    }
+
+
+    private fun pairPhone() {
+        val code = pairingCodeInput.text?.toString()?.trim()?.uppercase(Locale.ROOT).orEmpty()
+        if (!Regex("^[A-F0-9]{24}$").matches(code)) {
+            pairingCodeInput.error = "Enter the 24-character code from Workly website"
+            return
+        }
+        relayStatusText.text = "Pairing securely…"
+        relayExecutor.execute {
+            try {
+                val token = VoiceRelayApi.claimDevice(code, "Workly AI Voice Android")
+                SecureDeviceTokenStore.save(this, token)
+                runOnUiThread {
+                    pairingCodeInput.setText("")
+                    relayStatusText.text = "Phone paired securely. Tap Start phone server."
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    relayStatusText.text = "Pairing failed: ${error.message ?: "Please try again."}"
+                }
+            }
+        }
+    }
+
+    private fun requestNotificationAndStart() {
+        if (SecureDeviceTokenStore.read(this).isNullOrBlank()) {
+            relayStatusText.text = "Pair this phone first using a Workly website pairing code."
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+            return
+        }
+        startRelayService()
+    }
+
+    private fun startRelayService() {
+        val intent = Intent(this, VoiceRelayService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        relayStatusText.text = "Starting secure phone server…"
+    }
+
+    private fun refreshRelayStatus() {
+        relayStatusText.text = getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
+            .getString(VoiceRelayService.STATUS_KEY, "Phone server is stopped.")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::relayStatusText.isInitialized) refreshRelayStatus()
     }
 
     private fun speakText() {
@@ -259,6 +354,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (requestCode == REQUEST_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
             startListening()
         } else if (requestCode == REQUEST_AUDIO) setStatus("Microphone permission denied.")
+        if (requestCode == REQUEST_NOTIFICATIONS) {
+            if (grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
+                relayStatusText.text = "Notification permission denied. Starting service; its notification may be hidden."
+            }
+            startRelayService()
+        }
     }
 
     override fun onPause() {
@@ -270,6 +371,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         stopListening()
         tts?.stop()
         tts?.shutdown()
+        relayExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -300,5 +402,5 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun matchWrap() = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
-    companion object { private const val REQUEST_AUDIO = 4102 }
+    companion object { private const val REQUEST_AUDIO = 4102; private const val REQUEST_NOTIFICATIONS = 4103 }
 }
