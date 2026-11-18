@@ -185,7 +185,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Workly AI Voice server")
+            .setContentTitle("Workly Voice server")
             .setContentText(message.take(120))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -196,7 +196,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "AI Voice server", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, "Workly Voice server", NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
