@@ -35,12 +35,12 @@ object SpeechModelCatalog {
     private const val TINY_HI = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-hindi/resolve/main"
     private const val TINY_EN = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-english/resolve/main"
 
-    // AI4Bharat-derived IndicConformer CTC INT8 exports (shared tokens + language model).
+    // IndicConformer CTC INT8 exports. English has a dedicated tokens file.
     // Per-language ONNX files are ~198 MB; shared tokens are 67,605 bytes.
     fun indicConformer(language: String): Pack {
         val code = language.lowercase()
-        require(code == "hi" || code == "gu") { "IndicConformer supports Hindi (hi) and Gujarati (gu) in this app." }
-        val modelBytes = if (code == "hi") 197_595_593L else 197_595_461L
+        require(code == "hi" || code == "gu" || code == "en") { "Only Hindi, English and Gujarati are supported." }
+        val modelBytes = when (code) { "hi" -> 197_595_593L; "gu" -> 197_595_461L; else -> 174_610_057L }
         return Pack(
             id = "indicconformer-$code",
             title = "AI4Bharat IndicConformer INT8",
@@ -49,7 +49,7 @@ object SpeechModelCatalog {
             repository = "parismitaglobalsolutions/indicconformer-sherpa-onnx",
             files = listOf(
                 ModelFile("model.int8.onnx", "$INDICCONFORMER/$code/model.int8.onnx", modelBytes),
-                ModelFile("tokens.txt", "$INDICCONFORMER/tokens.txt", 67_605L)
+                ModelFile("tokens.txt", if (code == "en") "$INDICCONFORMER/en/tokens.txt" else "$INDICCONFORMER/tokens.txt", if (code == "en") 11_433L else 67_605L)
             )
         )
     }
