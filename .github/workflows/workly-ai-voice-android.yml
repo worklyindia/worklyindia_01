@@ -1,4 +1,4 @@
-name: Workly AI Voice Android
+name: Workly Voice Android
 
 on:
   push:
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   build-debug-apk:
-    name: Build standalone AI Voice APK
+    name: Build Workly Voice APK
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -43,10 +43,13 @@ jobs:
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleDebug
 
-      - name: Upload debug APK
+      - name: Rename APK for download
+        run: cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk android-ai-voice/app/build/outputs/apk/debug/Workly-Voice-v1.0.0.apk
+
+      - name: Upload Workly Voice APK
         uses: actions/upload-artifact@v7
         with:
-          name: workly-ai-voice-debug-apk
-          path: android-ai-voice/app/build/outputs/apk/debug/app-debug.apk
+          name: Workly-Voice-v1.0.0
+          path: android-ai-voice/app/build/outputs/apk/debug/Workly-Voice-v1.0.0.apk
           if-no-files-found: error
           retention-days: 14
