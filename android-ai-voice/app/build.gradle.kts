@@ -31,6 +31,13 @@ android {
             version = "3.22.1"
         }
     }
+    packaging {
+        jniLibs {
+            // Both Sherpa-ONNX and ONNX Runtime AARs bundle this shared native library.
+            // Package one copy per ABI; both SDKs use the same ONNX Runtime C ABI.
+            pickFirsts += setOf("**/libonnxruntime.so")
+        }
+    }
     buildFeatures { buildConfig = true }
     kotlinOptions { jvmTarget = "17" }
 }
