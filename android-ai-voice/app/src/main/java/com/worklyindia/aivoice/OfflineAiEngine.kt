@@ -13,6 +13,14 @@ class OfflineAiEngine {
         private set
 
     private val nativeAvailable = runCatching { System.loadLibrary("worklyllama") }.isSuccess
+    @Volatile private var partialResponseListener: ((String) -> Unit)? = null
+
+    // Called by JNI after each generated token. The listener is responsible for
+    // moving UI updates onto the Android main thread.
+    @Suppress("unused")
+    private fun onNativeToken(value: String) {
+        partialResponseListener?.invoke(value)
+    }
 
     @Synchronized
     fun loadModel(file: File): Boolean {
@@ -25,12 +33,17 @@ class OfflineAiEngine {
     }
 
     @Synchronized
-    fun generate(prompt: String): String {
+    fun generate(prompt: String, onPartial: (String) -> Unit = {}): String {
         check(isLoaded) { "Load the offline AI model first." }
         require(prompt.isNotBlank()) { "Enter a message first." }
-        val result = nativeGenerate(prompt.trim().take(4000), 96).trim()
-        check(result.isNotEmpty()) { "The model returned an empty response. Try a shorter message or reload the model." }
-        return result
+        partialResponseListener = onPartial
+        return try {
+            val result = nativeGenerate(prompt.trim().take(4000), 96).trim()
+            check(result.isNotEmpty()) { "The model returned an empty response. Try a shorter message or reload the model." }
+            result
+        } finally {
+            partialResponseListener = null
+        }
     }
 
     @Synchronized
