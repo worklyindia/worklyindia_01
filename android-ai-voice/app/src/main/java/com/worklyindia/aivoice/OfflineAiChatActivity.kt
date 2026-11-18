@@ -10,11 +10,13 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.Build
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -171,7 +173,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(2), dp(4), dp(2), dp(8))
             }
-            addView(chatMessages, ScrollView.LayoutParams(-1, -2))
+            addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
