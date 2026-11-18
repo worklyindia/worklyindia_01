@@ -52,14 +52,14 @@ function getWorker(): Worker {
 
 export function prepareShrutiRecognition(): Promise<void> {
   if (workerReady) return workerReady;
-  workerReady = new Promise((resolve, reject) => {
+  workerReady = new Promise<void>((resolve, reject) => {
     const current = getWorker();
     const timeout = window.setTimeout(() => reject(new Error('Shruti took too long to load. Please try again.')), 120000);
     const onMessage = (event: MessageEvent<WorkerMessage>) => {
       if (event.data.type === 'ready') {
         window.clearTimeout(timeout);
         current.removeEventListener('message', onMessage);
-        resolve();
+        resolve(undefined);
       } else if (event.data.type === 'error' && event.data.stage === 'init') {
         window.clearTimeout(timeout);
         current.removeEventListener('message', onMessage);
@@ -116,7 +116,6 @@ export async function startShrutiRecognition(): Promise<boolean> {
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
-      latency: 0.02,
     },
   });
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
