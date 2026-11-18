@@ -66,7 +66,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         super.onCreate(savedInstanceState)
         dark = isSystemDarkMode()
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(true)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(false)
         window.statusBarColor = bg
         window.navigationBarColor = bg
         if (android.os.Build.VERSION.SDK_INT >= 23) {
@@ -148,11 +148,7 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
         }
         root.addView(languagePicker, LinearLayout.LayoutParams(-1, -2))
         speechEnginePicker = Spinner(this).apply {
-            adapter = ArrayAdapter(
-                this@OfflineAiChatActivity,
-                android.R.layout.simple_spinner_dropdown_item,
-                listOf("Android speech service", "AI4Bharat IndicConformer · offline", "Shruti ONNX · offline")
-            )
+            adapter = readableSpinnerAdapter(listOf("Android speech service", "AI4Bharat IndicConformer · offline", "Shruti ONNX · offline"))
         }
         root.addView(speechEnginePicker, LinearLayout.LayoutParams(-1, -2))
 
@@ -221,6 +217,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun loadModel() {
         sendButton.isEnabled = false
+        sendButton.alpha = 0.55f
+        downloadModelButton.text = "Checking model download…"
         status.text = "Checking Qwen model and phone memory…"
         worker.execute {
             try {
@@ -236,8 +234,9 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                     if (index >= 0 && qwenModelPicker.selectedItemPosition != index) qwenModelPicker.setSelection(index)
                     status.text = "Available RAM: %.1f GB · Recommended: ${recommended.title}".format(java.util.Locale.US, memoryInfo.availMem / 1_000_000_000.0)
                 }
-                check(modelManager.snapshot(chosen).state == QwenModelManager.State.READY) {
-                    "${chosen.title} is not downloaded. Select a model and tap Download selected AI model."
+                val modelState = modelManager.snapshot(chosen).state
+                check(modelState == QwenModelManager.State.READY) {
+                    "${chosen.title} download is not verified. Open Downloads and wait until it shows Ready."
                 }
                 check(memoryInfo.availMem >= chosen.minFreeRam) {
                     "Not enough free RAM for ${chosen.title}. Choose a smaller Qwen model or close other apps."
@@ -248,6 +247,8 @@ class OfflineAiChatActivity : Activity(), TextToSpeech.OnInitListener {
                 runOnUiThread {
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
+                    sendButton.alpha = 1f
+                    downloadModelButton.text = "Manage model downloads"
                 }
             } catch (error: Exception) {
                 runOnUiThread {
