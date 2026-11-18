@@ -121,6 +121,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             it.setPadding(0, dp(5), 0, dp(4))
         })
         page.addView(label("Hindi · English · Gujarati", 15, 0xFF65748B.toInt(), false))
+        val quickActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        quickActions.addView(button("Model downloads").apply {
+            setOnClickListener { startActivity(Intent(this@MainActivity, SpeechDownloadsActivity::class.java)) }
+        }, LinearLayout.LayoutParams(0, dp(48), 1f).also { it.rightMargin = dp(6) })
+        quickActions.addView(button("Offline AI Chat").apply {
+            setOnClickListener { startActivity(Intent(this@MainActivity, OfflineAiChatActivity::class.java)) }
+        }, LinearLayout.LayoutParams(0, dp(48), 1f).also { it.leftMargin = dp(6) })
+        page.addView(quickActions, matchWrap().also { it.topMargin = dp(12) })
         page.addView(space(18))
 
         val statusCard = card()
