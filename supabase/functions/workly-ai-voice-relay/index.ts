@@ -103,9 +103,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
     }
 
     if (action === "create_job") {
-      await cleanupExpiredJobs(db, now);
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
+      await cleanupExpiredJobs(db, now);
       const jobType = body?.job_type;
       if (jobType !== "tts" && jobType !== "stt" && jobType !== "ai") return json({ error: "job_type must be tts, stt or ai" }, 400);
       const payload = body?.payload;
@@ -138,9 +138,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
     }
 
     if (action === "create_stt_job") {
-      await cleanupExpiredJobs(db, now);
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
+      await cleanupExpiredJobs(db, now);
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
       if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
       const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
