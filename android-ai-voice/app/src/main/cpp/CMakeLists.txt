@@ -76,7 +76,6 @@ ExternalProject_Add(workly_sdcpp_external
 add_library(workly_stable_diffusion SHARED IMPORTED GLOBAL)
 set_target_properties(workly_stable_diffusion PROPERTIES
     IMPORTED_LOCATION "${SDCPP_INSTALL_DIR}/lib/libstable-diffusion.so"
-    INTERFACE_INCLUDE_DIRECTORIES "${SDCPP_SOURCE_DIR}/include"
 )
 
 add_library(worklysd SHARED sd_image_jni.cpp)
