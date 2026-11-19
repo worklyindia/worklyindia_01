@@ -58,7 +58,7 @@ serve(async (req) => {
 
     // Shared owner-phone relay actions are handled by the isolated relay module.
     if (['register_device', 'create_job', 'get_job', 'poll', 'fail_job', 'upload_audio', 'complete_job', 'list_devices', 'revoke_device'].includes(action)) {
-      return await handleWorklyVoiceRelay(req);
+      return await handleWorklyVoiceRelay(new Request(req.url, { method: req.method, headers: req.headers, body: JSON.stringify({ action, ...params }) }));
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
