@@ -127,7 +127,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if ((activeJobs ?? 0) >= 20) return json({ error: "Shared voice queue is full. Try again shortly." }, 429);
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
-        .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: payload ?? {} })
+        .insert({
+          user_id: user.id,
+          device_id: device.id,
+          job_type: jobType,
+          payload: payload ?? {},
+          ...(jobType === "image" ? { expires_at: new Date(Date.now() + 15 * 60_000).toISOString() } : {}),
+        })
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
