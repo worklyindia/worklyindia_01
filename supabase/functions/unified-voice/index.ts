@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { runAiChain } from '../_shared/aiChain.ts';
+import { handleWorklyVoiceRelay } from '../workly-ai-voice-relay/index.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,6 +55,11 @@ serve(async (req) => {
     const { action, ...params } = await req.json();
 
     console.log(`[unified-voice] Action: ${action}`);
+
+    // Shared owner-phone relay actions are handled by the isolated relay module.
+    if (['register_device', 'create_job', 'get_job', 'poll', 'fail_job', 'upload_audio', 'complete_job', 'list_devices', 'revoke_device'].includes(action)) {
+      return await handleWorklyVoiceRelay(req);
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
