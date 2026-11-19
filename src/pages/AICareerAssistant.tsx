@@ -348,6 +348,8 @@ export default function AICareerAssistant() {
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [loadingVoiceId, setLoadingVoiceId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voicePlaybackContextRef = useRef<AudioContext | null>(null);
+  const voicePlaybackSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   // True once the initial session check finishes — prevents flashing the chat
   // page (or the login redirect) before we know whether the user is signed in.
@@ -2515,6 +2517,22 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
   };
 
   const handlePlayMessage = async (message: Message) => {
+    // Unlock Web Audio synchronously in the Speak-icon tap. Network/TTS work
+    // happens later; decoded audio can still play without a delayed play() call.
+    let playbackContext: AudioContext;
+    try {
+      const AudioContextClass = window.AudioContext;
+      if (!AudioContextClass) throw new Error('Web Audio is not supported on this device.');
+      if (!voicePlaybackContextRef.current || voicePlaybackContextRef.current.state === 'closed') {
+        voicePlaybackContextRef.current = new AudioContextClass();
+      }
+      playbackContext = voicePlaybackContextRef.current;
+      if (playbackContext.state !== 'running') void playbackContext.resume();
+    } catch (unlockError) {
+      toast.error('Audio playback could not start', { description: unlockError instanceof Error ? unlockError.message : 'Please tap Speak again.' });
+      return;
+    }
+
     // Check if user is logged in
     if (!currentUser) {
       handleLoginRequired('use voice playback');
@@ -2540,6 +2558,11 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
+    }
+    if (voicePlaybackSourceRef.current) {
+      try { voicePlaybackSourceRef.current.stop(0); } catch { /* already stopped */ }
+      voicePlaybackSourceRef.current.disconnect();
+      voicePlaybackSourceRef.current = null;
     }
     
     // If clicking the same message that's playing, stop it
@@ -2595,33 +2618,27 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
         audioSource = `data:audio/mp3;base64,${audioContent}`;
       }
 
-      // Create and play audio
-      const audio = new Audio(audioSource);
-      audioRef.current = audio;
-      
+      // Decode generated audio into Web Audio and start it on the context
+      // unlocked by the original Speak tap (avoids autoplay play() rejection).
+      const audioResponse = await fetch(audioSource);
+      if (!audioResponse.ok) throw new Error('Voice audio download failed.');
+      const audioBuffer = await playbackContext.decodeAudioData(await audioResponse.arrayBuffer());
+      if (playbackContext.state !== 'running') await playbackContext.resume();
+
+      const source = playbackContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(playbackContext.destination);
+      voicePlaybackSourceRef.current = source;
+      audioRef.current = null;
+
       setLoadingVoiceId(null);
       setPlayingMessageId(message.id);
-      
-      audio.onended = () => {
+      source.onended = () => {
+        if (voicePlaybackSourceRef.current === source) voicePlaybackSourceRef.current = null;
         setPlayingMessageId(null);
         audioRef.current = null;
       };
-      
-      audio.onerror = () => {
-        setPlayingMessageId(null);
-        setLoadingVoiceId(null);
-        audioRef.current = null;
-        toast.error('Audio playback failed', {
-          description: 'Browser audio decode nahi kar paya. Dobara try karein.',
-          duration: 5000,
-          action: {
-            label: 'Retry',
-            onClick: () => handlePlayMessage(message),
-          },
-        });
-      };
-      
-      await audio.play();
+      source.start(0);
       successHaptic();
     } catch (error: any) {
       console.error('Error playing message:', error);
