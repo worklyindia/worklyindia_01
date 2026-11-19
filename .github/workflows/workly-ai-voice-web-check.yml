@@ -10,7 +10,8 @@ on:
       - "src/integrations/supabase/types.ts"
       - "tsconfig.app.json"
       - "src/App.tsx"
-      - "src/pages/WorklyAIVoiceDevices.tsx"
+      - "src/lib/browserOfflineVoice.ts"
+      - "src/lib/nativeAppBridge.ts"
       - "src/pages/Settings.tsx"
       - "src/pages/owner-portal/**"
       - "src/lib/nativeAppBridge.ts"
@@ -22,7 +23,8 @@ on:
       - "src/integrations/supabase/types.ts"
       - "tsconfig.app.json"
       - "src/App.tsx"
-      - "src/pages/WorklyAIVoiceDevices.tsx"
+      - "src/lib/browserOfflineVoice.ts"
+      - "src/lib/nativeAppBridge.ts"
       - "src/pages/Settings.tsx"
       - ".github/workflows/workly-ai-voice-web-check.yml"
   workflow_dispatch:
@@ -46,5 +48,5 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Type-check website
         run: npx tsc --noEmit -p tsconfig.app.json
-      - name: Lint new pairing page
-        run: npx eslint src/pages/WorklyAIVoiceDevices.tsx --max-warnings 0
+      - name: Lint website voice modules
+        run: npx eslint src/lib/browserOfflineVoice.ts src/lib/nativeAppBridge.ts --max-warnings 0
