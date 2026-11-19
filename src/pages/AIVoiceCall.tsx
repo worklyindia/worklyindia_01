@@ -55,7 +55,6 @@ export default function AIVoiceCall() {
   const [callState, setCallState] = useState<CallState>('idle');
   const [callStarted, setCallStarted] = useState(false);
   const [lastReply, setLastReply] = useState('');
-  const [spokenLines, setSpokenLines] = useState<string[]>([]);
   const [lastTranscript, setLastTranscript] = useState('');
   const [partialTranscript, setPartialTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -122,7 +121,6 @@ export default function AIVoiceCall() {
   const stopReply = useCallback(() => {
     if (bridge) bridge.stopVoiceReply?.();
     const audio = replyAudioRef.current;
-    setSpokenLines([]);
     if (audio) {
       audio.ontimeupdate = null;
       audio.pause();
