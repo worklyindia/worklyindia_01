@@ -314,7 +314,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .upload(path, bytes, { contentType: "image/jpeg", upsert: false });
       if (uploadError) throw uploadError;
       const { data, error } = await db.from("workly_ai_voice_jobs")
-        .update({ status: "completed", result: { image_path: path, content_type: "image/jpeg" }, completed_at: new Date().toISOString() })
+        .update({
+          status: "completed",
+          result: { image_path: path, content_type: "image/jpeg" },
+          completed_at: new Date().toISOString(),
+          // Keep the private object long enough for the website's signed URL and chat history.
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString(),
+        })
         .eq("id", jobId)
         .eq("device_id", device.id)
         .eq("status", "running")
