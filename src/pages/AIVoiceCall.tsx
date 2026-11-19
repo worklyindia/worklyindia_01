@@ -161,6 +161,9 @@ export default function AIVoiceCall() {
     conversationTurnRef.current += 1;
     stopRecognition();
     stopReply();
+    const audioContext = audioContextRef.current;
+    audioContextRef.current = null;
+    if (audioContext && audioContext.state !== 'closed') void audioContext.close();
     setCallState('idle');
     setVoiceStage('Call ended');
     setMicLevel(0);
@@ -254,14 +257,6 @@ export default function AIVoiceCall() {
       }
       if (!reply) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      const assistantMessage: StoredMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: historyReply || reply,
-        timestamp: formatChatStamp(),
-        status: 'read',
-      };
-      chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
       setAiRequestStatus('Reply received');
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
@@ -281,6 +276,16 @@ export default function AIVoiceCall() {
 
       const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (spoken) {
+        // Commit the assistant message only once voice playback has actually started,
+        // so the text never appears ahead of the spoken reply in chat history.
+        const assistantMessage: StoredMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: historyReply || reply,
+          timestamp: formatChatStamp(),
+          status: 'read',
+        };
+        chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
         lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
         setVoiceStage('AI is speaking…');
