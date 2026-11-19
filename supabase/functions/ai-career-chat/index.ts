@@ -6212,6 +6212,11 @@ Create a visually striking, professional image prompt with unique style, color s
               const target = resolveTargetSize(args.size_preset, args.width, args.height);
               const ratioHint = aspectRatioHint(target.width, target.height);
               const textRule = args.include_text ? "TEXT RULES (critical): render every word COMPLETE and correctly spelled — never cut, crop or clip any letter. " + "Keep all text fully inside a safe area with at least 8% margin from every edge, never touching or bleeding past the frame. " + "Scale the text down so the longest line fits comfortably in the width. Use one clean, highly legible bold font, strong contrast against the background, max 2 short lines." : "Do NOT include any text, letters or words in the image.";
+              // Attach the current user's uploaded image to the tool arguments server-side.
+              // The model only chooses edit mode; it never needs to echo a large base64 payload.
+              if (args.use_reference_image === true && latestUserImageDataUrl) {
+                args.reference_image_data_url = latestUserImageDataUrl;
+              }
               const referenceImageDataUrl = args.use_reference_image === true
                 && typeof args.reference_image_data_url === "string"
                 && /^data:image\/(?:png|jpe?g|webp);base64,/i.test(args.reference_image_data_url)
