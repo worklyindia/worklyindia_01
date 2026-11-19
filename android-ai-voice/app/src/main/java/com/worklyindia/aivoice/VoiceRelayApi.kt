@@ -10,7 +10,7 @@ class RelayApiException(val statusCode: Int, message: String) : IllegalStateExce
 object VoiceRelayApi {
     private const val TIMEOUT_MS = 15_000
     private const val AUDIO_UPLOAD_TIMEOUT_MS = 60_000
-    private val endpoint = "${BuildConfig.SUPABASE_URL}/functions/v1/workly-ai-voice-relay"
+    private val endpoint = "${BuildConfig.SUPABASE_URL}/functions/v1/unified-voice"
 
     data class ApiResult(val body: JSONObject, val statusCode: Int)
 
