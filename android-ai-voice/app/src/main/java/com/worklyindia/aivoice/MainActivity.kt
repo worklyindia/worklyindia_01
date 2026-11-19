@@ -161,11 +161,11 @@ class MainActivity : Activity() {
         val connectionCard = addSection(
             "Workly India",
             "Workly India: " + (if (online) "Connected" else "Not Connected") +
-                "\\nConnection: " + (if (online) "Connected" else "Checking / reconnecting") +
-                "\\nStatus: " + status +
-                "\\nLast relay check: " + (if (heartbeat > 0) java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(heartbeat)) else "Not recorded") +
-                "\\nTransport: HTTPS · Supabase relay · 1-second polling" +
-                "\\nWebsite setup: automatic. Keep Workly Voice connected for website voice processing."
+                "\nConnection: " + (if (online) "Connected" else "Checking / reconnecting") +
+                "\nStatus: " + status +
+                "\nLast relay check: " + (if (heartbeat > 0) java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(heartbeat)) else "Not recorded") +
+                "\nTransport: HTTPS · Supabase relay · 1-second polling" +
+                "\nWebsite setup: automatic. Keep Workly Voice connected for website voice processing."
         )
         connectionCard.addView(TextView(this).apply {
             text = "Refresh connection status"
@@ -180,9 +180,9 @@ class MainActivity : Activity() {
         val diagnosticsCard = addSection(
             "Connection Checks",
             (if (tokenReady) "✓" else "⚠") + " Workly account registration" +
-                "\\n" + (if (online) "✓" else "⚠") + " Phone relay: " + (if (online) "Online / recent heartbeat" else "Not confirmed online") +
-                "\\n✓ Website requests: shown here when received by this phone" +
-                "\\nAI / speech processing: " + (if (status.contains("error", true) || status.contains("failed", true)) status else "Ready when a website request arrives")
+                "\n" + (if (online) "✓" else "⚠") + " Phone relay: " + (if (online) "Online / recent heartbeat" else "Not confirmed online") +
+                "\n✓ Website requests: shown here when received by this phone" +
+                "\nAI / speech processing: " + (if (status.contains("error", true) || status.contains("failed", true)) status else "Ready when a website request arrives")
         )
         diagnosticsCard.addView(TextView(this).apply {
             text = "Refresh diagnostics"
@@ -213,8 +213,8 @@ class MainActivity : Activity() {
                 event.optString("message").contains("error", true)
             historyCard.addView(TextView(this).apply {
                 text = (if (failed) "⚠ " else "• ") + event.optString("message") +
-                    "\\n" + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(event.optLong("at"))) +
-                    (if (event.optString("detail").isNotBlank()) "\\n" + event.optString("detail") else "")
+                    "\n" + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(event.optLong("at"))) +
+                    (if (event.optString("detail").isNotBlank()) "\n" + event.optString("detail") else "")
                 textSize = 13f
                 setTextColor(if (failed) 0xFFD97706.toInt() else primary)
                 setPadding(0, dp(8), 0, dp(8))
