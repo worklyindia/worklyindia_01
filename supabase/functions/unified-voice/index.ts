@@ -274,14 +274,30 @@ async function handleSpeechToText(params: any) {
 // STATELESS AI VOICE CHAT (no Workly retention)
 // =============================================
 async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
-  const token = authHeader.slice(7);
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: 'Session expired' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const authHeader = req.headers.get('authorization') ?? '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const { data: { user }, error: authError } = token
+    ? await supabase.auth.getUser(token)
+    : { data: { user: null }, error: new Error('No user token') };
+  // The registered owner phone may request an AI answer for a queued website
+  // turn. Its device token is verified against the active owner device row.
+  if (!user) {
+    const deviceToken = req.headers.get('x-device-token') ?? '';
+    const ownerUserId = Deno.env.get('WORKLY_AI_VOICE_OWNER_USER_ID') ?? '';
+    if (deviceToken.length < 40 || !ownerUserId) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(deviceToken));
+    const tokenHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    const { data: device, error: deviceError } = await supabase.from('workly_ai_voice_devices')
+      .select('id,user_id,revoked_at')
+      .eq('token_hash', tokenHash)
+      .eq('user_id', ownerUserId)
+      .is('revoked_at', null)
+      .maybeSingle();
+    if (deviceError || !device) {
+      return new Response(JSON.stringify({ error: 'Owner phone authentication failed' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
   }
   const text = typeof params.text === 'string' ? params.text.trim().slice(0, 4000) : '';
   const languageTag = typeof params.languageTag === 'string' ? params.languageTag.trim().slice(0, 24) : 'und';
