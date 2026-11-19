@@ -1,10 +1,20 @@
+type BrowserRecognitionResultEvent = {
+  resultIndex?: number;
+  results?: ArrayLike<{
+    isFinal: boolean;
+    0?: { transcript?: string };
+  }>;
+};
+
+type BrowserRecognitionErrorEvent = { error?: string };
+
 type BrowserRecognition = {
   processLocally?: boolean;
   lang: string;
   continuous: boolean;
   interimResults: boolean;
-  onresult: ((event: any) => void) | null;
-  onerror: ((event: any) => void) | null;
+  onresult: ((event: BrowserRecognitionResultEvent) => void) | null;
+  onerror: ((event: BrowserRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
   start(): void;
   stop(): void;
