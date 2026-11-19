@@ -104,20 +104,6 @@ class MainActivity : Activity() {
             interpolator = AccelerateDecelerateInterpolator()
             start()
         }
-        signalPanel.addView(TextView(this).apply {
-            text = "Ready for your website"
-            textSize = 21f
-            gravity = Gravity.CENTER
-            setTextColor(0xFFFFFFFF.toInt())
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(14), 0, dp(4))
-        })
-        signalPanel.addView(TextView(this).apply {
-            text = "Voice companion active"
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setTextColor(0xFFF4F1FF.toInt())
-        })
         page.addView(signalPanel, LinearLayout.LayoutParams(-1, -2).apply {
             topMargin = dp(42); bottomMargin = dp(28)
         })
