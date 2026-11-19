@@ -20,4 +20,4 @@ jobs:
         with:
           deno-version: v2.x
       - name: Type-check Edge Function and local imports
-        run: deno check --no-lock supabase/functions/unified-voice/index.ts
+        run: deno check --node-modules-dir=auto --no-lock supabase/functions/unified-voice/index.ts
