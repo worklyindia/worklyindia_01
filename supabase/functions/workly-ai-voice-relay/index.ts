@@ -43,11 +43,25 @@ async function deviceFor(req: Request) {
   const tokenHash = await sha256(token);
   const { data, error } = await supabase
     .from("workly_ai_voice_devices")
-    .select("id,user_id,revoked_at")
+    .select("id,user_id,revoked_at,last_seen_at")
     .eq("token_hash", tokenHash)
     .is("revoked_at", null)
     .maybeSingle();
   return error ? null : data;
+}
+
+async function cleanupExpiredJobs(db: any, now: string) {
+  const { data: expiredJobs } = await db.from("workly_ai_voice_jobs")
+    .select("result,payload")
+    .lt("expires_at", now)
+    .limit(100);
+  const expiredAudioPaths = (expiredJobs ?? [])
+    .flatMap((row: any) => [row.result?.audio_path, row.payload?.audio_path])
+    .filter((path: unknown) => typeof path === "string");
+  if (expiredAudioPaths.length) {
+    await db.storage.from("workly-ai-voice-audio").remove(expiredAudioPaths);
+  }
+  await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
 }
 
 export async function handleWorklyVoiceRelay(req: Request) {
@@ -60,12 +74,6 @@ export async function handleWorklyVoiceRelay(req: Request) {
     const action = typeof body?.action === "string" ? body.action : "";
     const db = supabase;
     const now = new Date().toISOString();
-    // Remove expired audio objects before pruning their short-lived job rows.
-    const { data: expiredJobs } = await db.from("workly_ai_voice_jobs").select("result,payload").lt("expires_at", now).limit(100);
-    const expiredAudioPaths = (expiredJobs ?? []).flatMap((row) => [row.result?.audio_path, row.payload?.audio_path]).filter((path) => typeof path === "string");
-    if (expiredAudioPaths.length) await db.storage.from("workly-ai-voice-audio").remove(expiredAudioPaths);
-    await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
-
     if (action === "register_device") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Please sign in with your Workly India account in the app." }, 401);
@@ -95,6 +103,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
     }
 
     if (action === "create_job") {
+      await cleanupExpiredJobs(db, now);
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
       const jobType = body?.job_type;
@@ -103,7 +112,6 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
-      await db.from("workly_ai_voice_jobs").delete().lt("expires_at", new Date().toISOString());
       const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id")
         .eq("user_id", ownerUserId)
@@ -130,6 +138,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
     }
 
     if (action === "create_stt_job") {
+      await cleanupExpiredJobs(db, now);
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
@@ -181,7 +190,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
     if (action === "poll") {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
-      await db.from("workly_ai_voice_devices").update({ last_seen_at: new Date().toISOString() }).eq("id", device.id);
+      // Keep the device online marker fresh without writing on every 1-second poll.
+      const lastSeenAt = device.last_seen_at ? Date.parse(device.last_seen_at) : 0;
+      if (!lastSeenAt || Date.now() - lastSeenAt >= 20_000) {
+        await db.from("workly_ai_voice_devices")
+          .update({ last_seen_at: new Date().toISOString() })
+          .eq("id", device.id);
+      }
 
       const { data: candidate, error: findError } = await db.from("workly_ai_voice_jobs")
         .select("id,job_type,payload,expires_at")
