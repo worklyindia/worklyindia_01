@@ -1,4 +1,4 @@
-name: Workly AI Voice Relay Checks
+name: ChatWork AI Voice Relay Checks
 
 on:
   push:
