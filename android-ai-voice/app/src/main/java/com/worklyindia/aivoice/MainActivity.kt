@@ -127,25 +127,121 @@ class MainActivity : Activity() {
         })
         page.addView(hero, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28); bottomMargin = dp(22) })
 
-        val info = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(15), dp(16), dp(15))
-            background = rounded(if (dark) 0xFF17243A.toInt() else 0xFFFFFFFF.toInt(), 20)
-            elevation = dp(2).toFloat()
+        // All Settings content is displayed directly on Home; no separate Settings page/tab.
+        val prefs = getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
+        val tokenReady = !SecureDeviceTokenStore.read(this).isNullOrBlank()
+        val status = prefs.getString(VoiceRelayService.STATUS_KEY, "Relay has not reported a status yet.") ?: "Unknown"
+        val heartbeat = prefs.getLong(VoiceRelayService.LAST_POLL_KEY, 0L)
+        val online = heartbeat > 0 && System.currentTimeMillis() - heartbeat < 60_000L &&
+            !status.contains("reconnect", true) && !status.contains("stopped", true)
+
+        fun addSection(title: String, body: String): LinearLayout {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+                background = rounded(if (dark) 0xFF17243A.toInt() else 0xFFFFFFFF.toInt(), 20)
+                elevation = dp(2).toFloat()
+            }
+            card.addView(TextView(this).apply {
+                text = title
+                textSize = 17f
+                setTextColor(primary)
+                setTypeface(typeface, Typeface.BOLD)
+            })
+            card.addView(TextView(this).apply {
+                text = body
+                textSize = 13f
+                setTextColor(secondary)
+                setPadding(0, dp(7), 0, 0)
+            })
+            page.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+            return card
         }
-        info.addView(TextView(this).apply {
-            text = "Simple. Secure. Ready."
-            textSize = 17f
-            setTextColor(primary)
-            setTypeface(typeface, Typeface.BOLD)
+
+        val connectionCard = addSection(
+            "Connection & Settings",
+            "Workly India account: " + (if (tokenReady) "Registered securely" else "Sign-in required") +
+                "\\nConnection: " + (if (online) "Connected" else "Checking / reconnecting") +
+                "\\nStatus: " + status +
+                "\\nLast relay check: " + (if (heartbeat > 0) java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(heartbeat)) else "Not recorded") +
+                "\\nTransport: HTTPS · Supabase relay · 1-second polling" +
+                "\\nWebsite setup: automatic. Keep Workly Voice connected for website voice processing."
+        )
+        connectionCard.addView(TextView(this).apply {
+            text = "Refresh connection status"
+            textSize = 14f
+            setTextColor(0xFF5B7CFA.toInt())
+            setPadding(0, dp(10), 0, 0)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { recreate() }
         })
-        info.addView(TextView(this).apply {
-            text = "Download the voice and AI models your website needs. No separate chat or calling screens."
+
+        val diagnosticsCard = addSection(
+            "Connection Checks",
+            (if (tokenReady) "✓" else "⚠") + " Workly account registration" +
+                "\\n" + (if (online) "✓" else "⚠") + " Phone relay: " + (if (online) "Online / recent heartbeat" else "Not confirmed online") +
+                "\\n✓ Website requests: shown here when received by this phone" +
+                "\\nAI / speech processing: " + (if (status.contains("error", true) || status.contains("failed", true)) status else "Ready when a website request arrives")
+        )
+        diagnosticsCard.addView(TextView(this).apply {
+            text = "Refresh diagnostics"
+            textSize = 14f
+            setTextColor(0xFF5B7CFA.toInt())
+            setPadding(0, dp(10), 0, 0)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { recreate() }
+        })
+
+        val historyCard = addSection("Recent Activity · Last 1 Hour", "")
+        val rawEvents = prefs.getString(VoiceRelayService.EVENTS_KEY, "[]") ?: "[]"
+        val events = runCatching {
+            val array = org.json.JSONArray(rawEvents)
+            (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+                .filter { System.currentTimeMillis() - it.optLong("at") <= 3_600_000L }
+                .sortedByDescending { it.optLong("at") }
+        }.getOrDefault(emptyList())
+        historyCard.addView(TextView(this).apply {
+            text = if (events.isEmpty()) "No website calls or errors recorded in the last hour." else "${events.size} activity records"
             textSize = 13f
             setTextColor(secondary)
-            setPadding(0, dp(6), 0, 0)
         })
-        page.addView(info, LinearLayout.LayoutParams(-1, -2))
+        events.forEach { event ->
+            val failed = event.optBoolean("error") ||
+                event.optString("message").contains("failed", true) ||
+                event.optString("message").contains("error", true)
+            historyCard.addView(TextView(this).apply {
+                text = (if (failed) "⚠ " else "• ") + event.optString("message") +
+                    "\\n" + java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(event.optLong("at"))) +
+                    (if (event.optString("detail").isNotBlank()) "\\n" + event.optString("detail") else "")
+                textSize = 13f
+                setTextColor(if (failed) 0xFFD97706.toInt() else primary)
+                setPadding(0, dp(8), 0, dp(8))
+            })
+        }
+        historyCard.addView(TextView(this).apply {
+            text = "Clear activity history"
+            textSize = 14f
+            setTextColor(0xFF5B7CFA.toInt())
+            setPadding(0, dp(10), 0, 0)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { prefs.edit().remove(VoiceRelayService.EVENTS_KEY).apply(); recreate() }
+        })
+        page.addView(TextView(this).apply {
+            text = "Privacy & Reliability"
+            textSize = 16f
+            setTextColor(primary)
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, dp(4), 0, dp(4))
+        })
+        page.addView(TextView(this).apply {
+            text = "Connection and request status summaries are stored locally on this device for the activity list. Android may restrict background activity; keep Workly Voice open if the relay disconnects."
+            textSize = 12f
+            setTextColor(secondary)
+            setPadding(0, 0, 0, dp(12))
+        })
         page.addView(TextView(this).apply {
             text = "HINDI  •  ENGLISH  •  GUJARATI"
             textSize = 11f
