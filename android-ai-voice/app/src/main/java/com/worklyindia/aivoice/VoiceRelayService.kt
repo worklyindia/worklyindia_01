@@ -6,11 +6,13 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
@@ -18,6 +20,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     private val running = AtomicBoolean(false)
     @Volatile private var ttsReady = false
     @Volatile private var activeJobId: String? = null
+    @Volatile private var activeAudioFile: File? = null
     private var tts: TextToSpeech? = null
     private var pollThread: Thread? = null
     private var activeToken: String? = null
@@ -29,24 +32,26 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         tts = TextToSpeech(this, this)
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
-                setStatus("Speaking a website voice request on this phone…")
+                setStatus("Generating voice audio for a website user…")
             }
             override fun onDone(utteranceId: String?) {
                 val jobId = utteranceId ?: return
                 val token = activeToken ?: return
+                val audioFile = activeAudioFile
                 Thread {
                     try {
-                        VoiceRelayApi.complete(
-                            token,
-                            jobId,
-                            JSONObject().put("played_on_phone", true)
-                                .put("message", "Text was spoken by this phone. No audio file was uploaded.")
-                        )
-                        activeJobId = null
-                        setStatus("Shared phone server is online. Next queued request can start.")
+                        if (audioFile == null || !audioFile.isFile || audioFile.length() == 0L) {
+                            throw IllegalStateException("Android did not create the voice audio file.")
+                        }
+                        VoiceRelayApi.uploadAudio(token, jobId, audioFile.readBytes())
+                        setStatus("Voice audio delivered to website user. Processing next request…")
                     } catch (error: Exception) {
+                        runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Voice audio upload failed.") }
+                        setStatus("Could not deliver voice audio: " + (error.message ?: "network error"))
+                    } finally {
+                        audioFile?.delete()
+                        activeAudioFile = null
                         activeJobId = null
-                        setStatus("Could not report completed voice request: ${error.message ?: "network error"}")
                     }
                 }.start()
             }
@@ -55,7 +60,9 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                 val jobId = utteranceId ?: return
                 val token = activeToken ?: return
                 Thread {
-                    runCatching { VoiceRelayApi.fail(token, jobId, "Android text-to-speech playback failed.") }
+                    runCatching { VoiceRelayApi.fail(token, jobId, "Android offline text-to-speech synthesis failed.") }
+                    activeAudioFile?.delete()
+                    activeAudioFile = null
                     activeJobId = null
                     setStatus("A voice request failed on this phone.")
                 }.start()
@@ -66,7 +73,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val token = SecureDeviceTokenStore.read(this)
         if (token.isNullOrBlank()) {
-            setStatus("Phone server stopped: pair this phone first.")
+            setStatus("Phone server stopped: connect the owner account first.")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -110,12 +117,12 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                         else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
                     }
                 } else {
-                    setStatus("Phone server is online. Waiting for a website request…")
+                    setStatus("Shared phone server is online. Waiting for website requests…")
                 }
             } catch (error: Exception) {
                 if (error is RelayApiException && error.statusCode == 401) {
                     SecureDeviceTokenStore.clear(this)
-                    setStatus("Phone access was revoked or the device token is invalid. Pair this phone again.")
+                    setStatus("Phone access was revoked or the device token is invalid. Sign in again.")
                     running.set(false)
                     stopSelf()
                     break
@@ -156,9 +163,14 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             return
         }
         engine.setLanguage(locale)
-        val result = engine.speak(text.take(1000), TextToSpeech.QUEUE_FLUSH, null, jobId)
+        val outputFile = File(cacheDir, "workly-voice-" + jobId + ".wav")
+        activeAudioFile?.delete()
+        activeAudioFile = outputFile
+        val result = engine.synthesizeToFile(text.take(1000), Bundle(), outputFile, jobId)
         if (result == TextToSpeech.ERROR) {
-            VoiceRelayApi.fail(token, jobId, "Android could not start text-to-speech.")
+            VoiceRelayApi.fail(token, jobId, "Android could not synthesize voice audio.")
+            outputFile.delete()
+            activeAudioFile = null
             activeJobId = null
         }
     }
