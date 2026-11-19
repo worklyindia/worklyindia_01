@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 type RelayJob = {
   id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'expired';
-  result?: { audio_url?: string; content_type?: string; error?: string } | null;
+  result?: { audio_url?: string; content_type?: string; error?: string; reply?: string; languageTag?: string } | null;
 };
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
