@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/workly-ai-voice-server-app
+      - feat/chatwork-ai-image-studio-mainline
     paths:
       - "android-ai-voice/**"
       - ".github/workflows/chatwork-android.yml"
