@@ -99,31 +99,14 @@ export default function AIVoiceCall() {
 
       const audio = replyAudioRef.current ?? new Audio();
       replyAudioRef.current = audio;
-      const speechWords = text.split(/\s+/).filter(Boolean);
-      const wordsPerLine = 7;
-      setSpokenLines(speechWords.slice(0, wordsPerLine).join(' ').trim() ? [speechWords.slice(0, wordsPerLine).join(' ')] : []);
-      audio.ontimeupdate = () => {
-        if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
-        const progress = Math.min(1, audio.currentTime / audio.duration);
-        const visibleWordCount = Math.max(1, Math.ceil(progress * speechWords.length));
-        const visibleWords = speechWords.slice(0, visibleWordCount);
-        const visibleLines: string[] = [];
-        for (let index = 0; index < visibleWords.length; index += wordsPerLine) {
-          visibleLines.push(visibleWords.slice(index, index + wordsPerLine).join(' '));
-        }
-        setSpokenLines(visibleLines.slice(-2));
-      };
       audio.onended = () => {
-        audio.ontimeupdate = null;
-        setSpokenLines([]);
         window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
       };
       audio.onerror = () => {
-        audio.ontimeupdate = null;
-        setSpokenLines([]);
         window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
       };
       audio.src = sourceUrl;
+      audio.muted = false;
       audio.volume = speakerOn ? 1 : 0;
       audio.currentTime = 0;
       await audio.play();
@@ -131,9 +114,7 @@ export default function AIVoiceCall() {
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Workly Voice app could not return audio.';
-      setErrorMessage(message);
-      setVoiceStage('Workly Voice app audio failed');
-      toast.error(message);
+      console.warn('Workly Voice audio playback failed:', message);
       return false;
     }
   }, [speakerOn]);
@@ -440,6 +421,23 @@ export default function AIVoiceCall() {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
     startingCallRef.current = true;
     try {
+      // Prime the same media element inside the Start button gesture. AI audio arrives
+      // asynchronously, so browsers need this early playback unlock to allow later play().
+      const playbackAudio = replyAudioRef.current ?? new Audio();
+      replyAudioRef.current = playbackAudio;
+      playbackAudio.preload = 'auto';
+      playbackAudio.muted = true;
+      playbackAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+      const unlock = playbackAudio.play();
+      if (unlock) {
+        void unlock.then(() => {
+          playbackAudio.pause();
+          playbackAudio.currentTime = 0;
+          playbackAudio.removeAttribute('src');
+          playbackAudio.load();
+          playbackAudio.muted = false;
+        }).catch(() => { playbackAudio.muted = false; });
+      }
       // Load the offline model only after the user taps Start AI Call.
       // The model is persisted in IndexedDB and reused on later visits.
       try { await navigator.storage?.persist?.(); } catch { /* browser may deny persistent storage */ }
@@ -537,26 +535,10 @@ export default function AIVoiceCall() {
         <div className="mt-5 min-h-6 text-sm font-medium tracking-wide text-white/70">
           {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'Listening…' : ''}
         </div>
-        <div
-          className="mt-5 flex min-h-[76px] w-full max-w-[340px] flex-col items-center justify-center gap-1 px-3 text-center"
-          aria-live="polite"
-          aria-atomic="false"
-        >
-          {spokenLines.length > 0 ? spokenLines.map((line, index) => (
-            <p
-              key={`${line}-${index}`}
-              className="w-full text-xl font-semibold leading-7 tracking-wide text-white drop-shadow-[0_0_14px_rgba(103,232,249,.35)] transition-all duration-300"
-              style={{ animation: "chatwork-line-in 280ms ease-out both" }}
-            >
-              {line}
-            </p>
-          )) : callState === 'speaking' && lastReply ? (
-            <p className="line-clamp-2 text-lg font-medium leading-7 text-white/80">{lastReply}</p>
-          ) : null}
-        </div>
+        <div className="mt-5 min-h-[76px] w-full" aria-hidden="true" />
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
-        <p className={`mt-2 max-w-xs text-xs ${errorMessage ? 'text-rose-300' : 'text-cyan-100/55'}`} aria-live="polite">{errorMessage || voiceStage}</p>
+        <p className="sr-only" aria-live="polite">{voiceStage}</p>
         <div className="mt-10 w-full">
           {!callStarted ? (
             <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">
