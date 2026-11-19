@@ -20,7 +20,7 @@ type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 function normalizeVoiceWords(value: string): string[] {
   return cleanVoiceText(value)
     .toLowerCase()
-    .replace(/[^a-z0-9\u0900-\u097f\s]/gi, ' ')
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, ' ')
     .split(/\s+/)
     .filter((word) => word.length > 1);
 }
@@ -42,7 +42,8 @@ function cleanVoiceText(value: string): string {
     .replace(/^•\s*/gm, '')
     .replace(/^[-*]\s+/gm, '')
     .replace(/\`{1,3}/g, '')
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[\uFE0E\uFE0F]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
