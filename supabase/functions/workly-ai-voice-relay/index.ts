@@ -98,7 +98,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
       const jobType = body?.job_type;
-      if (jobType !== "tts" && jobType !== "stt") return json({ error: "job_type must be tts or stt" }, 400);
+      if (jobType !== "tts" && jobType !== "stt" && jobType !== "ai") return json({ error: "job_type must be tts, stt or ai" }, 400);
       const payload = body?.payload;
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
