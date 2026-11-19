@@ -326,7 +326,7 @@ export default function AIVoiceCall() {
       }
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [speakReply, stopRecognition, stopReply, startRecognition, user?.id, muted]);
+  }, [speakReply, stopReply, startRecognition, user?.id, muted]);
 
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
