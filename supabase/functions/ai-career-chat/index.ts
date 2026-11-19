@@ -4301,7 +4301,7 @@ Create a visually striking, professional image prompt with unique style, color s
       ? latestUserMessage.content.find((part: any) => part?.type === "image_url" && typeof part?.image_url?.url === "string")
       : null;
     const latestUserImageDataUrl = typeof latestUserImagePart?.image_url?.url === "string"
-      && /^data:image\\/(?:png|jpe?g|webp);base64,/i.test(latestUserImagePart.image_url.url)
+      && /^data:image\/(?:png|jpe?g|webp);base64,/i.test(latestUserImagePart.image_url.url)
       && latestUserImagePart.image_url.url.length <= 12_000_000
       ? latestUserImagePart.image_url.url
       : null;
@@ -6214,7 +6214,7 @@ Create a visually striking, professional image prompt with unique style, color s
               const textRule = args.include_text ? "TEXT RULES (critical): render every word COMPLETE and correctly spelled — never cut, crop or clip any letter. " + "Keep all text fully inside a safe area with at least 8% margin from every edge, never touching or bleeding past the frame. " + "Scale the text down so the longest line fits comfortably in the width. Use one clean, highly legible bold font, strong contrast against the background, max 2 short lines." : "Do NOT include any text, letters or words in the image.";
               const referenceImageDataUrl = args.use_reference_image === true
                 && typeof args.reference_image_data_url === "string"
-                && /^data:image\\/(?:png|jpe?g|webp);base64,/i.test(args.reference_image_data_url)
+                && /^data:image\/(?:png|jpe?g|webp);base64,/i.test(args.reference_image_data_url)
                 && args.reference_image_data_url.length <= 12_000_000
                 ? args.reference_image_data_url
                 : null;
@@ -11078,11 +11078,6 @@ Remember: Tu ChatWork hai - ${BRAND_CONFIG.name} ki COMPLETE CUSTOMER SERVICE AI
         // generation while respecting upstream gateway rate limits.
         const toolResults = await runWithConcurrency(currentMessage.tool_calls, 3, async (toolCall: any) => {
           const args = JSON.parse(toolCall.function.arguments);
-          // If this generation tool is responding to an attached photo, pass it as the edit reference.
-          if (toolCall.function.name === "generate_image_for_user" && latestUserImageDataUrl) {
-            args.use_reference_image = true;
-            args.reference_image_data_url = latestUserImageDataUrl;
-          }
           const result = await executeTool(toolCall.function.name, args);
           return {
             role: "tool",
@@ -11379,6 +11374,11 @@ Remember: Tu ChatWork hai - ${BRAND_CONFIG.name} ki COMPLETE CUSTOMER SERVICE AI
         }
         const toolResults = await runWithConcurrency(currentMessage.tool_calls, 3, async (toolCall: any) => {
           const args = JSON.parse(toolCall.function.arguments);
+          // If this generation tool is responding to an attached photo, pass it as the edit reference.
+          if (toolCall.function.name === "generate_image_for_user" && latestUserImageDataUrl) {
+            args.use_reference_image = true;
+            args.reference_image_data_url = latestUserImageDataUrl;
+          }
           const result = await executeTool(toolCall.function.name, args);
           return {
             role: "tool",
