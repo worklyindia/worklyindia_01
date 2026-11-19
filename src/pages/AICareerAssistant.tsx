@@ -68,6 +68,7 @@ import {
   type StatusLangCode,
 } from '@/lib/requestStatus';
 import { callAICareerChat } from '@/lib/aiChatTransport';
+import { requestOwnerPhoneAIReply } from '@/lib/ownerPhoneVoiceRelay';
 import { SubscriptionExpiryBanner } from '@/components/ai-chat/SubscriptionExpiryBanner';
 import YouTubeOAuthBridge from '@/components/youtube/YouTubeOAuthBridge';
 
@@ -135,6 +136,43 @@ interface AttachedFile {
   size: number;
   textContent?: string; // Extracted text from PDF/DOC/TXT
   dataUrl?: string; // For preview
+}
+
+async function callWorklyVoiceFirst(
+  body: Record<string, any>,
+  callbacks: Parameters<typeof callAICareerChat>[1],
+  signal?: AbortSignal
+): Promise<{ fullText: string; cached: boolean }> {
+  // Rich/image requests stay on the existing AI pipeline. For normal text chat,
+  // try the paired Workly Voice Android app first, then preserve the existing AI fallback.
+  const hasImages = body.hasImages === true || (Array.isArray(body.messages) && body.messages.some((message: any) =>
+    Array.isArray(message?.content) && message.content.some((part: any) => part?.type === 'image_url')
+  ));
+  if (!hasImages && !signal?.aborted) {
+    try {
+      callbacks.onLifecycle?.('request_sent');
+      const messages = Array.isArray(body.messages) ? body.messages : [];
+      const prompt = messages
+        .filter((message: any) => message?.role === 'user' || message?.role === 'assistant')
+        .map((message: any) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${typeof message.content === 'string' ? message.content : ''}`)
+        .filter(Boolean)
+        .join('\\n')
+        .slice(-12000);
+      if (!prompt.trim()) throw new Error('No text available for Workly Voice AI.');
+      const result = await requestOwnerPhoneAIReply(prompt, navigator.language || 'auto');
+      if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
+      const reply = result.reply.trim();
+      if (!reply) throw new Error('Workly Voice AI returned an empty reply.');
+      callbacks.onLifecycle?.('server_accepted');
+      callbacks.onDelta?.(reply, reply);
+      callbacks.onDone?.(reply);
+      return { fullText: reply, cached: false };
+    } catch (error) {
+      if (signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error;
+      console.warn('[ai-chat] Workly Voice AI unavailable; using existing AI fallback.', error);
+    }
+  }
+  return callAICareerChat(body, callbacks, signal);
 }
 
 const CHAT_HEADER_GREEN = '#075E54';
@@ -674,7 +712,7 @@ export default function AICareerAssistant() {
           let firstChunk = true;
           let cachedHandled = false;
 
-          await callAICareerChat(
+          await callWorklyVoiceFirst(
             {
               messages: aiMessages,
               user_id: currentUser.id,
@@ -1609,7 +1647,7 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
       let isFirstChunk = true;
       let cachedHandled = false;
 
-      const result = await callAICareerChat(
+      const result = await callWorklyVoiceFirst(
         {
           // Exclude transient progress + error bubbles from the AI history
           // so the model never sees its own error toasts as context.

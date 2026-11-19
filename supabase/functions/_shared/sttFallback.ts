@@ -74,9 +74,10 @@ async function transcribeWithLovable(
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
 
-  const audioBlob = new Blob([audioBytes], { type: 'audio/webm' });
+  const isWav = audioBytes.length >= 12 && new TextDecoder().decode(audioBytes.slice(0, 4)) === 'RIFF';
+  const audioBlob = new Blob([audioBytes], { type: isWav ? 'audio/wav' : 'audio/webm' });
   const formData = new FormData();
-  formData.append('file', audioBlob, 'recording.webm');
+  formData.append('file', audioBlob, isWav ? 'recording.wav' : 'recording.webm');
   formData.append('model', 'openai/gpt-4o-mini-transcribe');
 
   const res = await fetch('https://ai.gateway.lovable.dev/v1/audio/transcriptions', {

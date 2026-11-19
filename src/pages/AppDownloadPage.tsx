@@ -56,7 +56,7 @@ export default function AppDownloadPage() {
     setError("");
     setDownloadUrl("");
     try {
-      const { data, error: queryError } = await supabase
+      const { data, error: queryError } = await (supabase as any)
         .from("android_app_releases")
         .select("id,version_name,version_code,apk_path,apk_size_bytes,release_notes,published_at,is_published")
         .eq("is_published", true)
@@ -68,7 +68,7 @@ export default function AppDownloadPage() {
         setRelease(null);
         return;
       }
-      const row = data as PublicRelease;
+      const row = data as unknown as PublicRelease;
       setRelease(row);
       if (isTrustedDownloadUrl(row.apk_path)) {
         setDownloadUrl(row.apk_path);

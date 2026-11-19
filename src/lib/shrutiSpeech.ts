@@ -1,3 +1,4 @@
+import { requestOwnerPhoneTranscription } from '@/lib/ownerPhoneVoiceRelay';
 type WorkerMessage =
   | { type: 'progress'; loaded: number; total: number }
   | { type: 'ready'; source: string }
@@ -51,26 +52,9 @@ function getWorker(): Worker {
 }
 
 export function prepareShrutiRecognition(): Promise<void> {
-  if (workerReady) return workerReady;
-  workerReady = new Promise((resolve, reject) => {
-    const current = getWorker();
-    const timeout = window.setTimeout(() => reject(new Error('Shruti took too long to load. Please try again.')), 120000);
-    const onMessage = (event: MessageEvent<WorkerMessage>) => {
-      if (event.data.type === 'ready') {
-        window.clearTimeout(timeout);
-        current.removeEventListener('message', onMessage);
-        resolve();
-      } else if (event.data.type === 'error' && event.data.stage === 'init') {
-        window.clearTimeout(timeout);
-        current.removeEventListener('message', onMessage);
-        workerReady = null;
-        reject(new Error(event.data.message));
-      }
-    };
-    current.addEventListener('message', onMessage);
-    current.postMessage({ type: 'init' });
-  }).catch((error) => { workerReady = null; throw error; });
-  return workerReady;
+  // Speech recognition is performed by the paired Workly Voice Android app.
+  // The website only captures microphone audio and securely queues it for the phone.
+  return Promise.resolve();
 }
 
 function resample16k(input: Float32Array, inputRate: number): Float32Array {
@@ -89,7 +73,7 @@ function resample16k(input: Float32Array, inputRate: number): Float32Array {
 }
 
 function submitUtterance() {
-  if (!chunks.length || transcribing || !worker) return;
+  if (!chunks.length || transcribing) return;
   const captured = chunks;
   chunks = [];
   const length = captured.reduce((total, chunk) => total + chunk.length, 0);
@@ -99,9 +83,38 @@ function submitUtterance() {
   const pcm = resample16k(joined, context?.sampleRate || 48000);
   if (pcm.length < 4800) return;
   transcribing = true;
-  emit('workly-shruti-status', { status: 'transcribing' });
-  const id = ++requestId;
-  worker.postMessage({ type: 'transcribe', id, pcm }, [pcm.buffer]);
+  emit('workly-shruti-status', { status: 'transcribing-on-workly-voice-app' });
+  void (async () => {
+    try {
+      const wav = new ArrayBuffer(44 + pcm.length * 2);
+      const view = new DataView(wav);
+      const writeText = (offset: number, value: string) => {
+        for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
+      };
+      writeText(0, 'RIFF'); view.setUint32(4, 36 + pcm.length * 2, true); writeText(8, 'WAVE');
+      writeText(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true); view.setUint32(24, 16000, true); view.setUint32(28, 32000, true);
+      view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeText(36, 'data');
+      view.setUint32(40, pcm.length * 2, true);
+      for (let i = 0; i < pcm.length; i += 1) {
+        const sample = Math.max(-1, Math.min(1, pcm[i]));
+        view.setInt16(44 + i * 2, sample < 0 ? sample * 32768 : sample * 32767, true);
+      }
+      const bytes = new Uint8Array(wav);
+      let binary = '';
+      const stride = 0x8000;
+      for (let i = 0; i < bytes.length; i += stride) binary += String.fromCharCode(...bytes.subarray(i, i + stride));
+      const result = await requestOwnerPhoneTranscription(btoa(binary));
+      if (active && result.text) {
+        emit('workly-shruti-status', { status: 'transcribed-by-workly-voice-app', language: result.languageTag });
+        emit('workly-voice-transcript', { text: result.text, languageTag: result.languageTag, source: 'workly-voice-android-app' });
+      }
+    } catch (error) {
+      emit('workly-voice-error', { message: error instanceof Error ? error.message : 'Workly Voice app could not transcribe caller audio.' });
+    } finally {
+      transcribing = false;
+    }
+  })();
 }
 
 export async function startShrutiRecognition(): Promise<boolean> {
@@ -116,7 +129,6 @@ export async function startShrutiRecognition(): Promise<boolean> {
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
-      latency: 0.02,
     },
   });
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;

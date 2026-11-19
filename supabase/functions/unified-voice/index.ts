@@ -3,10 +3,11 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { runAiChain } from '../_shared/aiChain.ts';
+import { handleWorklyVoiceRelay } from '../workly-ai-voice-relay/index.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-token',
 };
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -55,6 +56,11 @@ serve(async (req) => {
 
     console.log(`[unified-voice] Action: ${action}`);
 
+    // Shared owner-phone relay actions are handled by the isolated relay module.
+    if (['register_device', 'create_job', 'create_stt_job', 'get_job', 'poll', 'fail_job', 'upload_audio', 'complete_job', 'list_devices', 'revoke_device'].includes(action)) {
+      return await handleWorklyVoiceRelay(new Request(req.url, { method: req.method, headers: req.headers, body: JSON.stringify({ action, ...params }) }));
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     switch (action) {
@@ -62,7 +68,7 @@ serve(async (req) => {
         return await handleTextToSpeech(supabase, params, req);
       
       case 'speech-to-text':
-        return await handleSpeechToText(params);
+        return await handleSpeechToText(params, req, supabase);
 
       // Stateless AI voice reply: no database, storage, cache, usage counters or transcript logs.
       case 'ai-voice-chat':
@@ -111,7 +117,7 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
       method: 'POST',
       headers: { 'X-API-Key': apiKey, 'Cartesia-Version': '2024-11-13', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model_id: 'sonic-2',
+        model_id: 'sonic-latest',
         transcript: text,
         voice: { mode: 'id', id: '56e35e2d-6eb6-4226-ab8b-9776515a7094' },
         language: 'hi',
@@ -203,7 +209,7 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
       method: 'POST',
       headers: { 'X-API-Key': apiKey, 'Cartesia-Version': '2024-11-13', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model_id: 'sonic-2',
+        model_id: 'sonic-latest',
         transcript: text,
         voice: { mode: 'id', id: '56e35e2d-6eb6-4226-ab8b-9776515a7094' },
         language: 'hi',
@@ -234,8 +240,18 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
 // SPEECH TO TEXT (AssemblyAI → Lovable fallback)
 // =============================================
 
-async function handleSpeechToText(params: any) {
+async function handleSpeechToText(params: any, req: Request, supabase: any) {
+  const deviceToken = req.headers.get('x-device-token') || '';
+  if (deviceToken.length < 40 || deviceToken.length > 200) throw new Error('Workly Voice device authentication required.');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(deviceToken));
+  const tokenHash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  const { data: device, error: deviceError } = await supabase.from('workly_ai_voice_devices')
+    .select('id,user_id').eq('token_hash', tokenHash).is('revoked_at', null).maybeSingle();
+  if (deviceError || !device || device.user_id !== Deno.env.get('WORKLY_AI_VOICE_OWNER_USER_ID')) {
+    throw new Error('Workly Voice device authentication failed.');
+  }
   const { audio } = params;
+  if (typeof audio !== 'string' || audio.length > 1_800_000) throw new Error('Audio payload is missing or too large.');
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
 
@@ -268,14 +284,30 @@ async function handleSpeechToText(params: any) {
 // STATELESS AI VOICE CHAT (no Workly retention)
 // =============================================
 async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
-  const authHeader = req.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  }
-  const token = authHeader.slice(7);
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-  if (authError || !user) {
-    return new Response(JSON.stringify({ error: 'Session expired' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const authHeader = req.headers.get('authorization') ?? '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const { data: { user }, error: authError } = token
+    ? await supabase.auth.getUser(token)
+    : { data: { user: null }, error: new Error('No user token') };
+  // The registered owner phone may request an AI answer for a queued website
+  // turn. Its device token is verified against the active owner device row.
+  if (!user) {
+    const deviceToken = req.headers.get('x-device-token') ?? '';
+    const ownerUserId = Deno.env.get('WORKLY_AI_VOICE_OWNER_USER_ID') ?? '';
+    if (deviceToken.length < 40 || !ownerUserId) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(deviceToken));
+    const tokenHash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    const { data: device, error: deviceError } = await supabase.from('workly_ai_voice_devices')
+      .select('id,user_id,revoked_at')
+      .eq('token_hash', tokenHash)
+      .eq('user_id', ownerUserId)
+      .is('revoked_at', null)
+      .maybeSingle();
+    if (deviceError || !device) {
+      return new Response(JSON.stringify({ error: 'Owner phone authentication failed' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
   }
   const text = typeof params.text === 'string' ? params.text.trim().slice(0, 4000) : '';
   const languageTag = typeof params.languageTag === 'string' ? params.languageTag.trim().slice(0, 24) : 'und';

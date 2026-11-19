@@ -1,10 +1,20 @@
+type BrowserRecognitionResultEvent = {
+  resultIndex?: number;
+  results?: ArrayLike<{
+    isFinal: boolean;
+    0?: { transcript?: string };
+  }>;
+};
+
+type BrowserRecognitionErrorEvent = { error?: string };
+
 type BrowserRecognition = {
   processLocally?: boolean;
   lang: string;
   continuous: boolean;
   interimResults: boolean;
-  onresult: ((event: any) => void) | null;
-  onerror: ((event: any) => void) | null;
+  onresult: ((event: BrowserRecognitionResultEvent) => void) | null;
+  onerror: ((event: BrowserRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
   start(): void;
   stop(): void;
@@ -17,17 +27,18 @@ type BrowserRecognitionConstructor = {
   install?: (options: { langs: string[]; processLocally: true }) => Promise<boolean>;
 };
 
-declare global {
-  interface Window {
-    SpeechRecognition?: BrowserRecognitionConstructor;
-    webkitSpeechRecognition?: BrowserRecognitionConstructor;
-  }
-}
-
 let recognition: BrowserRecognition | null = null;
 
-const getRecognitionConstructor = () =>
-  typeof window === 'undefined' ? undefined : window.SpeechRecognition || window.webkitSpeechRecognition;
+const getRecognitionConstructor = (): BrowserRecognitionConstructor | undefined => {
+  if (typeof window === 'undefined') return undefined;
+  // Keep experimental Web Speech API typings local instead of redeclaring
+  // DOM Window properties, which conflict with TypeScript's lib.dom types.
+  const browserWindow = window as unknown as {
+    SpeechRecognition?: BrowserRecognitionConstructor;
+    webkitSpeechRecognition?: BrowserRecognitionConstructor;
+  };
+  return browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
+};
 
 /** General browser speech recognition support (local or browser-provided service). */
 export function isBrowserLocalVoiceAvailable(): boolean {
@@ -45,13 +56,13 @@ export async function startBrowserLocalRecognition(language = 'en-US', allowBrow
   if (!Ctor) throw new Error('Speech recognition is not supported in this browser. Please use the latest Chrome or Edge.');
 
   const lang = language || 'en-US';
-  const supportsLocal = 'processLocally' in Ctor.prototype && !!Ctor.available;
+  const supportsLocal = 'processLocally' in Ctor.prototype && typeof Ctor.available === 'function';
   let useLocal = supportsLocal;
 
   if (supportsLocal && Ctor.available) {
     const status = await Ctor.available({ langs: [lang], processLocally: true });
     if (status !== 'available') {
-      if ((status === 'downloadable' || status === 'downloading') && Ctor.install) {
+      if ((status === 'downloadable' || status === 'downloading') && typeof Ctor.install === 'function') {
         const installed = await Ctor.install({ langs: [lang], processLocally: true });
         if (!installed) throw new Error('Offline language pack could not be installed. Check internet and try again.');
         throw new Error('Offline language pack installed. Tap Start AI Call again.');

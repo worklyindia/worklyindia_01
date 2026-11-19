@@ -1,0 +1,561 @@
+package com.worklyindia.aivoice
+
+import android.Manifest
+import android.app.Activity
+import android.app.ActivityManager
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+import android.content.res.Configuration
+import android.os.Bundle
+import android.os.Build
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.PopupMenu
+import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.TextView
+import java.util.Locale
+import java.util.concurrent.Executors
+
+class OfflineAiChatActivity : Activity() {
+    private val worker = Executors.newSingleThreadExecutor()
+    private val modelManager by lazy { QwenModelManager(this) }
+    private lateinit var qwenModelPicker: Spinner
+    private var selectedQwenModel: QwenModelManager.Model? = null
+    private var userHasChosenQwenModel = false
+    private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
+    private val engine by lazy { OfflineAiEngine() }
+    private var tinyTtsEngine: IndicTinyTtsEngine? = null
+    private var activeAudioRecord: AudioRecord? = null
+    @Volatile private var offlineRecording = false
+    private val languages = listOf(
+        VoiceLanguage("Hindi · हिन्दी", "hi-IN", Locale.forLanguageTag("hi-IN")),
+        VoiceLanguage("English · India", "en-IN", Locale.forLanguageTag("en-IN")),
+        VoiceLanguage("Gujarati · ગુજરાતી", "gu-IN", Locale.forLanguageTag("gu-IN"))
+    )
+    private lateinit var chatMessages: LinearLayout
+    private var thinkingBubble: TextView? = null
+    private lateinit var promptInput: EditText
+    private lateinit var sendButton: Button
+    private lateinit var micButton: Button
+    private lateinit var status: TextView
+    private lateinit var chatScroll: ScrollView
+    private val conversationHistory = StringBuilder()
+    private var dark = false
+    @Volatile private var modelLoadInProgress = false
+    @Volatile private var loadedModelId: String? = null
+
+    private data class VoiceLanguage(val label: String, val tag: String, val locale: Locale) {
+        override fun toString() = label
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        dark = isSystemDarkMode()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(false)
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        if (android.os.Build.VERSION.SDK_INT >= 23) {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = if (dark) 0 else
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
+        buildUi()
+        loadModel()
+    }
+
+    private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
+    private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
+    private val primaryText get() = if (dark) 0xFFE8EEF7.toInt() else 0xFF142033.toInt()
+    private val secondaryText get() = if (dark) 0xFFB5C1D1.toInt() else 0xFF65748B.toInt()
+    private val accent get() = 0xFF1769C2.toInt()
+
+    private fun buildUi() {
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(bg)
+            clipToPadding = false
+            setOnApplyWindowInsetsListener { view, insets ->
+                val topInset: Int
+                val bottomInset: Int
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    val bars = insets.getInsets(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.displayCutout())
+                    val nav = insets.getInsets(android.view.WindowInsets.Type.navigationBars())
+                    val ime = insets.getInsets(android.view.WindowInsets.Type.ime())
+                    topInset = bars.top
+                    bottomInset = maxOf(nav.bottom, ime.bottom)
+                } else {
+                    @Suppress("DEPRECATION")
+                    topInset = insets.systemWindowInsetTop
+                    @Suppress("DEPRECATION")
+                    bottomInset = insets.systemWindowInsetBottom
+                }
+                view.setPadding(dp(14), topInset, dp(14), bottomInset)
+                insets
+            }
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        header.addView(Button(this).apply {
+            text = "‹"
+            textSize = 30f
+            isAllCaps = false
+            setTextColor(primaryText)
+            setBackgroundColor(bg)
+            contentDescription = "Back"
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(TextView(this).apply {
+            text = "⚡  Usage"
+            textSize = 19f
+            setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(Button(this).apply {
+            text = "⋮"
+            textSize = 24f
+            isAllCaps = false
+            setTextColor(primaryText)
+            setBackgroundColor(bg)
+            contentDescription = "Chat settings"
+            setOnClickListener { showChatOptions(this) }
+        }, LinearLayout.LayoutParams(dp(44), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
+
+        status = TextView(this).apply {
+            text = "Checking offline AI model…"
+            textSize = 12f
+            setTextColor(secondaryText)
+            setPadding(dp(8), dp(3), dp(8), dp(7))
+            maxLines = 2
+        }
+        root.addView(status, LinearLayout.LayoutParams(-1, -2))
+
+        qwenModelPicker = Spinner(this).apply {
+            adapter = readableSpinnerAdapter(modelManager.models)
+            isEnabled = false
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    selectedQwenModel = modelManager.models[position]
+                    sendButton.isEnabled = engine.isLoaded && selectedQwenModel?.let { modelManager.snapshot(it).state == QwenModelManager.State.READY } == true
+                }
+            }
+        }
+
+        chatScroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            setPadding(dp(2), dp(6), dp(2), dp(10))
+            chatMessages = LinearLayout(this@OfflineAiChatActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(2), dp(4), dp(2), dp(8))
+            }
+            addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
+        }
+        root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
+
+        val composer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(4), dp(5), dp(4))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface)
+                setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
+                cornerRadius = dp(32).toFloat()
+            }
+        }
+        val moreButton = Button(this).apply {
+            text = "+"
+            textSize = 27f
+            isAllCaps = false
+            setTextColor(secondaryText)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            contentDescription = "More chat options"
+            setOnClickListener { showChatOptions(this) }
+        }
+        composer.addView(moreButton, LinearLayout.LayoutParams(dp(42), dp(48)))
+        promptInput = EditText(this).apply {
+            hint = "Message…"
+            textSize = 16f
+            minLines = 1
+            maxLines = 4
+            setTextColor(primaryText)
+            setHintTextColor(secondaryText)
+            setPadding(dp(5), dp(9), dp(5), dp(9))
+            background = null
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendPrompt(); true } else false
+            }
+        }
+        composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
+        micButton = Button(this).apply {
+            text = "🎙"
+            textSize = 20f
+            isAllCaps = false
+            setTextColor(primaryText)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            contentDescription = "Voice input"
+            setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
+        }
+        composer.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(48)))
+        sendButton = Button(this).apply {
+            text = "➤"
+            textSize = 22f
+            isAllCaps = false
+            setTextColor(0xFFFFFFFF.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(accent)
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+            }
+            isEnabled = false
+            alpha = 0.55f
+            contentDescription = "Send message"
+            setOnClickListener { sendPrompt() }
+        }
+        composer.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
+        root.addView(composer, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(5)
+            bottomMargin = dp(6)
+        })
+        setContentView(root)
+    }
+
+    private fun showChatOptions(anchor: View) {
+        PopupMenu(this, anchor).apply {
+            menu.add("Settings").setOnMenuItemClickListener {
+                startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
+            }
+            show()
+        }
+    }
+
+
+    private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
+        object : ArrayAdapter<T>(this, android.R.layout.simple_spinner_item, items) {
+            private fun row(value: T) = TextView(this@OfflineAiChatActivity).apply {
+                text = value.toString()
+                textSize = 14f
+                setTextColor(primaryText)
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(8), dp(10), dp(8))
+                setBackgroundColor(surface)
+            }
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                row(getItem(position)!!)
+            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+                row(getItem(position)!!)
+        }
+
+    private fun loadModel() {
+        if (modelLoadInProgress) return
+        modelLoadInProgress = true
+        sendButton.isEnabled = false
+        sendButton.alpha = 0.55f
+        status.text = "Checking Qwen model and phone memory…"
+        worker.execute {
+            try {
+                val memoryInfo = ActivityManager.MemoryInfo()
+                (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memoryInfo)
+                val recommended = modelManager.recommendedModel(memoryInfo.availMem)
+                val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE).getString("selected_model_id", null)
+                val savedModel = modelManager.models.firstOrNull { it.id == savedId }
+                // Prefer the saved model only when it is both downloaded and safe for
+                // current free RAM. Otherwise automatically load the largest compatible
+                // model already downloaded on this phone; never silently use cloud/mobile TTS.
+                val savedReady = savedModel?.takeIf {
+                    memoryInfo.availMem >= it.minFreeRam &&
+                        modelManager.snapshot(it).state == QwenModelManager.State.READY
+                }
+                val downloadedCompatible = modelManager.models
+                    .filter { memoryInfo.availMem >= it.minFreeRam }
+                    .filter { modelManager.snapshot(it).state == QwenModelManager.State.READY }
+                    .maxByOrNull { it.size }
+                val chosen = savedReady ?: downloadedCompatible ?: recommended
+                selectedQwenModel = chosen
+                runOnUiThread {
+                    val index = modelManager.models.indexOf(chosen)
+                    if (index >= 0 && qwenModelPicker.selectedItemPosition != index) qwenModelPicker.setSelection(index)
+                    status.text = "Available RAM: %.1f GB · Recommended: ${recommended.title}".format(java.util.Locale.US, memoryInfo.availMem / 1_000_000_000.0)
+                }
+                val modelState = modelManager.snapshot(chosen).state
+                check(modelState == QwenModelManager.State.READY) {
+                    "${chosen.title} download is not verified. Open Downloads and wait until it shows Ready."
+                }
+                check(memoryInfo.availMem >= chosen.minFreeRam) {
+                    "Not enough free RAM for ${chosen.title}. Choose a smaller Qwen model or close other apps."
+                }
+                check(engine.loadModel(modelManager.file(chosen))) {
+                    "Qwen could not load. Free memory may be insufficient; try a smaller model."
+                }
+                runOnUiThread {
+                    loadedModelId = chosen.id
+                    modelLoadInProgress = false
+                    status.text = "Ready · ${chosen.title} · local AI replies enabled"
+                    sendButton.isEnabled = true
+                    sendButton.alpha = 1f
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    loadedModelId = null
+                    modelLoadInProgress = false
+                    status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
+                    sendButton.isEnabled = false
+                }
+            }
+        }
+    }
+
+    private fun sendPrompt() {
+        val prompt = promptInput.text?.toString()?.trim().orEmpty()
+        if (prompt.isEmpty()) {
+            promptInput.error = "Enter a message"
+            return
+        }
+        if (!engine.isLoaded) {
+            status.text = "AI model is not ready yet. Wait for the Ready status."
+            return
+        }
+        promptInput.setText("")
+        addMessage(prompt, true)
+        thinkingBubble = addMessage("Thinking…", false)
+        sendButton.isEnabled = false
+        sendButton.alpha = 0.55f
+        status.text = "Generating a reply on this phone…"
+        val contextPrompt = if (conversationHistory.isEmpty()) prompt else
+            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
+        worker.execute {
+            val startedAt = System.currentTimeMillis()
+            val answer = try {
+                engine.generate(contextPrompt) { partial ->
+                    runOnUiThread {
+                        thinkingBubble?.text = partial
+                        chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+                    }
+                }.trim().ifBlank {
+                    "AI ne empty response diya. Please shorter message bhejkar dobara try karein."
+                }
+            } catch (error: Throwable) {
+                "AI reply failed: ${error.message ?: error.javaClass.simpleName}. Model ko Settings se reload karke try karein."
+            }
+            val elapsedSeconds = ((System.currentTimeMillis() - startedAt) / 1000L).coerceAtLeast(1)
+            conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
+            if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
+            runOnUiThread {
+                replaceThinking(answer)
+                status.text = "Reply completed in ${elapsedSeconds}s"
+                sendButton.isEnabled = engine.isLoaded
+                sendButton.alpha = if (engine.isLoaded) 1f else 0.55f
+                if (!answer.startsWith("AI reply failed:")) speakAnswer(answer)
+            }
+        }
+    }
+
+    /** Offline-only voice input using a model already downloaded by the user. */
+    private fun startDownloadedVoiceInput() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_AUDIO)
+            return
+        }
+        val localeCode = Locale.getDefault().language.lowercase()
+        val candidates = when (localeCode) {
+            "gu" -> listOf(SpeechModelCatalog.shruti("gu"), SpeechModelCatalog.indicConformer("gu"), SpeechModelCatalog.shruti("hi"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.indicConformer("en"))
+            "hi" -> listOf(SpeechModelCatalog.shruti("hi"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.shruti("gu"), SpeechModelCatalog.indicConformer("gu"), SpeechModelCatalog.indicConformer("en"))
+            else -> listOf(SpeechModelCatalog.indicConformer("en"), SpeechModelCatalog.shruti("hi"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.shruti("gu"), SpeechModelCatalog.indicConformer("gu"))
+        }
+        val pack = candidates.firstOrNull { OfflineSpeechEngineFactory.isReady(this, it) }
+        if (pack == null) {
+            status.text = "No downloaded speech-to-text model is ready. Open Settings → Model Downloads and download a voice recognition pack first."
+            return
+        }
+        val minBuffer = AudioRecord.getMinBufferSize(OfflineSpeechRecognizer.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+        if (minBuffer <= 0) { status.text = "This phone does not support 16 kHz microphone recording."; return }
+        offlineRecording = true
+        micButton.text = "■ Stop recording"
+        status.text = "Recording offline with downloaded ${pack.title} · ${pack.languageCode}. Tap Stop when finished."
+        worker.execute {
+            var recorder: AudioRecord? = null
+            var speech: OfflineSpeechRecognizer? = null
+            try {
+                speech = if (pack.id.startsWith("shruti-")) OfflineSpeechEngineFactory.openShruti(this, pack.languageCode)
+                    else OfflineSpeechEngineFactory.openIndicConformer(this, pack.languageCode)
+                val audio = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, OfflineSpeechRecognizer.SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer * 2, 8192))
+                recorder = audio
+                check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize microphone." }
+                activeAudioRecord = audio
+                audio.startRecording()
+                val buffer = ShortArray(4096)
+                val samples = ArrayList<Float>(OfflineSpeechRecognizer.SAMPLE_RATE * 15)
+                val maxSamples = OfflineSpeechRecognizer.SAMPLE_RATE * 60
+                while (offlineRecording && samples.size < maxSamples) {
+                    val count = audio.read(buffer, 0, buffer.size)
+                    if (count > 0) for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
+                    else if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
+                }
+                offlineRecording = false
+                runCatching { if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
+                check(samples.isNotEmpty()) { "No audio was recorded. Tap Voice and speak." }
+                runOnUiThread { status.text = "Transcribing offline with downloaded ${pack.title}…" }
+                val result = speech.transcribe(samples.toFloatArray())
+                runOnUiThread {
+                    if (result.isNotBlank()) {
+                        promptInput.setText(result); promptInput.setSelection(promptInput.text.length)
+                        status.text = "Offline speech recognized using downloaded model. Tap Send to ask Workly AI."
+                    } else status.text = "No speech recognized. Speak clearly and try again."
+                    micButton.text = "🎙"; micButton.isEnabled = true
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    status.text = "Downloaded speech model error: ${error.message ?: "offline recognition failed"}"
+                    micButton.text = "🎙"; micButton.isEnabled = true
+                }
+            } finally {
+                offlineRecording = false; activeAudioRecord = null
+                runCatching { recorder?.release() }; runCatching { speech?.close() }
+            }
+        }
+    }
+
+    private fun stopOfflineVoiceInput() {
+        offlineRecording = false
+        runCatching {
+            activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
+        }
+        micButton.isEnabled = false
+        status.text = "Stopping microphone and transcribing…"
+    }
+
+    /** Uses downloaded Indic Tiny TTS only; never Android/mobile TTS. */
+    private fun speakAnswer(value: String) {
+        val language = selectedLanguage(value)
+        val code = when { language.tag.startsWith("hi") -> "hi"; language.tag.startsWith("gu") -> "gu"; else -> "en" }
+        val pack = SpeechModelCatalog.indicTinyTts(code)
+        if (!OfflineSpeechEngineFactory.isReady(this, pack)) {
+            status.text = "No downloaded ${language.label} text-to-speech pack. Open Settings → Model Downloads and download Indic Tiny TTS ${code.uppercase()}."
+            return
+        }
+        status.text = "Speaking with downloaded Indic Tiny TTS · ${code.uppercase()}…"
+        worker.execute {
+            try {
+                tinyTtsEngine?.close()
+                val tiny = IndicTinyTtsEngine.create(this, code)
+                tinyTtsEngine = tiny
+                tiny.speak(value)
+                runOnUiThread { status.text = "Spoken using downloaded Indic Tiny TTS · ${code.uppercase()}." }
+            } catch (error: Exception) {
+                runOnUiThread { status.text = "Downloaded text-to-speech model error: ${error.message ?: "audio generation failed"}. No mobile TTS fallback was used." }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Returning from Downloads must re-check the selected model and load it immediately.
+        // Previously the chat only loaded once in onCreate, so a model downloaded while
+        // this Activity remained alive never became usable until the app was reopened.
+        val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
+            .getString("selected_model_id", null)
+        if (!modelLoadInProgress && savedId != null && savedId != loadedModelId) loadModel()
+    }
+
+    // Language follows the device locale; recognition is allowed to detect the spoken language.
+    private fun selectedLanguage(sample: String? = null): VoiceLanguage {
+        val text = sample.orEmpty()
+        val detected = when {
+            text.any { it.code in 0x0900..0x097F } -> "hi"
+            text.any { it.code in 0x0A80..0x0AFF } -> "gu"
+            else -> "en"
+        }
+        return languages.first { it.tag.startsWith(detected) }
+    }
+
+    private fun addMessage(value: String, fromUser: Boolean): TextView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (fromUser) Gravity.END else Gravity.START
+            setPadding(dp(2), dp(3), dp(2), dp(3))
+        }
+        val bubble = TextView(this).apply {
+            text = value
+            textSize = 16f
+            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
+            setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
+            setLineSpacing(dp(2).toFloat(), 1.04f)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (fromUser) 0xFF1769C2.toInt() else surface)
+                cornerRadius = dp(19).toFloat()
+            }
+        }
+        val params = LinearLayout.LayoutParams(-2, -2).apply {
+            if (fromUser) marginStart = dp(42) else marginEnd = dp(28)
+        }
+        row.addView(bubble, params)
+        chatMessages.addView(row, LinearLayout.LayoutParams(-1, -2))
+        chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+        return bubble
+    }
+
+    private fun replaceThinking(answer: String) {
+        val bubble = thinkingBubble
+        if (bubble != null) bubble.text = answer else addMessage(answer, false)
+        thinkingBubble = null
+        chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun text(value: String, size: Int, color: Int) = TextView(this).apply {
+        text = value
+        textSize = size.toFloat()
+        setTextColor(color)
+        setPadding(0, dp(8), 0, dp(8))
+    }
+
+    private fun button(value: String) = Button(this).apply {
+        text = value
+        isAllCaps = false
+        minHeight = dp(48)
+        setTextColor(0xFFFFFFFF.toInt())
+        setBackgroundColor(accent)
+    }
+
+    private fun isSystemDarkMode(): Boolean =
+        (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startDownloadedVoiceInput()
+        else if (requestCode == REQUEST_AUDIO) status.text = "Microphone permission denied."
+    }
+
+    override fun onDestroy() {
+        offlineRecording = false
+        activeAudioRecord?.let { runCatching { it.stop() }; it.release() }
+        worker.execute { engine.unload() }
+        worker.shutdown()
+        tinyTtsEngine?.close()
+        super.onDestroy()
+    }
+
+    companion object { private const val REQUEST_AUDIO = 5101 }
+}

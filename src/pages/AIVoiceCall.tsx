@@ -7,9 +7,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
-import { supabase } from '@/integrations/supabase/client';
-import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
-import { callAICareerChat } from '@/lib/aiChatTransport';
+import { requestOwnerPhoneAIReply, requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
+import { stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 import { chatStorage, type StoredMessage } from '@/lib/chatStorage';
 import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition } from '@/lib/shrutiSpeech';
 import { formatChatStamp } from '@/utils/chatTimestamp';
@@ -20,7 +19,7 @@ type CallState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 function normalizeVoiceWords(value: string): string[] {
   return cleanVoiceText(value)
     .toLowerCase()
-    .replace(/[^a-z0-9\u0900-\u097f\s]/gi, ' ')
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, ' ')
     .split(/\s+/)
     .filter((word) => word.length > 1);
 }
@@ -41,8 +40,9 @@ function cleanVoiceText(value: string): string {
     .replace(/\*\*?|__?|~~|#{1,6}\s*/g, '')
     .replace(/^•\s*/gm, '')
     .replace(/^[-*]\s+/gm, '')
-    .replace(/\`{1,3}/g, '')
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/`{1,3}/g, '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[\uFE0E\uFE0F]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -81,31 +81,21 @@ export default function AIVoiceCall() {
 
   const bridge = getWorklyAndroidBridge();
   const startRecognition = useCallback((_language = 'auto') => {
+    // The caller microphone is captured on the caller device; owner-phone Workly Voice
+    // handles the online AI response and generates the reply audio.
     void startShrutiRecognition().catch((error) => window.dispatchEvent(new CustomEvent('workly-voice-error', {
-      detail: { message: error instanceof Error ? error.message : 'Shruti microphone could not start.' },
+      detail: { message: error instanceof Error ? error.message : 'Microphone speech recognition could not start.' },
     })));
     return true;
   }, []);
   const stopRecognition = useCallback(() => { stopShrutiRecognition(); }, []);
   const speakReply = useCallback(async (text: string, language: string) => {
     const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
-    if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
-
     try {
-      const { data, error } = await supabase.functions.invoke('unified-voice', {
-        body: { action: 'text-to-speech', text, provider: 'cartesia' },
-      });
-      if (error) throw error;
-
-      let sourceUrl = typeof data?.audioUrl === 'string' ? data.audioUrl : '';
-      if (!sourceUrl && typeof data?.audioContent === 'string') {
-        const binary = Uint8Array.from(atob(data.audioContent), (char) => char.charCodeAt(0));
-        const blob = new Blob([binary], { type: 'audio/mpeg' });
-        if (replyAudioUrlRef.current) URL.revokeObjectURL(replyAudioUrlRef.current);
-        replyAudioUrlRef.current = URL.createObjectURL(blob);
-        sourceUrl = replyAudioUrlRef.current;
-      }
-      if (!sourceUrl) throw new Error('No voice audio was returned.');
+      // All callers use the paired Workly Voice Android app for reply audio.
+      // Do not silently fall back to browser or host-app TTS: that would hide relay failures.
+      const sourceUrl = await requestOwnerPhoneVoiceAudio(text, resolvedLanguage);
+      if (!sourceUrl) throw new Error('The shared Workly Voice phone did not return audio.');
 
       const audio = replyAudioRef.current ?? new Audio();
       replyAudioRef.current = audio;
@@ -139,17 +129,14 @@ export default function AIVoiceCall() {
       await audio.play();
       window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
       return true;
-    } catch {
-      // Last-resort browser TTS. Do not surface a browser TTS failure as a call-ending error.
-      try {
-        const fallback = speakBrowserLocalReply(text, resolvedLanguage);
-        if (fallback) return true;
-      } catch {
-        // Keep the call alive even when browser speech playback is unavailable.
-      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Workly Voice app could not return audio.';
+      setErrorMessage(message);
+      setVoiceStage('Workly Voice app audio failed');
+      toast.error(message);
       return false;
     }
-  }, [bridge, speakerOn]);
+  }, [speakerOn]);
 
   const stopReply = useCallback(() => {
     if (bridge) bridge.stopVoiceReply?.();
@@ -243,32 +230,11 @@ export default function AIVoiceCall() {
         if (!activeRef.current || turnId !== conversationTurnRef.current) return;
         setAiRequestStatus(attempt === 0 ? 'Sending' : `Retrying ${attempt}/2`);
         try {
-          let candidate = '';
-          const result = await callAICareerChat(
-            {
-              messages: historyWithUser.map((message) => ({
-                role: message.role,
-                content: message.content,
-              })),
-              user_id: user.id,
-              hasImages: false,
-              currentPage: '/ai-assistant',
-              audience: 'default',
-              pageContext: {
-                path: '/ai-assistant',
-                page: 'AI Voice Call',
-                audience: 'default',
-                source: 'AI Voice Call',
-                voiceResponseInstruction: 'You are speaking with the user on a live phone call, not chatting by text. Reply like a warm, natural human caller: conversational, concise, direct, and easy to say aloud. Usually use one to three short sentences. Ask one question at a time. Avoid markdown, headings, bullet lists, emoji, links, long explanations, and phrases that sound like written chat. Match the exact language and natural speaking style of the latest user utterance (Hindi, Gujarati, English, or their intentional mix). Keep context from the call, respond to what they just said, and do not announce that you are an AI unless asked.'
-              },
-            },
-            {
-              onStatus: () => undefined,
-              onLifecycle: () => undefined,
-              onDelta: (_delta, fullText) => { candidate = fullText; },
-            }
+          const phoneReply = await requestOwnerPhoneAIReply(
+            historyWithUser.map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`).join('\n').slice(-12000),
+            detail?.languageTag || 'auto'
           );
-          candidate = result.fullText || candidate;
+          const candidate = phoneReply.reply;
           // Keep the original AI answer for the normal AI Chat history so
           // emojis, dates, formatting and rich chat presentation remain intact.
           // Only the audio copy is cleaned for reliable speech playback.
@@ -324,11 +290,13 @@ export default function AIVoiceCall() {
       }
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      setErrorMessage('');
+      const message = error instanceof Error ? error.message : 'Workly Voice app did not return an AI reply.';
+      setErrorMessage(message);
       lastSubmittedTranscriptRef.current = '';
-      setAiRequestStatus('Retrying');
-      setVoiceStage('AI is reconnecting…');
-      setCallState('listening');
+      setAiRequestStatus('Workly Voice failed');
+      setVoiceStage('Workly Voice app connection failed');
+      setCallState('error');
+      toast.error(message);
       if (activeRef.current && !muted) {
         window.setTimeout(() => {
           if (activeRef.current && !muted) startRecognition('auto');
@@ -336,7 +304,7 @@ export default function AIVoiceCall() {
       }
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [speakReply, stopRecognition, stopReply, startRecognition, user?.id]);
+  }, [speakReply, stopReply, startRecognition, user?.id, muted]);
 
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -408,7 +376,7 @@ export default function AIVoiceCall() {
       const started = startRecognition('auto');
       if (!started) { setCallState('error'); toast.error('Could not listen after interruption.'); }
     }, 180);
-  }, [startRecognition, stopRecognition, stopReply]);
+  }, [startRecognition, stopRecognition, stopReply, muted]);
 
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -427,6 +395,8 @@ export default function AIVoiceCall() {
     const handleShrutiStatus = (event: Event) => {
       const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
       if (detail?.status === 'ready') setNativeAvailable(true);
+      if (detail?.status === 'transcribing-on-workly-voice-app') setVoiceStage('Sending microphone audio to Workly Voice Android app…');
+      if (detail?.status === 'transcribed-by-workly-voice-app') setVoiceStage('Speech recognized by Workly Voice Android app');
     };
     window.addEventListener('workly-shruti-status', handleShrutiStatus);
     return () => { window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
@@ -586,6 +556,7 @@ export default function AIVoiceCall() {
         </div>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
+        <p className={`mt-2 max-w-xs text-xs ${errorMessage ? 'text-rose-300' : 'text-cyan-100/55'}`} aria-live="polite">{errorMessage || voiceStage}</p>
         <div className="mt-10 w-full">
           {!callStarted ? (
             <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">

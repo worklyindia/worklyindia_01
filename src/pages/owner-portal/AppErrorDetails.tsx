@@ -20,7 +20,7 @@ export default function AppErrorDetails() {
   const [severity,setSeverity] = useState("all");
   const load = useCallback(async () => {
     setLoading(true);
-    const {data,error} = await supabase.from("app_error_reports").select("*").order("created_at",{ascending:false}).limit(500);
+    const {data,error} = await (supabase as any).from("app_error_reports").select("*").order("created_at",{ascending:false}).limit(500);
     if(error){ toast.error("Unable to load app error reports: "+error.message); setRows([]); }
     else setRows((data || []) as AppError[]);
     setLoading(false);

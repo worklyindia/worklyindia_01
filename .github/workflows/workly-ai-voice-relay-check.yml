@@ -1,0 +1,40 @@
+name: Workly AI Voice Relay Checks
+
+on:
+  push:
+    branches: [feature/workly-ai-voice-server-app]
+    paths:
+      - "supabase/functions/workly-ai-voice-relay/**"
+      - "supabase/migrations/*workly_ai_voice_relay*"
+      - ".github/workflows/workly-ai-voice-relay-check.yml"
+  pull_request:
+    paths:
+      - "supabase/functions/workly-ai-voice-relay/**"
+      - "supabase/migrations/*workly_ai_voice_relay*"
+      - ".github/workflows/workly-ai-voice-relay-check.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-relay:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validate Deno formatting
+        run: deno fmt supabase/functions/workly-ai-voice-relay/index.ts
+      - name: Install Edge Function dependencies
+        working-directory: supabase/functions/workly-ai-voice-relay
+        run: deno install
+      - name: Type-check Edge Function
+        working-directory: supabase/functions/workly-ai-voice-relay
+        run: deno check index.ts
