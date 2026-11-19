@@ -10,6 +10,7 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const ownerUserId = Deno.env.get("WORKLY_AI_VOICE_OWNER_USER_ID") ?? "";
 const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -52,7 +53,7 @@ async function deviceFor(req: Request) {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
-  if (!supabaseUrl || !serviceKey) return json({ error: "Relay is not configured" }, 503);
+  if (!supabaseUrl || !serviceKey || !ownerUserId) return json({ error: "Relay owner setup is required" }, 503);
 
   try {
     const body = await req.json();
@@ -65,17 +66,18 @@ Deno.serve(async (req: Request) => {
     if (action === "register_device") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Please sign in with your Workly India account in the app." }, 401);
+      if (user.id !== ownerUserId) return json({ error: "Only the owner can register the shared voice phone." }, 403);
 
       // One active phone per account: replace older active registrations safely.
       await db.from("workly_ai_voice_devices")
         .update({ revoked_at: now })
-        .eq("user_id", user.id)
+        .eq("user_id", ownerUserId)
         .is("revoked_at", null);
 
       const deviceToken = randomHex(32);
       const { data: device, error } = await db.from("workly_ai_voice_devices")
         .insert({
-          user_id: user.id,
+          user_id: ownerUserId,
           token_hash: await sha256(deviceToken),
           device_name: String(body?.device_name ?? "Workly Voice Android").slice(0, 80),
         })
@@ -98,31 +100,30 @@ Deno.serve(async (req: Request) => {
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
-      const { count: activeJobs, error: countError } = await db.from("workly_ai_voice_jobs")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .in("status", ["pending", "running"])
-        .gt("expires_at", new Date().toISOString());
-      if (countError) throw countError;
-      if ((activeJobs ?? 0) >= 3) return json({ error: "Queue is full. Wait for the current voice request to finish." }, 429);
       await db.from("workly_ai_voice_jobs").delete().lt("expires_at", new Date().toISOString());
-
       const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", ownerUserId)
         .is("revoked_at", null)
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (deviceError || !device) return json({ error: "No paired AI Voice phone is online or registered" }, 404);
+      if (deviceError || !device) return json({ error: "The shared Workly Voice phone is offline or not registered." }, 404);
+      const { count: activeJobs, error: countError } = await db.from("workly_ai_voice_jobs")
+        .select("id", { count: "exact", head: true })
+        .eq("device_id", device.id)
+        .in("status", ["pending", "running"])
+        .gt("expires_at", new Date().toISOString());
+      if (countError) throw countError;
+      if ((activeJobs ?? 0) >= 20) return json({ error: "Shared voice queue is full. Try again shortly." }, 429);
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
         .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: payload ?? {} })
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
-      return json({ job });
+      return json({ job, queue_position: (activeJobs ?? 0) + 1 });
     }
 
     if (action === "get_job") {
