@@ -31,7 +31,9 @@ object LocalImageGenerator {
         require(width == 512 && height == 512) { "This phone profile currently supports 512 × 512 images." }
         require(ImageModelManager.isModelReady(context)) { "Download the local image model before generating." }
 
-        val memory = (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).memoryInfo
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memory = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memory)
         if (memory.lowMemory || memory.availMem < 1_500_000_000L) {
             throw IllegalStateException("Phone memory is low. Close other apps and try again.")
         }
