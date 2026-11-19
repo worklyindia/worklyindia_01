@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
-import { supabase } from '@/integrations/supabase/client';
+import { requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
 import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 import { callAICareerChat } from '@/lib/aiChatTransport';
 import { chatStorage, type StoredMessage } from '@/lib/chatStorage';
@@ -92,20 +92,9 @@ export default function AIVoiceCall() {
     if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
 
     try {
-      const { data, error } = await supabase.functions.invoke('unified-voice', {
-        body: { action: 'text-to-speech', text, provider: 'cartesia' },
-      });
-      if (error) throw error;
-
-      let sourceUrl = typeof data?.audioUrl === 'string' ? data.audioUrl : '';
-      if (!sourceUrl && typeof data?.audioContent === 'string') {
-        const binary = Uint8Array.from(atob(data.audioContent), (char) => char.charCodeAt(0));
-        const blob = new Blob([binary], { type: 'audio/mpeg' });
-        if (replyAudioUrlRef.current) URL.revokeObjectURL(replyAudioUrlRef.current);
-        replyAudioUrlRef.current = URL.createObjectURL(blob);
-        sourceUrl = replyAudioUrlRef.current;
-      }
-      if (!sourceUrl) throw new Error('No voice audio was returned.');
+      // All browser users share the one owner Android phone. No per-user app or pairing is needed.
+      const sourceUrl = await requestOwnerPhoneVoiceAudio(text, resolvedLanguage);
+      if (!sourceUrl) throw new Error('The shared Workly Voice phone did not return audio.');
 
       const audio = replyAudioRef.current ?? new Audio();
       replyAudioRef.current = audio;
