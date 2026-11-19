@@ -108,13 +108,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                     when (job.optString("job_type")) {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
-                        "stt" -> runCatching {
-                            VoiceRelayApi.fail(
-                                token,
-                                jobId,
-                                "Remote audio-file speech-to-text is not implemented yet. The current app microphone recognizer is local to this phone."
-                            )
-                        }
+                        "stt" -> handleSttJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
                     }
                 } else {
@@ -132,6 +126,34 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             }
             try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
         }
+    }
+
+    private fun handleSttJob(token: String, jobId: String, payload: JSONObject) {
+        if (activeJobId != null) {
+            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
+            return
+        }
+        activeJobId = jobId
+        Thread {
+            try {
+                val audioUrl = payload.optString("audio_url")
+                if (audioUrl.isBlank()) throw IllegalStateException("Caller audio URL is missing.")
+                setStatus("Transcribing caller audio on Workly Voice…")
+                val audio = VoiceRelayApi.downloadAudio(audioUrl)
+                val result = VoiceRelayApi.transcribe(token, audio)
+                val transcript = result.optString("text").trim()
+                if (transcript.isBlank()) throw IllegalStateException("No speech was detected in the caller audio.")
+                VoiceRelayApi.complete(token, jobId, JSONObject()
+                    .put("text", transcript.take(4000))
+                    .put("languageTag", result.optString("detected_language", "auto")))
+                setStatus("Caller speech transcribed by Workly Voice. Waiting for next request…")
+            } catch (error: Exception) {
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Caller speech transcription failed.") }
+                setStatus("Speech recognition failed: " + (error.message ?: "network error"))
+            } finally {
+                activeJobId = null
+            }
+        }.start()
     }
 
     private fun handleAiJob(token: String, jobId: String, payload: JSONObject) {
