@@ -74,18 +74,10 @@ class SettingsActivity : Activity() {
         connection.addView(label("Connection: " + if (online) "Connected" else "Checking / reconnecting", 16, if (online) 0xFF22A06B.toInt() else 0xFFD97706.toInt(), true))
         connection.addView(label(status, 14, secondary, false))
         connection.addView(label("Last successful relay check: " + if (heartbeat > 0) time(heartbeat) + " (" + age(heartbeat) + ")" else "Not recorded yet", 13, secondary, false))
-        connection.addView(label("Transport: outbound HTTPS · Relay: Supabase · Poll interval: 15 seconds", 12, secondary, false))
+        connection.addView(label("Transport: outbound HTTPS · Relay: Supabase · Poll interval: 1 second", 12, secondary, false))
         connection.addView(label("Website setup: automatic. This phone uses the signed-in Workly India account; no pairing code is needed.", 13, secondary, false))
         connection.addView(Button(this).apply {
             text = "Refresh connection status"; isAllCaps = false; setOnClickListener { render() }
-        })
-        connection.addView(button(if (online) "Stop phone server" else "Start / reconnect phone server", secondaryStyle = true).apply {
-            setOnClickListener {
-                val intent = Intent(this@SettingsActivity, VoiceRelayService::class.java)
-                if (online) stopService(intent)
-                else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
-                content.postDelayed({ render() }, 700)
-            }
         })
 
         val diagnostics = card()
