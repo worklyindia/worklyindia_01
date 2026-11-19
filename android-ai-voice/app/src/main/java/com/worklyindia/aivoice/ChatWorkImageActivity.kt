@@ -117,8 +117,19 @@ class ChatWorkImageActivity : Activity() {
         status.text = "Preparing your photo…"
         worker.execute {
             try {
-                val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw IllegalStateException("Could not read the selected photo.")
+                val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                    val output = ByteArrayOutputStream()
+                    val buffer = ByteArray(16 * 1024)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= 25 * 1024 * 1024) { "Photo is too large. Choose an image under 25 MB." }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                } ?: throw IllegalStateException("Could not read the selected photo.")
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
                 require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Selected file is not a valid image." }
@@ -284,30 +295,47 @@ class ChatWorkImageActivity : Activity() {
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val reader = stream?.bufferedReader() ?: throw IllegalStateException("Workly AI returned an empty response.")
+            val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
-                val error = reader.use { it.readText() }
-                throw IllegalStateException(runCatching { JSONObject(error).optString("error", error) }.getOrDefault(error).take(300))
+                val detail = runCatching {
+                    val json = JSONObject(raw)
+                    json.optString("userMessage").ifBlank { json.optString("message").ifBlank { json.optString("error") } }
+                }.getOrDefault(raw)
+                throw IllegalStateException(detail.ifBlank { "Workly AI request failed (HTTP $code)." }.take(300))
             }
+
+            // The website transport supports both JSON image responses and SSE image events.
+            // Keep the Android client compatible with both response modes.
+            val contentType = connection.contentType.orEmpty()
+            if (contentType.contains("application/json", ignoreCase = true) || raw.trimStart().startsWith("{")) {
+                val json = JSONObject(raw)
+                val directUrl = json.optString("imageUrl")
+                    .ifBlank { json.optString("image_url") }
+                    .ifBlank { json.optString("url") }
+                if (directUrl.startsWith("https://")) return directUrl
+                val message = json.optString("userMessage").ifBlank { json.optString("error") }
+                throw IllegalStateException(message.ifBlank { "Workly AI returned no image. Please try again." })
+            }
+
             var imageUrl: String? = null
             var streamError: String? = null
-            reader.useLines { lines ->
-                lines.forEach { line ->
-                    if (!line.startsWith("data: ")) return@forEach
-                    val payload = line.removePrefix("data: ").trim()
-                    if (payload.isBlank() || payload == "[DONE]") return@forEach
-                    runCatching {
-                        val event = JSONObject(payload)
-                        when (event.optString("type")) {
-                            "image" -> imageUrl = event.optString("url").takeIf { it.startsWith("https://") }
-                            "error" -> streamError = event.optString("message").ifBlank { "Workly AI could not create the image." }
-                            "status" -> runOnUiThread { status.text = event.optString("text").ifBlank { "Creating image…" } }
-                        }
+            raw.lineSequence().forEach { line ->
+                if (!line.startsWith("data: ")) return@forEach
+                val payload = line.removePrefix("data: ").trim()
+                if (payload.isBlank() || payload == "[DONE]") return@forEach
+                runCatching {
+                    val event = JSONObject(payload)
+                    when (event.optString("type")) {
+                        "image" -> imageUrl = event.optString("url").takeIf { it.startsWith("https://") }
+                        "error" -> streamError = event.optString("message").ifBlank { "Workly AI could not create the image." }
+                        "status" -> runOnUiThread { status.text = event.optString("text").ifBlank { "Creating image…" } }
                     }
                 }
             }
             if (!imageUrl.isNullOrBlank()) return imageUrl!!
             if (!streamError.isNullOrBlank()) throw IllegalStateException(streamError)
+            val markdown = Regex("!\\[[^]]*]\\((https?://[^)]+)\\)").find(raw)?.groupValues?.getOrNull(1)
+            if (!markdown.isNullOrBlank()) return markdown
             throw IllegalStateException("Workly AI finished without returning an image. Please try again.")
         } finally { connection.disconnect() }
     }
