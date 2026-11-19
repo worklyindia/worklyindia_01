@@ -206,7 +206,7 @@ function classifyTask(
   const VERB_RE = /\b(generate|create|make|build|design|draft|prepare|write|bana|banao|banado|bana do|banake|banakar|banwa|banwao|tayar kar|taiyar kar|taiyaar kar|chahiye|chahiyē|do|de do|dedo)\b|बना|बनाओ|बनाकर|बनवा|तैयार|चाहिए/;
   const isImageGeneration =
     (/\b(image|photo|picture|poster|banner|logo|thumbnail|tasveer|chhavi)\b|फोटो|छवि|तस्वीर/.test(text) && VERB_RE.test(text)) ||
-    (hasImages && /\b(edit|change|modify|restyle|transform|retouch|remove|replace|background|crop|blur|enhance|redesign|badal|badlo|hatao|hata\s*do|kapde|rang)\b|edit karo|edit kar do|photo ko badal|background badal/i.test(text));
+    (hasImages && /\b(edit|change|modify|restyle|transform|retouch|remove|replace|background|crop|blur|enhance|improve|better|sundar|achha|accha|cartoon|filter|redesign|badal|badlo|hatao|hata\s*do|kapde|rang|bana|banao|make|create|generate)\b|edit karo|edit kar do|kar\s*de|kar\s*do|photo ko badal|background badal/i.test(text));
   if (isImageGeneration) return 'image_generation';
 
   // Image-only questions remain vision analysis; edit requests above must retain tool access.
