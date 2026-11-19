@@ -138,7 +138,15 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (error) throw error;
       if (!data) return json({ error: "Job not found" }, 404);
-      return json({ job: data });
+      let job = data;
+      if (data.status === "completed" && typeof data.result?.audio_path === "string") {
+        const { data: signed, error: signedError } = await db.storage
+          .from("workly-ai-voice-audio")
+          .createSignedUrl(data.result.audio_path, 300);
+        if (signedError) throw signedError;
+        job = { ...data, result: { audio_url: signed.signedUrl, content_type: data.result.content_type ?? "audio/wav" } };
+      }
+      return json({ job });
     }
 
     if (action === "poll") {
@@ -182,6 +190,46 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
       if (error) throw error;
       if (!data) return json({ error: "Job not found or already finished" }, 404);
+      return json({ job: data });
+    }
+
+    if (action === "upload_audio") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const jobId = typeof body?.job_id === "string" ? body.job_id : "";
+      const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
+      if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
+      if (!audioBase64 || audioBase64.length > 2_500_000) return json({ error: "Audio must be between 1 byte and 1.8 MB." }, 413);
+      const { data: job, error: jobError } = await db.from("workly_ai_voice_jobs")
+        .select("id")
+        .eq("id", jobId)
+        .eq("device_id", device.id)
+        .eq("status", "running")
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+      if (jobError) throw jobError;
+      if (!job) return json({ error: "Voice job not found, expired, or not running." }, 404);
+      let bytes: Uint8Array;
+      try {
+        const binary = atob(audioBase64);
+        bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      } catch {
+        return json({ error: "Invalid base64 audio." }, 400);
+      }
+      if (bytes.byteLength > 1_800_000) return json({ error: "Generated audio exceeds 1.8 MB." }, 413);
+      const path = `${device.id}/${jobId}.wav`;
+      const { error: uploadError } = await db.storage.from("workly-ai-voice-audio")
+        .upload(path, bytes, { contentType: "audio/wav", upsert: true });
+      if (uploadError) throw uploadError;
+      const { data, error } = await db.from("workly_ai_voice_jobs")
+        .update({ status: "completed", result: { audio_path: path, content_type: "audio/wav" }, completed_at: new Date().toISOString() })
+        .eq("id", jobId)
+        .eq("device_id", device.id)
+        .eq("status", "running")
+        .select("id,status")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return json({ error: "Voice job was already completed or expired." }, 409);
       return json({ job: data });
     }
 
