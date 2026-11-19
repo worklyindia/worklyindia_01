@@ -9,6 +9,5 @@
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowSplashScreenBackground">#F4F7FF</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_workly_voice</item>
-        <item name="android:postSplashScreenTheme">@style/WorklyVoiceTheme</item>
     </style>
 </resources>
