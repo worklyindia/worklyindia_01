@@ -107,6 +107,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                     val jobId = job.optString("id")
                     when (job.optString("job_type")) {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
+                        "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "stt" -> runCatching {
                             VoiceRelayApi.fail(
                                 token,
@@ -131,6 +132,36 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             }
             try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
         }
+    }
+
+    private fun handleAiJob(token: String, jobId: String, payload: JSONObject) {
+        if (activeJobId != null) {
+            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
+            return
+        }
+        activeJobId = jobId
+        Thread {
+            try {
+                val request = JSONObject()
+                    .put("text", payload.optString("text").take(4000))
+                    .put("languageTag", payload.optString("languageTag", "auto"))
+                val response = VoiceRelayApi.post("ai-voice-chat", request, deviceToken = token)
+                if (response.statusCode !in 200..299) {
+                    throw RelayApiException(response.statusCode, response.body.optString("error", "Online AI request failed."))
+                }
+                val reply = response.body.optString("reply").trim()
+                if (reply.isEmpty()) throw IllegalStateException("Online AI returned an empty reply.")
+                VoiceRelayApi.complete(token, jobId, JSONObject()
+                    .put("reply", reply)
+                    .put("languageTag", response.body.optString("languageTag", "auto")))
+                setStatus("AI reply delivered to website. Waiting for next request…")
+            } catch (error: Exception) {
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Online AI request failed.") }
+                setStatus("AI request failed: " + (error.message ?: "network error"))
+            } finally {
+                activeJobId = null
+            }
+        }.start()
     }
 
     private fun handleTtsJob(token: String, jobId: String, payload: JSONObject) {
