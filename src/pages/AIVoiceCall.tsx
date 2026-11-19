@@ -82,18 +82,19 @@ export default function AIVoiceCall() {
 
   const bridge = getWorklyAndroidBridge();
   const startRecognition = useCallback((_language = 'auto') => {
+    // The caller microphone is captured on the caller device; owner-phone Workly Voice
+    // handles the online AI response and generates the reply audio.
     void startShrutiRecognition().catch((error) => window.dispatchEvent(new CustomEvent('workly-voice-error', {
-      detail: { message: error instanceof Error ? error.message : 'Shruti microphone could not start.' },
+      detail: { message: error instanceof Error ? error.message : 'Microphone speech recognition could not start.' },
     })));
     return true;
   }, []);
   const stopRecognition = useCallback(() => { stopShrutiRecognition(); }, []);
   const speakReply = useCallback(async (text: string, language: string) => {
     const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
-    if (bridge) return bridge.speakVoiceReply?.(text, language) ?? false;
-
     try {
-      // All browser users share the one owner Android phone. No per-user app or pairing is needed.
+      // All callers use the paired Workly Voice Android app for reply audio.
+      // Do not silently fall back to browser or host-app TTS: that would hide relay failures.
       const sourceUrl = await requestOwnerPhoneVoiceAudio(text, resolvedLanguage);
       if (!sourceUrl) throw new Error('The shared Workly Voice phone did not return audio.');
 
@@ -129,17 +130,14 @@ export default function AIVoiceCall() {
       await audio.play();
       window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
       return true;
-    } catch {
-      // Last-resort browser TTS. Do not surface a browser TTS failure as a call-ending error.
-      try {
-        const fallback = speakBrowserLocalReply(text, resolvedLanguage);
-        if (fallback) return true;
-      } catch {
-        // Keep the call alive even when browser speech playback is unavailable.
-      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Workly Voice app could not return audio.';
+      setErrorMessage(message);
+      setVoiceStage('Workly Voice app audio failed');
+      toast.error(message);
       return false;
     }
-  }, [bridge, speakerOn]);
+  }, [speakerOn]);
 
   const stopReply = useCallback(() => {
     if (bridge) bridge.stopVoiceReply?.();
@@ -233,34 +231,11 @@ export default function AIVoiceCall() {
         if (!activeRef.current || turnId !== conversationTurnRef.current) return;
         setAiRequestStatus(attempt === 0 ? 'Sending' : `Retrying ${attempt}/2`);
         try {
-          let candidate = '';
-          try {
-            const phoneReply = await requestOwnerPhoneAIReply(
-              historyWithUser.map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`).join('\n').slice(-12000),
-              detail?.languageTag || 'auto'
-            );
-            candidate = phoneReply.reply;
-          } catch (phoneError) {
-            // Keep the current AI system as the automatic fallback if the owner phone is offline or fails.
-            const result = await callAICareerChat(
-              {
-                messages: historyWithUser.map((message) => ({ role: message.role, content: message.content })),
-                user_id: user.id,
-                hasImages: false,
-                currentPage: '/ai-assistant',
-                audience: 'default',
-                pageContext: {
-                  path: '/ai-assistant',
-                  page: 'AI Voice Call',
-                  audience: 'default',
-                  source: 'AI Voice Call',
-                  voiceResponseInstruction: 'You are speaking with the user on a live phone call, not chatting by text. Reply like a warm, natural human caller: conversational, concise, direct, and easy to say aloud. Usually use one to three short sentences. Ask one question at a time. Avoid markdown, headings, bullet lists, emoji, links, long explanations, and phrases that sound like written chat. Match the exact language and natural speaking style of the latest user utterance (Hindi, Gujarati, English, or their intentional mix). Keep context from the call, respond to what they just said, and do not announce that you are an AI unless asked.'
-                },
-              },
-              { onStatus: () => undefined, onLifecycle: () => undefined, onDelta: (_delta, fullText) => { candidate = fullText; } }
-            );
-            candidate = result.fullText || candidate;
-          }
+          const phoneReply = await requestOwnerPhoneAIReply(
+            historyWithUser.map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`).join('\n').slice(-12000),
+            detail?.languageTag || 'auto'
+          );
+          const candidate = phoneReply.reply;
           // Keep the original AI answer for the normal AI Chat history so
           // emojis, dates, formatting and rich chat presentation remain intact.
           // Only the audio copy is cleaned for reliable speech playback.
@@ -316,11 +291,13 @@ export default function AIVoiceCall() {
       }
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      setErrorMessage('');
+      const message = error instanceof Error ? error.message : 'Workly Voice app did not return an AI reply.';
+      setErrorMessage(message);
       lastSubmittedTranscriptRef.current = '';
-      setAiRequestStatus('Retrying');
-      setVoiceStage('AI is reconnecting…');
-      setCallState('listening');
+      setAiRequestStatus('Workly Voice failed');
+      setVoiceStage('Workly Voice app connection failed');
+      setCallState('error');
+      toast.error(message);
       if (activeRef.current && !muted) {
         window.setTimeout(() => {
           if (activeRef.current && !muted) startRecognition('auto');
