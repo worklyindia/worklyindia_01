@@ -35,9 +35,9 @@ android {
     }
     packaging {
         jniLibs {
-            // Both Sherpa-ONNX and ONNX Runtime AARs bundle this shared native library.
-            // Package one copy per ABI; both SDKs use the same ONNX Runtime C ABI.
-            pickFirsts += setOf("**/libonnxruntime.so")
+            // Sherpa/ONNX and the llama.cpp + stable-diffusion.cpp runtimes
+            // share native dependencies. Package one identical runtime copy per ABI.
+            pickFirsts += setOf("**/libonnxruntime.so", "**/libc++_shared.so")
         }
     }
     buildFeatures { buildConfig = true }
