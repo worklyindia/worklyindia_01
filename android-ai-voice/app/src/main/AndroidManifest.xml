@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <queries>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
@@ -23,6 +24,7 @@
             android:foregroundServiceType="dataSync" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".OfflineAiChatActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ChatWorkImageActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".VoiceActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
