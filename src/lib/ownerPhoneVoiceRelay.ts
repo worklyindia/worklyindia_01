@@ -26,7 +26,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
 
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
-    await wait(1200);
+    await wait(350);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
@@ -62,7 +62,7 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
   // Android online AI requests may take up to 60 seconds; allow time for the phone to finish.
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
-    await wait(900);
+    await wait(350);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
