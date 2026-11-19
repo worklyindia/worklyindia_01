@@ -12,7 +12,7 @@ object VoiceRelayApi {
 
     data class ApiResult(val body: JSONObject, val statusCode: Int)
 
-    fun post(action: String, values: JSONObject = JSONObject(), deviceToken: String? = null): ApiResult {
+    fun post(action: String, values: JSONObject = JSONObject(), deviceToken: String? = null, authToken: String? = null): ApiResult {
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = TIMEOUT_MS
@@ -20,7 +20,7 @@ object VoiceRelayApi {
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-            setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_PUBLISHABLE_KEY}")
+            setRequestProperty("Authorization", "Bearer ${authToken ?: BuildConfig.SUPABASE_PUBLISHABLE_KEY}")
             if (!deviceToken.isNullOrBlank()) setRequestProperty("x-device-token", deviceToken)
         }
         try {
@@ -43,6 +43,14 @@ object VoiceRelayApi {
         )
         if (result.statusCode !in 200..299) {
             throw RelayApiException(result.statusCode, result.body.optString("error", "Pairing failed"))
+        }
+        return result.body.getString("device_token")
+    }
+
+    fun registerDevice(authToken: String, deviceName: String): String {
+        val result = post("register_device", JSONObject().put("device_name", deviceName), authToken = authToken)
+        if (result.statusCode !in 200..299) {
+            throw RelayApiException(result.statusCode, result.body.optString("error", "Could not connect this phone to your Workly account"))
         }
         return result.body.getString("device_token")
     }
