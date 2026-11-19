@@ -45,9 +45,8 @@ class SpeechDownloadsActivity : Activity() {
         refreshAll()
     }
     private fun buildUi() {
-        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(12),dp(18),dp(20)); setBackgroundColor(bg) }
-        page.addView(Button(this).apply { text="‹  Back to Workly Voice"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
-        page.addView(label("Model Downloads",27,primary,true))
+        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(24),dp(18),dp(20)); setBackgroundColor(bg) }
+        page.addView(label("Downloads",27,primary,true))
         page.addView(label("Phone available RAM: %.1f GB. Unsupported models are locked on this device. Download progress shows transferred size and live network speed.".format(Locale.US,availableRam/1e9),13,secondary,false))
         val scroll=ScrollView(this); val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(list); page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
