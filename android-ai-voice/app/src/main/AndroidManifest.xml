@@ -23,6 +23,7 @@
             android:foregroundServiceType="dataSync" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".OfflineAiChatActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ChatWorkImageActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".VoiceActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
