@@ -66,8 +66,10 @@ class WorklyAccountActivity : Activity() {
                 val result = JSONObject(raw.ifBlank { "{}" })
                 if (code !in 200..299) throw IllegalStateException(result.optString("msg", result.optString("message", result.optString("error_description", "Sign in failed. Check your details."))))
                 val accessToken = result.optString("access_token")
-                if (accessToken.isBlank()) throw IllegalStateException("Workly sign-in did not return a valid session.")
-                val deviceToken = VoiceRelayApi.registerDevice(accessToken, "Workly Voice Android")
+                val refreshToken = result.optString("refresh_token")
+                if (accessToken.isBlank() || refreshToken.isBlank()) throw IllegalStateException("Workly sign-in did not return a valid session.")
+                SecureDeviceTokenStore.saveAuthSession(this, accessToken, refreshToken)
+                val deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
                 SecureDeviceTokenStore.save(this, deviceToken)
                 runOnUiThread {
                     val relayIntent = Intent(this, VoiceRelayService::class.java)
