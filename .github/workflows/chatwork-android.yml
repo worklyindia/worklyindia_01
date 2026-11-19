@@ -73,8 +73,8 @@ jobs:
             echo "- This is a **debug preview APK**, not a signed production release."
             echo "- Large AI and speech models are downloaded separately; they are not bundled in the APK."
             echo "- Gujarati speech output currently depends on the Android TTS engine."
-            echo "- Local image generation requires a separate 1.57 GB model download and can be slow or memory-intensive on mid-range phones; physical-device testing is required.
-- Offline recognition accuracy, device performance and battery behavior require physical-device testing."
+            echo "- Local image generation requires a separate 1.57 GB model download and can be slow or memory-intensive on mid-range phones; physical-device testing is required."
+            echo "- Offline recognition accuracy, device performance and battery behavior require physical-device testing."
             echo "- Website/Supabase relay source is review-only and has not been deployed to production."
             echo
             echo "## Download"
