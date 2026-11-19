@@ -50,7 +50,7 @@ async function deviceFor(req: Request) {
   return error ? null : data;
 }
 
-Deno.serve(async (req: Request) => {
+export async function handleWorklyVoiceRelay(req: Request) {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!supabaseUrl || !serviceKey || !ownerUserId) return json({ error: "Relay owner setup is required" }, 503);
@@ -289,4 +289,4 @@ Deno.serve(async (req: Request) => {
     console.error("workly-ai-voice-relay error", error);
     return json({ error: "Relay request failed" }, 500);
   }
-});
+}
