@@ -89,9 +89,30 @@ serve(async (req) => {
     const audioBytes = new Uint8Array(audioBuffer);
     console.log(`[${requestId}] Audio buffer size: ${audioBytes.length} bytes`);
 
-    const { transcribeAudio } = await import('../_shared/sttFallback.ts');
-    const transcript = await transcribeAudio(audioBytes, requestId);
-    console.log(`[${requestId}] Transcription completed (${transcript.provider}): ${transcript.text}`);
+    if (audio.length > 14_000_000) {
+      throw new Error('Audio file too large (max about 10 MB)');
+    }
+
+    // Free-only transcription through the isolated Cloudflare Workers AI Whisper gateway.
+    // Do not fall back to metered providers when the daily free quota is unavailable.
+    const workerResponse = await fetch('https://workly-speech-transcribe.gohilvishal7600.workers.dev', {
+      method: 'POST',
+      headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const workerResult = await workerResponse.json().catch(() => ({}));
+    if (!workerResponse.ok) {
+      throw new Error(workerResult?.error || 'Free Cloudflare speech recognition is temporarily unavailable');
+    }
+    const transcript = {
+      text: typeof workerResult?.text === 'string' ? workerResult.text : '',
+      detected_language: workerResult?.detected_language || 'auto',
+      confidence: workerResult?.confidence ?? 1,
+      provider: 'cloudflare-whisper',
+    };
+    if (!transcript.text) throw new Error('No speech detected. Please try again.');
+    console.log('Cloudflare Whisper transcription completed.');
 
     // Increment voice_input usage after successful transcription
     console.log(`[${requestId}] Incrementing voice_input usage for user ${user.id}`);

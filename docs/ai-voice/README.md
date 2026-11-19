@@ -4,53 +4,48 @@
 
 - The AI Chat composer has a dedicated phone-call icon that opens `/ai-voice-call`.
 - The voice-call page is a UI shell with a microphone permission check.
-- The page deliberately does not call OpenAI Realtime or any paid voice API.
 - Live calling remains disabled until an open-source inference service is deployed and configured.
+- Existing `unified-voice` function remains untouched during this isolated speech-model project.
 
-## Intended open-source stack
+## Confirmed four-model roles
 
-- Speech-to-text: `whisper.cpp` (start with the multilingual base model; Gujarati/Hindi/English must be tested with real audio).
-- Text-to-speech: Mithi v2 Flash (verify the model card, license, runtime dependencies, voice quality and language coverage before production use).
-- Existing Workly AI response service: reuse only if it can be called without introducing a paid provider charge. Otherwise the AI response model also needs a self-hosted open-source option.
-- Browser transport: WebRTC or a self-hosted WebSocket/WebRTC gateway. Do not assume Vercel serverless functions can host persistent audio streams.
+- **Primary STT:** AI4Bharat IndicConformer INT8.
+- **Backup STT:** `udgamlabs/Shruti` (Hindi/English/Hinglish only after benchmark); this is speech recognition, not TTS.
+- **Indic TTS:** Indic Tiny TTS Hindi and Gujarati language-specific candidates; verify each checkpoint and full model/code/vocoder license chain.
+- **English TTS:** Kokoro-82M; English-focused, do not route Gujarati/Hindi to it.
 
-## Free-tier constraints
+See [STACK_DECISION.md](../server-side-speech/STACK_DECISION.md), [FEASIBILITY.md](../server-side-speech/FEASIBILITY.md), [API_CONTRACT.md](../server-side-speech/API_CONTRACT.md) and [BENCHMARK_PLAN.md](../server-side-speech/BENCHMARK_PLAN.md).
 
-Supabase Free and Vercel are not model-inference hosts. Do not upload model weights into Supabase database/storage or commit model weights to GitHub. Store source code, setup scripts and configuration in GitHub; download model weights onto the inference host at deployment time.
+## Hosting and cost constraints
 
-A public 24/7 service with unlimited callers cannot be guaranteed at zero cost. Any free hosting tier has compute, bandwidth, concurrency, execution-time or inactivity limits. If no always-on machine is available, the voice feature must remain unavailable or run only while a user's own machine is online.
+- Approved budget: **₹0/month only**. No paid GPU, paid Cloudflare plan, prepaid credits, auto-billing trial or paid host.
+- Cloudflare Workers are the authenticated public API gateway, not arbitrary model inference hosts.
+- Check exact model IDs against Workers AI catalogue; only exact supported models may route there. Unsupported custom models run on external inference server.
+- AI Gateway provides request routing/observability controls, not arbitrary model hosting.
+- R2 stores approved artifacts/audio, not inference.
+- Queues are optional for back-pressure; do not persist private audio without a reviewed retention design.
+- Supabase Edge Functions are for auth/orchestration, not persistent model inference.
+- No reliable always-on free GPU host has been verified. If free runtime cannot pass capacity and latency gates, do not enable production routing.
 
-## Required backend contract before enabling the call button
+## Required API before enabling clients
 
-Create a separately hosted inference service that:
-1. Authenticates users with short-lived signed tokens; never expose service credentials in browser code.
-2. Accepts streamed audio and returns partial/final transcripts.
-3. Sends text to the approved Workly AI response provider.
-4. Synthesizes the response with Mithi and streams audio chunks back.
-5. Supports interruption/cancellation, mute, call termination and disconnect cleanup.
-6. Enforces request-size, duration, concurrency and abuse controls.
-7. Returns explicit errors for unavailable model, overload, timeout and quota exhaustion.
+Expose `POST /api/speech/transcribe`, `POST /api/speech/synthesize`, and `GET /api/speech/health`. Use short-lived audience-restricted tokens; never expose service credentials in browser or APK. Enforce payload, duration, text, concurrency and timeout limits. Return explicit errors for unavailable models, overload and quota exhaustion. Do not silently fall back to paid services or unsupported models.
 
-Suggested environment variables (server-side only):
-- `WORKLY_VOICE_SERVICE_URL`
-- `WORKLY_VOICE_SERVICE_SECRET`
+## Android safety and privacy
 
-Do not enable live calling until the inference host, AI response model, license review, security checks and Hindi/English/Gujarati quality tests are complete.
+Do not remove model weights/local inference dependencies until server endpoint is deployed, authenticated and tested end-to-end. Then remove only approved model assets and unnecessary dependencies. Preserve unrelated audio features and charging notification sounds. Keep UI text English-only. Measure actual APK before/after.
 
-## Privacy-first, no-retention requirement
+Process speech in memory; do not persist raw audio, generated audio, transcripts, prompts, responses or replay buffers by default. Disable payload logging across app, gateway, proxy, host and observability. Clear buffers after processing/cancellation/disconnect.
 
-The production voice service must process speech in memory and must not persist:
-- Raw microphone audio or generated speech audio.
-- Partial or final speech-to-text transcripts.
-- Text prompts or AI voice responses created during a call.
-- Call recordings, replay buffers, or speech payloads in analytics/crash reports.
+## Rollout sequence
 
-Implementation requirements:
-1. Keep audio chunks and transcript buffers in volatile memory only; discard them immediately after each processing step and clear remaining buffers when a call ends, is interrupted, or disconnects.
-2. Do not write audio, transcripts, prompts, or generated responses to Supabase, object storage, browser local/session storage, IndexedDB, GitHub, or application logs.
-3. Disable request-body logging and payload capture at the inference gateway, reverse proxy, hosting platform, observability tools, and error reporting. Log only non-content operational metadata (for example status, latency, model availability and coarse byte counts), with no user speech or text.
-4. Do not retain provider-side prompts or speech data. Use only a self-hosted/open-source inference stack whose runtime and hosting configuration can meet this requirement; verify host-level logs and backups before launch.
-5. Keep only the minimum non-content operational event if required, and make even that optional. Do not save transcripts as chat history by default.
-6. Clearly disclose that transient processing still occurs and that infrastructure providers may process network/operational metadata.
+1. Verify exact repositories, pinned revisions, task types, language support and complete license chain.
+2. Benchmark IndicConformer primary STT and Shruti backup STT separately.
+3. Benchmark Indic Tiny TTS Hindi/Gujarati and Kokoro English.
+4. Prove all selected models load and serve on approved ₹0/month runtime.
+5. Implement and security-test isolated inference API.
+6. Add Cloudflare gateway, AI Gateway controls, and optional R2/Queues only where needed.
+7. Connect a test client while preserving current behavior.
+8. Switch production clients only after language parity, Android playback, APK-size, rollback and no-retention checks pass.
 
-This no-retention policy is a required acceptance criterion, not a claim that the current UI already performs live speech processing. It reduces stored data and privacy risk, but does not remove free-tier compute, bandwidth, concurrency, request-duration or quota limits.
+No model endpoint is currently approved as production-ready; do not claim deployment until live inference endpoint passes tests.

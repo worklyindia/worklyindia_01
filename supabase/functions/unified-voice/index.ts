@@ -62,7 +62,7 @@ serve(async (req) => {
         return await handleTextToSpeech(supabase, params, req);
       
       case 'speech-to-text':
-        return await handleSpeechToText(params);
+        return await handleSpeechToText(params, req);
 
       // Stateless AI voice reply: no database, storage, cache, usage counters or transcript logs.
       case 'ai-voice-chat':
@@ -234,31 +234,59 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
 // SPEECH TO TEXT (AssemblyAI → Lovable fallback)
 // =============================================
 
-async function handleSpeechToText(params: any) {
+async function handleSpeechToText(params: any, req: Request) {
   const { audio } = params;
-  const requestId = crypto.randomUUID();
-  const startTime = Date.now();
+  if (typeof audio !== 'string' || !audio.trim()) {
+    return new Response(JSON.stringify({ error: 'No audio data provided' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+  if (audio.length > 14_000_000) {
+    return new Response(JSON.stringify({ error: 'Audio file too large (max about 10 MB)' }), {
+      status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 
-  console.log(`[${requestId}] Voice-to-text request (AssemblyAI → Lovable fallback)`);
+  const authHeader = req.headers.get('authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Authentication required' }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 
-  if (!audio) throw new Error('No audio data provided');
-
-  const binaryAudio = processBase64Chunks(audio);
-  console.log(`[${requestId}] Audio size: ${binaryAudio.length} bytes`);
-
-  const { transcribeAudio } = await import('../_shared/sttFallback.ts');
-  const result = await transcribeAudio(binaryAudio, requestId);
-  console.log(`[${requestId}] Completed in ${Date.now() - startTime}ms via ${result.provider}`);
-
-  return new Response(
-    JSON.stringify({
-      text: result.text,
-      detected_language: result.detected_language,
-      confidence: result.confidence,
-      provider: result.provider,
-    }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
+  // Free-only speech recognition: never fall back to metered external providers.
+  const workerUrl = 'https://workly-speech-transcribe.gohilvishal7600.workers.dev';
+  try {
+    const response = await fetch(workerUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ audio }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const status = response.status === 401 ? 401 : response.status === 413 ? 413 : 503;
+      return new Response(JSON.stringify({
+        error: result?.error || 'Free speech recognition is temporarily unavailable',
+        provider: 'cloudflare-whisper',
+      }), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({
+      text: typeof result?.text === 'string' ? result.text : '',
+      detected_language: result?.detected_language || 'auto',
+      confidence: result?.confidence ?? 1,
+      provider: 'cloudflare-whisper',
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    console.error('[unified-voice] Cloudflare Whisper unavailable:', error);
+    return new Response(JSON.stringify({
+      error: 'Free Cloudflare speech recognition is temporarily unavailable. Please try again later.',
+      provider: 'cloudflare-whisper',
+    }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
 }
 
 
