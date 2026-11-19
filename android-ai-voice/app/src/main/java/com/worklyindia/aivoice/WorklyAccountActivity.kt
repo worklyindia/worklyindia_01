@@ -70,9 +70,8 @@ class WorklyAccountActivity : Activity() {
                 val deviceToken = VoiceRelayApi.registerDevice(accessToken, "Workly Voice Android")
                 SecureDeviceTokenStore.save(this, deviceToken)
                 runOnUiThread {
-                    startService(Intent(this, VoiceRelayService::class.java).also {
-                        if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(it) else startService(it)
-                    })
+                    val relayIntent = Intent(this, VoiceRelayService::class.java)
+                    if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(relayIntent) else startService(relayIntent)
                     startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
                     finish()
                 }
