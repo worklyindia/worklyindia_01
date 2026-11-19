@@ -284,7 +284,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         val events = try { org.json.JSONArray(prefs.getString(EVENTS_KEY, "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
         events.put(org.json.JSONObject().put("at", System.currentTimeMillis()).put("kind", kind).put("message", message).put("detail", detail).put("error", kind.contains("error", true)))
         val trimmed = org.json.JSONArray()
-        val cutoff = System.currentTimeMillis() - 3_600_000L
+        val cutoff = System.currentTimeMillis() - 86_400_000L
         for (i in 0 until events.length()) {
             val item = events.optJSONObject(i) ?: continue
             if (item.optLong("at") >= cutoff) trimmed.put(item)
