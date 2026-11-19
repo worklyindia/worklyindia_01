@@ -36,17 +36,6 @@ object VoiceRelayApi {
         }
     }
 
-    fun claimDevice(pairingCode: String, deviceName: String): String {
-        val result = post(
-            "claim_device",
-            JSONObject().put("pairing_code", pairingCode).put("device_name", deviceName)
-        )
-        if (result.statusCode !in 200..299) {
-            throw RelayApiException(result.statusCode, result.body.optString("error", "Pairing failed"))
-        }
-        return result.body.getString("device_token")
-    }
-
     fun registerDevice(authToken: String, deviceName: String): String {
         val result = post("register_device", JSONObject().put("device_name", deviceName), authToken = authToken)
         if (result.statusCode !in 200..299) {
