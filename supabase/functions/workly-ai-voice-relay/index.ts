@@ -199,7 +199,7 @@ Deno.serve(async (req: Request) => {
       const jobId = typeof body?.job_id === "string" ? body.job_id : "";
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
       if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
-      if (!audioBase64 || audioBase64.length > 2_500_000) return json({ error: "Audio must be between 1 byte and 1.8 MB." }, 413);
+      if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Audio must be between 1 byte and 1.3 MB." }, 413);
       const { data: job, error: jobError } = await db.from("workly_ai_voice_jobs")
         .select("id")
         .eq("id", jobId)
@@ -216,7 +216,7 @@ Deno.serve(async (req: Request) => {
       } catch {
         return json({ error: "Invalid base64 audio." }, 400);
       }
-      if (bytes.byteLength > 1_800_000) return json({ error: "Generated audio exceeds 1.8 MB." }, 413);
+      if (bytes.byteLength > 1_300_000) return json({ error: "Generated audio exceeds 1.3 MB." }, 413);
       const path = `${device.id}/${jobId}.wav`;
       const { error: uploadError } = await db.storage.from("workly-ai-voice-audio")
         .upload(path, bytes, { contentType: "audio/wav", upsert: true });
