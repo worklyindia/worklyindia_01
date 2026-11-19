@@ -63,7 +63,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
     // Remove expired audio objects before pruning their short-lived job rows.
     const { data: expiredJobs } = await db.from("workly_ai_voice_jobs").select("result,payload").lt("expires_at", now).limit(100);
     const expiredAudioPaths = (expiredJobs ?? []).flatMap((row) => [row.result?.audio_path, row.payload?.audio_path]).filter((path) => typeof path === "string");
+    const expiredImagePaths = (expiredJobs ?? []).map((row) => row.result?.image_path).filter((path) => typeof path === "string");
     if (expiredAudioPaths.length) await db.storage.from("workly-ai-voice-audio").remove(expiredAudioPaths);
+    if (expiredImagePaths.length) await db.storage.from("workly-ai-images").remove(expiredImagePaths);
     await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
 
     if (action === "register_device") {
@@ -98,7 +100,10 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
       const jobType = body?.job_type;
-      if (jobType !== "tts" && jobType !== "stt" && jobType !== "ai") return json({ error: "job_type must be tts, stt or ai" }, 400);
+      if (jobType !== "tts" && jobType !== "stt" && jobType !== "ai" && jobType !== "image") return json({ error: "job_type must be tts, stt, ai or image" }, 400);
+      // The image worker is the owner's personal phone. Never expose its local
+      // compute to arbitrary signed-in users or let them consume its battery.
+      if (jobType === "image" && user.id !== ownerUserId) return json({ error: "Local phone image generation is enabled for the account owner only." }, 403);
       const payload = body?.payload;
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
@@ -174,6 +179,12 @@ export async function handleWorklyVoiceRelay(req: Request) {
           .createSignedUrl(data.result.audio_path, 300);
         if (signedError) throw signedError;
         job = { ...data, result: { audio_url: signed.signedUrl, content_type: data.result.content_type ?? "audio/wav" } };
+      } else if (data.status === "completed" && typeof data.result?.image_path === "string") {
+        const { data: signed, error: signedError } = await db.storage
+          .from("workly-ai-images")
+          .createSignedUrl(data.result.image_path, 86400);
+        if (signedError) throw signedError;
+        job = { ...data, result: { image_url: signed.signedUrl, content_type: "image/jpeg" } };
       }
       return json({ job });
     }
@@ -264,6 +275,54 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return json({ error: "Voice job was already completed or expired." }, 409);
+      return json({ job: data });
+    }
+
+    if (action === "upload_image") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const jobId = typeof body?.job_id === "string" ? body.job_id : "";
+      const imageBase64 = typeof body?.image_base64 === "string" ? body.image_base64 : "";
+      if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
+      if (!imageBase64 || imageBase64.length > 1_600_000) return json({ error: "Generated image must be a JPEG under 1.2 MB." }, 413);
+      const { data: job, error: jobError } = await db.from("workly_ai_voice_jobs")
+        .select("id,job_type")
+        .eq("id", jobId)
+        .eq("device_id", device.id)
+        .eq("job_type", "image")
+        .eq("status", "running")
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+      if (jobError) throw jobError;
+      if (!job) return json({ error: "Image job not found, expired, or not running." }, 404);
+      let bytes: Uint8Array;
+      try {
+        const binary = atob(imageBase64);
+        bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      } catch {
+        return json({ error: "Invalid base64 image." }, 400);
+      }
+      if (bytes.byteLength < 1000 || bytes.byteLength > 1_200_000) return json({ error: "Generated JPEG size is invalid." }, 413);
+      const path = `${device.id}/${jobId}.jpg`;
+      const { error: uploadError } = await db.storage.from("workly-ai-images")
+        .upload(path, bytes, { contentType: "image/jpeg", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data, error } = await db.from("workly_ai_voice_jobs")
+        .update({ status: "completed", result: { image_path: path, content_type: "image/jpeg" }, completed_at: new Date().toISOString() })
+        .eq("id", jobId)
+        .eq("device_id", device.id)
+        .eq("status", "running")
+        .gt("expires_at", new Date().toISOString())
+        .select("id,status")
+        .maybeSingle();
+      if (error) {
+        await db.storage.from("workly-ai-images").remove([path]);
+        throw error;
+      }
+      if (!data) {
+        await db.storage.from("workly-ai-images").remove([path]);
+        return json({ error: "Image job was already completed or expired." }, 409);
+      }
       return json({ job: data });
     }
 
