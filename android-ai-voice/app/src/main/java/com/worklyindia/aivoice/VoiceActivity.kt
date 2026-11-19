@@ -186,29 +186,6 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
 
 
 
-    private fun pairPhone() {
-        val code = pairingCodeInput.text?.toString()?.trim()?.uppercase(Locale.ROOT).orEmpty()
-        if (!Regex("^[A-F0-9]{24}$").matches(code)) {
-            pairingCodeInput.error = "Enter the 24-character code from Workly website"
-            return
-        }
-        relayStatusText.text = "Pairing securely…"
-        relayExecutor.execute {
-            try {
-                val token = VoiceRelayApi.claimDevice(code, "Workly Voice Android")
-                SecureDeviceTokenStore.save(this, token)
-                runOnUiThread {
-                    pairingCodeInput.setText("")
-                    relayStatusText.text = "Phone paired securely. Tap Start phone server."
-                }
-            } catch (error: Exception) {
-                runOnUiThread {
-                    relayStatusText.text = "Pairing failed: ${error.message ?: "Please try again."}"
-                }
-            }
-        }
-    }
-
     private fun requestNotificationAndStart() {
         if (SecureDeviceTokenStore.read(this).isNullOrBlank()) {
             relayStatusText.text = "Pair this phone first using a Workly website pairing code."
