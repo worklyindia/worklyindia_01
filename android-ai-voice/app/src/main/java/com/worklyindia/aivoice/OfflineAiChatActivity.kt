@@ -277,7 +277,18 @@ class OfflineAiChatActivity : Activity() {
                 val recommended = modelManager.recommendedModel(memoryInfo.availMem)
                 val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE).getString("selected_model_id", null)
                 val savedModel = modelManager.models.firstOrNull { it.id == savedId }
-                val chosen = if (userHasChosenQwenModel) selectedQwenModel ?: recommended else savedModel ?: recommended
+                // Prefer the saved model only when it is both downloaded and safe for
+                // current free RAM. Otherwise automatically load the largest compatible
+                // model already downloaded on this phone; never silently use cloud/mobile TTS.
+                val savedReady = savedModel?.takeIf {
+                    memoryInfo.availMem >= it.minFreeRam &&
+                        modelManager.snapshot(it).state == QwenModelManager.State.READY
+                }
+                val downloadedCompatible = modelManager.models
+                    .filter { memoryInfo.availMem >= it.minFreeRam }
+                    .filter { modelManager.snapshot(it).state == QwenModelManager.State.READY }
+                    .maxByOrNull { it.size }
+                val chosen = savedReady ?: downloadedCompatible ?: recommended
                 selectedQwenModel = chosen
                 runOnUiThread {
                     val index = modelManager.models.indexOf(chosen)
