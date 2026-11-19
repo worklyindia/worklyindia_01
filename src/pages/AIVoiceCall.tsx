@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
-import { requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
+import { requestOwnerPhoneAIReply, requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
 import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 import { callAICareerChat } from '@/lib/aiChatTransport';
 import { chatStorage, type StoredMessage } from '@/lib/chatStorage';
@@ -234,31 +234,33 @@ export default function AIVoiceCall() {
         setAiRequestStatus(attempt === 0 ? 'Sending' : `Retrying ${attempt}/2`);
         try {
           let candidate = '';
-          const result = await callAICareerChat(
-            {
-              messages: historyWithUser.map((message) => ({
-                role: message.role,
-                content: message.content,
-              })),
-              user_id: user.id,
-              hasImages: false,
-              currentPage: '/ai-assistant',
-              audience: 'default',
-              pageContext: {
-                path: '/ai-assistant',
-                page: 'AI Voice Call',
+          try {
+            const phoneReply = await requestOwnerPhoneAIReply(
+              historyWithUser.map((message) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`).join('\n').slice(-12000),
+              detail?.languageTag || 'auto'
+            );
+            candidate = phoneReply.reply;
+          } catch (phoneError) {
+            // Keep the current AI system as the automatic fallback if the owner phone is offline or fails.
+            const result = await callAICareerChat(
+              {
+                messages: historyWithUser.map((message) => ({ role: message.role, content: message.content })),
+                user_id: user.id,
+                hasImages: false,
+                currentPage: '/ai-assistant',
                 audience: 'default',
-                source: 'AI Voice Call',
-                voiceResponseInstruction: 'You are speaking with the user on a live phone call, not chatting by text. Reply like a warm, natural human caller: conversational, concise, direct, and easy to say aloud. Usually use one to three short sentences. Ask one question at a time. Avoid markdown, headings, bullet lists, emoji, links, long explanations, and phrases that sound like written chat. Match the exact language and natural speaking style of the latest user utterance (Hindi, Gujarati, English, or their intentional mix). Keep context from the call, respond to what they just said, and do not announce that you are an AI unless asked.'
+                pageContext: {
+                  path: '/ai-assistant',
+                  page: 'AI Voice Call',
+                  audience: 'default',
+                  source: 'AI Voice Call',
+                  voiceResponseInstruction: 'You are speaking with the user on a live phone call, not chatting by text. Reply like a warm, natural human caller: conversational, concise, direct, and easy to say aloud. Usually use one to three short sentences. Ask one question at a time. Avoid markdown, headings, bullet lists, emoji, links, long explanations, and phrases that sound like written chat. Match the exact language and natural speaking style of the latest user utterance (Hindi, Gujarati, English, or their intentional mix). Keep context from the call, respond to what they just said, and do not announce that you are an AI unless asked.'
+                },
               },
-            },
-            {
-              onStatus: () => undefined,
-              onLifecycle: () => undefined,
-              onDelta: (_delta, fullText) => { candidate = fullText; },
-            }
-          );
-          candidate = result.fullText || candidate;
+              { onStatus: () => undefined, onLifecycle: () => undefined, onDelta: (_delta, fullText) => { candidate = fullText; } }
+            );
+            candidate = result.fullText || candidate;
+          }
           // Keep the original AI answer for the normal AI Chat history so
           // emojis, dates, formatting and rich chat presentation remain intact.
           // Only the audio copy is cleaned for reliable speech playback.
