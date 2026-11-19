@@ -60,7 +60,10 @@ Deno.serve(async (req: Request) => {
     const action = typeof body?.action === "string" ? body.action : "";
     const db = supabase;
     const now = new Date().toISOString();
-    // Keep relay data short-lived even when the website stops polling.
+    // Remove expired audio objects before pruning their short-lived job rows.
+    const { data: expiredJobs } = await db.from("workly_ai_voice_jobs").select("result").lt("expires_at", now).limit(100);
+    const expiredAudioPaths = (expiredJobs ?? []).map((row) => row.result?.audio_path).filter((path) => typeof path === "string");
+    if (expiredAudioPaths.length) await db.storage.from("workly-ai-voice-audio").remove(expiredAudioPaths);
     await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
 
     if (action === "register_device") {
