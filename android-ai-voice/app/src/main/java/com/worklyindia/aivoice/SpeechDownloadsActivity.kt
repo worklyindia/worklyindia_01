@@ -46,8 +46,19 @@ class SpeechDownloadsActivity : Activity() {
     }
     private fun buildUi() {
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(24),dp(18),dp(20)); setBackgroundColor(bg) }
-        page.addView(label("Downloads",27,primary,true))
-        page.addView(label("Phone available RAM: %.1f GB. Unsupported models are locked on this device. Download progress shows transferred size and live network speed.".format(Locale.US,availableRam/1e9),13,secondary,false))
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        header.addView(label("Downloads",27,primary,true), LinearLayout.LayoutParams(0,-2,1f))
+        header.addView(TextView(this).apply {
+            text = "✕"
+            textSize = 26f
+            setTextColor(primary)
+            gravity = android.view.Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(14), dp(6), dp(4), dp(6))
+            setOnClickListener { finish() }
+        })
+        page.addView(header)
         val scroll=ScrollView(this); val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(list); page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
         qwenManager.models.forEach { addQwenCard(list,it) }
