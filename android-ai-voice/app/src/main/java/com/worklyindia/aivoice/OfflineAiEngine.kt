@@ -15,8 +15,6 @@ class OfflineAiEngine {
     private val nativeAvailable = runCatching { System.loadLibrary("worklyllama") }.isSuccess
     @Volatile private var partialResponseListener: ((String) -> Unit)? = null
 
-    // Called by JNI after each generated token. The listener is responsible for
-    // moving UI updates onto the Android main thread.
     @Suppress("unused")
     private fun onNativeToken(value: String) {
         partialResponseListener?.invoke(value)
@@ -38,7 +36,9 @@ class OfflineAiEngine {
         require(prompt.isNotBlank()) { "Enter a message first." }
         partialResponseListener = onPartial
         return try {
-            val result = nativeGenerate(prompt.trim().take(4000), 96).trim()
+            // 160 tokens gives the small on-device models room to answer fully,
+            // while keeping replies bounded for mobile latency and memory.
+            val result = nativeGenerate(prompt.trim().take(4000), 160).trim()
             check(result.isNotEmpty()) { "The model returned an empty response. Try a shorter message or reload the model." }
             result
         } finally {
