@@ -41,7 +41,7 @@ function cleanVoiceText(value: string): string {
     .replace(/\*\*?|__?|~~|#{1,6}\s*/g, '')
     .replace(/^•\s*/gm, '')
     .replace(/^[-*]\s+/gm, '')
-    .replace(/\`{1,3}/g, '')
+    .replace(/`{1,3}/g, '')
     .replace(/\p{Extended_Pictographic}/gu, '')
     .replace(/[\uFE0E\uFE0F]/gu, '')
     .replace(/\s{2,}/g, ' ')
