@@ -45,21 +45,30 @@ class SpeechDownloadsActivity : Activity() {
         refreshAll()
     }
     private fun buildUi() {
-        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(24),dp(18),dp(20)); setBackgroundColor(bg) }
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(bg)
+            clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        }
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(12), dp(18), dp(24))
+        }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        header.addView(label("Downloads",27,primary,true), LinearLayout.LayoutParams(0,-2,1f))
         header.addView(TextView(this).apply {
-            text = "✕"
-            textSize = 26f
+            text = "‹"
+            textSize = 38f
             setTextColor(primary)
             gravity = android.view.Gravity.CENTER
+            setPadding(0, 0, dp(12), 0)
             isClickable = true
             isFocusable = true
-            setPadding(dp(14), dp(6), dp(4), dp(6))
+            contentDescription = "Back"
             setOnClickListener { finish() }
         })
-        page.addView(header)
-        val scroll=ScrollView(this); val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(list); page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
+        header.addView(label("Downloads", 27, primary, true))
+        list.addView(header)
+        scroll.addView(list)
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
         qwenManager.models.forEach { addQwenCard(list,it) }
         list.addView(label("VOICE RECOGNITION",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
@@ -70,7 +79,7 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Indic Tiny TTS Hindi","Indic Tiny TTS · Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
-        setContentView(page)
+        setContentView(scroll)
     }
     private fun addQwenCard(parent: LinearLayout, model: QwenModelManager.Model) {
         val card=card(parent,model.title + if(model.premium) " · PREMIUM" else "","Download: " + "%.0f MB".format(Locale.US,model.size/1e6) + " · Requires about %.1f GB free RAM".format(Locale.US,model.minFreeRam/1e9))
@@ -87,10 +96,10 @@ class SpeechDownloadsActivity : Activity() {
             val speed=if(lastAt>0 && now>lastAt && snap.downloaded>=lastBytes) (snap.downloaded-lastBytes)*1000L/(now-lastAt) else 0L
             lastAt=now; lastBytes=snap.downloaded
             val transferred="%.1f / %.1f MB".format(Locale.US,snap.downloaded/1e6,snap.total/1e6)
-            val speedText=if(snap.state==QwenModelManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
+
             status.text=when(snap.state) {
                 QwenModelManager.State.READY -> "Downloaded · Ready · " + transferred
-                QwenModelManager.State.RUNNING -> "Downloading · " + snap.progressPercent + "% · " + transferred + speedText
+                QwenModelManager.State.RUNNING -> "Downloading · " + snap.progressPercent + "% · " + transferred
                 QwenModelManager.State.PENDING -> "Waiting for network · " + transferred
                 QwenModelManager.State.PAUSED -> "Paused · " + transferred
                 QwenModelManager.State.FAILED -> "Download failed · " + transferred + " · Retry"
@@ -121,10 +130,10 @@ class SpeechDownloadsActivity : Activity() {
             val now=android.os.SystemClock.elapsedRealtime()
             val speed=if(lastAt>0 && now>lastAt && s.downloadedBytes>=lastBytes) (s.downloadedBytes-lastBytes)*1000L/(now-lastAt) else 0L
             lastAt=now; lastBytes=s.downloadedBytes
-            val speedText=if(s.state==SpeechPackDownloadManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
+
             status.text=when(s.state) {
                 SpeechPackDownloadManager.State.COMPLETE -> "Ready · installed"
-                SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB" + speedText
+                SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB"
                 SpeechPackDownloadManager.State.PENDING -> "Waiting for network…"
                 SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
                 SpeechPackDownloadManager.State.FAILED -> "Download failed · tap Retry"
