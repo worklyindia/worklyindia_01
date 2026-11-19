@@ -1,10 +1,13 @@
 package com.worklyindia.aivoice
 
 import android.app.Activity
+import android.content.ContentValues
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.os.Environment
 import android.util.Base64
 import android.view.Gravity
 import android.view.View
@@ -16,6 +19,8 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import android.provider.MediaStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -31,6 +36,8 @@ class ChatWorkImageActivity : Activity() {
     private lateinit var preview: ImageView
     private lateinit var generateButton: Button
     private lateinit var chooseButton: Button
+    private lateinit var saveButton: Button
+    private var lastGeneratedBitmap: Bitmap? = null
     private var referenceImageDataUrl: String? = null
     private var busy = false
 
@@ -65,6 +72,13 @@ class ChatWorkImageActivity : Activity() {
         root.addView(ScrollView(this).apply {
             addView(preview, ScrollView.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
+        saveButton = Button(this).apply {
+            text = "Save image to Gallery"
+            isAllCaps = false
+            visibility = View.GONE
+            setOnClickListener { saveImageToGallery() }
+        }
+        root.addView(saveButton, LinearLayout.LayoutParams(-1, dp(48)))
         prompt = EditText(this).apply {
             hint = "Describe the image or how to edit your photo…"
             minLines = 2; maxLines = 5; textSize = 16f
@@ -160,9 +174,11 @@ class ChatWorkImageActivity : Activity() {
                 val imageUrl = callWorklyAiImage(token, body)
                 val bitmap = downloadGeneratedImage(imageUrl)
                 runOnUiThread {
+                    lastGeneratedBitmap = bitmap
                     preview.setImageBitmap(bitmap)
                     preview.visibility = View.VISIBLE
-                    status.text = "Image ready. You can save or share it from the image."
+                    saveButton.visibility = View.VISIBLE
+                    status.text = "Image ready. Tap Save image to Gallery to keep it on your phone."
                     prompt.setText("")
                     referenceImageDataUrl = null
                     chooseButton.text = "Add photo"
@@ -176,6 +192,51 @@ class ChatWorkImageActivity : Activity() {
                     chooseButton.isEnabled = true
                 }
             }
+        }
+    }
+
+    private fun saveImageToGallery() {
+        val bitmap = lastGeneratedBitmap ?: run {
+            status.text = "Generate an image first."
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT < 29
+            && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.WRITE_EXTERNAL_STORAGE), REQUEST_SAVE_PERMISSION)
+            return
+        }
+        try {
+            val name = "ChatWork-${System.currentTimeMillis()}.png"
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/ChatWork")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("Could not create a Gallery image file.")
+            contentResolver.openOutputStream(uri)?.use { output ->
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                    throw IllegalStateException("Could not save the generated image.")
+                }
+            } ?: throw IllegalStateException("Could not open the Gallery image file.")
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                contentResolver.update(uri, ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }, null, null)
+            }
+            Toast.makeText(this, "Image saved in Pictures/ChatWork", Toast.LENGTH_LONG).show()
+        } catch (error: Exception) {
+            status.text = error.message ?: "Could not save image."
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_SAVE_PERMISSION) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) saveImageToGallery()
+            else status.text = "Storage permission was not granted."
         }
     }
 
@@ -275,6 +336,7 @@ class ChatWorkImageActivity : Activity() {
 
     companion object {
         private const val REQUEST_IMAGE = 8201
+        private const val REQUEST_SAVE_PERMISSION = 8202
         private const val MAX_IMAGE_BASE64_CHARS = 10_000_000
     }
 }
