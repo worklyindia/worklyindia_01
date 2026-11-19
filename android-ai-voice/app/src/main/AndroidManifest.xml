@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -21,7 +22,7 @@
         <service
             android:name=".VoiceRelayService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|mediaProcessing" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".OfflineAiChatActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ChatWorkImageActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
