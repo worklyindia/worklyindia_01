@@ -17,7 +17,6 @@ android {
         applicationId = "com.worklyindia.aivoice"
         minSdk = 26
         targetSdk = 35
-        // GitHub Actions run number is monotonically increasing and allows in-place APK updates.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
         buildConfigField("String", "SUPABASE_URL", "\"https://jubwzelupbntbetpajqb.supabase.co\"")
@@ -65,6 +64,7 @@ android {
 }
 
 dependencies {
+    implementation("com.airbnb.android:lottie:6.6.7")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
