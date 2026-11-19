@@ -285,15 +285,16 @@ async function handleSpeechToText(params: any, req: Request, supabase: any) {
 // =============================================
 function parseVoiceConversation(raw: string): Array<{ role: 'user' | 'assistant'; content: string }> {
   if (!raw) return [];
-  const lines = raw.split(/\\\\n|\\r?\\n/);
+  // Frontend serializes turns with a literal backslash-n separator.
+  const lines = raw.split(/\\n|\r?\n/);
   const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   for (const line of lines) {
-    const match = line.match(/^\\s*(User|Assistant):\\s*(.*)$/i);
+    const match = line.match(/^\s*(User|Assistant):\s*(.*)$/i);
     if (match) {
       const content = match[2].trim();
       if (content) messages.push({ role: match[1].toLowerCase() as 'user' | 'assistant', content });
     } else if (line.trim()) {
-      if (messages.length) messages[messages.length - 1].content += '\\n' + line.trim();
+      if (messages.length) messages[messages.length - 1].content += '\n' + line.trim();
       else messages.push({ role: 'user', content: line.trim() });
     }
   }
@@ -390,7 +391,6 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   if (!hasNaturalEnding && reply.length > 0) {
     const continuation = await runAiChain([
       { role: 'system', content: voiceSystemPrompt + ' Continue the existing answer only. Do not repeat its opening or any completed point. Finish the current sentence or list naturally, then end with a complete final sentence. Keep the same language and script.' },
-      { role: 'assistant', content: reply },
       ...conversation,
       { role: 'assistant', content: reply },
       { role: 'user', content: 'Continue exactly from where the previous answer stopped and finish the answer.' },
