@@ -1,4 +1,4 @@
-name: Workly Voice Android
+name: ChatWork Android
 
 on:
   push:
@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   build-debug-apk:
-    name: Build Workly Voice APK
+    name: Build ChatWork APK
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "# Workly Voice — Public Release Summary"
+            echo "# ChatWork — Public Release Summary"
             echo
             echo "| Field | Details |"
             echo "|---|---|"
@@ -66,7 +66,7 @@ jobs:
             echo
             echo "## Release notes"
             echo
-            echo "Initial Workly Voice Android preview release. Includes a separate voice-assistant app with Hindi, Indian English and Gujarati language selection; on-device Qwen 2.5 3B AI chat (model downloaded separately); Android TTS and optional Indic Tiny TTS speech packs; voice input with Android speech recognition and optional offline speech-model packs; and secure phone pairing / foreground relay controls."
+            echo "Initial ChatWork Android preview release. Includes a separate voice-assistant app with Hindi, Indian English and Gujarati language selection; on-device Qwen 2.5 3B AI chat (model downloaded separately); Android TTS and optional Indic Tiny TTS speech packs; voice input with Android speech recognition and optional offline speech-model packs; and secure phone pairing / foreground relay controls."
             echo
             echo "## Important limitations"
             echo
@@ -78,16 +78,16 @@ jobs:
             echo
             echo "## Download"
             echo
-            echo "The `Workly-Voice-v1.0.0` APK artifact is attached to this workflow run after a successful build."
+            echo "The `ChatWork-v1.0.0` APK artifact is attached to this workflow run after a successful build."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Rename APK for download
-        run: cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk android-ai-voice/app/build/outputs/apk/debug/Workly-Voice-v1.0.0.apk
+        run: cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
 
-      - name: Upload Workly Voice APK
+      - name: Upload ChatWork APK
         uses: actions/upload-artifact@v7
         with:
-          name: Workly-Voice-v1.0.0
-          path: android-ai-voice/app/build/outputs/apk/debug/Workly-Voice-v1.0.0.apk
+          name: ChatWork-v1.0.0
+          path: android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
           if-no-files-found: error
           retention-days: 14
