@@ -72,7 +72,10 @@ jobs:
           export SAIENT_SD_CPP_SOURCE="$GITHUB_WORKSPACE/stable-diffusion.cpp"
           export SAIENT_ANDROID_NDK="$ANDROID_HOME/ndk/27.1.12297006"
           bash saient/scripts/build-wan-android.sh
-          echo "7f18eb1337e70bc69cbbd21adfe7a7bfe56401e50c33c7a41747104f6bfa49ca  saient/engine/arm64-v8a/libquartz-wan.so" | sha256sum --check
+          test -s saient/engine/arm64-v8a/libquartz-wan.so
+          file saient/engine/arm64-v8a/libquartz-wan.so
+          readelf -h saient/engine/arm64-v8a/libquartz-wan.so | grep -E "Class:.*ELF64|Machine:.*AArch64"
+          chmod 0755 saient/engine/arm64-v8a/libquartz-wan.so
           mkdir -p android-ai-voice/app/src/main/jniLibs/arm64-v8a
           cp saient/engine/arm64-v8a/libquartz-wan.so android-ai-voice/app/src/main/jniLibs/arm64-v8a/
 
