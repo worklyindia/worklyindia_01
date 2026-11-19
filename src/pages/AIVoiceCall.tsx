@@ -260,7 +260,7 @@ export default function AIVoiceCall() {
       setAiRequestStatus('Reply received');
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      setLastReply(reply);
+      // Keep the reply hidden until its audio has successfully started.
       // Lock the UI into the speaking state before playback begins. The
       // microphone has already been stopped above, so it cannot overwrite this
       // state while the AI is answering.
@@ -276,6 +276,7 @@ export default function AIVoiceCall() {
 
       const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (spoken) {
+        setLastReply(reply);
         // Commit the assistant message only once voice playback has actually started,
         // so the text never appears ahead of the spoken reply in chat history.
         const assistantMessage: StoredMessage = {
@@ -402,8 +403,7 @@ export default function AIVoiceCall() {
     const handleShrutiStatus = (event: Event) => {
       const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
       if (detail?.status === 'ready') setNativeAvailable(true);
-      if (detail?.status === 'transcribing-on-workly-voice-app') setVoiceStage('Sending microphone audio to Workly Voice Android app…');
-      if (detail?.status === 'transcribed-by-workly-voice-app') setVoiceStage('Speech recognized by Workly Voice Android app');
+      // Keep internal microphone relay progress hidden from the call UI.
     };
     window.addEventListener('workly-shruti-status', handleShrutiStatus);
     return () => { window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
