@@ -49,3 +49,32 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
   }
   throw new Error('The shared voice request timed out. Please try again.');
 }
+
+
+export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto'): Promise<{ reply: string; languageTag: string }> {
+  const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
+    body: { action: 'create_job', job_type: 'ai', payload: { text: text.slice(0, 4000), languageTag } },
+  });
+  if (createError) throw createError;
+  const jobId = created?.job?.id;
+  if (typeof jobId !== 'string') throw new Error(created?.error || 'Shared Workly Voice phone is unavailable.');
+  window.dispatchEvent(new CustomEvent('workly-voice-ai-status', { detail: { status: 'queued' } }));
+  const deadline = Date.now() + 45_000;
+  while (Date.now() < deadline) {
+    await wait(900);
+    const { data, error } = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'get_job', job_id: jobId },
+    });
+    if (error) throw error;
+    const job = data?.job as RelayJob | undefined;
+    if (!job) throw new Error('Shared AI request could not be found.');
+    if (job.status === 'failed' || job.status === 'expired') throw new Error(job.result?.error || 'Shared AI request failed.');
+    if (job.status === 'completed') {
+      const reply = typeof job.result?.reply === 'string' ? job.result.reply.trim() : '';
+      if (!reply) throw new Error('The owner phone completed the AI request without a reply.');
+      return { reply, languageTag: typeof job.result?.languageTag === 'string' ? job.result.languageTag : languageTag };
+    }
+    window.dispatchEvent(new CustomEvent('workly-voice-ai-status', { detail: { status: job.status } }));
+  }
+  throw new Error('The shared phone AI request timed out.');
+}
