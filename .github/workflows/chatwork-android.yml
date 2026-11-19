@@ -40,7 +40,7 @@ jobs:
           accept-android-sdk-licenses: true
 
       - name: Install Android SDK, NDK and CMake
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "ndk;27.1.12297006" "cmake;3.22.1"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -70,7 +70,7 @@ jobs:
       - name: Build and verify Saient Wan ARM64 Vulkan worker
         run: |
           export SAIENT_SD_CPP_SOURCE="$GITHUB_WORKSPACE/stable-diffusion.cpp"
-          export SAIENT_ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          export SAIENT_ANDROID_NDK="$ANDROID_HOME/ndk/27.1.12297006"
           bash saient/scripts/build-wan-android.sh
           echo "7f18eb1337e70bc69cbbd21adfe7a7bfe56401e50c33c7a41747104f6bfa49ca  saient/engine/arm64-v8a/libquartz-wan.so" | sha256sum --check
           mkdir -p android-ai-voice/app/src/main/jniLibs/arm64-v8a
