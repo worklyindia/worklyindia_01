@@ -47,6 +47,36 @@ jobs:
         with:
           gradle-version: "9.5.1"
 
+      # Build the pinned Saient Wan Vulkan worker from source. Do not fetch or trust an
+      # unverified prebuilt executable; the upstream build script checks its exact backend commit.
+      - name: Install Vulkan host headers
+        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev spirv-headers
+
+      - name: Checkout pinned Saient build recipe
+        uses: actions/checkout@v7
+        with:
+          repository: SaientAI/saient
+          ref: 73073fd7fe17dc565b33a148e42282bcc1eb926c
+          path: saient
+
+      - name: Checkout pinned Wan backend source
+        uses: actions/checkout@v7
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: e31a86ce9110b11a98bd5990c329093244c2d1e3
+          submodules: recursive
+          path: stable-diffusion.cpp
+
+      - name: Build and verify Saient Wan ARM64 Vulkan worker
+        env:
+          SAIENT_SD_CPP_SOURCE: ${{ github.workspace }}/stable-diffusion.cpp
+          SAIENT_ANDROID_NDK: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: |
+          bash saient/scripts/build-wan-android.sh
+          echo "7f18eb1337e70bc69cbbd21adfe7a7bfe56401e50c33c7a41747104f6bfa49ca  saient/engine/arm64-v8a/libquartz-wan.so" | sha256sum --check
+          mkdir -p android-ai-voice/app/src/main/jniLibs/arm64-v8a
+          cp saient/engine/arm64-v8a/libquartz-wan.so android-ai-voice/app/src/main/jniLibs/arm64-v8a/
+
       - name: Build debug APK
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleDebug
