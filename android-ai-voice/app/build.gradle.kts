@@ -45,7 +45,7 @@ android {
 }
 dependencies {
     // ONNX Runtime CPU inference for Indic Tiny TTS acoustic, flow and Vocos graphs.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.23.2")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         // The Android AAR already contains the Kotlin/JVM API classes.
         // JitPack also publishes a separate JVM JAR; exclude it to avoid duplicate classes.
