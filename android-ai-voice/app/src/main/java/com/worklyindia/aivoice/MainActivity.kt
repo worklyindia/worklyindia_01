@@ -16,7 +16,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
-/** Simple Workly Voice companion home: only Downloads and Settings are user-facing destinations. */
+/** Workly Voice home with one full-width model-download action. */
 class MainActivity : Activity() {
     private var dark = false
     private val bg get() = if (dark) 0xFF0B1220.toInt() else 0xFFF4F7FF.toInt()
@@ -32,7 +32,7 @@ class MainActivity : Activity() {
         }
 
         // This background relay is intentionally kept for the WEBSITE's voice calls.
-        // It has no separate screen or controls in the app; Downloads and Settings are the only tabs.
+        // It has no separate screen or controls in the app.
         val relayIntent = Intent(this, VoiceRelayService::class.java)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(relayIntent) else startService(relayIntent)
 
@@ -60,7 +60,7 @@ class MainActivity : Activity() {
         }
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(22), dp(20), dp(24))
+            setPadding(dp(20), dp(30), dp(20), dp(24))
             setBackgroundColor(bg)
         }
         page.addView(TextView(this).apply {
@@ -140,7 +140,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         })
         info.addView(TextView(this).apply {
-            text = "Only two app sections: Downloads and Settings. No separate chat or calling screens."
+            text = "Download the voice and AI models your website needs. No separate chat or calling screens."
             textSize = 13f
             setTextColor(secondary)
             setPadding(0, dp(6), 0, 0)
@@ -156,55 +156,27 @@ class MainActivity : Activity() {
         })
         scroll.addView(page)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(bottomNavigation(), LinearLayout.LayoutParams(-1, dp(76)))
+        root.addView(downloadAction(), LinearLayout.LayoutParams(-1, dp(72)))
         setContentView(root)
     }
 
-    private fun bottomNavigation(): View {
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+    /** Transparent, edge-to-edge download action: the app background remains visible. */
+    private fun downloadAction(): View {
+        return TextView(this).apply {
+            text = "⬇   Download Model"
+            textSize = 19f
             gravity = Gravity.CENTER
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            background = rounded(if (dark) 0xFF17243A.toInt() else 0xFFFFFFFF.toInt(), 22)
-            elevation = dp(12).toFloat()
-        }
-        bar.addView(navItem("⬇", "Downloads", intArrayOf(0xFF2878F0.toInt(), 0xFF24B8C7.toInt())) {
-            startActivity(Intent(this, SpeechDownloadsActivity::class.java))
-        }, LinearLayout.LayoutParams(0, -1, 1f).apply { rightMargin = dp(6) })
-        bar.addView(navItem("⚙", "Settings", intArrayOf(0xFF8B5CF6.toInt(), 0xFFEC4899.toInt())) {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }, LinearLayout.LayoutParams(0, -1, 1f).apply { leftMargin = dp(6) })
-        return bar
-    }
-
-    private fun navItem(icon: String, title: String, colors: IntArray, click: () -> Unit): View {
-        val item = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            background = GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                if (dark) intArrayOf(0xFF24334E.toInt(), 0xFF2C3458.toInt()) else intArrayOf(0xFFEAF1FF.toInt(), 0xFFF4EAFE.toInt())
-            ).apply { cornerRadius = dp(17).toFloat() }
+            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(8), dp(10), dp(8), dp(10))
             isClickable = true
             isFocusable = true
-            setOnClickListener { click() }
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, SpeechDownloadsActivity::class.java))
+            }
+            // No button/card background or elevation; full-width touch target.
+            background = null
         }
-        val iconView = TextView(this).apply {
-            text = icon
-            textSize = 24f
-            gravity = Gravity.CENTER
-            setTextColor(colors[0])
-        }
-        item.addView(iconView, LinearLayout.LayoutParams(dp(34), -1))
-        item.addView(TextView(this).apply {
-            text = title
-            textSize = 15f
-            setTextColor(primary)
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER_VERTICAL
-        })
-        return item
     }
 
     private fun gradient(colors: IntArray, radius: Int) = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors).apply { cornerRadius = dp(radius).toFloat() }
