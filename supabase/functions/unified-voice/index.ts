@@ -117,7 +117,7 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
       method: 'POST',
       headers: { 'X-API-Key': apiKey, 'Cartesia-Version': '2024-11-13', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model_id: 'sonic-2',
+        model_id: 'sonic-latest',
         transcript: text,
         voice: { mode: 'id', id: '56e35e2d-6eb6-4226-ab8b-9776515a7094' },
         language: 'hi',
@@ -209,7 +209,7 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
       method: 'POST',
       headers: { 'X-API-Key': apiKey, 'Cartesia-Version': '2024-11-13', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model_id: 'sonic-2',
+        model_id: 'sonic-latest',
         transcript: text,
         voice: { mode: 'id', id: '56e35e2d-6eb6-4226-ab8b-9776515a7094' },
         language: 'hi',
