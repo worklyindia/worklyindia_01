@@ -60,7 +60,6 @@ Deno.serve(async (req: Request) => {
     const db = supabase;
     const now = new Date().toISOString();
     // Keep relay data short-lived even when the website stops polling.
-    await db.from("workly_ai_voice_pairings").delete().lt("expires_at", now);
     await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
 
     if (action === "register_device") {
