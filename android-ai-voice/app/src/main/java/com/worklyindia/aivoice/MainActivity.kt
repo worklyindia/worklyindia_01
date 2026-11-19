@@ -100,9 +100,9 @@ class MainActivity : Activity() {
         hero.addView(orb, LinearLayout.LayoutParams(-1, dp(82)))
         ObjectAnimator.ofPropertyValuesHolder(
             orb,
-            PropertyValuesHolder.ofFloat(View.ALPHA, .78f, 1f),
-            PropertyValuesHolder.ofFloat(View.SCALE_X, .96f, 1.04f),
-            PropertyValuesHolder.ofFloat(View.SCALE_Y, .96f, 1.04f)
+            PropertyValuesHolder.ofFloat("alpha", .78f, 1f),
+            PropertyValuesHolder.ofFloat("scaleX", .96f, 1.04f),
+            PropertyValuesHolder.ofFloat("scaleY", .96f, 1.04f)
         ).apply {
             duration = 1800L
             repeatCount = ObjectAnimator.INFINITE
