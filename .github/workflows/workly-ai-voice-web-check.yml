@@ -1,5 +1,5 @@
 name: Workly AI Voice Website Checks
-# Validates the authenticated pairing page and its Workly Settings entry point.
+# Validates shared owner-phone voice relay integration.
 
 on:
   push:
@@ -12,6 +12,8 @@ on:
       - "src/App.tsx"
       - "src/lib/browserOfflineVoice.ts"
       - "src/lib/nativeAppBridge.ts"
+      - "src/lib/ownerPhoneVoiceRelay.ts"
+      - "src/pages/AIVoiceCall.tsx"
       - "src/pages/Settings.tsx"
       - "src/pages/owner-portal/**"
       - "src/lib/nativeAppBridge.ts"
@@ -49,4 +51,4 @@ jobs:
       - name: Type-check website
         run: npx tsc --noEmit -p tsconfig.app.json
       - name: Lint website voice modules
-        run: npx eslint src/lib/browserOfflineVoice.ts src/lib/nativeAppBridge.ts --max-warnings 0
+        run: npx eslint src/lib/browserOfflineVoice.ts src/lib/nativeAppBridge.ts src/lib/ownerPhoneVoiceRelay.ts src/pages/AIVoiceCall.tsx --max-warnings 0
