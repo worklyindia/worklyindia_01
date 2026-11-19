@@ -62,8 +62,8 @@ object VoiceRelayApi {
     }
 
     fun uploadAudio(token: String, jobId: String, audioBytes: ByteArray) {
-        if (audioBytes.isEmpty() || audioBytes.size > 1_800_000) {
-            throw RelayApiException(413, "Generated voice audio is empty or exceeds 1.8 MB.")
+        if (audioBytes.isEmpty() || audioBytes.size > 1_300_000) {
+            throw RelayApiException(413, "Generated voice audio is empty or exceeds 1.3 MB.")
         }
         val encoded = Base64.getEncoder().encodeToString(audioBytes)
         val values = JSONObject().put("job_id", jobId).put("audio_base64", encoded)
