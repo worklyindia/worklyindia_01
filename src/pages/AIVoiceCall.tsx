@@ -396,6 +396,12 @@ export default function AIVoiceCall() {
       const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
       if (detail?.status === 'ready') setNativeAvailable(true);
     };
+    const handleShrutiStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
+      if (detail?.status === 'ready') setNativeAvailable(true);
+      if (detail?.status === 'transcribing-on-workly-voice-app') setVoiceStage('Sending microphone audio to Workly Voice Android app…');
+      if (detail?.status === 'transcribed-by-workly-voice-app') setVoiceStage('Speech recognized by Workly Voice Android app');
+    };
     window.addEventListener('workly-shruti-status', handleShrutiStatus);
     return () => { window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
   }, []);
