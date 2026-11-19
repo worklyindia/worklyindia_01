@@ -9,8 +9,10 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieDrawable
 
-/** Minimal home screen: only the fixed Download Model action. */
+/** Centered animated signal home screen with a fixed Download Model action. */
 class MainActivity : Activity() {
     private var dark = false
     private val bg get() = if (dark) 0xFF0B1220.toInt() else 0xFFF4F7FF.toInt()
@@ -46,9 +48,23 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.BOTTOM
+            gravity = Gravity.CENTER
             setBackgroundColor(bg)
         }
+
+        // The animation fills the available center area and stays clear of the system bars
+        // and the bottom Download Model action.
+        val signalAnimation = LottieAnimationView(this).apply {
+            setAnimation("Signals.json")
+            repeatCount = LottieDrawable.INFINITE
+            repeatMode = LottieDrawable.RESTART
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            setBackgroundColor(bg)
+            contentDescription = "Animated signal"
+        }
+        root.addView(signalAnimation, LinearLayout.LayoutParams(-1, 0, 1f))
+
         root.addView(TextView(this).apply {
             text = "↓   Download Model"
             textSize = 19f
@@ -63,7 +79,19 @@ class MainActivity : Activity() {
                 startActivity(Intent(this@MainActivity, SpeechDownloadsActivity::class.java))
             }
         }, LinearLayout.LayoutParams(-1, dp(72)))
+
         setContentView(root)
+        signalAnimation.playAnimation()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (findViewById<LottieAnimationView>(android.R.id.content))?.resumeAnimation()
+    }
+
+    override fun onPause() {
+        (findViewById<LottieAnimationView>(android.R.id.content))?.pauseAnimation()
+        super.onPause()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
