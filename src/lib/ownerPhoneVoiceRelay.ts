@@ -79,3 +79,31 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
   }
   throw new Error('The shared phone AI request timed out.');
 }
+
+
+export async function requestOwnerPhoneTranscription(audioBase64: string): Promise<{ text: string; languageTag: string }> {
+  if (!audioBase64 || audioBase64.length > 1_800_000) throw new Error('Caller audio is empty or exceeds the upload limit.');
+  const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
+    body: { action: 'create_stt_job', audio_base64: audioBase64 },
+  });
+  if (createError) throw createError;
+  const jobId = created?.job?.id;
+  if (typeof jobId !== 'string') throw new Error(created?.error || 'Workly Voice phone is offline.');
+  window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: 'queued' } }));
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    await wait(900);
+    const { data, error } = await supabase.functions.invoke('unified-voice', { body: { action: 'get_job', job_id: jobId } });
+    if (error) throw error;
+    const job = data?.job as RelayJob | undefined;
+    if (!job) throw new Error('Workly Voice transcription job could not be found.');
+    if (job.status === 'failed' || job.status === 'expired') throw new Error(job.result?.error || 'Workly Voice transcription failed.');
+    if (job.status === 'completed') {
+      const text = typeof job.result?.text === 'string' ? job.result.text.trim() : '';
+      if (!text) throw new Error('Workly Voice returned an empty transcript.');
+      return { text, languageTag: typeof job.result?.languageTag === 'string' ? job.result.languageTag : 'auto' };
+    }
+    window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: job.status } }));
+  }
+  throw new Error('Workly Voice speech recognition timed out.');
+}
