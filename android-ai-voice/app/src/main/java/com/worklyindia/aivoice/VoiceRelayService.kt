@@ -291,7 +291,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }
         prefs.edit().putString(EVENTS_KEY, trimmed.toString()).apply()
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(value))
+        manager.notify(NOTIFICATION_ID, buildNotification(message))
     }
 
     private fun buildNotification(message: String): Notification {
