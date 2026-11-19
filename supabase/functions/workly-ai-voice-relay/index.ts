@@ -129,6 +129,32 @@ export async function handleWorklyVoiceRelay(req: Request) {
       return json({ job, queue_position: (activeJobs ?? 0) + 1 });
     }
 
+    if (action === "create_stt_job") {
+      const user = await authenticatedUser(req);
+      if (!user) return json({ error: "Authentication required" }, 401);
+      const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
+      if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
+      const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
+        .select("id").eq("user_id", ownerUserId).is("revoked_at", null)
+        .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (deviceError || !device) return json({ error: "The shared Workly Voice phone is offline or not registered." }, 404);
+      let bytes: Uint8Array;
+      try { const binary = atob(audioBase64); bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0)); }
+      catch { return json({ error: "Invalid recorded audio." }, 400); }
+      if (bytes.byteLength < 1000 || bytes.byteLength > 1_300_000) return json({ error: "Recorded audio size is invalid." }, 413);
+      const jobId = crypto.randomUUID();
+      const path = `${device.id}/input-${jobId}.wav`;
+      const { error: uploadError } = await db.storage.from("workly-ai-voice-audio")
+        .upload(path, bytes, { contentType: "audio/wav", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: job, error } = await db.from("workly_ai_voice_jobs")
+        .insert({ id: jobId, user_id: user.id, device_id: device.id, job_type: "stt", payload: { audio_path: path, content_type: "audio/wav" } })
+        .select("id,status,expires_at").single();
+      if (error) { await db.storage.from("workly-ai-voice-audio").remove([path]); throw error; }
+      return json({ job });
+    }
+
     if (action === "get_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
@@ -175,6 +201,11 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .select("id,job_type,payload,expires_at")
         .maybeSingle();
       if (claimError) throw claimError;
+      if (claimed?.job_type === "stt" && typeof claimed.payload?.audio_path === "string") {
+        const { data: signed, error: signedError } = await db.storage.from("workly-ai-voice-audio").createSignedUrl(claimed.payload.audio_path, 300);
+        if (signedError) throw signedError;
+        claimed.payload = { ...claimed.payload, audio_url: signed.signedUrl };
+      }
       return json({ job: claimed ?? null, heartbeat_at: new Date().toISOString() });
     }
 
