@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 type RelayJob = {
   id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'expired';
-  result?: { audio_url?: string; content_type?: string; error?: string; reply?: string; text?: string; languageTag?: string } | null;
+  result?: { audio_url?: string; image_url?: string; content_type?: string; error?: string; reply?: string; text?: string; languageTag?: string } | null;
 };
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -106,4 +106,45 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
     window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: job.status } }));
   }
   throw new Error('Workly Voice speech recognition timed out.');
+}
+
+
+/**
+ * Ask the owner's paired Android phone to generate an image locally.
+ * The website only receives a short-lived signed URL; prompts and image pixels
+ * are never sent to a third-party image-generation API.
+ */
+export async function requestOwnerPhoneImage(prompt: string): Promise<string> {
+  const cleanPrompt = prompt.trim().slice(0, 4000);
+  if (!cleanPrompt) throw new Error('Describe the image you want to create.');
+  const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
+    body: { action: 'create_job', job_type: 'image', payload: { prompt: cleanPrompt, width: 512, height: 512, steps: 8 } },
+  });
+  if (createError) throw createError;
+  const jobId = created?.job?.id;
+  if (typeof jobId !== 'string') throw new Error(created?.error || 'Your paired phone is offline. Open ChatWork on your phone and keep its phone server running.');
+  window.dispatchEvent(new CustomEvent('workly-voice-image-status', { detail: { status: 'queued' } }));
+  const deadline = Date.now() + 14 * 60_000;
+  while (Date.now() < deadline) {
+    await wait(1800);
+    const { data, error } = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'get_job', job_id: jobId },
+    });
+    if (error) throw error;
+    const job = data?.job as RelayJob | undefined;
+    if (!job) throw new Error('Local image request could not be found.');
+    if (job.status === 'failed' || job.status === 'expired') {
+      throw new Error(job.result?.error || 'Your phone could not generate this image. Check that the local image model is downloaded.');
+    }
+    if (job.status === 'completed') {
+      const imageUrl = job.result?.image_url;
+      if (typeof imageUrl !== 'string' || !imageUrl.startsWith('https://')) {
+        throw new Error('Your phone completed the request but did not return an image.');
+      }
+      window.dispatchEvent(new CustomEvent('workly-voice-image-status', { detail: { status: 'completed' } }));
+      return imageUrl;
+    }
+    window.dispatchEvent(new CustomEvent('workly-voice-image-status', { detail: { status: job.status } }));
+  }
+  throw new Error('Local image generation timed out. Keep ChatWork open on your phone and try again.');
 }
