@@ -13,7 +13,8 @@ This is a separate Android app and an isolated relay backend. The relay source i
 ## Actions in `workly-ai-voice-relay`
 - `create_pairing`: authenticated website user; returns a one-time 24-character hex code valid for 5 minutes.
 - `claim_device`: Android app exchanges the code for a device token.
-- `create_job`: authenticated website user creates a `tts` or `stt` request (payload limit 20 KB; maximum three active jobs per user).
+- `create_job`: authenticated website user creates a `tts`, `stt`, `ai` or owner-only `image` request (payload limit 20 KB; image jobs have a 15-minute expiry).
+- `upload_image`: the paired phone uploads a small JPEG result to private Storage; the website receives a 24-hour signed URL.
 - `get_job`: authenticated website user retrieves only their own job status/result.
 - `list_devices`: authenticated website user lists their own paired phones.
 - `revoke_device`: authenticated website user revokes a paired phone token.
@@ -29,7 +30,10 @@ This is a separate Android app and an isolated relay backend. The relay source i
 - Android's current `SpeechRecognizer` listens to the phone microphone; it does not transcribe an arbitrary audio file uploaded by a website. Remote STT requires a separately implemented/tested audio-input model or a supported external-audio recognition path.
 - Remote TTS currently plays text through the paired phone speaker and returns a playback confirmation, not an audio file. Audio-file synthesis/upload and remote audio-file STT still need implementation and device testing.
 - Phone availability depends on power, network, Android background limits, and the user keeping the foreground server enabled. No 24/7 uptime guarantee.
-- Free Supabase quotas apply. This design does not promise unlimited traffic or zero throttling.
+- Local image inference uses Stable Diffusion 1.5 Q4 (about 1.57 GB) downloaded to the Android app's private files. The phone uses the CPU backend at 512×512 and 4–10 steps; it does not call a paid image-generation API.
+- Website image jobs are restricted to the owner account because they consume the owner's phone battery, memory and mobile data. The phone must be online, registered, and running the foreground relay.
+- The Android model/runtime integration still requires a successful CI build and physical-device performance/RAM testing before production use.
+- Free Supabase quotas apply to relay, Storage and network transfer. This design does not promise unlimited traffic or zero throttling.
 
 ## Deployment safety
 1. Review and test the SQL migration and Edge Function.
