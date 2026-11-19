@@ -157,12 +157,17 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             activeJobId = null
             return
         }
-        if (engine.isLanguageAvailable(locale) < TextToSpeech.LANG_AVAILABLE) {
-            VoiceRelayApi.fail(token, jobId, "This phone has no installed TTS voice for $tag.")
+        val offlineVoice = engine.voices
+            ?.filter { voice ->
+                voice.locale.language == locale.language && !voice.isNetworkConnectionRequired
+            }
+            ?.maxByOrNull { voice -> if (voice.locale == locale) 2 else 1 }
+        if (offlineVoice == null) {
+            VoiceRelayApi.fail(token, jobId, "No installed offline TTS voice is available for $tag. Install an offline voice in Android language settings.")
             activeJobId = null
             return
         }
-        engine.setLanguage(locale)
+        engine.voice = offlineVoice
         val outputFile = File(cacheDir, "workly-voice-" + jobId + ".wav")
         activeAudioFile?.delete()
         activeAudioFile = outputFile
