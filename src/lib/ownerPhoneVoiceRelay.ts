@@ -53,7 +53,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
 
 export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto'): Promise<{ reply: string; languageTag: string }> {
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
-    body: { action: 'create_job', job_type: 'ai', payload: { text: text.slice(0, 4000), languageTag } },
+    body: { action: 'create_job', job_type: 'ai', payload: { text: text.slice(-4000), languageTag } },
   });
   if (createError) throw createError;
   const jobId = created?.job?.id;
