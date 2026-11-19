@@ -68,7 +68,7 @@ import {
   type StatusLangCode,
 } from '@/lib/requestStatus';
 import { callAICareerChat } from '@/lib/aiChatTransport';
-import { requestOwnerPhoneAIReply } from '@/lib/ownerPhoneVoiceRelay';
+import { requestOwnerPhoneAIReply, requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
 import { SubscriptionExpiryBanner } from '@/components/ai-chat/SubscriptionExpiryBanner';
 import YouTubeOAuthBridge from '@/components/youtube/YouTubeOAuthBridge';
 
@@ -2553,74 +2553,50 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
     setLoadingVoiceId(message.id);
     
     try {
-      // Check cache first
-      const cachedAudio = getCachedAudio(message.content);
-      
-      let audioContent: string;
-      
-      if (cachedAudio) {
-        // Use cached audio
-        audioContent = cachedAudio;
-        console.log('🎵 Using cached TTS audio');
-      } else {
-        // Try Cartesia first
-        try {
-          const { data, error } = await supabase.functions.invoke('unified-voice', {
-            body: { action: 'text-to-speech', text: message.content, provider: 'cartesia' }
-          });
+      // Primary provider: the paired Workly Voice phone. Give it a short
+      // window; if unavailable or unsuccessful, automatically use cloud TTS.
+      let audioSource: string;
+      try {
+        audioSource = await requestOwnerPhoneVoiceAudio(
+          message.content,
+          navigator.language || 'hi-IN',
+          30_000
+        );
+        console.log('✅ Workly Voice audio generated');
+      } catch (worklyVoiceError) {
+        console.warn('⚠️ Workly Voice unavailable; using fallback TTS:', worklyVoiceError);
 
-          if (error) {
-            // Handle specific error types
-            if (error.message?.includes('login') || error.message?.includes('session expired') || error.message?.includes('Authentication required')) {
-              setLoadingVoiceId(null);
-              toast.error('Session Expired - Please login again', {
-                duration: 5000,
-                action: {
-                  label: 'Login',
-                  onClick: () => navigate('/auth?redirect=/ai-assistant')
-                }
-              });
-              return;
-            }
-            
-            // Handle limit errors with redirect
-            if (error.message?.includes('limit') || error.message?.includes('exhausted')) {
-              setLoadingVoiceId(null);
-              toast.error('🔊 Voice Playback Limit Reached', {
-                description: 'Your voice playback limit has been exhausted. Redirecting to subscription page...',
-                duration: 2000,
-              });
-              setTimeout(() => {
-                navigate('/ai-assistant/subscription');
-              }, 2000);
-              return;
-            }
-            
-            throw error;
+        // Only use cached/cloud voices after the primary Workly Voice attempt fails.
+        const cachedAudio = getCachedAudio(message.content);
+        let audioContent: string;
+
+        if (cachedAudio) {
+          audioContent = cachedAudio;
+          console.log('🎵 Using cached fallback TTS audio');
+        } else {
+          try {
+            const { data, error } = await supabase.functions.invoke('unified-voice', {
+              body: { action: 'text-to-speech', text: message.content, provider: 'cartesia' }
+            });
+            if (error) throw error;
+            audioContent = data.audioContent;
+            console.log('✅ Cartesia fallback voice generated');
+          } catch (cartesiaError) {
+            console.warn('⚠️ Cartesia failed, falling back to MiniMax:', cartesiaError);
+            const { data, error } = await supabase.functions.invoke('unified-voice', {
+              body: { action: 'text-to-speech', text: message.content, provider: 'minimax' }
+            });
+            if (error) throw error;
+            audioContent = data.audioContent;
+            console.log('✅ MiniMax fallback voice generated');
           }
-
-          audioContent = data.audioContent;
-          console.log('✅ Cartesia voice generated');
-        } catch (cartesiaError) {
-          console.warn('⚠️ Cartesia failed, falling back to ElevenLabs:', cartesiaError);
-          
-          // Fallback to ElevenLabs (MiniMax)
-          const { data, error } = await supabase.functions.invoke('unified-voice', {
-            body: { action: 'text-to-speech', text: message.content, provider: 'minimax' }
-          });
-
-          if (error) throw error;
-
-          audioContent = data.audioContent;
-          console.log('✅ ElevenLabs fallback voice generated');
+          setCachedAudio(message.content, audioContent);
         }
-        
-        // Save to cache for future use
-        setCachedAudio(message.content, audioContent);
+        audioSource = `data:audio/mp3;base64,${audioContent}`;
       }
 
       // Create and play audio
-      const audio = new Audio(`data:audio/mp3;base64,${audioContent}`);
+      const audio = new Audio(audioSource);
       audioRef.current = audio;
       
       setLoadingVoiceId(null);
