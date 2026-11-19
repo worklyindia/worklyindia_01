@@ -91,8 +91,6 @@ function classifyTask(
 ): ChatTaskType {
   const text = latestMessage.toLowerCase().trim();
 
-  if (hasImages) return 'vision_analysis';
-
   // Profile-field nouns covering English, Hinglish, and Hindi script.
   // IMPORTANT: keep this in sync with the field list accepted by
   // update_user_profile / update_company_profile.
@@ -206,8 +204,13 @@ function classifyTask(
   if (isDelivery) return 'delivery';
 
   const VERB_RE = /\b(generate|create|make|build|design|draft|prepare|write|bana|banao|banado|bana do|banake|banakar|banwa|banwao|tayar kar|taiyar kar|taiyaar kar|chahiye|chahiyē|do|de do|dedo)\b|बना|बनाओ|बनाकर|बनवा|तैयार|चाहिए/;
-  const isImageGeneration = /\b(image|photo|picture|poster|banner|logo|thumbnail|tasveer|chhavi)\b|फोटो|छवि|तस्वीर/.test(text) && VERB_RE.test(text);
+  const isImageGeneration =
+    (/\b(image|photo|picture|poster|banner|logo|thumbnail|tasveer|chhavi)\b|फोटो|छवि|तस्वीर/.test(text) && VERB_RE.test(text)) ||
+    (hasImages && /\b(edit|change|modify|restyle|transform|retouch|remove|replace|background|crop|blur|enhance|redesign|badal|badlo|hatao|hata\s*do|kapde|rang)\b|edit karo|edit kar do|photo ko badal|background badal/i.test(text));
   if (isImageGeneration) return 'image_generation';
+
+  // Image-only questions remain vision analysis; edit requests above must retain tool access.
+  if (hasImages) return 'vision_analysis';
 
   const isDocumentGeneration = /\b(pdf|resume|cv|file|document|letter|report)\b|पीडीएफ|फाइल|रिज्यूमे/.test(text) && VERB_RE.test(text);
   if (isDocumentGeneration || hasDocs) return 'document_generation';
