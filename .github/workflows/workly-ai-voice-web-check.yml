@@ -3,7 +3,7 @@ name: ChatWork AI Website Checks
 
 on:
   push:
-    branches: [feature/workly-ai-voice-server-app, feat/chatwork-ai-image-studio-mainline]
+    branches: [feature/workly-ai-voice-server-app]
     paths:
       - "package.json"
       - "src/hooks/**"
