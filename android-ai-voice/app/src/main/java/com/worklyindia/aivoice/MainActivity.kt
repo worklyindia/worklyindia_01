@@ -15,6 +15,7 @@ import com.airbnb.lottie.LottieDrawable
 /** Centered animated signal home screen with a fixed Download Model action. */
 class MainActivity : Activity() {
     private var dark = false
+    private var signalAnimationView: LottieAnimationView? = null
     private val bg get() = if (dark) 0xFF0B1220.toInt() else 0xFFF4F7FF.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,8 +53,7 @@ class MainActivity : Activity() {
             setBackgroundColor(bg)
         }
 
-        // The animation fills the available center area and stays clear of the system bars
-        // and the bottom Download Model action.
+        // Center animation occupies the free space between system bars and bottom action.
         val signalAnimation = LottieAnimationView(this).apply {
             setAnimation("Signals.json")
             repeatCount = LottieDrawable.INFINITE
@@ -63,6 +63,7 @@ class MainActivity : Activity() {
             setBackgroundColor(bg)
             contentDescription = "Animated signal"
         }
+        signalAnimationView = signalAnimation
         root.addView(signalAnimation, LinearLayout.LayoutParams(-1, 0, 1f))
 
         root.addView(TextView(this).apply {
@@ -86,12 +87,18 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        (findViewById<LottieAnimationView>(android.R.id.content))?.resumeAnimation()
+        signalAnimationView?.resumeAnimation()
     }
 
     override fun onPause() {
-        (findViewById<LottieAnimationView>(android.R.id.content))?.pauseAnimation()
+        signalAnimationView?.pauseAnimation()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        signalAnimationView?.cancelAnimation()
+        signalAnimationView = null
+        super.onDestroy()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
