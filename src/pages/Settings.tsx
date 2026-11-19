@@ -217,16 +217,6 @@ const Settings = () => {
         {/* Deletion Warning Banner */}
         <DeleteAccountCountdown userId={user?.id} variant="banner" />
 
-        {!isWorklyAndroidApp() && (
-          <Card className="mb-5 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-semibold text-foreground">Workly AI Voice Server</h2>
-              <p className="text-sm text-muted-foreground">Pair and manage your Android phone as a private voice device.</p>
-            </div>
-            <Button onClick={() => navigate("/settings/ai-voice-server")} className="shrink-0">Open AI Voice Server</Button>
-          </Card>
-        )}
-
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className={`grid w-full ${isWorklyAndroidApp() ? 'grid-cols-4' : 'grid-cols-3'} h-auto p-1`}>
             {isWorklyAndroidApp() && <TabsTrigger value="app" className="text-xs sm:text-sm px-1 sm:px-3 py-2">App Settings</TabsTrigger>}
