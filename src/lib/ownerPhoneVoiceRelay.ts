@@ -59,7 +59,8 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
   const jobId = created?.job?.id;
   if (typeof jobId !== 'string') throw new Error(created?.error || 'Shared Workly Voice phone is unavailable.');
   window.dispatchEvent(new CustomEvent('workly-voice-ai-status', { detail: { status: 'queued' } }));
-  const deadline = Date.now() + 45_000;
+  // Android online AI requests may take up to 60 seconds; allow time for the phone to finish.
+  const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
     await wait(900);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
