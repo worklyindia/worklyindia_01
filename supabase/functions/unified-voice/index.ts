@@ -7,7 +7,7 @@ import { handleWorklyVoiceRelay } from '../workly-ai-voice-relay/index.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-token',
 };
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -57,7 +57,7 @@ serve(async (req) => {
     console.log(`[unified-voice] Action: ${action}`);
 
     // Shared owner-phone relay actions are handled by the isolated relay module.
-    if (['register_device', 'create_job', 'get_job', 'poll', 'fail_job', 'upload_audio', 'complete_job', 'list_devices', 'revoke_device'].includes(action)) {
+    if (['register_device', 'create_job', 'create_stt_job', 'get_job', 'poll', 'fail_job', 'upload_audio', 'complete_job', 'list_devices', 'revoke_device'].includes(action)) {
       return await handleWorklyVoiceRelay(new Request(req.url, { method: req.method, headers: req.headers, body: JSON.stringify({ action, ...params }) }));
     }
 
@@ -68,7 +68,7 @@ serve(async (req) => {
         return await handleTextToSpeech(supabase, params, req);
       
       case 'speech-to-text':
-        return await handleSpeechToText(params);
+        return await handleSpeechToText(params, req, supabase);
 
       // Stateless AI voice reply: no database, storage, cache, usage counters or transcript logs.
       case 'ai-voice-chat':
@@ -240,8 +240,18 @@ async function handleTextToSpeech(supabase: any, params: any, req: Request) {
 // SPEECH TO TEXT (AssemblyAI → Lovable fallback)
 // =============================================
 
-async function handleSpeechToText(params: any) {
+async function handleSpeechToText(params: any, req: Request, supabase: any) {
+  const deviceToken = req.headers.get('x-device-token') || '';
+  if (deviceToken.length < 40 || deviceToken.length > 200) throw new Error('Workly Voice device authentication required.');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(deviceToken));
+  const tokenHash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  const { data: device, error: deviceError } = await supabase.from('workly_ai_voice_devices')
+    .select('id,user_id').eq('token_hash', tokenHash).is('revoked_at', null).maybeSingle();
+  if (deviceError || !device || device.user_id !== Deno.env.get('WORKLY_AI_VOICE_OWNER_USER_ID')) {
+    throw new Error('Workly Voice device authentication failed.');
+  }
   const { audio } = params;
+  if (typeof audio !== 'string' || audio.length > 1_800_000) throw new Error('Audio payload is missing or too large.');
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
 
