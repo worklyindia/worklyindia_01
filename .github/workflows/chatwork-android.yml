@@ -66,14 +66,15 @@ jobs:
             echo
             echo "## Release notes"
             echo
-            echo "Initial ChatWork Android preview release. Includes a separate voice-assistant app with Hindi, Indian English and Gujarati language selection; on-device Qwen 2.5 3B AI chat (model downloaded separately); Android TTS and optional Indic Tiny TTS speech packs; voice input with Android speech recognition and optional offline speech-model packs; and secure phone pairing / foreground relay controls."
+            echo "ChatWork Android preview release. Includes Hindi, Indian English and Gujarati voice tools; on-device Qwen 2.5 3B AI chat (model downloaded separately); local Stable Diffusion 1.5 Q4 image generation (1.57 GB model downloaded separately, 512×512 CPU mode); Android TTS and optional Indic Tiny TTS speech packs; voice input with Android speech recognition and optional offline speech-model packs; and secure owner-phone relay controls."
             echo
             echo "## Important limitations"
             echo
             echo "- This is a **debug preview APK**, not a signed production release."
             echo "- Large AI and speech models are downloaded separately; they are not bundled in the APK."
             echo "- Gujarati speech output currently depends on the Android TTS engine."
-            echo "- Offline recognition accuracy, device performance and battery behavior require physical-device testing."
+            echo "- Local image generation requires a separate 1.57 GB model download and can be slow or memory-intensive on mid-range phones; physical-device testing is required.
+- Offline recognition accuracy, device performance and battery behavior require physical-device testing."
             echo "- Website/Supabase relay source is review-only and has not been deployed to production."
             echo
             echo "## Download"
