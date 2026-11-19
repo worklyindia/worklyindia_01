@@ -21,6 +21,7 @@
             android:name=".VoiceRelayService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".OfflineAiChatActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".VoiceActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" />
