@@ -123,6 +123,33 @@ Deno.serve(async (req: Request) => {
       return json({ device_id: device.id, device_token: deviceToken, message: "Device paired. Store this token securely; it will not be shown again." });
     }
 
+    if (action === "register_device") {
+      const user = await authenticatedUser(req);
+      if (!user) return json({ error: "Please sign in with your Workly India account in the app." }, 401);
+
+      // One active phone per account: replace older active registrations safely.
+      await db.from("workly_ai_voice_devices")
+        .update({ revoked_at: now })
+        .eq("user_id", user.id)
+        .is("revoked_at", null);
+
+      const deviceToken = randomHex(32);
+      const { data: device, error } = await db.from("workly_ai_voice_devices")
+        .insert({
+          user_id: user.id,
+          token_hash: await sha256(deviceToken),
+          device_name: String(body?.device_name ?? "Workly Voice Android").slice(0, 80),
+        })
+        .select("id")
+        .single();
+      if (error) throw error;
+      return json({
+        device_id: device.id,
+        device_token: deviceToken,
+        message: "This phone is securely connected to your Workly India account."
+      });
+    }
+
     if (action === "create_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
