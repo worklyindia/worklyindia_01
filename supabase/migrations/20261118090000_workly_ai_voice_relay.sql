@@ -2,18 +2,6 @@
 -- This migration is committed for review only; it is NOT applied to the live Supabase project by this PR.
 
 
-create table if not exists public.workly_ai_voice_pairings (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
-  code_hash text not null unique,
-  expires_at timestamptz not null,
-  consumed_at timestamptz,
-  created_at timestamptz not null default now()
-);
-
-create index if not exists workly_ai_voice_pairings_expiry_idx
-  on public.workly_ai_voice_pairings (expires_at);
-
 create table if not exists public.workly_ai_voice_devices (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -46,9 +34,8 @@ create table if not exists public.workly_ai_voice_jobs (
 create index if not exists workly_ai_voice_jobs_device_queue_idx
   on public.workly_ai_voice_jobs (device_id, status, created_at);
 
-alter table public.workly_ai_voice_pairings enable row level security;
 alter table public.workly_ai_voice_devices enable row level security;
 alter table public.workly_ai_voice_jobs enable row level security;
 
-revoke all on table public.workly_ai_voice_pairings, public.workly_ai_voice_devices, public.workly_ai_voice_jobs from public, anon, authenticated;
-grant select, insert, update, delete on table public.workly_ai_voice_pairings, public.workly_ai_voice_devices, public.workly_ai_voice_jobs to service_role;
+revoke all on table public.workly_ai_voice_devices, public.workly_ai_voice_jobs from public, anon, authenticated;
+grant select, insert, update, delete on table public.workly_ai_voice_devices, public.workly_ai_voice_jobs to service_role;
