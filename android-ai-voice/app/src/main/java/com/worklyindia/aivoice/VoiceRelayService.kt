@@ -102,9 +102,11 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                     continue
                 }
                 val response = VoiceRelayApi.poll(token)
+                getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putLong(LAST_POLL_KEY, System.currentTimeMillis()).apply()
                 val job = response.optJSONObject("job")
                 if (job != null) {
                     val jobId = job.optString("id")
+                    recordEvent("Website request", "Received " + job.optString("job_type").uppercase(Locale.ROOT) + " request", "Request ID: " + jobId)
                     when (job.optString("job_type")) {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
@@ -266,7 +268,26 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun setStatus(value: String) {
-        getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, value).apply()
+        val prefs = getSharedPreferences(STATUS_PREFS, MODE_PRIVATE)
+        val previous = prefs.getString(STATUS_KEY, null)
+        prefs.edit().putString(STATUS_KEY, value).apply()
+        if (previous != value) recordEvent(
+            if (value.contains("failed", true) || value.contains("error", true) || value.contains("reconnect", true)) "Error / connection" else "Server status",
+            value
+        )
+    }
+
+    private fun recordEvent(kind: String, message: String, detail: String = "") {
+        val prefs = getSharedPreferences(STATUS_PREFS, MODE_PRIVATE)
+        val events = try { org.json.JSONArray(prefs.getString(EVENTS_KEY, "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
+        events.put(org.json.JSONObject().put("at", System.currentTimeMillis()).put("kind", kind).put("message", message).put("detail", detail).put("error", kind.contains("error", true)))
+        val trimmed = org.json.JSONArray()
+        val cutoff = System.currentTimeMillis() - 3_600_000L
+        for (i in 0 until events.length()) {
+            val item = events.optJSONObject(i) ?: continue
+            if (item.optLong("at") >= cutoff) trimmed.put(item)
+        }
+        prefs.edit().putString(EVENTS_KEY, trimmed.toString()).apply()
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification(value))
     }
@@ -305,6 +326,8 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         const val NOTIFICATION_ID = 6401
         const val STATUS_PREFS = "workly_ai_voice_status"
         const val STATUS_KEY = "server_status"
+        const val LAST_POLL_KEY = "last_successful_relay_poll"
+        const val EVENTS_KEY = "recent_activity_events"
         const val POLL_INTERVAL_MS = 15_000L
     }
 }
