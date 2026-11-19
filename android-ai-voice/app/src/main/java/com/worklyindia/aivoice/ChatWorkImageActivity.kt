@@ -70,7 +70,7 @@ class ChatWorkImageActivity : Activity() {
             visibility = View.GONE
         }
         root.addView(ScrollView(this).apply {
-            addView(preview, ScrollView.LayoutParams(-1, -2))
+            addView(preview, android.widget.FrameLayout.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         saveButton = Button(this).apply {
             text = "Save image to Gallery"
