@@ -50,6 +50,10 @@ class SettingsActivity : Activity() {
         val server = card(page)
         server.addView(label("Workly India account connection", 18, primary, true))
         server.addView(label("This phone connects automatically using the Workly India account you signed into. No pairing code or website setup is needed.", 13, secondary, false))
+        server.addView(label("The website can send image requests to this phone. Download the 1.57 GB local image model in AI Image Studio first; keep the phone server running.", 13, secondary, false))
+        server.addView(button("Open AI Image Studio").apply {
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, ChatWorkImageActivity::class.java)) }
+        })
         val connected = !SecureDeviceTokenStore.read(this).isNullOrBlank()
         server.addView(label(if (connected) "Account connection: Securely registered" else "Account connection: Sign in required", 14, secondary, true))
         server.addView(label(
@@ -62,7 +66,7 @@ class SettingsActivity : Activity() {
                 stopService(Intent(this@SettingsActivity, VoiceRelayService::class.java))
             }
         })
-        page.addView(label("The phone server uses outbound HTTPS. Android may limit long-running background services; reopen Workly Voice to reconnect when Android stops it.", 12, secondary, false))
+        page.addView(label("The phone server uses outbound HTTPS for voice and image jobs. Android may limit long-running background services; reopen Workly Voice to reconnect when Android stops it. Image generation uses CPU, so it can take time and use battery.", 12, secondary, false))
         setContentView(ScrollView(this).apply { addView(page) })
     }
 
