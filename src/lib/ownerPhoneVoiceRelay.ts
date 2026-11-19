@@ -8,7 +8,7 @@ type RelayJob = {
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export async function requestOwnerPhoneVoiceAudio(text: string, language: string): Promise<string> {
+export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000): Promise<string> {
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
     body: {
       action: 'create_job',
@@ -24,7 +24,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
     detail: { status: 'queued', queuePosition: created.queue_position ?? null },
   }));
 
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await wait(350);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
