@@ -32,7 +32,7 @@ class WorklyAccountActivity : Activity() {
         root.addView(TextView(this).apply { text = "Connect your account"; textSize = 27f; setTextColor(0xFF142033.toInt()); setPadding(0, dp(8), 0, dp(6)) })
         root.addView(TextView(this).apply { text = "Sign in with the same email or phone and password you use on Workly India."; textSize = 14f; setTextColor(0xFF65748B.toInt()) })
         identity = EditText(this).apply { hint = "Email address or phone (+country code)"; maxLines = 1; setPadding(dp(12), dp(12), dp(12), dp(12)) }
-        password = EditText(this).apply { hint = "Password"; singleLine = true; inputType = 129; setPadding(dp(12), dp(12), dp(12), dp(12)) }
+        password = EditText(this).apply { hint = "Password"; maxLines = 1; inputType = 129; setPadding(dp(12), dp(12), dp(12), dp(12)) }
         root.addView(identity, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(22) })
         root.addView(password, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(10) })
         root.addView(Button(this).apply {
