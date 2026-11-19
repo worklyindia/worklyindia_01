@@ -45,6 +45,6 @@ grant select, insert, update, delete on table public.workly_ai_voice_devices, pu
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('workly-ai-voice-audio', 'workly-ai-voice-audio', false, 1300000, array['audio/wav'])
 on conflict (id) do update
-set public = false, file_size_limit = 1887436, allowed_mime_types = array['audio/wav'];
+set public = false, file_size_limit = 1300000, allowed_mime_types = array['audio/wav'];
 
 -- Only the Edge Function service role may read/write this bucket. No browser role access.
