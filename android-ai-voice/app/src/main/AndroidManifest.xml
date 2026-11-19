@@ -13,7 +13,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_workly_voice"
-        android:label="Workly Voice"
+        android:label="ChatWork"
         android:roundIcon="@drawable/ic_workly_voice"
         android:supportsRtl="true"
         android:theme="@style/WorklyVoiceTheme">
