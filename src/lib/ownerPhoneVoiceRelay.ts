@@ -9,7 +9,7 @@ type RelayJob = {
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export async function requestOwnerPhoneVoiceAudio(text: string, language: string): Promise<string> {
-  const { data: created, error: createError } = await supabase.functions.invoke('workly-ai-voice-relay', {
+  const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
     body: {
       action: 'create_job',
       job_type: 'tts',
@@ -27,7 +27,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     await wait(1200);
-    const { data, error } = await supabase.functions.invoke('workly-ai-voice-relay', {
+    const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
     if (error) throw error;
