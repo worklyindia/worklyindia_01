@@ -22,6 +22,13 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (SecureDeviceTokenStore.read(this).isNullOrBlank()) {
+            startActivity(Intent(this, WorklyAccountActivity::class.java))
+            finish()
+            return
+        }
+        val relayIntent = Intent(this, VoiceRelayService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) startForegroundService(relayIntent) else startService(relayIntent)
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(false)
@@ -44,7 +51,7 @@ class MainActivity : Activity() {
         addDestination(page, "Voice", "Text to speech and speech to text", VoiceActivity::class.java)
         addDestination(page, "AI Chat", "Chat with offline Qwen AI and use voice input", OfflineAiChatActivity::class.java)
         addDestination(page, "Downloads", "Manage AI4Bharat, Indic Tiny TTS, Shruti and Qwen models", SpeechDownloadsActivity::class.java)
-        addDestination(page, "Settings", "Pair this phone and manage the secure voice server", SettingsActivity::class.java)
+        addDestination(page, "Settings", "Manage AI models and your connected Workly account", SettingsActivity::class.java)
         page.addView(label("WORKLY VOICE · VERSION 1.0.0", 11, secondary, true).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(24), 0, 0)
