@@ -61,8 +61,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
     const db = supabase;
     const now = new Date().toISOString();
     // Remove expired audio objects before pruning their short-lived job rows.
-    const { data: expiredJobs } = await db.from("workly_ai_voice_jobs").select("result").lt("expires_at", now).limit(100);
-    const expiredAudioPaths = (expiredJobs ?? []).map((row) => row.result?.audio_path).filter((path) => typeof path === "string");
+    const { data: expiredJobs } = await db.from("workly_ai_voice_jobs").select("result,payload").lt("expires_at", now).limit(100);
+    const expiredAudioPaths = (expiredJobs ?? []).flatMap((row) => [row.result?.audio_path, row.payload?.audio_path]).filter((path) => typeof path === "string");
     if (expiredAudioPaths.length) await db.storage.from("workly-ai-voice-audio").remove(expiredAudioPaths);
     await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
 
@@ -275,6 +275,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
       if (JSON.stringify(result).length > 32_000) return json({ error: "Result exceeds 32 KB" }, 413);
 
+      const { data: jobBeforeComplete } = await db.from("workly_ai_voice_jobs")
+        .select("payload").eq("id", jobId).eq("device_id", device.id).eq("status", "running").maybeSingle();
       const { data, error } = await db.from("workly_ai_voice_jobs")
         .update({ status: "completed", result, completed_at: new Date().toISOString() })
         .eq("id", jobId)
@@ -285,6 +287,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return json({ error: "Job not found, expired, or already completed" }, 404);
+      const inputAudioPath = jobBeforeComplete?.payload?.audio_path;
+      if (typeof inputAudioPath === "string") await db.storage.from("workly-ai-voice-audio").remove([inputAudioPath]);
       return json({ job: data });
     }
 
