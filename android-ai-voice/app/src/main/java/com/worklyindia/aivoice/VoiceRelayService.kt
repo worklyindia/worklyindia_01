@@ -17,6 +17,7 @@ import org.json.JSONObject
 class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     private val running = AtomicBoolean(false)
     @Volatile private var ttsReady = false
+    @Volatile private var activeJobId: String? = null
     private var tts: TextToSpeech? = null
     private var pollThread: Thread? = null
     private var activeToken: String? = null
@@ -41,8 +42,10 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                             JSONObject().put("played_on_phone", true)
                                 .put("message", "Text was spoken by this phone. No audio file was uploaded.")
                         )
-                        setStatus("Phone server is online. Last voice request completed.")
+                        activeJobId = null
+                        setStatus("Shared phone server is online. Next queued request can start.")
                     } catch (error: Exception) {
+                        activeJobId = null
                         setStatus("Could not report completed voice request: ${error.message ?: "network error"}")
                     }
                 }.start()
@@ -53,6 +56,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                 val token = activeToken ?: return
                 Thread {
                     runCatching { VoiceRelayApi.fail(token, jobId, "Android text-to-speech playback failed.") }
+                    activeJobId = null
                     setStatus("A voice request failed on this phone.")
                 }.start()
             }
@@ -86,6 +90,10 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         setStatus("Connecting to Supabase relay…")
         while (running.get()) {
             try {
+                if (activeJobId != null) {
+                    Thread.sleep(500)
+                    continue
+                }
                 val response = VoiceRelayApi.poll(token)
                 val job = response.optJSONObject("job")
                 if (job != null) {
@@ -119,27 +127,40 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun handleTtsJob(token: String, jobId: String, payload: JSONObject) {
+        if (activeJobId != null) {
+            VoiceRelayApi.fail(token, jobId, "Phone is already processing another voice request.")
+            return
+        }
+        activeJobId = jobId
         val text = payload.optString("text").trim()
         if (text.isEmpty()) {
             VoiceRelayApi.fail(token, jobId, "TTS request has no text.")
+            activeJobId = null
             return
         }
         if (!ttsReady) {
             VoiceRelayApi.fail(token, jobId, "Android text-to-speech engine is not ready.")
+            activeJobId = null
             return
         }
         val tag = payload.optString("language", "hi-IN")
         val locale = Locale.forLanguageTag(tag)
         val engine = tts ?: run {
             VoiceRelayApi.fail(token, jobId, "Android text-to-speech engine is unavailable.")
+            activeJobId = null
             return
         }
         if (engine.isLanguageAvailable(locale) < TextToSpeech.LANG_AVAILABLE) {
             VoiceRelayApi.fail(token, jobId, "This phone has no installed TTS voice for $tag.")
+            activeJobId = null
             return
         }
         engine.setLanguage(locale)
-        engine.speak(text.take(1000), TextToSpeech.QUEUE_ADD, null, jobId)
+        val result = engine.speak(text.take(1000), TextToSpeech.QUEUE_FLUSH, null, jobId)
+        if (result == TextToSpeech.ERROR) {
+            VoiceRelayApi.fail(token, jobId, "Android could not start text-to-speech.")
+            activeJobId = null
+        }
     }
 
     override fun onInit(status: Int) {
