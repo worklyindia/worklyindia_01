@@ -90,6 +90,29 @@ object VoiceRelayApi {
         }
     }
 
+    fun downloadAudio(audioUrl: String): ByteArray {
+        val connection = (URL(audioUrl).openConnection() as HttpURLConnection).apply {
+            connectTimeout = TIMEOUT_MS
+            readTimeout = AUDIO_UPLOAD_TIMEOUT_MS
+            requestMethod = "GET"
+        }
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) throw RelayApiException(code, "Could not download caller audio.")
+            val bytes = connection.inputStream.use { it.readBytes() }
+            if (bytes.isEmpty() || bytes.size > 1_300_000) throw RelayApiException(413, "Caller audio is empty or too large.")
+            return bytes
+        } finally { connection.disconnect() }
+    }
+
+    fun transcribe(token: String, audioBytes: ByteArray): JSONObject {
+        if (audioBytes.isEmpty() || audioBytes.size > 1_300_000) throw RelayApiException(413, "Caller audio is empty or too large.")
+        val values = JSONObject().put("audio", Base64.getEncoder().encodeToString(audioBytes))
+        val response = post("speech-to-text", values, deviceToken = token)
+        if (response.statusCode !in 200..299) throw RelayApiException(response.statusCode, response.body.optString("error", "Speech recognition failed."))
+        return response.body
+    }
+
     fun fail(token: String, jobId: String, reason: String) {
         val response = post(
             "fail_job",
