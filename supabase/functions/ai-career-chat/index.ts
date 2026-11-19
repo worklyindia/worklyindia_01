@@ -4297,12 +4297,6 @@ Create a visually striking, professional image prompt with unique style, color s
     // Keep only the current user turn's inline image as an optional edit reference.
     // It is passed to the image model only when the model explicitly selects edit mode.
     const latestUserMessage = Array.isArray(messages) ? [...messages].reverse().find((m: any) => m?.role === "user") : null;
-    const latestUserText = typeof latestUserMessage?.content === "string"
-      ? latestUserMessage.content
-      : Array.isArray(latestUserMessage?.content)
-        ? latestUserMessage.content.filter((part: any) => part?.type === "text").map((part: any) => String(part.text || "")).join(" ")
-        : "";
-    const latestUserRequestsEdit = /\b(edit|change|modify|restyle|transform|retouch|remove background|replace background|background badal|kapde badal|photo edit|image edit)\b|edit karo|edit kar do|photo ko badal|tasveer badal/i.test(latestUserText);
     const latestUserImagePart = Array.isArray(latestUserMessage?.content)
       ? latestUserMessage.content.find((part: any) => part?.type === "image_url" && typeof part?.image_url?.url === "string")
       : null;
@@ -11380,8 +11374,9 @@ Remember: Tu ChatWork hai - ${BRAND_CONFIG.name} ki COMPLETE CUSTOMER SERVICE AI
         }
         const toolResults = await runWithConcurrency(currentMessage.tool_calls, 3, async (toolCall: any) => {
           const args = JSON.parse(toolCall.function.arguments);
-          if (toolCall.function.name === "generate_image_for_user" && latestUserImageDataUrl
-            && (args.use_reference_image === true || latestUserRequestsEdit)) {
+          // This tool is reached only for a generation/edit request. If the current turn
+          // includes a photo, use it as the reference rather than silently dropping it.
+          if (toolCall.function.name === "generate_image_for_user" && latestUserImageDataUrl) {
             args.use_reference_image = true;
             args.reference_image_data_url = latestUserImageDataUrl;
           }
