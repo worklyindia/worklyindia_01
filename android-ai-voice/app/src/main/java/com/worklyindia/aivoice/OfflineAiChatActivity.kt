@@ -240,6 +240,9 @@ class OfflineAiChatActivity : Activity() {
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
+            menu.add("Create / Edit Image").setOnMenuItemClickListener {
+                startActivity(Intent(this@OfflineAiChatActivity, ChatWorkImageActivity::class.java)); true
+            }
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
