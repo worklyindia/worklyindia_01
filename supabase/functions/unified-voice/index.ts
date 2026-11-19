@@ -356,6 +356,24 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   if (!result?.text) {
     return new Response(JSON.stringify({ error: 'Free AI providers are temporarily unavailable. Please try again.' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-  const replyLanguageTag = detectLanguageTag(result.text, detectLanguageTag(text, languageTag));
-  return new Response(JSON.stringify({ reply: result.text, languageTag: replyLanguageTag }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+
+  // Some free-tier models occasionally stop mid-list or mid-sentence even
+  // when the requested token budget is available. Ask the same free model
+  // chain to continue only when the first answer has no natural ending.
+  let reply = result.text.trim();
+  const hasNaturalEnding = /[.!?।॥…]["'”’)]*\\s*$/.test(reply);
+  if (!hasNaturalEnding && reply.length > 0) {
+    const continuation = await runAiChain([
+      { role: 'system', content: voiceSystemPrompt + ' Continue the existing answer only. Do not repeat its opening or any completed point. Finish the current sentence or list naturally, then end with a complete final sentence. Keep the same language and script.' },
+      { role: 'assistant', content: reply },
+      { role: 'user', content: 'Continue exactly from where the previous answer stopped and finish the answer.' },
+    ], { maxTokens: 350, temperature: 0.25, label: 'ai-voice-call-continuation', silent: true, freeOnly: true });
+    if (continuation?.text) {
+      const nextPart = continuation.text.trim();
+      if (nextPart) reply = `${reply.replace(/[\\s,;:—-]+$/, '')} ${nextPart}`.trim();
+    }
+  }
+
+  const replyLanguageTag = detectLanguageTag(reply, detectLanguageTag(text, languageTag));
+  return new Response(JSON.stringify({ reply, languageTag: replyLanguageTag }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
