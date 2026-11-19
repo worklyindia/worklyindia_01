@@ -159,8 +159,8 @@ class MainActivity : Activity() {
         }
 
         val connectionCard = addSection(
-            "Connection & Settings",
-            "Workly India account: " + (if (tokenReady) "Registered securely" else "Sign-in required") +
+            "Workly India",
+            "Workly India: " + (if (online) "Connected" else "Not Connected") +
                 "\\nConnection: " + (if (online) "Connected" else "Checking / reconnecting") +
                 "\\nStatus: " + status +
                 "\\nLast relay check: " + (if (heartbeat > 0) java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(heartbeat)) else "Not recorded") +
@@ -194,12 +194,12 @@ class MainActivity : Activity() {
             setOnClickListener { recreate() }
         })
 
-        val historyCard = addSection("Recent Activity · Last 1 Hour", "")
+        val historyCard = addSection("Logs · Last 24 Hours", "")
         val rawEvents = prefs.getString(VoiceRelayService.EVENTS_KEY, "[]") ?: "[]"
         val events = runCatching {
             val array = org.json.JSONArray(rawEvents)
             (0 until array.length()).mapNotNull { array.optJSONObject(it) }
-                .filter { System.currentTimeMillis() - it.optLong("at") <= 3_600_000L }
+                .filter { System.currentTimeMillis() - it.optLong("at") <= 86_400_000L }
                 .sortedByDescending { it.optLong("at") }
         }.getOrDefault(emptyList())
         historyCard.addView(TextView(this).apply {
@@ -228,27 +228,6 @@ class MainActivity : Activity() {
             isClickable = true
             isFocusable = true
             setOnClickListener { prefs.edit().remove(VoiceRelayService.EVENTS_KEY).apply(); recreate() }
-        })
-        page.addView(TextView(this).apply {
-            text = "Privacy & Reliability"
-            textSize = 16f
-            setTextColor(primary)
-            setTypeface(typeface, Typeface.BOLD)
-            setPadding(0, dp(4), 0, dp(4))
-        })
-        page.addView(TextView(this).apply {
-            text = "Connection and request status summaries are stored locally on this device for the activity list. Android may restrict background activity; keep Workly Voice open if the relay disconnects."
-            textSize = 12f
-            setTextColor(secondary)
-            setPadding(0, 0, 0, dp(12))
-        })
-        page.addView(TextView(this).apply {
-            text = "HINDI  •  ENGLISH  •  GUJARATI"
-            textSize = 11f
-            letterSpacing = .08f
-            gravity = Gravity.CENTER
-            setTextColor(secondary)
-            setPadding(0, dp(26), 0, dp(12))
         })
         scroll.addView(page)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
