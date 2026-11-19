@@ -92,7 +92,7 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
   window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: 'queued' } }));
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    await wait(900);
+    await wait(350);
     const { data, error } = await supabase.functions.invoke('unified-voice', { body: { action: 'get_job', job_id: jobId } });
     if (error) throw error;
     const job = data?.job as RelayJob | undefined;
