@@ -52,7 +52,7 @@ class SpeechDownloadsActivity : Activity() {
         }
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(12), dp(18), dp(24))
+            setPadding(dp(18), dp(30), dp(18), dp(24))
         }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
         header.addView(TextView(this).apply {
