@@ -59,8 +59,7 @@ bool ensure_context(const std::string& model_path) {
         set_string(options, "model_path", model_path) &&
         set_int(options, "n_threads", threads) &&
         sd_opt_set_bool(options, "enable_mmap", true) == SD_STATUS_OK &&
-        sd_opt_set_bool(options, "auto_fit", true) == SD_STATUS_OK &&
-        set_string(options, "backend", "cpu");
+        sd_opt_set_bool(options, "auto_fit", true) == SD_STATUS_OK;
 
     if (!configured) {
         LOGE("Could not configure local Stable Diffusion context: %s", sd_get_last_error());
