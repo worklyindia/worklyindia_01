@@ -67,6 +67,22 @@ class MainActivity : Activity() {
         root.addView(signalAnimation, LinearLayout.LayoutParams(-1, 0, 1f))
 
         root.addView(TextView(this).apply {
+            text = "🎨   AI Image Studio"
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Create or edit an image with Workly AI"
+            background = null
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, ChatWorkImageActivity::class.java))
+            }
+        }, LinearLayout.LayoutParams(-1, dp(64)))
+
+        root.addView(TextView(this).apply {
             text = "↓   Download Model"
             textSize = 19f
             gravity = Gravity.CENTER
