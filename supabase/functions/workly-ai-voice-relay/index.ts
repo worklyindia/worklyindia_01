@@ -188,7 +188,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       } else if (data.status === "completed" && typeof data.result?.image_path === "string") {
         const { data: signed, error: signedError } = await db.storage
           .from("workly-ai-images")
-          .createSignedUrl(data.result.image_path, 86400);
+          .createSignedUrl(data.result.image_path, 604800);
         if (signedError) throw signedError;
         job = { ...data, result: { image_url: signed.signedUrl, content_type: "image/jpeg" } };
       }
