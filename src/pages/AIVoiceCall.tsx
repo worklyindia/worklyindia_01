@@ -325,7 +325,7 @@ export default function AIVoiceCall() {
       }
     }
     // Transcript and reply remain only in component memory and are cleared by End Call.
-  }, [speakReply, stopRecognition, stopReply, startRecognition, user?.id]);
+  }, [speakReply, stopRecognition, stopReply, startRecognition, user?.id, muted]);
 
   const handlePartialTranscript = useCallback((event: Event) => {
     if (!activeRef.current) return;
@@ -397,7 +397,7 @@ export default function AIVoiceCall() {
       const started = startRecognition('auto');
       if (!started) { setCallState('error'); toast.error('Could not listen after interruption.'); }
     }, 180);
-  }, [startRecognition, stopRecognition, stopReply]);
+  }, [startRecognition, stopRecognition, stopReply, muted]);
 
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
