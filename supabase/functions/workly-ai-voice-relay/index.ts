@@ -63,66 +63,6 @@ Deno.serve(async (req: Request) => {
     await db.from("workly_ai_voice_pairings").delete().lt("expires_at", now);
     await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
 
-    if (action === "create_pairing") {
-      const user = await authenticatedUser(req);
-      if (!user) return json({ error: "Authentication required" }, 401);
-
-      // Only the newest unused code for this account should remain valid.
-      await db.from("workly_ai_voice_pairings")
-        .delete()
-        .eq("user_id", user.id)
-        .is("consumed_at", null);
-      // 12 random bytes -> 24 hex characters; short-lived and single-use.
-      await db.from("workly_ai_voice_pairings").delete().lt("expires_at", new Date().toISOString());
-      const code = randomHex(12).toUpperCase();
-      const codeHash = await sha256(code);
-      const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
-
-      const { error } = await db.from("workly_ai_voice_pairings").insert({
-        user_id: user.id,
-        code_hash: codeHash,
-        expires_at: expiresAt,
-      });
-      if (error) throw error;
-      return json({ pairing_code: code, expires_at: expiresAt, expires_in_seconds: 300 });
-    }
-
-    if (action === "claim_device") {
-      const code = typeof body?.pairing_code === "string" ? body.pairing_code.trim().toUpperCase() : "";
-      if (!/^[A-F0-9]{24}$/.test(code)) return json({ error: "Invalid or expired pairing code" }, 400);
-      const codeHash = await sha256(code);
-      const { data: pairing, error: pairingError } = await db.from("workly_ai_voice_pairings")
-        .select("id,user_id,expires_at,consumed_at")
-        .eq("code_hash", codeHash)
-        .is("consumed_at", null)
-        .gt("expires_at", new Date().toISOString())
-        .maybeSingle();
-      if (pairingError || !pairing) return json({ error: "Invalid or expired pairing code" }, 400);
-
-      const deviceToken = randomHex(32);
-      const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .insert({
-          user_id: pairing.user_id,
-          token_hash: await sha256(deviceToken),
-          device_name: String(body?.device_name ?? "Workly AI Voice Android").slice(0, 80),
-        })
-        .select("id")
-        .single();
-      if (deviceError) throw deviceError;
-
-      const { data: consumed, error: consumeError } = await db.from("workly_ai_voice_pairings")
-        .update({ consumed_at: new Date().toISOString() })
-        .eq("id", pairing.id)
-        .is("consumed_at", null)
-        .select("id")
-        .maybeSingle();
-      if (consumeError || !consumed) {
-        await db.from("workly_ai_voice_devices").delete().eq("id", device.id);
-        return json({ error: "Pairing code was already used. Generate a new code." }, 409);
-      }
-      return json({ device_id: device.id, device_token: deviceToken, message: "Device paired. Store this token securely; it will not be shown again." });
-    }
-
     if (action === "register_device") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Please sign in with your Workly India account in the app." }, 401);
