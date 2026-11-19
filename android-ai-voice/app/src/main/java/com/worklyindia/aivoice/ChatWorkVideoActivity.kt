@@ -137,10 +137,21 @@ class ChatWorkVideoActivity : Activity() {
     }
 
     private fun refreshButtons() {
-        val runtime = WanVideoGenerator.isRuntimeAvailable(this)
-        download.isEnabled = !WanVideoModelManager.isReady(this)
-        generate.isEnabled = runtime && WanVideoModelManager.isReady(this)
-        if (runtime) status.text = runtimeStatus()
+        download.isEnabled = false
+        generate.isEnabled = false
+        Thread {
+            val runtime = WanVideoGenerator.isRuntimeAvailable(this)
+            val ready = WanVideoModelManager.isReady(this)
+            runOnUiThread {
+                download.isEnabled = !ready
+                generate.isEnabled = runtime && ready
+                status.text = when {
+                    !runtime -> "Wan native runtime is not present in this installed APK yet. Build the PR to bundle it."
+                    ready -> "Wan model pack: Ready"
+                    else -> "Wan model pack: Not downloaded"
+                }
+            }
+        }.start()
     }
 
     private fun setBusy(busy: Boolean) {
