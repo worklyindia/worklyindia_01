@@ -3,14 +3,11 @@ package com.worklyindia.aivoice
 import android.app.Activity
 import android.content.ContentValues
 import android.content.pm.PackageManager
-import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.util.Base64
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -23,28 +20,21 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.provider.MediaStore
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
 
-/** Uses the same authenticated Workly AI Chat image-generation pipeline as the website. */
+/** Generates images on-device with the downloaded local Stable Diffusion model. */
 class ChatWorkImageActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private lateinit var prompt: EditText
     private lateinit var status: TextView
     private lateinit var preview: ImageView
     private lateinit var generateButton: Button
-    private lateinit var chooseButton: Button
     private lateinit var saveButton: Button
     private lateinit var modelButton: Button
     private lateinit var modelProgress: ProgressBar
     private val modelHandler = Handler(Looper.getMainLooper())
     private var modelPoll: Runnable? = null
     private var lastGeneratedBitmap: Bitmap? = null
-    private var referenceImageDataUrl: String? = null
     private var busy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,7 +55,7 @@ class ChatWorkImageActivity : Activity() {
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
         status = TextView(this).apply {
-            text = "Create a new image or choose a photo to edit."
+            text = "Download the local model, then generate images on this phone without a paid image API."
             textSize = 13f; setTextColor(0xFF65748B.toInt()); setPadding(dp(4), dp(8), dp(4), dp(10))
         }
         root.addView(status)
@@ -97,83 +87,19 @@ class ChatWorkImageActivity : Activity() {
         }
         root.addView(saveButton, LinearLayout.LayoutParams(-1, dp(48)))
         prompt = EditText(this).apply {
-            hint = "Describe the image or how to edit your photo…"
+            hint = "Describe the image you want to create…"
             minLines = 2; maxLines = 5; textSize = 16f
             setTextColor(0xFF142033.toInt())
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
         root.addView(prompt, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        chooseButton = Button(this).apply {
-            text = "Photo edit coming soon"; isAllCaps = false
-            isEnabled = false
-        }
-        actions.addView(chooseButton, LinearLayout.LayoutParams(0, dp(50), 1f))
         generateButton = Button(this).apply {
-            text = "Create image"; isAllCaps = false
+            text = "Create image on this phone"; isAllCaps = false
             setOnClickListener { generateImage() }
         }
-        actions.addView(generateButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
-        root.addView(actions)
+        root.addView(generateButton, LinearLayout.LayoutParams(-1, dp(50)))
         setContentView(root)
         updateModelDownloadUi()
-    }
-
-    private fun choosePhoto() {
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-        }
-        startActivityForResult(intent, REQUEST_IMAGE)
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_IMAGE || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        status.text = "Preparing your photo…"
-        worker.execute {
-            try {
-                val bytes = contentResolver.openInputStream(uri)?.use { input ->
-                    val output = ByteArrayOutputStream()
-                    val buffer = ByteArray(16 * 1024)
-                    var total = 0
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        total += count
-                        require(total <= 25 * 1024 * 1024) { "Photo is too large. Choose an image under 25 MB." }
-                        output.write(buffer, 0, count)
-                    }
-                    output.toByteArray()
-                } ?: throw IllegalStateException("Could not read the selected photo.")
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-                require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Selected file is not a valid image." }
-                val sample = maxOf(1, maxOf(bounds.outWidth, bounds.outHeight) / 1800)
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
-                    ?: throw IllegalStateException("Could not decode the selected photo.")
-                val scaled = if (maxOf(bitmap.width, bitmap.height) > 1600) {
-                    val ratio = 1600f / maxOf(bitmap.width, bitmap.height)
-                    Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt().coerceAtLeast(1), (bitmap.height * ratio).toInt().coerceAtLeast(1), true)
-                } else bitmap
-                val output = ByteArrayOutputStream()
-                scaled.compress(Bitmap.CompressFormat.JPEG, 82, output)
-                val encoded = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
-                require(encoded.length <= MAX_IMAGE_BASE64_CHARS) { "Photo is too large. Choose a smaller image." }
-                val dataUrl = "data:image/jpeg;base64,$encoded"
-                runOnUiThread {
-                    referenceImageDataUrl = dataUrl
-                    preview.setImageBitmap(scaled)
-                    preview.visibility = View.VISIBLE
-                    status.text = "Photo attached. Describe the changes you want, then tap Create image."
-                    chooseButton.text = "Change photo"
-                }
-            } catch (error: Exception) {
-                runOnUiThread { status.text = error.message ?: "Could not prepare this photo." }
-            }
-        }
     }
 
     private fun generateImage() {
@@ -190,7 +116,6 @@ class ChatWorkImageActivity : Activity() {
         }
         busy = true
         generateButton.isEnabled = false
-        chooseButton.isEnabled = false
         status.text = "Generating image locally on this phone. No paid image API is used…"
         worker.execute {
             try {
@@ -209,7 +134,6 @@ class ChatWorkImageActivity : Activity() {
                 runOnUiThread {
                     busy = false
                     generateButton.isEnabled = true
-                    chooseButton.isEnabled = false
                 }
             }
         }
@@ -360,8 +284,6 @@ class ChatWorkImageActivity : Activity() {
     }
 
     companion object {
-        private const val REQUEST_IMAGE = 8201
         private const val REQUEST_SAVE_PERMISSION = 8202
-        private const val MAX_IMAGE_BASE64_CHARS = 10_000_000
     }
 }
