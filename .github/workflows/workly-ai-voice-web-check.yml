@@ -3,7 +3,7 @@ name: ChatWork AI Website Checks
 
 on:
   push:
-    branches: [feature/workly-ai-voice-server-app]
+    branches: [feature/workly-ai-voice-server-app, feat/chatwork-ai-image-studio-mainline]
     paths:
       - "package.json"
       - "src/hooks/**"
@@ -27,6 +27,8 @@ on:
       - "src/App.tsx"
       - "src/lib/browserOfflineVoice.ts"
       - "src/lib/nativeAppBridge.ts"
+      - "src/lib/ownerPhoneVoiceRelay.ts"
+      - "src/pages/AICareerAssistant.tsx"
       - "src/pages/Settings.tsx"
       - ".github/workflows/workly-ai-voice-web-check.yml"
   workflow_dispatch:
