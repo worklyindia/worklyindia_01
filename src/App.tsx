@@ -151,7 +151,6 @@ const CaseStudies = lazyRetry(() => import("./pages/CaseStudies"));
 
 const HelpCenter = lazyRetry(() => import("./pages/HelpCenter"));
 const Settings = lazyRetry(() => import("./pages/Settings"));
-const WorklyAIVoiceDevices = lazyRetry(() => import("./pages/WorklyAIVoiceDevices"));
 const AccountChangePage = lazyRetry(() => import("./pages/AccountChangePage"));
 const RateApp = lazyRetry(() => import("./pages/RateApp"));
 const AllReviews = lazyRetry(() => import("./pages/AllReviews"));
@@ -1208,11 +1207,6 @@ const AppContent = () => {
         <Route path="/monthly-competition/history" element={
           <ProtectedRoute>
             <ReferralOnboardingGuard><CompetitionHistory /></ReferralOnboardingGuard>
-          </ProtectedRoute>
-        } />
-        <Route path="/settings/ai-voice-server" element={
-          <ProtectedRoute requireCompleteProfile>
-            <WorklyAIVoiceDevices />
           </ProtectedRoute>
         } />
         <Route path="/settings" element={
