@@ -217,9 +217,11 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             .orEmpty()
         // Prefer an online voice for natural cloud-connected call audio, while
         // retaining an installed offline voice as a resilience option.
+        // Prefer an installed on-device voice for low-latency calls.
+        // Use a network voice only when no offline voice exists for this language.
         val selectedVoice = matchingVoices
             .maxByOrNull { voice ->
-                (if (voice.locale == locale) 2 else 1) + (if (voice.isNetworkConnectionRequired) 2 else 0)
+                (if (voice.locale == locale) 2 else 1) + (if (!voice.isNetworkConnectionRequired) 4 else 0)
             }
         if (selectedVoice == null) {
             VoiceRelayApi.fail(token, jobId, "No installed Android TTS voice is available for $tag. Install a Hindi, Gujarati or English voice in Android language settings.")
@@ -328,6 +330,6 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         const val STATUS_KEY = "server_status"
         const val LAST_POLL_KEY = "last_successful_relay_poll"
         const val EVENTS_KEY = "recent_activity_events"
-        const val POLL_INTERVAL_MS = 15_000L
+        const val POLL_INTERVAL_MS = 1_000L
     }
 }
