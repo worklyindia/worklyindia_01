@@ -8,6 +8,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.view.Gravity
 import android.view.View
@@ -37,6 +39,10 @@ class ChatWorkImageActivity : Activity() {
     private lateinit var generateButton: Button
     private lateinit var chooseButton: Button
     private lateinit var saveButton: Button
+    private lateinit var modelButton: Button
+    private lateinit var modelProgress: ProgressBar
+    private val modelHandler = Handler(Looper.getMainLooper())
+    private var modelPoll: Runnable? = null
     private var lastGeneratedBitmap: Bitmap? = null
     private var referenceImageDataUrl: String? = null
     private var busy = false
@@ -63,6 +69,17 @@ class ChatWorkImageActivity : Activity() {
             textSize = 13f; setTextColor(0xFF65748B.toInt()); setPadding(dp(4), dp(8), dp(4), dp(10))
         }
         root.addView(status)
+        modelButton = Button(this).apply {
+            isAllCaps = false
+            setOnClickListener { startModelDownload() }
+        }
+        root.addView(modelButton, LinearLayout.LayoutParams(-1, dp(48)))
+        modelProgress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+        }
+        root.addView(modelProgress, LinearLayout.LayoutParams(-1, dp(6)))
         preview = ImageView(this).apply {
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -88,8 +105,8 @@ class ChatWorkImageActivity : Activity() {
         root.addView(prompt, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         chooseButton = Button(this).apply {
-            text = "Add photo"; isAllCaps = false
-            setOnClickListener { choosePhoto() }
+            text = "Photo edit coming soon"; isAllCaps = false
+            isEnabled = false
         }
         actions.addView(chooseButton, LinearLayout.LayoutParams(0, dp(50), 1f))
         generateButton = Button(this).apply {
@@ -99,6 +116,7 @@ class ChatWorkImageActivity : Activity() {
         actions.addView(generateButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
         root.addView(actions)
         setContentView(root)
+        updateModelDownloadUi()
     }
 
     private fun choosePhoto() {
@@ -165,42 +183,124 @@ class ChatWorkImageActivity : Activity() {
             return
         }
         if (busy) return
+        if (!ImageModelManager.isModelReady(this)) {
+            status.text = "Download the 1.57 GB local image model over Wi-Fi first."
+            startModelDownload()
+            return
+        }
         busy = true
         generateButton.isEnabled = false
         chooseButton.isEnabled = false
-        status.text = if (referenceImageDataUrl == null) "Creating image with Workly AI…" else "Editing your photo with Workly AI…"
+        status.text = "Generating image locally on this phone. No paid image API is used…"
         worker.execute {
             try {
-                val token = getValidAccessToken()
-                val content = JSONArray().put(JSONObject().put("type", "text").put("text", text))
-                referenceImageDataUrl?.let { dataUrl ->
-                    content.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", dataUrl)))
-                }
-                val userMessage = JSONObject().put("role", "user").put("content", content)
-                val body = JSONObject()
-                    .put("messages", JSONArray().put(userMessage))
-                    .put("hasImages", referenceImageDataUrl != null)
-                    .put("current_domain", "worklyindia.devs.surf")
-                    .put("currentPage", "ChatWork Android AI Image Studio")
-                val imageUrl = callWorklyAiImage(token, body)
-                val bitmap = downloadGeneratedImage(imageUrl)
+                val bitmap = LocalImageGenerator.generateBitmap(this@ChatWorkImageActivity, text, 512, 512, 8)
                 runOnUiThread {
                     lastGeneratedBitmap = bitmap
                     preview.setImageBitmap(bitmap)
                     preview.visibility = View.VISIBLE
                     saveButton.visibility = View.VISIBLE
-                    status.text = "Image ready. Tap Save image to Gallery to keep it on your phone."
+                    status.text = "Image generated on this phone. Tap Save image to Gallery."
                     prompt.setText("")
-                    referenceImageDataUrl = null
-                    chooseButton.text = "Add photo"
                 }
             } catch (error: Exception) {
-                runOnUiThread { status.text = error.message ?: "Image generation failed. Please try again." }
+                runOnUiThread { status.text = error.message ?: "Local image generation failed. Please try again." }
             } finally {
                 runOnUiThread {
                     busy = false
                     generateButton.isEnabled = true
-                    chooseButton.isEnabled = true
+                    chooseButton.isEnabled = false
+                }
+            }
+        }
+    }
+
+    private fun startModelDownload() {
+        if (ImageModelManager.isModelReady(this)) {
+            modelButton.text = "Local image model ready ✓"
+            modelButton.isEnabled = false
+            modelProgress.progress = 100
+            modelProgress.visibility = View.VISIBLE
+            status.text = "Local image model is ready. Image generation runs on this phone."
+            return
+        }
+        try {
+            val id = ImageModelManager.startDownload(this)
+            if (id <= 0L) {
+                updateModelDownloadUi()
+                return
+            }
+            modelButton.text = "Downloading local model…"
+            modelButton.isEnabled = false
+            modelProgress.visibility = View.VISIBLE
+            status.text = "Downloading 1.57 GB model over Wi-Fi. You can keep ChatWork open."
+            watchModelDownload()
+        } catch (error: Exception) {
+            status.text = error.message ?: "Could not start model download."
+        }
+    }
+
+    private fun watchModelDownload() {
+        modelPoll?.let { modelHandler.removeCallbacks(it) }
+        val poll = object : Runnable {
+            override fun run() {
+                val id = ImageModelManager.savedDownloadId(this@ChatWorkImageActivity) ?: return
+                val state = ImageModelManager.query(this@ChatWorkImageActivity, id)
+                if (state == null) {
+                    status.text = "Model download status is unavailable. Check the Android Downloads notification."
+                    modelButton.isEnabled = true
+                    modelButton.text = "Resume local model download"
+                    return
+                }
+                modelProgress.visibility = View.VISIBLE
+                modelProgress.progress = state.progressPercent
+                when (state.status) {
+                    android.app.DownloadManager.STATUS_SUCCESSFUL -> {
+                        if (ImageModelManager.isModelReady(this@ChatWorkImageActivity)) {
+                            modelButton.text = "Local image model ready ✓"
+                            modelButton.isEnabled = false
+                            modelProgress.progress = 100
+                            status.text = "Model downloaded and verified by file size. Local image generation is ready."
+                        } else {
+                            modelButton.text = "Retry model download"
+                            modelButton.isEnabled = true
+                            status.text = "Downloaded model size did not match the expected file. Please retry."
+                        }
+                    }
+                    android.app.DownloadManager.STATUS_FAILED -> {
+                        modelButton.text = "Retry local model download"
+                        modelButton.isEnabled = true
+                        status.text = "Model download failed (reason ${state.reason}). Check Wi-Fi and free storage."
+                    }
+                    else -> {
+                        modelButton.text = "Downloading local model… ${state.progressPercent}%"
+                        modelButton.isEnabled = false
+                        status.text = "Downloading local image model: ${state.progressPercent}%"
+                        modelHandler.postDelayed(this, 1000)
+                    }
+                }
+            }
+        }
+        modelPoll = poll
+        modelHandler.post(poll)
+    }
+
+    private fun updateModelDownloadUi() {
+        if (ImageModelManager.isModelReady(this)) {
+            modelButton.text = "Local image model ready ✓"
+            modelButton.isEnabled = false
+            modelProgress.progress = 100
+            modelProgress.visibility = View.VISIBLE
+        } else {
+            modelButton.text = "Download local AI model (1.57 GB · Wi-Fi)"
+            modelButton.isEnabled = true
+            modelProgress.visibility = View.GONE
+            ImageModelManager.savedDownloadId(this)?.let { id ->
+                val state = ImageModelManager.query(this, id)
+                if (state?.status == android.app.DownloadManager.STATUS_RUNNING ||
+                    state?.status == android.app.DownloadManager.STATUS_PENDING ||
+                    state?.status == android.app.DownloadManager.STATUS_PAUSED) {
+                    watchModelDownload()
                 }
             }
         }
@@ -251,113 +351,10 @@ class ChatWorkImageActivity : Activity() {
         }
     }
 
-    private fun getValidAccessToken(): String {
-        var access = SecureDeviceTokenStore.readAccessToken(this)
-            ?: throw IllegalStateException("Connect your Workly India account in ChatWork Settings first.")
-        val refresh = SecureDeviceTokenStore.readRefreshToken(this)
-            ?: throw IllegalStateException("Your secure sign-in session is missing. Reconnect your Workly India account.")
-        val expiresAt = runCatching {
-            val part = access.split(".")[1]
-            val payload = String(Base64.decode(part, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING), Charsets.UTF_8)
-            JSONObject(payload).optLong("exp", 0L)
-        }.getOrDefault(0L)
-        if (expiresAt > System.currentTimeMillis() / 1000L + 90L) return access
-        val connection = (URL("${BuildConfig.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 15000; readTimeout = 20000; doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-        }
-        try {
-            connection.outputStream.use {
-                it.write(JSONObject().put("refresh_token", refresh).toString().toByteArray(Charsets.UTF_8))
-            }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val result = JSONObject(stream?.bufferedReader()?.use { it.readText() }.orEmpty().ifBlank { "{}" })
-            if (code !in 200..299) throw IllegalStateException("Workly sign-in expired. Reconnect your account in ChatWork Settings.")
-            access = result.optString("access_token")
-            val nextRefresh = result.optString("refresh_token", refresh)
-            if (access.isBlank()) throw IllegalStateException("Could not refresh your Workly sign-in.")
-            SecureDeviceTokenStore.saveAuthSession(this, access, nextRefresh)
-            return access
-        } finally { connection.disconnect() }
-    }
-
-    private fun callWorklyAiImage(accessToken: String, body: JSONObject): String {
-        val connection = (URL("${BuildConfig.SUPABASE_URL}/functions/v1/ai-career-chat").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 30000; readTimeout = 180000; doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Accept", "text/event-stream, application/json")
-            setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-            setRequestProperty("Authorization", "Bearer $accessToken")
-        }
-        try {
-            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) {
-                val detail = runCatching {
-                    val json = JSONObject(raw)
-                    json.optString("userMessage").ifBlank { json.optString("message").ifBlank { json.optString("error") } }
-                }.getOrDefault(raw)
-                throw IllegalStateException(detail.ifBlank { "Workly AI request failed (HTTP $code)." }.take(300))
-            }
-
-            // The website transport supports both JSON image responses and SSE image events.
-            // Keep the Android client compatible with both response modes.
-            val contentType = connection.contentType.orEmpty()
-            if (contentType.contains("application/json", ignoreCase = true) || raw.trimStart().startsWith("{")) {
-                val json = JSONObject(raw)
-                val directUrl = json.optString("imageUrl")
-                    .ifBlank { json.optString("image_url") }
-                    .ifBlank { json.optString("url") }
-                if (directUrl.startsWith("https://")) return directUrl
-                val message = json.optString("userMessage").ifBlank { json.optString("error") }
-                throw IllegalStateException(message.ifBlank { "Workly AI returned no image. Please try again." })
-            }
-
-            var imageUrl: String? = null
-            var streamError: String? = null
-            raw.lineSequence().forEach { line ->
-                if (!line.startsWith("data: ")) return@forEach
-                val payload = line.removePrefix("data: ").trim()
-                if (payload.isBlank() || payload == "[DONE]") return@forEach
-                runCatching {
-                    val event = JSONObject(payload)
-                    when (event.optString("type")) {
-                        "image" -> imageUrl = event.optString("url").takeIf { it.startsWith("https://") }
-                        "error" -> streamError = event.optString("message").ifBlank { "Workly AI could not create the image." }
-                        "status" -> runOnUiThread { status.text = event.optString("text").ifBlank { "Creating image…" } }
-                    }
-                }
-            }
-            if (!imageUrl.isNullOrBlank()) return imageUrl!!
-            if (!streamError.isNullOrBlank()) throw IllegalStateException(streamError)
-            val markdown = Regex("!\\[[^]]*]\\((https?://[^)]+)\\)").find(raw)?.groupValues?.getOrNull(1)
-            if (!markdown.isNullOrBlank()) return markdown
-            throw IllegalStateException("Workly AI finished without returning an image. Please try again.")
-        } finally { connection.disconnect() }
-    }
-
-    private fun downloadGeneratedImage(imageUrl: String): Bitmap {
-        require(imageUrl.startsWith("https://")) { "AI returned an unsafe image link." }
-        val connection = (URL(imageUrl).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20000; readTimeout = 30000; requestMethod = "GET"
-        }
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) throw IllegalStateException("Generated image could not be downloaded.")
-            val bytes = connection.inputStream.use { it.readBytes() }
-            require(bytes.isNotEmpty() && bytes.size <= 15 * 1024 * 1024) { "Generated image is empty or too large." }
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                ?: throw IllegalStateException("Generated image format is not supported.")
-        } finally { connection.disconnect() }
-    }
-
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
+        modelPoll?.let { modelHandler.removeCallbacks(it) }
         worker.shutdownNow()
         super.onDestroy()
     }
