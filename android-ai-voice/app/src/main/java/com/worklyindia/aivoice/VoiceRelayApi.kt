@@ -113,6 +113,19 @@ object VoiceRelayApi {
         return response.body
     }
 
+    fun uploadImage(token: String, jobId: String, imageBytes: ByteArray) {
+        if (imageBytes.isEmpty() || imageBytes.size > 1_200_000) {
+            throw RelayApiException(413, "Generated image is empty or exceeds 1.2 MB.")
+        }
+        val values = JSONObject()
+            .put("job_id", jobId)
+            .put("image_base64", Base64.getEncoder().encodeToString(imageBytes))
+        val response = post("upload_image", values, deviceToken = token)
+        if (response.statusCode !in 200..299) {
+            throw RelayApiException(response.statusCode, response.body.optString("error", "Could not upload generated image"))
+        }
+    }
+
     fun fail(token: String, jobId: String, reason: String) {
         val response = post(
             "fail_job",
