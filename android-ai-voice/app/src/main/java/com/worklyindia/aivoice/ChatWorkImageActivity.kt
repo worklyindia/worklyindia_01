@@ -121,6 +121,7 @@ class ChatWorkImageActivity : Activity() {
             try {
                 val bitmap = LocalImageGenerator.generateBitmap(this@ChatWorkImageActivity, text, 512, 512, 8)
                 runOnUiThread {
+                    lastGeneratedBitmap?.recycle()
                     lastGeneratedBitmap = bitmap
                     preview.setImageBitmap(bitmap)
                     preview.visibility = View.VISIBLE
@@ -280,6 +281,8 @@ class ChatWorkImageActivity : Activity() {
     override fun onDestroy() {
         modelPoll?.let { modelHandler.removeCallbacks(it) }
         worker.shutdownNow()
+        lastGeneratedBitmap?.recycle()
+        lastGeneratedBitmap = null
         super.onDestroy()
     }
 
