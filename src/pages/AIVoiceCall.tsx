@@ -8,8 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAIChatSettings } from '@/hooks/useAIChatSettings';
 import { getWorklyAndroidBridge } from '@/lib/nativeAppBridge';
 import { requestOwnerPhoneAIReply, requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
-import { speakBrowserLocalReply, stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
-import { callAICareerChat } from '@/lib/aiChatTransport';
+import { stopBrowserLocalReply } from '@/lib/browserOfflineVoice';
 import { chatStorage, type StoredMessage } from '@/lib/chatStorage';
 import { prepareShrutiRecognition, startShrutiRecognition, stopShrutiRecognition } from '@/lib/shrutiSpeech';
 import { formatChatStamp } from '@/utils/chatTimestamp';
@@ -555,6 +554,7 @@ export default function AIVoiceCall() {
         </div>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
+        <p className={`mt-2 max-w-xs text-xs ${errorMessage ? 'text-rose-300' : 'text-cyan-100/55'}`} aria-live="polite">{errorMessage || voiceStage}</p>
         <div className="mt-10 w-full">
           {!callStarted ? (
             <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">
