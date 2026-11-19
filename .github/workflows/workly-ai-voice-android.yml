@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/workly-ai-voice-server-app
+      - feat/voice-settings-connection-call-history
     paths:
       - "android-ai-voice/**"
       - ".github/workflows/workly-ai-voice-android.yml"
