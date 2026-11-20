@@ -175,6 +175,16 @@ export default function AIVoiceModels() {
           <Mic2 className="h-7 w-7 text-primary" />
         </div>
 
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1 text-sm">
+              <p className="font-semibold">Try Kokoro on this phone</p>
+              <p className="text-muted-foreground">Optional browser-local English TTS test. The model is downloaded on demand and runs on your device.</p>
+            </div>
+            <Button className="shrink-0" onClick={() => navigate("/ai-voice-models/kokoro-mobile")}>Open mobile test</Button>
+          </CardContent>
+        </Card>
+
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex gap-3 p-4">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
