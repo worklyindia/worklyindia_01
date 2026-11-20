@@ -3,6 +3,7 @@ name: ChatWork Android
 on:
   push:
     branches:
+      - main
       - feature/workly-ai-voice-server-app
     paths:
       - "android-ai-voice/**"
