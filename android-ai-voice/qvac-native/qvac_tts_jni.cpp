@@ -100,7 +100,7 @@ void throwJava(JNIEnv* env, const std::string& message) {
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_worklyindia_aivoice_QvacTtsEngine_nativeCreate(
     JNIEnv* env, jclass, jint kind, jstring modelDir, jstring modelA, jstring modelB,
-    jstring description, jstring referenceAudio, jstring referenceText, jint threads) {
+    jstring description, jstring referenceAudio, jstring referenceText, jstring language, jint threads) {
     try {
         auto instance = std::make_unique<Instance>();
         instance->kind = static_cast<EngineKind>(kind);
@@ -110,6 +110,7 @@ Java_com_worklyindia_aivoice_QvacTtsEngine_nativeCreate(
         const std::string desc = utf8(env, description);
         const std::string refAudio = utf8(env, referenceAudio);
         const std::string refText = utf8(env, referenceText);
+        const std::string languageCode = utf8(env, language);
         const int nThreads = std::max(1, std::min(4, static_cast<int>(threads)));
 
         if (kind == CHATTERBOX) {
@@ -117,6 +118,7 @@ Java_com_worklyindia_aivoice_QvacTtsEngine_nativeCreate(
             opts.t3_gguf_path = a;
             opts.s3gen_gguf_path = b;
             opts.n_threads = nThreads;
+            opts.language = languageCode.empty() ? "en" : languageCode;
             opts.n_predict = 512;
             opts.n_gpu_layers = 0;
             instance->chatterbox = std::make_unique<tts_cpp::chatterbox::Engine>(opts);
@@ -127,6 +129,7 @@ Java_com_worklyindia_aivoice_QvacTtsEngine_nativeCreate(
             opts.merges_path = b;
             opts.reference_audio = refAudio;
             opts.prompt_text = refText;
+            opts.language = languageCode.empty() ? "en" : languageCode;
             opts.n_threads = nThreads;
             opts.n_gpu_layers = 0;
             instance->cosyvoice = std::make_unique<tts_cpp::cosyvoice::Engine>(opts);
