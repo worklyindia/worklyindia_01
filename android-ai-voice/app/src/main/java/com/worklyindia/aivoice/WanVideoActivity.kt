@@ -5,6 +5,9 @@ import android.app.ActivityManager
 import android.app.AlertDialog
 import android.content.ContentValues
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -214,6 +217,44 @@ class WanVideoActivity : Activity() {
 
     private fun startDownload() {
         if (busy) return
+        val prefs = getSharedPreferences("workly_wan_download_preferences", MODE_PRIVATE)
+        if (prefs.contains("allow_mobile_data")) {
+            val allowMobile = prefs.getBoolean("allow_mobile_data", false)
+            if (!allowMobile && wifiNetwork() == null) {
+                Toast.makeText(this, "Connect to Wi-Fi to download the 4.73 GB Wan model.", Toast.LENGTH_LONG).show()
+                return
+            }
+            beginDownload(allowMobile)
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Download 4.73 GB video model?")
+            .setMessage("Choose Wi-Fi only to avoid mobile data charges, or explicitly allow mobile data for this large one-time download.")
+            .setNegativeButton("Wi-Fi only") { _, _ ->
+                prefs.edit().putBoolean("allow_mobile_data", false).apply()
+                if (wifiNetwork() == null) {
+                    Toast.makeText(this, "Connect to Wi-Fi, then tap Download Wan model.", Toast.LENGTH_LONG).show()
+                } else beginDownload(false)
+            }
+            .setPositiveButton("Allow mobile data") { _, _ ->
+                prefs.edit().putBoolean("allow_mobile_data", true).apply()
+                beginDownload(true)
+            }
+            .setNeutralButton("Cancel", null)
+            .show()
+    }
+
+    private fun wifiNetwork(): Network? {
+        val manager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        return manager.allNetworks.firstOrNull { network ->
+            val capabilities = manager.getNetworkCapabilities(network)
+            capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        }
+    }
+
+    private fun beginDownload(allowMobileData: Boolean) {
+        if (busy) return
         busy = true
         downloadButton.isEnabled = false
         cancelDownloadButton.visibility = View.VISIBLE
@@ -221,7 +262,14 @@ class WanVideoActivity : Activity() {
         downloadProgress.progress = 0
         downloadProgressText.text = "Starting secure download…"
         worker.execute {
+            val connectivity = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+            var wifiBound = false
             try {
+                if (!allowMobileData) {
+                    val wifi = wifiNetwork() ?: throw IllegalStateException("Wi-Fi disconnected. Connect to Wi-Fi and retry.")
+                    if (!connectivity.bindProcessToNetwork(wifi)) throw IllegalStateException("Could not bind this download to Wi-Fi.")
+                    wifiBound = true
+                }
                 val snapshot = WanVideoManager.download(this) { progress ->
                     val percent = if (progress.totalBytes > 0) (progress.completedBytes * 100 / progress.totalBytes).toInt().coerceIn(0, 100) else 0
                     main.post {
@@ -246,6 +294,8 @@ class WanVideoActivity : Activity() {
                     downloadButton.isEnabled = true
                     refreshStatus()
                 }
+            } finally {
+                if (wifiBound) connectivity.bindProcessToNetwork(null)
             }
         }
     }
