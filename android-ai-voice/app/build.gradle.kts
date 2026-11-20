@@ -202,7 +202,6 @@ val stageQvacTtsSource by tasks.registering {
     inputs.dir(qvacTtsSource)
     inputs.dir(qvacGgmlSource)
     inputs.dir(sentencePieceSource)
-    outputs.dir(qvacNativeBuildDir)
     doLast {
         check(File(qvacTtsSource, "CMakeLists.txt").isFile) {
             "QVAC TTS source submodule is missing. Run: git submodule update --init --recursive"
@@ -230,6 +229,9 @@ val stageQvacTtsSource by tasks.registering {
 val configureQvacNative by tasks.registering(Exec::class) {
     dependsOn(stageQvacTtsSource)
     inputs.dir(layout.projectDirectory.dir("../qvac-native"))
+    inputs.dir(qvacTtsSource)
+    inputs.dir(qvacGgmlSource)
+    inputs.dir(sentencePieceSource)
     outputs.dir(qvacNativeBuildDir)
     commandLine(
         "cmake", "-S", layout.projectDirectory.dir("../qvac-native").asFile.absolutePath,
@@ -246,6 +248,10 @@ val configureQvacNative by tasks.registering(Exec::class) {
 
 val buildQvacNative by tasks.registering(Exec::class) {
     dependsOn(configureQvacNative, buildQwenNative)
+    inputs.dir(qvacNativeBuildDir)
+    inputs.dir(qvacTtsSource)
+    inputs.dir(qvacGgmlSource)
+    inputs.dir(sentencePieceSource)
     outputs.file(qvacNativeOutput)
     commandLine(
         "cmake", "--build", qvacNativeBuildDir.get().asFile.absolutePath,
