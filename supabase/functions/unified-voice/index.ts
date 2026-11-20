@@ -403,6 +403,17 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
     }
   }
 
+  // Remove exact consecutive sentence duplicates sometimes emitted by small free models.
+  const sentenceParts = reply.match(/[^.!?।॥]+[.!?।॥]?/gu) ?? [reply];
+  const uniqueSentences: string[] = [];
+  for (const part of sentenceParts) {
+    const normalized = part.trim().replace(/[.!?।॥]+$/u, '').toLocaleLowerCase();
+    const previous = uniqueSentences.at(-1)?.replace(/[.!?।॥]+$/u, '').toLocaleLowerCase();
+    if (normalized && normalized === previous) continue;
+    if (part.trim()) uniqueSentences.push(part.trim());
+  }
+  reply = uniqueSentences.join(' ').replace(/\s+/g, ' ').trim();
+
   const replyLanguageTag = detectLanguageTag(reply, detectLanguageTag(text, languageTag));
   return new Response(JSON.stringify({ reply, languageTag: replyLanguageTag }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
