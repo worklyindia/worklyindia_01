@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, PhoneOff } from 'lucide-react';
+import { Download, Mic, PhoneOff } from 'lucide-react';
 import LottieSearchIcon from '@/components/LottieSearchIcon';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -601,6 +601,10 @@ export default function AIVoiceCall() {
               <span>End Call</span>
             </button>
           )}
+          <Button variant="outline" onClick={() => navigate('/ai-voice-models')} className="mt-3 h-11 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+            <Download className="mr-2 h-4 w-4" />
+            TTS Model Library & Downloads
+          </Button>
         </div>
       </section>
     </main>
