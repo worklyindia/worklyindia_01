@@ -260,8 +260,8 @@ class SpeechDownloadsActivity : Activity() {
                                         Toast.makeText(this@SpeechDownloadsActivity, "MOSS audio playback failed.", Toast.LENGTH_LONG).show()
                                         true
                                     }
-                                    prepareAsync()
                                     setOnPreparedListener { it.start() }
+                                    prepareAsync()
                                 }
                                 Toast.makeText(this, "MOSS speech generated · ${result.durationMs} ms", Toast.LENGTH_LONG).show()
                             } catch (error: Throwable) {
