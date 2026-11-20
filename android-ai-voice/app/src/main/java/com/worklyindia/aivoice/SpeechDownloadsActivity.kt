@@ -522,70 +522,112 @@ class SpeechDownloadsActivity : Activity() {
             .show()
     }
 
+
     private fun showQwenTest(pack: SpeechModelCatalog.Pack) {
         if (android.os.Build.VERSION.SDK_INT < 31) {
             Toast.makeText(this, "Qwen3-TTS requires Android 12 or newer.", Toast.LENGTH_LONG).show()
             return
         }
-        val input = EditText(this).apply {
-            setText("Hello! This is Qwen three text to speech running locally on Android.")
-            minLines = 3
-            maxLines = 6
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Test Qwen3-TTS")
-            .setMessage("Enter English text. The 0.6B Q4 model runs locally on this phone and may take time on CPU.")
-            .setView(input)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Generate & Play") { _, _ ->
-                val text = input.text.toString().trim()
-                if (text.isBlank()) {
-                    Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                statusToast("Loading Qwen3-TTS and generating offline speech…")
-                ttsExecutor.execute {
-                    try {
-                        val output = Qwen3TtsEngine(speechManager.modelDirectory(pack), 2).use { engine ->
-                            engine.load()
-                            engine.synthesizeToWav(text, java.io.File(cacheDir, "qwen3_tts_test.wav"))
-                        }
-                        runOnUiThread {
-                            try {
-                                activeMossPlayer?.release()
-                                activeMossPlayer = MediaPlayer().apply {
-                                    setDataSource(output.absolutePath)
-                                    setOnCompletionListener { player ->
-                                        player.release()
-                                        if (activeMossPlayer === player) activeMossPlayer = null
+        statusToast("Loading Qwen3 model and reading available speakers…")
+        ttsExecutor.execute {
+            val engine = Qwen3TtsEngine(speechManager.modelDirectory(pack), 2)
+            try {
+                engine.load()
+                val speakers = engine.availableSpeakers().ifEmpty { listOf("Ryan") }
+                runOnUiThread {
+                    val layout = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(16), dp(8), dp(16), dp(4))
+                    }
+                    layout.addView(label("LANGUAGE", 12, secondary, true))
+                    layout.addView(label("English · current GGUF test path", 14, primary, false))
+                    layout.addView(label("VOICE · " + speakers.size + " AVAILABLE", 12, secondary, true))
+                    val voiceSpinner = Spinner(this)
+                    voiceSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, speakers).also {
+                        it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                    }
+                    layout.addView(voiceSpinner)
+                    layout.addView(label("TEST TEXT", 12, secondary, true))
+                    val input = EditText(this).apply {
+                        setText("Hello! This is Qwen three text to speech running locally on Android.")
+                        minLines = 3
+                        maxLines = 6
+                        setPadding(dp(12), dp(10), dp(12), dp(10))
+                    }
+                    layout.addView(input)
+                    val dialog = AlertDialog.Builder(this)
+                        .setTitle("Test Qwen3-TTS · " + speakers.size + " Voices")
+                        .setMessage("Select an available speaker and enter English text. This model build is currently configured for the English test path.")
+                        .setView(layout)
+                        .setNegativeButton("Cancel") { _, _ -> engine.close() }
+                        .setPositiveButton("Generate & Play", null)
+                        .create()
+                    dialog.setOnCancelListener { engine.close() }
+                    dialog.setOnShowListener {
+                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                            val text = input.text.toString().trim()
+                            val speaker = speakers[voiceSpinner.selectedItemPosition]
+                            if (text.isBlank()) {
+                                Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
+                                return@setOnClickListener
+                            }
+                            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                            statusToast("Generating English · " + speaker + " offline…")
+                            ttsExecutor.execute {
+                                try {
+                                    val output = engine.synthesizeToWav(text, java.io.File(cacheDir, "qwen3_tts_test.wav"), speaker)
+                                    engine.close()
+                                    runOnUiThread {
+                                        dialog.dismiss()
+                                        try {
+                                            activeMossPlayer?.release()
+                                            activeMossPlayer = MediaPlayer().apply {
+                                                setDataSource(output.absolutePath)
+                                                setOnCompletionListener { player ->
+                                                    player.release()
+                                                    if (activeMossPlayer === player) activeMossPlayer = null
+                                                }
+                                                setOnErrorListener { player, _, _ ->
+                                                    player.release()
+                                                    if (activeMossPlayer === player) activeMossPlayer = null
+                                                    Toast.makeText(this@SpeechDownloadsActivity, "Qwen3 audio playback failed.", Toast.LENGTH_LONG).show()
+                                                    true
+                                                }
+                                                setOnPreparedListener { it.start() }
+                                                prepareAsync()
+                                            }
+                                            Toast.makeText(this, "Qwen3 voice generated successfully.", Toast.LENGTH_LONG).show()
+                                        } catch (error: Throwable) {
+                                            Toast.makeText(this, error.message ?: "Could not play Qwen3 audio.", Toast.LENGTH_LONG).show()
+                                        }
                                     }
-                                    setOnErrorListener { player, _, _ ->
-                                        player.release()
-                                        if (activeMossPlayer === player) activeMossPlayer = null
-                                        Toast.makeText(this@SpeechDownloadsActivity, "Qwen3 audio playback failed.", Toast.LENGTH_LONG).show()
-                                        true
+                                } catch (error: Throwable) {
+                                    engine.close()
+                                    runOnUiThread {
+                                        dialog.dismiss()
+                                        AlertDialog.Builder(this)
+                                            .setTitle("Qwen3 voice test failed")
+                                            .setMessage(error.message ?: "Could not run the native Qwen3 model.")
+                                            .setPositiveButton("OK", null)
+                                            .show()
                                     }
-                                    setOnPreparedListener { it.start() }
-                                    prepareAsync()
                                 }
-                                Toast.makeText(this, "Qwen3 speech generated successfully.", Toast.LENGTH_LONG).show()
-                            } catch (error: Throwable) {
-                                Toast.makeText(this, error.message ?: "Could not play Qwen3 audio.", Toast.LENGTH_LONG).show()
                             }
                         }
-                    } catch (error: Throwable) {
-                        runOnUiThread {
-                            AlertDialog.Builder(this)
-                                .setTitle("Qwen3 voice test failed")
-                                .setMessage(error.message ?: "Could not load or run the native Qwen3 model.")
-                                .setPositiveButton("OK", null)
-                                .show()
-                        }
                     }
+                    dialog.show()
+                }
+            } catch (error: Throwable) {
+                engine.close()
+                runOnUiThread {
+                    AlertDialog.Builder(this)
+                        .setTitle("Qwen3 model loading failed")
+                        .setMessage(error.message ?: "Could not load the native Qwen3 model.")
+                        .setPositiveButton("OK", null)
+                        .show()
                 }
             }
-            .show()
+        }
     }
 
     private fun showMossTest(pack: SpeechModelCatalog.Pack) {
