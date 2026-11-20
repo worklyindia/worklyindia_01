@@ -75,8 +75,8 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
         addSpeechPack(list,"MOSS-TTS-Nano 100M","Native Android ONNX runtime · approximately 717 MB download · demo prompt test only; custom text tokenizer pending",SpeechModelCatalog.mossTtsNano())
+        addSpeechPack(list,"Qwen3-TTS 0.6B Base · Q4_K_M","Native C++/GGML Android engine · approximately 884 MB download · arm64 / Android 12+",SpeechModelCatalog.qwen3Tts())
         list.addView(label("OTHER TTS MODELS · NATIVE ANDROID RUNTIME NOT YET INTEGRATED",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
-        addServerModelCard(list,"Qwen3-TTS","Expressive multilingual TTS and voice design. Requires a compatible server/runtime; not yet an offline Android engine.","https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base")
         addServerModelCard(list,"CosyVoice 3","Multilingual natural speech and voice cloning. Download source available; Android inference is not integrated yet.","https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512")
         addServerModelCard(list,"AI4Bharat IndicF5","Indian-language TTS including Hindi and Gujarati. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/IndicF5")
         addServerModelCard(list,"Indic Parler-TTS","Indian-language preset voices and style control. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/indic-parler-tts")
@@ -160,10 +160,11 @@ class SpeechDownloadsActivity : Activity() {
         val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         val isTts = pack.id.startsWith("indic-tiny-tts-")
         val isMoss = pack.id == "moss-tts-nano"
+        val isQwen = pack.id == "qwen3-tts-06b-q4"
         val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
         val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
         card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
-        test.setOnClickListener { if (isMoss) showMossTest(pack) else showTtsTest(pack) }
+        test.setOnClickListener { when { isMoss -> showMossTest(pack); isQwen -> showQwenTest(pack); else -> showTtsTest(pack) } }
         delete.setOnClickListener {
             AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                 .setMessage("This removes this model's downloaded files from ChatWork storage.")
@@ -191,7 +192,7 @@ class SpeechDownloadsActivity : Activity() {
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
             action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-            test.visibility=if((isTts || isMoss) && installed) View.VISIBLE else View.GONE
+            test.visibility=if((isTts || isMoss || isQwen) && installed) View.VISIBLE else View.GONE
             delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
@@ -222,6 +223,73 @@ class SpeechDownloadsActivity : Activity() {
                     }
                 }
             }.show()
+    }
+
+
+    private fun showQwenTest(pack: SpeechModelCatalog.Pack) {
+        if (android.os.Build.VERSION.SDK_INT < 31) {
+            Toast.makeText(this, "Qwen3-TTS requires Android 12 or newer.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val input = EditText(this).apply {
+            setText("Hello! This is Qwen three text to speech running locally on Android.")
+            minLines = 3
+            maxLines = 6
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Test Qwen3-TTS")
+            .setMessage("Enter English text. The 0.6B Q4 model runs locally on this phone and may take time on CPU.")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Generate & Play") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isBlank()) {
+                    Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                statusToast("Loading Qwen3-TTS and generating offline speech…")
+                ttsExecutor.execute {
+                    try {
+                        val output = Qwen3TtsEngine(speechManager.modelDirectory(pack), 2).use { engine ->
+                            engine.load()
+                            engine.synthesizeToWav(text, java.io.File(cacheDir, "qwen3_tts_test.wav"))
+                        }
+                        runOnUiThread {
+                            try {
+                                activeMossPlayer?.release()
+                                activeMossPlayer = MediaPlayer().apply {
+                                    setDataSource(output.absolutePath)
+                                    setOnCompletionListener { player ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                    }
+                                    setOnErrorListener { player, _, _ ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                        Toast.makeText(this@SpeechDownloadsActivity, "Qwen3 audio playback failed.", Toast.LENGTH_LONG).show()
+                                        true
+                                    }
+                                    setOnPreparedListener { it.start() }
+                                    prepareAsync()
+                                }
+                                Toast.makeText(this, "Qwen3 speech generated successfully.", Toast.LENGTH_LONG).show()
+                            } catch (error: Throwable) {
+                                Toast.makeText(this, error.message ?: "Could not play Qwen3 audio.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    } catch (error: Throwable) {
+                        runOnUiThread {
+                            AlertDialog.Builder(this)
+                                .setTitle("Qwen3 voice test failed")
+                                .setMessage(error.message ?: "Could not load or run the native Qwen3 model.")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .show()
     }
 
     private fun showMossTest(pack: SpeechModelCatalog.Pack) {
