@@ -46,7 +46,7 @@ class MossTtsOnnxEngine(
         voice: String = "Junhao",
         maxFrames: Int = 160,
         seed: Long = 1234L,
-    ): SynthesisResult {
+    ): MossSynthesisResult {
         require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
         val startedAt = System.currentTimeMillis()
         val inputRows = buildInputRows(textTokenIds, voice)
