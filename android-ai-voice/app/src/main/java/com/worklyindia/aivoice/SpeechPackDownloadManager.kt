@@ -90,7 +90,7 @@ class SpeechPackDownloadManager(context: Context) {
                         DownloadManager.STATUS_PENDING -> State.PENDING
                         DownloadManager.STATUS_RUNNING -> State.RUNNING
                         DownloadManager.STATUS_PAUSED -> State.PAUSED
-                        DownloadManager.STATUS_SUCCESSFUL -> if (isCompleteFile(target, file.expectedBytes)) State.COMPLETE else State.FAILED
+                        DownloadManager.STATUS_SUCCESSFUL -> if (isCompleteFile(target, file)) State.COMPLETE else State.FAILED
                         else -> State.FAILED
                     }
                     FileStatus(file.relativePath, state, downloaded, if (total > 0L) total else file.expectedBytes)
