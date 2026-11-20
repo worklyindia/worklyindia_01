@@ -10,16 +10,20 @@ import android.os.Looper
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.EditText
+import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class SpeechDownloadsActivity : Activity() {
     private val speechManager by lazy { SpeechPackDownloadManager(this) }
     private val qwenManager by lazy { QwenModelManager(this) }
     private val handler = Handler(Looper.getMainLooper())
+    private val ttsExecutor = Executors.newSingleThreadExecutor()
     private val rows = mutableListOf<DownloadRow>()
     private var dark = false
     private var choiceShowing = false
@@ -88,7 +92,15 @@ class SpeechDownloadsActivity : Activity() {
         val status=label("Checking model…",13,secondary,true)
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false }
-        card.addView(status); card.addView(progress); card.addView(action)
+        val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
+        card.addView(status); card.addView(progress); card.addView(action); card.addView(delete)
+        delete.setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Delete ${model.title}?")
+                .setMessage("This removes the downloaded model file from this app's storage.")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Delete") { _,_ -> qwenManager.cancelAndDelete(model); refreshAll() }
+                .show()
+        }
         var lastBytes = 0L
         var lastAt = 0L
         val row=DownloadRow(status,progress,action) {
@@ -109,6 +121,7 @@ class SpeechDownloadsActivity : Activity() {
             }
             progress.progress=snap.progressPercent
             progress.visibility=if(snap.state==QwenModelManager.State.RUNNING) View.VISIBLE else View.GONE
+            delete.visibility=if(snap.state==QwenModelManager.State.READY || snap.downloaded>0L) View.VISIBLE else View.GONE
             action.isEnabled=supported && snap.state!=QwenModelManager.State.RUNNING && snap.state!=QwenModelManager.State.PENDING && snap.state!=QwenModelManager.State.PAUSED
             action.text=when { !supported -> "Not supported on this phone"; snap.state==QwenModelManager.State.READY -> "Use this model in Chat"; snap.state==QwenModelManager.State.FAILED -> "Retry download"; else -> "Download " + model.title.substringAfter("Qwen 2.5 ") }
             action.setOnClickListener {
@@ -124,7 +137,18 @@ class SpeechDownloadsActivity : Activity() {
         val card=card(parent,title,subtitle); val status=label("Checking saved files…",13,secondary,true)
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
-        card.addView(status);card.addView(progress);card.addView(action)
+        val isTts = pack.id.startsWith("indic-tiny-tts-")
+        val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
+        val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
+        card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
+        test.setOnClickListener { showTtsTest(pack) }
+        delete.setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
+                .setMessage("This removes this model's downloaded files from ChatWork storage.")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Delete") { _,_ -> speechManager.delete(pack); refreshAll() }
+                .show()
+        }
         var lastBytes = 0L
         var lastAt = 0L
         val row=DownloadRow(status,progress,action) {
@@ -142,12 +166,43 @@ class SpeechDownloadsActivity : Activity() {
                 else -> "Not downloaded · ${s.totalBytes/1_000_000} MB"
             }
             progress.progress=s.percent; progress.visibility=if(s.state==SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
-            action.visibility=if(s.state==SpeechPackDownloadManager.State.COMPLETE || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
+            val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
+            action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
+            test.visibility=if(isTts && installed) View.VISIBLE else View.GONE
+            delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
         row.refresh()
     }
+    private fun showTtsTest(pack: SpeechModelCatalog.Pack) {
+        val language = pack.languageCode
+        val sample = when (language) {
+            "hi" -> "नमस्ते! यह हिंदी टेक्स्ट टू स्पीच मॉडल का परीक्षण है।"
+            "gu" -> "નમસ્તે! આ ગુજરાતી ટેક્સ્ટ ટુ સ્પીચ મોડેલની કસોટી છે."
+            else -> "Hello! This is an offline text to speech model test."
+        }
+        val input=EditText(this).apply { setText(sample); minLines=3; maxLines=6; setPadding(dp(12),dp(10),dp(12),dp(10)) }
+        AlertDialog.Builder(this).setTitle("Test ${pack.title}")
+            .setMessage("Enter text in the selected model language.")
+            .setView(input)
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Generate & Play") { _,_ ->
+                val text=input.text.toString().trim()
+                if(text.isBlank()) { Toast.makeText(this,"Enter text to test.",Toast.LENGTH_SHORT).show(); return@setPositiveButton }
+                statusToast("Generating offline speech…")
+                ttsExecutor.execute {
+                    try {
+                        IndicTinyTtsEngine.create(this,language).use { it.speak(text) }
+                        runOnUiThread { Toast.makeText(this,"Voice test finished.",Toast.LENGTH_SHORT).show() }
+                    } catch(error:Throwable) {
+                        runOnUiThread { AlertDialog.Builder(this).setTitle("Voice test failed").setMessage(error.message ?: "Could not generate speech.").setPositiveButton("OK",null).show() }
+                    }
+                }
+            }.show()
+    }
+    private fun statusToast(message:String) { Toast.makeText(this,message,Toast.LENGTH_SHORT).show() }
+
     private fun withNetworkChoice(action:(Boolean)->Unit) {
         val prefs=getSharedPreferences("workly_model_download_preferences",MODE_PRIVATE)
         if(prefs.contains("allow_mobile_data")) { action(prefs.getBoolean("allow_mobile_data",false)); return }
@@ -165,6 +220,6 @@ class SpeechDownloadsActivity : Activity() {
     }
     private fun label(value:String,size:Int,color:Int,bold:Boolean)=TextView(this).apply { text=value;textSize=size.toFloat();setTextColor(color);if(bold)setTypeface(typeface,android.graphics.Typeface.BOLD);setPadding(0,dp(5),0,dp(5)) }
     override fun onResume(){super.onResume();refreshAll()}
-    override fun onDestroy(){handler.removeCallbacksAndMessages(null);super.onDestroy()}
+    override fun onDestroy(){handler.removeCallbacksAndMessages(null);ttsExecutor.shutdownNow();super.onDestroy()}
     private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
 }
