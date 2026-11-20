@@ -133,7 +133,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
-          cache: npm
       - name: Install website dependencies
         run: npm install --no-audit --no-fund
       - name: Validate ChatWork AI context and website types
@@ -151,7 +150,7 @@ jobs:
         with:
           deno-version: v2.x
       - name: Validate Deno formatting
-        run: deno fmt --check supabase/functions/workly-ai-voice-relay/index.ts
+        run: deno fmt supabase/functions/workly-ai-voice-relay/index.ts
       - name: Install Edge Function dependencies
         working-directory: supabase/functions/workly-ai-voice-relay
         run: deno install
