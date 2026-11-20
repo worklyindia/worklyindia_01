@@ -64,9 +64,6 @@ class SpeechDownloadsActivity : Activity() {
         recognitionLanguages.forEach { (code, language) ->
             addSpeechPack(list,"IndicConformer · $language","AI4Bharat IndicConformer INT8 · $language offline speech-to-text",SpeechModelCatalog.indicConformer(code))
         }
-        list.addView(label("ADDITIONAL VOICE RECOGNITION MODELS",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
-        addSpeechPack(list,"Shruti ONNX · Hindi","Moonshine-based offline speech recognition · Hindi",SpeechModelCatalog.shruti("hi"))
-        addSpeechPack(list,"Shruti ONNX · Gujarati","Moonshine-based offline speech recognition · Gujarati",SpeechModelCatalog.shruti("gu"))
         list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
         addSpeechPack(list,"Indic Tiny TTS Hindi","Indic Tiny TTS · Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
