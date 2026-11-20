@@ -1,28 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,18C34.1,18 18,32.3 18,50C18,59.1 22.3,67.2 29.2,73L25,88L41.2,81.5C45.2,82.9 49.5,83.7 54,83.7C73.9,83.7 90,69.4 90,51.7C90,33.9 73.9,18 54,18ZM54,24C70.6,24 84,36.4 84,51.7C84,67 70.6,77.7 54,77.7C49.8,77.7 45.7,76.9 42,75.4L39.7,74.5L33.6,77L35.2,71.3L32.8,69.3C27.2,64.6 24,57.6 24,50C24,36.4 37.4,24 54,24Z"/>
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M40,48A4.5,4.5 0,1 0,40 57A4.5,4.5 0,1 0,40 48M54,48A4.5,4.5 0,1 0,54 57A4.5,4.5 0,1 0,54 48M68,48A4.5,4.5 0,1 0,68 57A4.5,4.5 0,1 0,68 48"/>
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M76,12C84,14 91,19 96,26L91,30C87,24 81,20 74,18Z"/>
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M73,20C81,22 87,27 91,33L86,37C83,32 78,28 71,26Z"/>
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M75,68H91C96,68 100,72 100,77V91C100,96 96,100 91,100H75C70,100 66,96 66,91V77C66,72 70,68 75,68ZM76,74C73.8,74 72,75.8 72,78V90C72,92.2 73.8,94 76,94H90C92.2,94 94,92.2 94,90V78C94,75.8 92.2,74 90,74Z"/>
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M75,69V63C75,56.9 79.9,52 86,52C92.1,52 97,56.9 97,63V69H91V63C91,60.2 88.8,58 86,58C83.2,58 81,60.2 81,63V69Z"/>
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M83,78A3,3 0,1 0,89 78A3,3 0,1 0,83 78M84,80H88L89,89H83Z"/>
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/chatwork_logo"
+    android:gravity="center" />
