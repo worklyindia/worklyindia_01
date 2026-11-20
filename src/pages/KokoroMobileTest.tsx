@@ -87,21 +87,17 @@ export default function KokoroMobileTest() {
       }
       if ("caches" in window) {
         const cacheNames = await caches.keys();
-        await Promise.all(cacheNames.filter((name) => MODEL_CACHE_MATCH.test(name)).map((name) => caches.delete(name)));
-      }
-      if (typeof indexedDB !== "undefined" && "databases" in indexedDB) {
-        const databases = await indexedDB.databases();
-        await Promise.all(databases
-          .filter((database) => database.name && MODEL_CACHE_MATCH.test(database.name))
-          .map((database) => new Promise<void>((resolve) => {
-            const request = indexedDB.deleteDatabase(database.name as string);
-            request.onsuccess = () => resolve();
-            request.onerror = () => resolve();
-            request.onblocked = () => resolve();
-          })));
+        for (const cacheName of cacheNames) {
+          if (!/transformers|kokoro/i.test(cacheName)) continue;
+          const cache = await caches.open(cacheName);
+          const requests = await cache.keys();
+          await Promise.all(requests
+            .filter((request) => request.url.toLowerCase().includes("kokoro-82m-v1.0-onnx"))
+            .map((request) => cache.delete(request)));
+        }
       }
       setConfirmDelete(false);
-      toast.success("Matching ChatWork browser model caches cleared. Other website/browser caches are untouched.");
+      toast.success("Kokoro model cache entries cleared. Other model cache entries are untouched.");
     } catch (error) {
       console.error("Kokoro model delete failed", error);
       toast.error("Could not clear all model cache. Close other ChatWork tabs and try again.");
