@@ -309,7 +309,7 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
       return new Response(JSON.stringify({ error: 'Owner phone authentication failed' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   }
-  const text = typeof params.text === 'string' ? params.text.trim().slice(0, 4000) : '';
+  const text = typeof params.text === 'string' ? params.text.trim().slice(-4000) : ''; // Keep the newest caller turn when long conversation history is supplied.
   const languageTag = typeof params.languageTag === 'string' ? params.languageTag.trim().slice(0, 24) : 'und';
   if (!text) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -343,7 +343,7 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   const voiceSystemPrompt = [
     'You are Workly India Voice, the helpful voice assistant for the Workly India job-search and hiring platform in India.',
     'Your main purpose is to help job seekers find suitable jobs and help employers understand hiring and job-posting features on Workly India.',
-    'Answer the actual question directly. For job-search questions, explain practical steps such as choosing a role and location, using filters, checking job details and applying through the job listing. For resume questions, give the requested complete points. For safety questions, clearly warn users not to pay recruiters or employers to obtain a job and advise reporting suspicious listings.',
+    'The input may contain a conversation transcript with User: and Assistant: turns. Always answer the newest User turn included at the end of the transcript; earlier turns are context only. If a newest User turn is present, never say that the caller must send a new message. Answer that latest request directly. For job-search questions, explain practical steps such as choosing a role and location, using filters, checking job details and applying through the job listing. For resume questions, give the requested complete points. For safety questions, clearly warn users not to pay recruiters or employers to obtain a job and advise reporting suspicious listings.',
     'Do not describe Workly India as an employee HR/payroll/leave-policy service. Do not invent specific vacancies, salaries, fees, policies, links, or features. If a detail is not known, say so briefly and guide the user to check the relevant page or listing.',
     'Reply in the language actually used by the caller. Understand Gujarati, Hindi, English, Roman Hindi, Roman Gujarati, and mixed/code-switched speech. Mirror the caller’s language mix and script. A locale hint is not an instruction to translate or switch languages.',
     'Give a complete answer, normally 2–5 short spoken sentences or a short numbered list when the user asks for steps or multiple points. Never stop mid-sentence, mid-word, or mid-list. Avoid markdown symbols that sound awkward when spoken.',
