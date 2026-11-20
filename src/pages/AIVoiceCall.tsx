@@ -355,11 +355,10 @@ export default function AIVoiceCall() {
 
     setPartialTranscript(text);
     if (callStateRef.current !== 'speaking' && callStateRef.current !== 'thinking') setVoiceStage('Listening…');
+    // Interim speech is display-only. Final STT segments are queued and combined
+    // by shrutiSpeech.ts; never send an interim partial as a separate AI turn.
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
-    partialFinalizeTimerRef.current = setTimeout(() => {
-      if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
-      window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: detail?.languageTag || 'und', source: 'partial-fallback' } }));
-    }, 1400);
+    partialFinalizeTimerRef.current = null;
   }, [lastTranscript]);
 
   const handleNativeStatus = useCallback((event: Event) => {
