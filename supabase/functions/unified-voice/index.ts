@@ -309,7 +309,7 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
       return new Response(JSON.stringify({ error: 'Owner phone authentication failed' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   }
-  const text = typeof params.text === 'string' ? params.text.trim().slice(0, 4000) : '';
+  const text = typeof params.text === 'string' ? params.text.trim().slice(0, 12000) : '';
   const languageTag = typeof params.languageTag === 'string' ? params.languageTag.trim().slice(0, 24) : 'und';
   if (!text) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
