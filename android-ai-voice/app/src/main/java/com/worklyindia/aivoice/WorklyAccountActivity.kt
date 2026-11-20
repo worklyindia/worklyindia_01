@@ -22,17 +22,21 @@ class WorklyAccountActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ChatWorkTheme.applyWindow(this)
+        val bg = ChatWorkTheme.color(this, 0xFFF4F7FB.toInt())
+        val ink = ChatWorkTheme.color(this, 0xFF142033.toInt())
+        val muted = ChatWorkTheme.color(this, 0xFF65748B.toInt())
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(24), dp(24), dp(24), dp(24))
-            setBackgroundColor(0xFFF4F7FB.toInt())
+            setBackgroundColor(bg)
         }
         root.addView(TextView(this).apply { text = "WORKLY INDIA"; textSize = 13f; setTextColor(0xFF2878D0.toInt()) })
-        root.addView(TextView(this).apply { text = "Connect your account"; textSize = 27f; setTextColor(0xFF142033.toInt()); setPadding(0, dp(8), 0, dp(6)) })
-        root.addView(TextView(this).apply { text = "Sign in with the same email or phone and password you use on Workly India."; textSize = 14f; setTextColor(0xFF65748B.toInt()) })
-        identity = EditText(this).apply { hint = "Email address or phone (+country code)"; maxLines = 1; setPadding(dp(12), dp(12), dp(12), dp(12)) }
-        password = EditText(this).apply { hint = "Password"; maxLines = 1; inputType = 129; setPadding(dp(12), dp(12), dp(12), dp(12)) }
+        root.addView(TextView(this).apply { text = "Connect your account"; textSize = 27f; setTextColor(ink); setPadding(0, dp(8), 0, dp(6)) })
+        root.addView(TextView(this).apply { text = "Sign in with the same email or phone and password you use on Workly India."; textSize = 14f; setTextColor(muted) })
+        identity = EditText(this).apply { hint = "Email address or phone (+country code)"; maxLines = 1; setTextColor(ink); setHintTextColor(muted); setBackgroundColor(ChatWorkTheme.color(this@WorklyAccountActivity, 0xFFFFFFFF.toInt())); setPadding(dp(12), dp(12), dp(12), dp(12)) }
+        password = EditText(this).apply { hint = "Password"; maxLines = 1; inputType = 129; setTextColor(ink); setHintTextColor(muted); setBackgroundColor(ChatWorkTheme.color(this@WorklyAccountActivity, 0xFFFFFFFF.toInt())); setPadding(dp(12), dp(12), dp(12), dp(12)) }
         root.addView(identity, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(22) })
         root.addView(password, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(10) })
         root.addView(Button(this).apply {
