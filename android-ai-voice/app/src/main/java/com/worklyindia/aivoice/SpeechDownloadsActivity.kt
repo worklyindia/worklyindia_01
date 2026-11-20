@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.content.res.Configuration
 import android.content.Intent
 import android.net.Uri
+import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -30,6 +31,7 @@ class SpeechDownloadsActivity : Activity() {
     private var dark = false
     private var choiceShowing = false
     private var availableRam = 0L
+    private var activeMossPlayer: MediaPlayer? = null
     private data class DownloadRow(val status: TextView, val progress: ProgressBar, val action: Button, var lastBytes: Long = 0L, var lastAt: Long = 0L, val refresh: () -> Unit)
     private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
@@ -75,7 +77,6 @@ class SpeechDownloadsActivity : Activity() {
         list.addView(label("NEW TEXT TO SPEECH MODELS · MODEL LIBRARY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
         addServerModelCard(list,"Qwen3-TTS","Expressive multilingual TTS and voice design. Requires a compatible server/runtime; not yet an offline Android engine.","https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base")
         addServerModelCard(list,"CosyVoice 3","Multilingual natural speech and voice cloning. Download source available; Android inference is not integrated yet.","https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512")
-        addServerModelCard(list,"MOSS-TTS","Long-form and expressive speech model family. Requires its own compatible runtime.","https://github.com/OpenMOSS/MOSS-TTS")
         addServerModelCard(list,"AI4Bharat IndicF5","Indian-language TTS including Hindi and Gujarati. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/IndicF5")
         addServerModelCard(list,"Indic Parler-TTS","Indian-language preset voices and style control. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/indic-parler-tts")
         addServerModelCard(list,"Chatterbox","Expressive TTS model family. Check the selected checkpoint and runtime requirements.","https://huggingface.co/ResembleAI/chatterbox")
@@ -157,10 +158,11 @@ class SpeechDownloadsActivity : Activity() {
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         val isTts = pack.id.startsWith("indic-tiny-tts-")
+        val isMoss = pack.id == "moss-tts-nano"
         val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
         val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
         card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
-        test.setOnClickListener { showTtsTest(pack) }
+        test.setOnClickListener { if (isMoss) showMossTest(pack) else showTtsTest(pack) }
         delete.setOnClickListener {
             AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                 .setMessage("This removes this model's downloaded files from ChatWork storage.")
@@ -188,7 +190,7 @@ class SpeechDownloadsActivity : Activity() {
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
             action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-            test.visibility=if(isTts && installed) View.VISIBLE else View.GONE
+            test.visibility=if((isTts || isMoss) && installed) View.VISIBLE else View.GONE
             delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
@@ -220,6 +222,66 @@ class SpeechDownloadsActivity : Activity() {
                 }
             }.show()
     }
+
+    private fun showMossTest(pack: SpeechModelCatalog.Pack) {
+        AlertDialog.Builder(this)
+            .setTitle("Test MOSS-TTS-Nano")
+            .setMessage("This native Android ONNX smoke test generates and plays the built-in English demo sentence. Custom text input will be enabled after the SentencePiece tokenizer adapter is integrated.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Generate & Play") { _, _ ->
+                statusToast("Generating speech on this phone…")
+                ttsExecutor.execute {
+                    try {
+                        val result = MossTtsOnnxEngine(
+                            modelRoot = speechManager.modelDirectory(pack),
+                            outputDir = cacheDir,
+                            cpuThreads = 2
+                        ).use { engine ->
+                            engine.synthesize(
+                                textTokenIds = MossDemoPrompts.ENGLISH_TOKEN_IDS,
+                                outputFile = java.io.File(cacheDir, "moss_tts_nano_test.wav"),
+                                voice = "Junhao",
+                                maxFrames = 160,
+                                seed = 1234L
+                            )
+                        }
+                        runOnUiThread {
+                            try {
+                                activeMossPlayer?.release()
+                                activeMossPlayer = MediaPlayer().apply {
+                                    setDataSource(result.outputFile.absolutePath)
+                                    setOnCompletionListener { player ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                    }
+                                    setOnErrorListener { player, _, _ ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                        Toast.makeText(this@SpeechDownloadsActivity, "MOSS audio playback failed.", Toast.LENGTH_LONG).show()
+                                        true
+                                    }
+                                    prepareAsync()
+                                    setOnPreparedListener { it.start() }
+                                }
+                                Toast.makeText(this, "MOSS speech generated · ${result.durationMs} ms", Toast.LENGTH_LONG).show()
+                            } catch (error: Throwable) {
+                                Toast.makeText(this, error.message ?: "Could not play generated audio.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    } catch (error: Throwable) {
+                        runOnUiThread {
+                            AlertDialog.Builder(this)
+                                .setTitle("MOSS voice test failed")
+                                .setMessage(error.message ?: "Could not load or run the local ONNX model.")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .show()
+    }
+
     private fun statusToast(message:String) { Toast.makeText(this,message,Toast.LENGTH_SHORT).show() }
 
     private fun withNetworkChoice(action:(Boolean)->Unit) {
@@ -239,6 +301,6 @@ class SpeechDownloadsActivity : Activity() {
     }
     private fun label(value:String,size:Int,color:Int,bold:Boolean)=TextView(this).apply { text=value;textSize=size.toFloat();setTextColor(color);if(bold)setTypeface(typeface,android.graphics.Typeface.BOLD);setPadding(0,dp(5),0,dp(5)) }
     override fun onResume(){super.onResume();refreshAll()}
-    override fun onDestroy(){handler.removeCallbacksAndMessages(null);ttsExecutor.shutdownNow();super.onDestroy()}
+    override fun onDestroy(){handler.removeCallbacksAndMessages(null);ttsExecutor.shutdownNow();activeMossPlayer?.release();activeMossPlayer=null;super.onDestroy()}
     private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
 }
