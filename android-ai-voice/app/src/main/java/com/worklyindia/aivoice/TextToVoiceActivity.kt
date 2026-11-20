@@ -171,10 +171,10 @@ class TextToVoiceActivity : Activity() {
         actions.addView(playButton,LinearLayout.LayoutParams(0,dp(50),1f))
         actions.addView(saveButton,LinearLayout.LayoutParams(0,dp(50),1f))
         content.addView(actions)
+        resultActions=actions
         modelSpinner.onItemSelectedListener=selectionListener { updateModel() }
         languageSpinner.onItemSelectedListener=selectionListener { updateLanguage() }
         setContentView(page)
-        resultActions=actions
     }
 
     private lateinit var resultActions: LinearLayout
