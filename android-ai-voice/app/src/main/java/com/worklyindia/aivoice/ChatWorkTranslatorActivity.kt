@@ -85,14 +85,17 @@ class ChatWorkTranslatorActivity : Activity() {
         Language("sw", "Swahili")
     )
 
-    private val bg = 0xFFF4F7FB.toInt()
-    private val ink = 0xFF142033.toInt()
-    private val muted = 0xFF65748B.toInt()
+    private val bg get() = ChatWorkTheme.color(this, 0xFFF4F7FB.toInt())
+    private val ink get() = ChatWorkTheme.color(this, 0xFF142033.toInt())
+    private val muted get() = ChatWorkTheme.color(this, 0xFF65748B.toInt())
+    private val surface get() = ChatWorkTheme.color(this, 0xFFFFFFFF.toInt())
+    private val border get() = ChatWorkTheme.color(this, 0xFFD8E0EA.toInt())
     private val blue = 0xFF1769C2.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        ChatWorkTheme.applyWindow(this)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         val root = LinearLayout(this).apply {
@@ -132,7 +135,7 @@ class ChatWorkTranslatorActivity : Activity() {
             setTextColor(ink); setHintTextColor(muted)
             setPadding(dp(12), dp(12), dp(12), dp(12))
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFFFFFFFF.toInt()); setStroke(dp(1), 0xFFD8E0EA.toInt()); cornerRadius = dp(12).toFloat()
+                setColor(surface); setStroke(dp(1), border); cornerRadius = dp(12).toFloat()
             }
         }
         root.addView(sourceText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
