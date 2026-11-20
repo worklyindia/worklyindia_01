@@ -21,6 +21,9 @@ let noiseFloor = 0.003;
 let speechThreshold = 0.018;
 let voiceCandidateFrames = 0;
 let transcribing = false;
+let transcriptionQueue: Float32Array[] = [];
+let pendingTranscriptParts: string[] = [];
+let transcriptFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let active = false;
 
 function emit(name: string, detail: Record<string, unknown>) {
@@ -72,20 +75,25 @@ function resample16k(input: Float32Array, inputRate: number): Float32Array {
   return output;
 }
 
-function submitUtterance() {
-  if (!chunks.length || transcribing) return;
-  const captured = chunks;
-  chunks = [];
-  const length = captured.reduce((total, chunk) => total + chunk.length, 0);
-  const joined = new Float32Array(length);
-  let offset = 0;
-  for (const chunk of captured) { joined.set(chunk, offset); offset += chunk.length; }
-  const pcm = resample16k(joined, context?.sampleRate || 48000);
-  if (pcm.length < 4800) return;
+function scheduleTranscriptFlush() {
+  if (transcriptFlushTimer) clearTimeout(transcriptFlushTimer);
+  if (!active || speechStartedAt || chunks.length || transcriptionQueue.length || transcribing || !pendingTranscriptParts.length) return;
+  transcriptFlushTimer = setTimeout(() => {
+    transcriptFlushTimer = null;
+    if (!active || speechStartedAt || chunks.length || transcriptionQueue.length || transcribing) return;
+    const text = pendingTranscriptParts.join(' ').replace(/\s+/g, ' ').trim();
+    pendingTranscriptParts = [];
+    if (text) emit('workly-voice-transcript', { text, languageTag: 'auto', source: 'workly-voice-android-app-long-audio' });
+  }, 1800);
+}
+
+async function processTranscriptionQueue() {
+  if (transcribing || !active) return;
   transcribing = true;
-  emit('workly-shruti-status', { status: 'transcribing-on-workly-voice-app' });
-  void (async () => {
-    try {
+  emit('workly-shruti-status', { status: 'transcribing', queuedSegments: transcriptionQueue.length });
+  try {
+    while (active && transcriptionQueue.length) {
+      const pcm = transcriptionQueue.shift()!;
       const wav = new ArrayBuffer(44 + pcm.length * 2);
       const view = new DataView(wav);
       const writeText = (offset: number, value: string) => {
@@ -104,17 +112,61 @@ function submitUtterance() {
       let binary = '';
       const stride = 0x8000;
       for (let i = 0; i < bytes.length; i += stride) binary += String.fromCharCode(...bytes.subarray(i, i + stride));
-      const result = await requestOwnerPhoneTranscription(btoa(binary));
-      if (active && result.text) {
-        emit('workly-shruti-status', { status: 'transcribed-by-workly-voice-app', language: result.languageTag });
-        emit('workly-voice-transcript', { text: result.text, languageTag: result.languageTag, source: 'workly-voice-android-app' });
+
+      let result: Awaited<ReturnType<typeof requestOwnerPhoneTranscription>> | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 3 && active; attempt += 1) {
+        try {
+          result = await requestOwnerPhoneTranscription(btoa(binary));
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        }
       }
-    } catch (error) {
-      emit('workly-voice-error', { message: error instanceof Error ? error.message : 'Workly Voice app could not transcribe caller audio.' });
-    } finally {
-      transcribing = false;
+      if (!active) break;
+      if (!result) {
+        emit('workly-voice-error', { message: lastError instanceof Error ? lastError.message : 'A speech segment could not be transcribed after 3 attempts.' });
+        continue;
+      }
+      const text = result.text.trim();
+      if (text) pendingTranscriptParts.push(text);
+      emit('workly-shruti-status', {
+        status: 'segment-transcribed',
+        language: result.languageTag,
+        queuedSegments: transcriptionQueue.length,
+      });
     }
-  })();
+  } finally {
+    transcribing = false;
+    if (active && transcriptionQueue.length) void processTranscriptionQueue();
+    else scheduleTranscriptFlush();
+  }
+}
+
+function submitUtterance() {
+  if (!chunks.length) return;
+  const captured = chunks;
+  chunks = [];
+  const length = captured.reduce((total, chunk) => total + chunk.length, 0);
+  const joined = new Float32Array(length);
+  let offset = 0;
+  for (const chunk of captured) { joined.set(chunk, offset); offset += chunk.length; }
+  const pcm = resample16k(joined, context?.sampleRate || 48000);
+  if (pcm.length < 4800) {
+    scheduleTranscriptFlush();
+    return;
+  }
+  // Each segment stays below the relay's 1.3 MB WAV limit. Queue it instead
+  // of dropping it when an earlier segment is still being transcribed.
+  if (transcriptionQueue.length >= 40) {
+    emit('workly-voice-error', { message: 'Too much speech is queued. Pause briefly while ChatWork finishes transcribing the earlier audio.' });
+    scheduleTranscriptFlush();
+    return;
+  }
+  transcriptionQueue.push(pcm);
+  emit('workly-shruti-status', { status: 'segment-queued', queuedSegments: transcriptionQueue.length });
+  void processTranscriptionQueue();
 }
 
 export async function startShrutiRecognition(): Promise<boolean> {
@@ -149,6 +201,10 @@ export async function startShrutiRecognition(): Promise<boolean> {
   silentGain.connect(context.destination);
   chunks = [];
   preRoll = [];
+  transcriptionQueue = [];
+  pendingTranscriptParts = [];
+  if (transcriptFlushTimer) clearTimeout(transcriptFlushTimer);
+  transcriptFlushTimer = null;
   noiseFloor = 0.003;
   speechThreshold = 0.018;
   voiceCandidateFrames = 0;
@@ -224,6 +280,10 @@ export function stopShrutiRecognition(): void {
   if (context) { void context.close(); context = null; }
   chunks = [];
   preRoll = [];
+  transcriptionQueue = [];
+  pendingTranscriptParts = [];
+  if (transcriptFlushTimer) clearTimeout(transcriptFlushTimer);
+  transcriptFlushTimer = null;
   speechStartedAt = 0;
   lastVoiceAt = 0;
   noiseFloor = 0.003;
