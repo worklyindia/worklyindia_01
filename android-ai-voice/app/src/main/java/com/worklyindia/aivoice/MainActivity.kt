@@ -67,6 +67,16 @@ class MainActivity : Activity() {
         root.addView(signalAnimation, LinearLayout.LayoutParams(-1, 0, 1f))
 
         root.addView(TextView(this).apply {
+            text = "ChatWork"
+            textSize = 27f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFFFFFFFF.toInt() else 0xFF142033.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(8), dp(2), dp(8), dp(4))
+            contentDescription = "ChatWork"
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+
+        root.addView(TextView(this).apply {
             text = "🎨   AI Image Studio"
             textSize = 18f
             gravity = Gravity.CENTER
