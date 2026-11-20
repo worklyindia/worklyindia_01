@@ -27,6 +27,8 @@ on:
       - "src/App.tsx"
       - "src/lib/browserOfflineVoice.ts"
       - "src/lib/nativeAppBridge.ts"
+      - "src/lib/shrutiSpeech.ts"
+      - "src/pages/AIVoiceCall.tsx"
       - "src/pages/Settings.tsx"
       - ".github/workflows/workly-ai-voice-web-check.yml"
   workflow_dispatch:
