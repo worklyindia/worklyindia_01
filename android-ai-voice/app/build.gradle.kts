@@ -234,14 +234,10 @@ val stageQvacTtsSource by tasks.registering {
         val cosyvoiceEngine = File(qvacTtsSource, "src/cosyvoice_engine.cpp")
         check(cosyvoiceEngine.isFile) { "QVAC CosyVoice native engine source is missing." }
         val engineSource = Files.readString(cosyvoiceEngine.toPath())
-        val oldVoiceBlock = """        require(voice_path, "voice.gguf");
-
-        // ---- backend selection -------------------------------------------"""
+        val oldVoiceBlock = """        require(voice_path, "voice.gguf");"""
         val newVoiceBlock = """        if (voice_path.empty() && opts.reference_audio.empty()) {
             require(voice_path, "voice.gguf");
-        }
-
-        // ---- backend selection -------------------------------------------"""
+        }""
         val oldLoadBlock = """        // voice.gguf: read its four tensors into vectors, then free it.
         {
             model_ctx voice_m = cosyvoice_load_gguf(
