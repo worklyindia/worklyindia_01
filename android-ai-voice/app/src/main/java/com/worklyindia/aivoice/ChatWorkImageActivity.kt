@@ -45,10 +45,16 @@ class ChatWorkImageActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        ChatWorkTheme.applyWindow(this)
+        val dark = ChatWorkTheme.isDark(this)
+        val bg = ChatWorkTheme.color(this, 0xFFF4F7FB.toInt())
+        val surface = ChatWorkTheme.color(this, 0xFFFFFFFF.toInt())
+        val ink = ChatWorkTheme.color(this, 0xFF142033.toInt())
+        val muted = ChatWorkTheme.color(this, 0xFF65748B.toInt())
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(12))
-            setBackgroundColor(0xFFF4F7FB.toInt())
+            setBackgroundColor(bg)
         }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         header.addView(Button(this).apply {
@@ -56,18 +62,18 @@ class ChatWorkImageActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = "AI Image Studio"; textSize = 21f; setTextColor(0xFF142033.toInt())
+            text = "AI Image Studio"; textSize = 21f; setTextColor(ink)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
         status = TextView(this).apply {
             text = "Create a new image or choose a photo to edit."
-            textSize = 13f; setTextColor(0xFF65748B.toInt()); setPadding(dp(4), dp(8), dp(4), dp(10))
+            textSize = 13f; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(10))
         }
         root.addView(status)
         preview = ImageView(this).apply {
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setBackgroundColor(0xFFE5EAF1.toInt())
+            setBackgroundColor(ChatWorkTheme.color(this@ChatWorkImageActivity, 0xFFE5EAF1.toInt()))
             visibility = View.GONE
         }
         root.addView(ScrollView(this).apply {
@@ -83,8 +89,10 @@ class ChatWorkImageActivity : Activity() {
         prompt = EditText(this).apply {
             hint = "Describe the image or how to edit your photo…"
             minLines = 2; maxLines = 5; textSize = 16f
-            setTextColor(0xFF142033.toInt())
+            setTextColor(ink)
             setPadding(dp(12), dp(10), dp(12), dp(10))
+            setHintTextColor(muted)
+            setBackgroundColor(surface)
         }
         root.addView(prompt, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
