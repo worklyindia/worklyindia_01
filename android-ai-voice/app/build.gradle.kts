@@ -58,6 +58,9 @@ android {
     sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/wan-jni"))
     packaging {
         jniLibs {
+            // Wan is launched as a child process from nativeLibraryDir, so Android
+            // must extract the executable instead of loading it only from the APK.
+            useLegacyPackaging = true
             pickFirsts += setOf("**/libonnxruntime.so")
         }
     }
