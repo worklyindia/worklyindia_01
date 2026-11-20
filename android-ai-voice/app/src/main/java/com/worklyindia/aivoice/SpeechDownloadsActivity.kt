@@ -68,14 +68,17 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Indic Tiny TTS Hindi","Indic Tiny TTS · Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
-        list.addView(label("AI IMAGE GENERATION · WEBSITE SERVER",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
-        addServerModelCard(list,"Image Generation Model","Stored and run on the Workly website model server.")
-        list.addView(label("AI VIDEO GENERATION · WEBSITE SERVER",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
-        addServerModelCard(list,"Wan 2.1 Text-to-Video 1.3B","Model weights are stored on the server; website requests run inference there.")
-        list.addView(label("LANGUAGE TRANSLATION · WEBSITE SERVER",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
-        addServerModelCard(list,"MADLAD-400 3B Translation","Multilingual model cached on the translation server.")
-        list.addView(label("Website server deployment is not yet connected. Server model downloads will be enabled only after the GPU host, secure API and health checks are configured.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
+        list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
+        addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
+        addLocalOnlyCard(list,"Wan 2.1 Text-to-Video 1.3B","Not supported on this phone: Wan needs a multi-gigabyte model pack and substantially more RAM. Download is disabled to prevent storage and memory failures.")
+        addLocalOnlyCard(list,"MADLAD-400 3B Translation","The 3B model is too large for this phone. A separate small offline translation model must be integrated before on-device translation can be enabled.")
+        list.addView(label("Mobile-only mode: no Hugging Face, website server or remote AI endpoint is used by these model cards. Only locally supported models can be enabled.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         setContentView(page)
+    }
+    private fun addLocalOnlyCard(parent:LinearLayout,title:String,reason:String) {
+        val c=card(parent,title,reason)
+        c.addView(label("On-device · Not available",12,secondary,true))
+        c.addView(Button(this).apply { text="Not supported on this phone"; isAllCaps=false; isEnabled=false })
     }
     private fun addServerModelCard(parent:LinearLayout,title:String,subtitle:String) {
         val c=card(parent,title,subtitle)
