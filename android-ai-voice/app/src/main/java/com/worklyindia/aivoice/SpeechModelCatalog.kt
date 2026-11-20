@@ -144,7 +144,7 @@ object SpeechModelCatalog {
         files = listOf(
             ModelFile(
                 "qwen-talker-0.6b-customvoice-Q4_K_M.gguf",
-                "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-talker-0.6b-base-Q4_K_M.gguf",
+                "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-talker-0.6b-customvoice-Q4_K_M.gguf",
                 604_878_080L
             ),
             ModelFile(
