@@ -2,6 +2,8 @@ package com.worklyindia.aivoice
 
 import android.content.Context
 import android.os.StatFs
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -93,7 +95,7 @@ object WanVideoManager {
         return Snapshot(true, true, true, active, directoryBytes(dir), if (active) "Wan2.1 model is ready on this phone." else "Wan2.1 model is installed but inactive.")
     }
 
-    fun download(context: Context, onProgress: (DownloadProgress) -> Unit): Snapshot {
+    fun download(context: Context, allowMobileData: Boolean, onProgress: (DownloadProgress) -> Unit): Snapshot {
         synchronized(lock) {
             check(activeProcess?.isAlive != true) { "Stop video generation before downloading the model." }
             check(activeConnection == null) { "A Wan model download is already running." }
@@ -129,7 +131,7 @@ object WanVideoManager {
                     continue
                 }
                 val part = File(target.path + ".part")
-                downloadFile(item, part, completed, onProgress)
+                downloadFile(context, item, part, completed, allowMobileData, onProgress)
                 if (part.length() != item.bytes) throw IOException(item.name + " downloaded with the wrong size.")
                 if (sha256(part) != item.sha256) {
                     part.delete()
@@ -161,14 +163,17 @@ object WanVideoManager {
     }
 
     private fun downloadFile(
+        context: Context,
         item: ModelFile,
         part: File,
         completed: Long,
+        allowMobileData: Boolean,
         onProgress: (DownloadProgress) -> Unit
     ) {
         var failures = 0
         while (part.length() < item.bytes) {
             if (cancelDownload) throw IOException("Wan model download cancelled.")
+            requireAllowedNetwork(context, allowMobileData)
             val offset = part.length()
             val connection = (URL(item.url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 20_000
@@ -218,6 +223,22 @@ object WanVideoManager {
                 connection.disconnect()
                 synchronized(lock) { if (activeConnection === connection) activeConnection = null }
             }
+        }
+    }
+
+
+    private fun requireAllowedNetwork(context: Context, allowMobileData: Boolean) {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = manager.activeNetwork ?: throw IOException("No internet connection. Connect to Wi-Fi and try again.")
+        val capabilities = manager.getNetworkCapabilities(network)
+            ?: throw IOException("Network status is unavailable. Try again.")
+        if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+            throw IOException("The current network has no internet access.")
+        }
+        val wifi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        if (!wifi && !allowMobileData) {
+            throw IOException("Wan model download is set to Wi-Fi only. Connect to Wi-Fi or allow mobile data in the download prompt.")
         }
     }
 
