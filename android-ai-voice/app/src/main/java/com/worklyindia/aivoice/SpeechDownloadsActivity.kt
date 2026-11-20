@@ -71,7 +71,7 @@ class SpeechDownloadsActivity : Activity() {
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
         addLocalOnlyCard(list,"Wan 2.1 Text-to-Video 1.3B","Not supported on this phone: Wan needs a multi-gigabyte model pack and substantially more RAM. Download is disabled to prevent storage and memory failures.")
-        addLocalOnlyCard(list,"MADLAD-400 3B Translation","The 3B model is too large for this phone. A separate small offline translation model must be integrated before on-device translation can be enabled.")
+        addLocalOnlyCard(list,"Offline Translation · ML Kit","Lightweight language packs are downloaded to this phone on first use (about 30 MB per language). Translation runs on-device; no translation server is used.")
         list.addView(label("Mobile-only mode: no Hugging Face, website server or remote AI endpoint is used by these model cards. Only locally supported models can be enabled.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         setContentView(page)
     }

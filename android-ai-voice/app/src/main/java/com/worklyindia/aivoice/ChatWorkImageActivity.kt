@@ -66,7 +66,7 @@ class ChatWorkImageActivity : Activity() {
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
         status = TextView(this).apply {
-            text = "Create a new image or choose a photo to edit."
+            text = "On-device image generation is not supported on this phone yet. No remote image service is used."
             textSize = 13f; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(10))
         }
         root.addView(status)
@@ -97,12 +97,12 @@ class ChatWorkImageActivity : Activity() {
         root.addView(prompt, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         chooseButton = Button(this).apply {
-            text = "Add photo"; isAllCaps = false
+            text = "Add photo"; isAllCaps = false; visibility = View.GONE
             setOnClickListener { choosePhoto() }
         }
         actions.addView(chooseButton, LinearLayout.LayoutParams(0, dp(50), 1f))
         generateButton = Button(this).apply {
-            text = "Create image"; isAllCaps = false
+            text = "Not available on this phone"; isAllCaps = false; isEnabled = false
             setOnClickListener { generateImage() }
         }
         actions.addView(generateButton, LinearLayout.LayoutParams(0, dp(50), 1f).apply { leftMargin = dp(8) })
