@@ -194,14 +194,13 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 val qvacRepo = layout.projectDirectory.dir("../external/qvac-fabric-speech.cpp").asFile
 val qvacTtsSource = File(qvacRepo, "engines/tts")
 val qvacGgmlSource = layout.projectDirectory.dir("../external/qvac-fabric-llm.cpp/ggml").asFile
-val qvacStagingDir = layout.buildDirectory.dir("qvac-tts-source")
 val qvacNativeBuildDir = layout.buildDirectory.dir("qvac-native")
 val qvacNativeOutput = layout.buildDirectory.file("generated/qvac-jni/arm64-v8a/libworkly_qvac_tts_jni.so")
 
 val stageQvacTtsSource by tasks.registering {
     inputs.dir(qvacTtsSource)
     inputs.dir(qvacGgmlSource)
-    outputs.dir(qvacStagingDir)
+    outputs.dir(qvacNativeBuildDir)
     doLast {
         check(File(qvacTtsSource, "CMakeLists.txt").isFile) {
             "QVAC TTS source submodule is missing. Run: git submodule update --init --recursive"
@@ -209,16 +208,17 @@ val stageQvacTtsSource by tasks.registering {
         check(File(qvacGgmlSource, "CMakeLists.txt").isFile) {
             "QVAC fabric GGML submodule is missing. Run: git submodule update --init --recursive"
         }
-        val stage = qvacStagingDir.get().asFile
-        stage.deleteRecursively()
-        stage.mkdirs()
-        project.copy {
-            from(qvacTtsSource)
-            into(stage)
-            exclude("ggml/**")
+        val ggmlLink = File(qvacTtsSource, "ggml")
+        if (java.nio.file.Files.isSymbolicLink(ggmlLink.toPath())) {
+            java.nio.file.Files.delete(ggmlLink.toPath())
+        } else if (ggmlLink.exists()) {
+            check(ggmlLink.isDirectory && File(ggmlLink, "CMakeLists.txt").isFile) {
+                "Unexpected QVAC engines/tts/ggml path; refusing to overwrite it."
+            }
         }
-        val ggmlLink = File(stage, "ggml")
-        java.nio.file.Files.createSymbolicLink(ggmlLink.toPath(), qvacGgmlSource.toPath())
+        if (!ggmlLink.exists()) {
+            java.nio.file.Files.createSymbolicLink(ggmlLink.toPath(), qvacGgmlSource.toPath())
+        }
     }
 }
 
@@ -229,7 +229,7 @@ val configureQvacNative by tasks.registering(Exec::class) {
     commandLine(
         "cmake", "-S", layout.projectDirectory.dir("../qvac-native").asFile.absolutePath,
         "-B", qvacNativeBuildDir.get().asFile.absolutePath,
-        "-DQVAC_TTS_ROOT=${qvacStagingDir.get().asFile.absolutePath}",
+        "-DQVAC_TTS_ROOT=${qvacTtsSource.absolutePath}",
         "-DCMAKE_TOOLCHAIN_FILE=${android.ndkDirectory.absolutePath}/build/cmake/android.toolchain.cmake",
         "-DANDROID_ABI=arm64-v8a",
         "-DANDROID_PLATFORM=android-26",
