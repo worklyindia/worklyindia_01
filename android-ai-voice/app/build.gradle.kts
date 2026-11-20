@@ -6,6 +6,7 @@ import java.security.MessageDigest
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
 
 val releaseStoreFile = System.getenv("WORKLY_VOICE_KEYSTORE_PATH")
@@ -76,6 +77,7 @@ android {
 dependencies {
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.firebase:firebase-messaging:24.1.2")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.32.0")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
