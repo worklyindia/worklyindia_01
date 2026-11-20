@@ -102,6 +102,19 @@ export async function handleWorklyVoiceRelay(req: Request) {
       });
     }
 
+    if (action === "register_fcm_token") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const fcmToken = typeof body?.fcm_token === "string" ? body.fcm_token.trim() : "";
+      if (fcmToken.length < 20 || fcmToken.length > 4096) return json({ error: "Invalid Firebase registration token" }, 400);
+      const { error } = await db.from("workly_ai_voice_devices")
+        .update({ fcm_token: fcmToken, fcm_token_updated_at: new Date().toISOString() })
+        .eq("id", device.id)
+        .is("revoked_at", null);
+      if (error) throw error;
+      return json({ registered: true });
+    }
+
     if (action === "create_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
