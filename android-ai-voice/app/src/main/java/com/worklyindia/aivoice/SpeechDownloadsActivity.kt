@@ -72,9 +72,33 @@ class SpeechDownloadsActivity : Activity() {
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
         qwenManager.models.forEach { addQwenCard(list,it) }
         list.addView(label("VOICE RECOGNITION",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
-        addSpeechPack(list,"IndicConformer Hindi","AI4Bharat IndicConformer INT8 · Hindi offline speech-to-text",SpeechModelCatalog.indicConformer("hi"))
-        addSpeechPack(list,"IndicConformer English","AI4Bharat IndicConformer INT8 · English offline speech-to-text",SpeechModelCatalog.indicConformer("en"))
-        addSpeechPack(list,"IndicConformer Gujarati","AI4Bharat IndicConformer INT8 · Gujarati offline speech-to-text",SpeechModelCatalog.indicConformer("gu"))
+        listOf(
+            "as" to "Assamese",
+            "bn" to "Bengali",
+            "brx" to "Bodo",
+            "doi" to "Dogri",
+            "gu" to "Gujarati",
+            "hi" to "Hindi",
+            "kn" to "Kannada",
+            "kok" to "Konkani",
+            "ks" to "Kashmiri",
+            "mai" to "Maithili",
+            "ml" to "Malayalam",
+            "mni" to "Manipuri",
+            "mr" to "Marathi",
+            "ne" to "Nepali",
+            "or" to "Odia",
+            "pa" to "Punjabi",
+            "sa" to "Sanskrit",
+            "sat" to "Santali",
+            "sd" to "Sindhi",
+            "ta" to "Tamil",
+            "te" to "Telugu",
+            "ur" to "Urdu",
+            "en" to "English"
+        ).forEach { (code, languageName) ->
+            addSpeechPack(list, "IndicConformer $languageName", "AI4Bharat IndicConformer INT8 · $languageName offline speech-to-text", SpeechModelCatalog.indicConformer(code))
+        }
         list.addView(label("TEXT TO SPEECH",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
         addSpeechPack(list,"Indic Tiny TTS Hindi","Indic Tiny TTS · Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
