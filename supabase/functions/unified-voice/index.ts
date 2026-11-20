@@ -368,6 +368,13 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
     /\\s+(?:The previous answer was|There is nothing further to|There is nothing else to add|The answer is complete)[\\s\\S]*$/i,
     '',
   ).trim();
+  const isSimpleGreeting = /^(?:hi|hello|hey|good morning|good afternoon|good evening)\\b/i.test(text);
+  if (isSimpleGreeting) {
+    reply = reply.replace(
+      /\\s*(?:i['’]?m sorry|i am sorry|i don['’]?t have memory|i do not have memory|i can['’]?t remember|i cannot remember)[\\s\\S]*$/i,
+      '',
+    ).trim();
+  }
   const hasNaturalEnding = /[.!?।॥…]["'”’)]*\\s*$/.test(reply);
   if (!hasNaturalEnding && reply.length > 0) {
     const continuation = await runAiChain([
