@@ -85,13 +85,17 @@ def translate(payload: TranslateRequest, authorization: Optional[str] = Header(d
 
     if not text:
         raise HTTPException(status_code=400, detail="Text is required")
-    if target not in SUPPORTED_LANGUAGES:
-        raise HTTPException(status_code=400, detail="Unsupported target language")
+    if not re.fullmatch(r"[a-z]{2,3}", target):
+        raise HTTPException(status_code=400, detail="Invalid target language code")
     if model is None or tokenizer is None:
         raise HTTPException(status_code=503, detail="Translation model is not ready")
 
     # MADLAD-400 uses a target-language prefix such as <2gu> or <2en>.
-    prompt = f"<2{target}> {text}"
+    target_token = f"<2{target}>"
+    token_id = tokenizer.convert_tokens_to_ids(target_token)
+    if token_id == tokenizer.unk_token_id:
+        raise HTTPException(status_code=400, detail="The selected target language is not supported by this model")
+    prompt = f"{target_token} {text}"
     with model_lock, torch.inference_mode():
         inputs = tokenizer(
             prompt,
