@@ -1,3 +1,9 @@
 [submodule "android-ai-voice/external/qwen3-tts.cpp"]
 	path = android-ai-voice/external/qwen3-tts.cpp
 	url = https://github.com/Danmoreng/qwen3-tts.cpp.git
+[submodule "android-ai-voice/external/qvac-fabric-speech.cpp"]
+	path = android-ai-voice/external/qvac-fabric-speech.cpp
+	url = https://github.com/tetherto/qvac-fabric-speech.cpp.git
+[submodule "android-ai-voice/external/qvac-fabric-llm.cpp"]
+	path = android-ai-voice/external/qvac-fabric-llm.cpp
+	url = https://github.com/tetherto/qvac-fabric-llm.cpp.git
