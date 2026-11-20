@@ -194,12 +194,14 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 val qvacRepo = layout.projectDirectory.dir("../external/qvac-fabric-speech.cpp").asFile
 val qvacTtsSource = File(qvacRepo, "engines/tts")
 val qvacGgmlSource = layout.projectDirectory.dir("../external/qvac-fabric-llm.cpp/ggml").asFile
+val sentencePieceSource = layout.projectDirectory.dir("../external/sentencepiece").asFile
 val qvacNativeBuildDir = layout.buildDirectory.dir("qvac-native")
 val qvacNativeOutput = layout.buildDirectory.file("generated/qvac-jni/arm64-v8a/libworkly_qvac_tts_jni.so")
 
 val stageQvacTtsSource by tasks.registering {
     inputs.dir(qvacTtsSource)
     inputs.dir(qvacGgmlSource)
+    inputs.dir(sentencePieceSource)
     outputs.dir(qvacNativeBuildDir)
     doLast {
         check(File(qvacTtsSource, "CMakeLists.txt").isFile) {
@@ -207,6 +209,9 @@ val stageQvacTtsSource by tasks.registering {
         }
         check(File(qvacGgmlSource, "CMakeLists.txt").isFile) {
             "QVAC fabric GGML submodule is missing. Run: git submodule update --init --recursive"
+        }
+        check(File(sentencePieceSource, "CMakeLists.txt").isFile) {
+            "SentencePiece submodule is missing. Run: git submodule update --init --recursive"
         }
         val ggmlLink = File(qvacTtsSource, "ggml")
         if (java.nio.file.Files.isSymbolicLink(ggmlLink.toPath())) {
@@ -230,6 +235,7 @@ val configureQvacNative by tasks.registering(Exec::class) {
         "cmake", "-S", layout.projectDirectory.dir("../qvac-native").asFile.absolutePath,
         "-B", qvacNativeBuildDir.get().asFile.absolutePath,
         "-DQVAC_TTS_ROOT=${qvacTtsSource.absolutePath}",
+        "-DSENTENCEPIECE_ROOT=${sentencePieceSource.absolutePath}",
         "-DCMAKE_TOOLCHAIN_FILE=${android.ndkDirectory.absolutePath}/build/cmake/android.toolchain.cmake",
         "-DANDROID_ABI=arm64-v8a",
         "-DANDROID_PLATFORM=android-26",
