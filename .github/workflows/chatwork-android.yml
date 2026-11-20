@@ -111,6 +111,30 @@ jobs:
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleDebug
 
+      - name: Verify native TTS runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android-ai-voice/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then APK="android-ai-voice/app/build/outputs/apk/debug/app-debug.apk"; fi
+          test -f "$APK"
+          NDK_READelf="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          test -x "$NDK_READelf"
+          mkdir -p "$RUNNER_TEMP/chatwork-apk-check"
+          unzip -q "$APK" 'lib/arm64-v8a/*.so' -d "$RUNNER_TEMP/chatwork-apk-check"
+          QVAC="$RUNNER_TEMP/chatwork-apk-check/lib/arm64-v8a/libworkly_qvac_tts_jni.so"
+          QWEN="$RUNNER_TEMP/chatwork-apk-check/lib/arm64-v8a/libqwen3_tts_jni.so"
+          test -f "$QVAC" && test -f "$QWEN"
+          if "$NDK_READelf" -d "$QVAC" | grep -q 'Shared library: \[libomp.so\]'; then
+            echo '::error::QVAC TTS still depends on libomp.so, which is not provided by Android.'
+            exit 1
+          fi
+          if "$NDK_READelf" -d "$QWEN" | grep -Eq 'Shared library: \[libggml(-base|-cpu)?\.so\]'; then
+            echo '::error::Qwen JNI still dynamically links GGML; this can load an incompatible GGML from another engine.'
+            exit 1
+          fi
+          echo 'Verified: QVAC has no libomp.so dependency and Qwen has no shared GGML dependency.'
+
       - name: Rename APK
         shell: bash
         run: |
