@@ -46,6 +46,17 @@ object VoiceRelayApi {
         return result.body.getString("device_token")
     }
 
+    fun registerFcmToken(deviceToken: String, fcmToken: String) {
+        val result = post(
+            "register_fcm_token",
+            JSONObject().put("fcm_token", fcmToken),
+            deviceToken = deviceToken
+        )
+        if (result.statusCode !in 200..299) {
+            throw RelayApiException(result.statusCode, result.body.optString("error", "Could not register push notifications"))
+        }
+    }
+
     fun poll(token: String): JSONObject {
         val result = post("poll", deviceToken = token)
         if (result.statusCode !in 200..299) throw RelayApiException(result.statusCode, result.body.optString("error", "Relay poll failed"))
