@@ -79,6 +79,50 @@ class IndicTinyTtsEngine private constructor(
         play(waveform)
     }
 
+    fun synthesizeToWav(text: String, output: File, voice: String = "female", speed: Float = 1.0f): File {
+        require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
+        val selectedVoice = voice.lowercase()
+        val speaker = when (selectedVoice) {
+            "female" -> femaleSpeakerId
+            "male" -> maleSpeakerId
+            else -> throw IllegalArgumentException("Choose female or male voice.")
+        }
+        val scale = (if (selectedVoice == "male") maleLengthScale else femaleLengthScale) / speed
+        val normalized = normalizeInput(text)
+        require(normalized.isNotBlank()) { "Enter text to speak." }
+        val parts = ArrayList<FloatArray>()
+        val random = Random(System.nanoTime())
+        for (chunk in splitChunks(normalized)) {
+            val ids = encodeCharacters(chunk)
+            require(ids.size <= MAX_TOKENS) { "Text is too long. Split it into shorter sentences." }
+            val spoken = synthesizeChunk(ids, speaker, random, scale)
+            if (spoken.isNotEmpty()) {
+                if (parts.isNotEmpty()) parts.add(FloatArray(pauseSamples))
+                parts.add(spoken)
+            }
+        }
+        val samples = FloatArray(parts.sumOf { it.size })
+        var offset = 0
+        parts.forEach { it.copyInto(samples, offset); offset += it.size }
+        require(samples.isNotEmpty()) { "No supported speech characters found for this voice." }
+        writeWav(output, samples)
+        return output
+    }
+
+    private fun writeWav(output: File, samples: FloatArray) {
+        output.parentFile?.mkdirs()
+        val dataBytes = samples.size * 2
+        java.io.DataOutputStream(output.outputStream().buffered()).use { out ->
+            fun ascii(value: String) = out.write(value.toByteArray(Charsets.US_ASCII))
+            fun leInt(value: Int) { out.writeByte(value); out.writeByte(value ushr 8); out.writeByte(value ushr 16); out.writeByte(value ushr 24) }
+            fun leShort(value: Int) { out.writeByte(value); out.writeByte(value ushr 8) }
+            ascii("RIFF"); leInt(36 + dataBytes); ascii("WAVE"); ascii("fmt "); leInt(16)
+            leShort(1); leShort(1); leInt(SAMPLE_RATE); leInt(SAMPLE_RATE * 2); leShort(2); leShort(16)
+            ascii("data"); leInt(dataBytes)
+            samples.forEach { leShort((it.coerceIn(-1f, 1f) * 32767f).toInt()) }
+        }
+    }
+
     private fun splitChunks(text: String): List<String> {
         val result = ArrayList<String>()
         val sentences = text.split(Regex("(?<=[।?!.])\\s+"))
