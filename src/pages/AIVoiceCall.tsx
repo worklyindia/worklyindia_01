@@ -127,8 +127,25 @@ export default function AIVoiceCall() {
       window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Workly Voice app could not return audio.';
-      console.warn('Workly Voice audio playback failed:', message);
+      const message = error instanceof Error ? error.message : 'ChatWork phone audio is unavailable.';
+      console.warn('ChatWork phone audio playback failed; using browser voice fallback:', message);
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = resolvedLanguage;
+          utterance.rate = 1;
+          utterance.volume = speakerOn ? 1 : 0;
+          utterance.onstart = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
+          utterance.onend = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
+          utterance.onerror = (event) => window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: event.error || 'Device voice playback failed.' } }));
+          window.speechSynthesis.speak(utterance);
+          return true;
+        } catch (fallbackError) {
+          console.warn('Browser voice fallback failed:', fallbackError);
+        }
+      }
+      setErrorMessage('AI reply is ready, but voice playback is unavailable. Check the ChatWork phone and installed language voice.');
       return false;
     }
   }, [speakerOn]);
@@ -258,6 +275,15 @@ export default function AIVoiceCall() {
       if (!reply) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setAiRequestStatus('Reply received');
+      setLastReply(reply);
+      const assistantMessage: StoredMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: historyReply || reply,
+        timestamp: formatChatStamp(),
+        status: 'read',
+      };
+      chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       // Keep the reply hidden until its audio has successfully started.
@@ -276,25 +302,14 @@ export default function AIVoiceCall() {
 
       const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (spoken) {
-        setLastReply(reply);
-        // Commit the assistant message only once voice playback has actually started,
-        // so the text never appears ahead of the spoken reply in chat history.
-        const assistantMessage: StoredMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: historyReply || reply,
-          timestamp: formatChatStamp(),
-          status: 'read',
-        };
-        chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
         lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
         setVoiceStage('AI is speaking…');
       } else {
-        // TTS failure must never end or navigate away from the call screen.
-        setCallState('listening');
-        setVoiceStage('Listening…');
-        if (activeRef.current && !mutedRef.current) startRecognition('auto');
+        lastSubmittedTranscriptRef.current = '';
+        setCallState('error');
+        setVoiceStage('AI text reply is ready; voice playback failed.');
+        setErrorMessage('Your AI text reply is ready above. Check ChatWork TTS and the phone voice language settings.');
       }
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
@@ -389,14 +404,9 @@ export default function AIVoiceCall() {
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const message = (event as CustomEvent<{ message?: string }>).detail?.message || 'Voice service error.';
-    setErrorMessage('');
-    setVoiceStage('Microphone reconnecting…');
-    setCallState('listening');
-    if (activeRef.current && !mutedRef.current) {
-      window.setTimeout(() => {
-        if (activeRef.current && !mutedRef.current) startRecognition('auto');
-      }, 300);
-    }
+    setErrorMessage(message);
+    setVoiceStage(message);
+    setCallState('error');
   }, [startRecognition]);
 
   useEffect(() => {
@@ -552,7 +562,14 @@ export default function AIVoiceCall() {
         <div className="mt-5 min-h-6 text-sm font-medium tracking-wide text-white/70">
           {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'Listening…' : ''}
         </div>
-        <div className="mt-5 min-h-[76px] w-full" aria-hidden="true" />
+        <div className="mt-5 min-h-[76px] max-h-40 w-full overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left" aria-live="polite">
+          {lastTranscript && <p className="text-sm text-white/70"><span className="font-semibold text-cyan-200">You:</span> {lastTranscript}</p>}
+          {partialTranscript && <p className="mt-1 text-sm text-white/45">{partialTranscript}</p>}
+          {lastReply && <p className="mt-2 text-sm leading-relaxed text-white"><span className="font-semibold text-fuchsia-200">ChatWork:</span> {lastReply}</p>}
+          {!lastTranscript && !partialTranscript && !lastReply && <p className="text-center text-xs text-white/35">Your speech and ChatWork replies will appear here</p>}
+        </div>
+        <p className="mt-2 min-h-4 text-xs text-white/45" aria-live="polite">{callStarted ? `${aiRequestStatus} · ${voiceStage}` : ''}</p>
+        {errorMessage && <p className="mt-2 max-w-sm text-xs text-rose-300" role="alert">{errorMessage}</p>}
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
         <p className="sr-only" aria-live="polite">{voiceStage}</p>
