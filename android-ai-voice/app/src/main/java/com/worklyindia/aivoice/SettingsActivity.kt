@@ -17,7 +17,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Mobile-friendly diagnostics and connection settings for Workly Voice. */
+/** Mobile-friendly diagnostics and connection settings for ChatWork. */
 class SettingsActivity : Activity() {
     private var dark = false
     private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
@@ -60,7 +60,7 @@ class SettingsActivity : Activity() {
             setOnClickListener { finish() }
         })
         content.addView(label("Settings", 30, primary, true))
-        content.addView(label("Workly Voice connection & diagnostics", 14, secondary, false))
+        content.addView(label("ChatWork connection & diagnostics", 14, secondary, false))
 
         val prefs = getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
         val tokenReady = !SecureDeviceTokenStore.read(this).isNullOrBlank()
@@ -118,7 +118,7 @@ class SettingsActivity : Activity() {
         content.addView(diagnostics)
         content.addView(history)
         content.addView(label("Privacy & reliability", 17, primary, true))
-        content.addView(label("Only connection and request status/error summaries are kept on this device for this activity list. The list automatically shows the most recent hour. Android can restrict background services; keep Workly Voice open if the phone server disconnects.", 12, secondary, false))
+        content.addView(label("Only connection and request status/error summaries are kept on this device for this activity list. The list automatically shows the most recent hour. Android can restrict background services; keep ChatWork open if the phone server disconnects.", 12, secondary, false))
     }
 
     private fun readEvents(): List<JSONObject> {
