@@ -314,8 +314,13 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   if (!text) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
-  // Deterministic greeting avoids free-model filler and gives voice calls an instant, clean opening.
-  if (/^(?:hi|hello|hey|good morning|good afternoon|good evening)\\b/i.test(text)) {
+  // Detect a simple greeting even when the relay sends a conversation transcript
+  // such as "User: Hello ChatWork." rather than the raw utterance.
+  const latestUserUtterance = text.split(/\r?\n/).reverse()
+    .find((line: string) => /^(?:user|caller)\s*:/i.test(line))
+    ?.replace(/^(?:user|caller)\s*:\s*/i, '').trim() ?? text;
+  const isSimpleGreeting = /^(?:hi|hello|hey|good morning|good afternoon|good evening)(?:\s+chatwork)?[.!?,\s]*$/i.test(latestUserUtterance);
+  if (isSimpleGreeting) {
     return new Response(JSON.stringify({
       reply: 'Hello! How can I help you today?',
       languageTag: languageTag.startsWith('und') || languageTag === 'auto' ? 'en-IN' : languageTag,
@@ -372,10 +377,9 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   // answer (for example, "The previous answer was complete..."). Remove that
   // accidental tail before deciding whether a continuation is actually needed.
   let reply = result.text.trim().replace(
-    /\\s+(?:The previous answer was|There is nothing further to|There is nothing else to add|The answer is complete)[\\s\\S]*$/i,
+    /\s+(?:The previous answer was|There is nothing further to|There is nothing else to add|The answer is complete)[\s\S]*$/i,
     '',
   ).trim();
-  const isSimpleGreeting = /^(?:hi|hello|hey|good morning|good afternoon|good evening)\\b/i.test(text);
   if (isSimpleGreeting) {
     // Greeting turns should stay short and must not grow an unrelated model disclaimer.
     const questionEnd = reply.indexOf('?');
