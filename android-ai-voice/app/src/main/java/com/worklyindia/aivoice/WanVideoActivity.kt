@@ -303,6 +303,7 @@ class WanVideoActivity : Activity() {
         val negative = negativeInput.text?.toString()?.trim().orEmpty()
         val seed = (System.currentTimeMillis() and 0x7FFFFFFF).coerceAtLeast(1L)
         busy = true
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         currentResult = null
         videoView.stopPlayback()
         videoView.visibility = View.GONE
@@ -325,6 +326,7 @@ class WanVideoActivity : Activity() {
                 }
                 main.post {
                     busy = false
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     currentResult = result
                     generationProgress.visibility = View.GONE
                     cancelGenerationButton.visibility = View.GONE
@@ -341,6 +343,7 @@ class WanVideoActivity : Activity() {
             } catch (error: Exception) {
                 main.post {
                     busy = false
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     generationProgress.visibility = View.GONE
                     cancelGenerationButton.visibility = View.GONE
                     generateButton.isEnabled = currentStatus?.valid == true && currentStatus?.active == true
@@ -426,6 +429,7 @@ class WanVideoActivity : Activity() {
             WanVideoManager.cancelDownload()
             WanVideoManager.cancelGeneration()
         }
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         runCatching { videoView.stopPlayback() }
         worker.shutdownNow()
         main.removeCallbacksAndMessages(null)
