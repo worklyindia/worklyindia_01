@@ -384,12 +384,24 @@ class SpeechDownloadsActivity : Activity() {
     }
 
     private fun showMossTest(pack: SpeechModelCatalog.Pack) {
+        val input = EditText(this).apply {
+            setText("Hello! This is MOSS text to speech running offline on Android.")
+            minLines = 3
+            maxLines = 6
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
         AlertDialog.Builder(this)
             .setTitle("Test MOSS-TTS-Nano")
-            .setMessage("This native Android ONNX smoke test generates and plays the built-in English demo sentence. Custom text input will be enabled after the SentencePiece tokenizer adapter is integrated.")
+            .setMessage("Enter English text. SentencePiece tokenization and ONNX speech generation run locally.")
+            .setView(input)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Generate & Play") { _, _ ->
-                statusToast("Generating speech on this phone…")
+                val text = input.text.toString().trim()
+                if (text.isBlank()) {
+                    Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                statusToast("Tokenizing text and generating speech on this phone…")
                 ttsExecutor.execute {
                     try {
                         val result = MossTtsOnnxEngine(
@@ -398,7 +410,7 @@ class SpeechDownloadsActivity : Activity() {
                             cpuThreads = 2
                         ).use { engine ->
                             engine.synthesize(
-                                textTokenIds = MossDemoPrompts.ENGLISH_TOKEN_IDS,
+                                text = text,
                                 outputFile = java.io.File(cacheDir, "moss_tts_nano_test.wav"),
                                 voice = "Junhao",
                                 maxFrames = 160,
@@ -432,7 +444,7 @@ class SpeechDownloadsActivity : Activity() {
                         runOnUiThread {
                             AlertDialog.Builder(this)
                                 .setTitle("MOSS voice test failed")
-                                .setMessage(error.message ?: "Could not load or run the local ONNX model.")
+                                .setMessage(error.message ?: "Could not tokenize text or run the local ONNX model.")
                                 .setPositiveButton("OK", null)
                                 .show()
                         }
