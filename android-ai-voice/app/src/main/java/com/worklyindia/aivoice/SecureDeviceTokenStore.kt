@@ -17,6 +17,8 @@ import javax.crypto.spec.GCMParameterSpec
 object SecureDeviceTokenStore {
     private const val PREFS = "workly_ai_voice_secure"
     private const val TOKEN = "device_token"
+    private const val ACCESS_TOKEN = "auth_access_token"
+    private const val REFRESH_TOKEN = "auth_refresh_token"
     private const val KEY_ALIAS = "workly_ai_voice_device_token_v1"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
 
@@ -31,6 +33,40 @@ object SecureDeviceTokenStore {
             .edit()
             .putString(TOKEN, Base64.encodeToString(packed, Base64.NO_WRAP))
             .apply()
+    }
+
+    @Synchronized
+    fun saveAuthSession(context: Context, accessToken: String, refreshToken: String) {
+        require(accessToken.isNotBlank() && refreshToken.isNotBlank()) { "Invalid Workly sign-in session" }
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(ACCESS_TOKEN, encrypt(accessToken))
+            .putString(REFRESH_TOKEN, encrypt(refreshToken))
+            .apply()
+    }
+
+    @Synchronized
+    fun readAccessToken(context: Context): String? = readSecret(context, ACCESS_TOKEN)
+
+    @Synchronized
+    fun readRefreshToken(context: Context): String? = readSecret(context, REFRESH_TOKEN)
+
+    private fun readSecret(context: Context, key: String): String? {
+        val packed = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(key, null) ?: return null
+        return runCatching { decrypt(packed) }.getOrNull()
+    }
+
+    private fun encrypt(value: String): String {
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        return Base64.encodeToString(cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+    }
+
+    private fun decrypt(value: String): String {
+        val packed = Base64.decode(value, Base64.NO_WRAP)
+        require(packed.size > 12) { "Stored session is invalid" }
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, packed.copyOfRange(0, 12)))
+        return cipher.doFinal(packed.copyOfRange(12, packed.size)).toString(Charsets.UTF_8)
     }
 
     @Synchronized

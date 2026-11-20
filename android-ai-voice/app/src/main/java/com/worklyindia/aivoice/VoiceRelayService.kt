@@ -109,6 +109,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "stt" -> handleSttJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
+                        "image" -> handleImageJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
                     }
                 } else {
@@ -126,6 +127,45 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             }
             try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
         }
+    }
+
+    private fun handleImageJob(token: String, jobId: String, payload: JSONObject) {
+        if (activeJobId != null) {
+            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
+            return
+        }
+        activeJobId = jobId
+        Thread {
+            try {
+                val prompt = payload.optString("prompt").trim().take(4000)
+                if (prompt.isBlank()) throw IllegalStateException("Image prompt is empty.")
+                if (!ImageModelManager.isModelReady(this)) {
+                    throw IllegalStateException("Local image model is not downloaded. Open ChatWork → AI Image Studio and download the 1.57 GB model over Wi-Fi.")
+                }
+                val width = payload.optInt("width", 512).coerceIn(512, 512)
+                val height = payload.optInt("height", 512).coerceIn(512, 512)
+                val steps = payload.optInt("steps", 8).coerceIn(4, 10)
+                setStatus("Generating image locally on this phone…")
+                val bitmap = LocalImageGenerator.generateBitmap(this, prompt, width, height, steps)
+                val output = java.io.ByteArrayOutputStream()
+                if (!bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 84, output)) {
+                    throw IllegalStateException("Could not encode the generated image.")
+                }
+                bitmap.recycle()
+                val imageBytes = output.toByteArray()
+                if (imageBytes.isEmpty() || imageBytes.size > 1_200_000) {
+                    throw IllegalStateException("Generated image is too large to send. Try a simpler prompt.")
+                }
+                setStatus("Uploading locally generated image to ChatWork…")
+                VoiceRelayApi.uploadImage(token, jobId, imageBytes)
+                setStatus("Local image delivered to ChatWork website. Waiting for next request…")
+            } catch (error: Exception) {
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Local image generation failed.") }
+                setStatus("Local image failed: " + (error.message ?: "unknown error"))
+            } finally {
+                activeJobId = null
+            }
+        }.start()
     }
 
     private fun handleSttJob(token: String, jobId: String, payload: JSONObject) {

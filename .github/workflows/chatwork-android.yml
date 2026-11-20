@@ -2,55 +2,102 @@ name: ChatWork Android
 
 on:
   push:
-    branches:
-      - feature/workly-ai-voice-server-app
+    branches: [main, feature/workly-ai-voice-server-app]
     paths:
       - "android-ai-voice/**"
+      - "src/hooks/**"
+      - "src/integrations/supabase/types.ts"
+      - "src/App.tsx"
+      - "src/lib/**"
+      - "src/pages/AICareerAssistant.tsx"
+      - "src/pages/AIVoiceCall.tsx"
+      - "src/pages/Settings.tsx"
+      - "src/pages/owner-portal/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".nvmrc"
+      - "tsconfig.app.json"
+      - "supabase/functions/workly-ai-voice-relay/**"
+      - "supabase/migrations/*workly_ai_voice_relay*"
       - ".github/workflows/chatwork-android.yml"
   pull_request:
     paths:
       - "android-ai-voice/**"
+      - "src/hooks/**"
+      - "src/integrations/supabase/types.ts"
+      - "src/App.tsx"
+      - "src/lib/**"
+      - "src/pages/AICareerAssistant.tsx"
+      - "src/pages/AIVoiceCall.tsx"
+      - "src/pages/Settings.tsx"
+      - "src/pages/owner-portal/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".nvmrc"
+      - "tsconfig.app.json"
+      - "supabase/functions/workly-ai-voice-relay/**"
+      - "supabase/migrations/*workly_ai_voice_relay*"
       - ".github/workflows/chatwork-android.yml"
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: chatwork-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-apk:
-    name: Build ChatWork APK
+    name: ChatWork Android — Build APK
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
       - name: Set up Java 17
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
-
       - name: Set up Android SDK and native build tools
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
-
       - name: Install Android SDK, NDK and CMake
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
-
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "ndk;27.1.12297006" "cmake;3.22.1"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "9.5.1"
-
+      - name: Install Vulkan host headers
+        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev spirv-headers glslc ripgrep
+      - name: Checkout pinned Saient build recipe
+        uses: actions/checkout@v7
+        with:
+          repository: SaientAI/saient
+          ref: 73073fd7fe17dc565b33a148e42282bcc1eb926c
+          path: saient
+      - name: Checkout pinned Wan backend source
+        uses: actions/checkout@v7
+        with:
+          repository: leejet/stable-diffusion.cpp
+          ref: e31a86ce9110b11a98bd5990c329093244c2d1e3
+          submodules: recursive
+          path: stable-diffusion.cpp
+      - name: Build and verify Saient Wan ARM64 Vulkan worker
+        run: |
+          export SAIENT_SD_CPP_SOURCE="$GITHUB_WORKSPACE/stable-diffusion.cpp"
+          export SAIENT_ANDROID_NDK="$ANDROID_HOME/ndk/27.1.12297006"
+          bash saient/scripts/build-wan-android.sh
+          test -s saient/engine/arm64-v8a/libquartz-wan.so
+          file saient/engine/arm64-v8a/libquartz-wan.so
+          readelf -h saient/engine/arm64-v8a/libquartz-wan.so | grep -E "Class:.*ELF64|Machine:.*AArch64"
+          chmod 0755 saient/engine/arm64-v8a/libquartz-wan.so
+          mkdir -p android-ai-voice/app/src/main/jniLibs/arm64-v8a
+          cp saient/engine/arm64-v8a/libquartz-wan.so android-ai-voice/app/src/main/jniLibs/arm64-v8a/
       - name: Build debug APK
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleDebug
-
       - name: Prepare public release summary
         shell: bash
         run: |
@@ -59,35 +106,62 @@ jobs:
             echo
             echo "| Field | Details |"
             echo "|---|---|"
-            echo "| **Version name** | 1.0.0 |"
-            echo "| **Version code** | $GITHUB_RUN_NUMBER |"
-            echo "| **Minimum supported version code** | 1 |"
-            echo "| **Application ID** | `com.worklyindia.aivoice` |"
+            echo "| Version name | 1.0.0 |"
+            echo "| Version code | $GITHUB_RUN_NUMBER |"
+            echo "| Application ID | com.worklyindia.aivoice |"
             echo
-            echo "## Release notes"
-            echo
-            echo "Initial ChatWork Android preview release. Includes a separate voice-assistant app with Hindi, Indian English and Gujarati language selection; on-device Qwen 2.5 3B AI chat (model downloaded separately); Android TTS and optional Indic Tiny TTS speech packs; voice input with Android speech recognition and optional offline speech-model packs; and secure phone pairing / foreground relay controls."
-            echo
-            echo "## Important limitations"
-            echo
-            echo "- This is a **debug preview APK**, not a signed production release."
-            echo "- Large AI and speech models are downloaded separately; they are not bundled in the APK."
-            echo "- Gujarati speech output currently depends on the Android TTS engine."
-            echo "- Offline recognition accuracy, device performance and battery behavior require physical-device testing."
-            echo "- Website/Supabase relay source is review-only and has not been deployed to production."
-            echo
-            echo "## Download"
-            echo
-            echo "The `ChatWork-v1.0.0` APK artifact is attached to this workflow run after a successful build."
+            echo "Preview APK: debug build, not a signed production release."
+            echo "For push-to-main or manual runs, the APK is published as a direct .apk asset in GitHub Releases (not wrapped in an Actions artifact ZIP)."
+            echo "Pull-request runs build and validate the APK but do not publish a release."
+            echo "AI models are downloaded separately. Device performance requires physical-device testing."
+            echo "Website and Supabase source checks run in the other jobs; this workflow does not deploy them."
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Rename APK for download
         run: cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
-
-      - name: Upload ChatWork APK
-        uses: actions/upload-artifact@v7
+      - name: Publish direct APK download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
-          name: ChatWork-v1.0.0
-          path: android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
-          if-no-files-found: error
-          retention-days: 14
+          tag_name: chatwork-preview-${{ github.run_number }}
+          name: ChatWork APK Preview #${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false
+          files: android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
+          body: |
+            ChatWork debug preview APK. This is not a signed production release.
+            AI models download separately; device performance requires physical-device testing.
+
+  ai-context-website-checks:
+    name: ChatWork AI Context & Website Checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ".nvmrc"
+      - name: Install website dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate ChatWork AI context and website types
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Lint ChatWork voice relay integration
+        run: npx eslint src/lib/browserOfflineVoice.ts src/lib/nativeAppBridge.ts src/lib/ownerPhoneVoiceRelay.ts src/pages/AIVoiceCall.tsx --max-warnings 0
+
+  ai-voice-relay-checks:
+    name: ChatWork AI Voice Relay Checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validate Deno formatting
+        run: deno fmt supabase/functions/workly-ai-voice-relay/index.ts
+      - name: Install Edge Function dependencies
+        working-directory: supabase/functions/workly-ai-voice-relay
+        run: deno install
+      - name: Type-check Edge Function
+        working-directory: supabase/functions/workly-ai-voice-relay
+        run: deno check index.ts

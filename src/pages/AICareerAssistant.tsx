@@ -68,7 +68,7 @@ import {
   type StatusLangCode,
 } from '@/lib/requestStatus';
 import { callAICareerChat } from '@/lib/aiChatTransport';
-import { requestOwnerPhoneAIReply } from '@/lib/ownerPhoneVoiceRelay';
+import { requestOwnerPhoneAIReply, requestOwnerPhoneImage } from '@/lib/ownerPhoneVoiceRelay';
 import { SubscriptionExpiryBanner } from '@/components/ai-chat/SubscriptionExpiryBanner';
 import YouTubeOAuthBridge from '@/components/youtube/YouTubeOAuthBridge';
 
@@ -148,6 +148,31 @@ async function callWorklyVoiceFirst(
   const hasImages = body.hasImages === true || (Array.isArray(body.messages) && body.messages.some((message: any) =>
     Array.isArray(message?.content) && message.content.some((part: any) => part?.type === 'image_url')
   ));
+  // The owner can route explicit image-generation prompts to the paired
+  // Android phone. This branch intentionally has no cloud-image fallback:
+  // image inference must happen on the owner's device.
+  if (body.useOwnerPhoneImage === true && !hasImages && !signal?.aborted) {
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const lastUser = [...messages].reverse().find((message: any) => message?.role === 'user');
+    const rawContent = lastUser?.content;
+    const prompt = typeof rawContent === 'string'
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? rawContent.filter((part: any) => part?.type === 'text').map((part: any) => part.text || '').join(' ')
+        : '';
+    if (detectGenerationIntent(prompt) === 'image') {
+      callbacks.onLifecycle?.('request_sent');
+      callbacks.onImageStart?.();
+      const imageUrl = await requestOwnerPhoneImage(prompt);
+      if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
+      callbacks.onImage?.(imageUrl);
+      const reply = 'Image generated on your paired phone using its local AI model.';
+      callbacks.onDelta?.(reply, reply);
+      callbacks.onDone?.(reply);
+      return { fullText: reply, cached: false };
+    }
+  }
+
   if (!hasImages && !signal?.aborted) {
     try {
       callbacks.onLifecycle?.('request_sent');
@@ -1656,7 +1681,8 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
           audience: chatAudience,
           hasImages: imageUrls.length > 0,
           currentPage: window.location.pathname,
-          pageContext: getPageContext()
+          pageContext: getPageContext(),
+          useOwnerPhoneImage: isOwner
         },
         {
           onRunId: (runId) => {

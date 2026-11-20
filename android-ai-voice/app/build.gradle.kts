@@ -35,9 +35,9 @@ android {
     }
     packaging {
         jniLibs {
-            // Both Sherpa-ONNX and ONNX Runtime AARs bundle this shared native library.
-            // Package one copy per ABI; both SDKs use the same ONNX Runtime C ABI.
-            pickFirsts += setOf("**/libonnxruntime.so")
+            // Sherpa/ONNX and the llama.cpp + stable-diffusion.cpp runtimes
+            // share native dependencies. Package one identical runtime copy per ABI.
+            pickFirsts += setOf("**/libonnxruntime.so", "**/libc++_shared.so")
         }
     }
     buildFeatures { buildConfig = true }
@@ -45,7 +45,7 @@ android {
 }
 dependencies {
     // ONNX Runtime CPU inference for Indic Tiny TTS acoustic, flow and Vocos graphs.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.1")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.23.2")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         // The Android AAR already contains the Kotlin/JVM API classes.
         // JitPack also publishes a separate JVM JAR; exclude it to avoid duplicate classes.

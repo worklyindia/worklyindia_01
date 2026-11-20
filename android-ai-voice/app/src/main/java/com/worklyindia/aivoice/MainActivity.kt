@@ -50,6 +50,8 @@ class MainActivity : Activity() {
         page.addView(label("Choose what you want to do", 15, secondary, false).apply { setPadding(0, dp(24), 0, dp(12)) })
         addDestination(page, "Voice", "Text to speech and speech to text", VoiceActivity::class.java)
         addDestination(page, "AI Chat", "Chat with offline Qwen AI and use voice input", OfflineAiChatActivity::class.java)
+        addDestination(page, "AI Image Studio", "Generate images locally on this phone and share them with ChatWork website", ChatWorkImageActivity::class.java)
+        addDestination(page, "AI Video · Saient Wan", "On-device text-to-video setup and device compatibility check", ChatWorkVideoActivity::class.java)
         addDestination(page, "Downloads", "Manage AI4Bharat, Indic Tiny TTS, Shruti and Qwen models", SpeechDownloadsActivity::class.java)
         addDestination(page, "Settings", "Manage AI models and your connected Workly account", SettingsActivity::class.java)
         page.addView(label("WORKLY VOICE · VERSION 1.0.0", 11, secondary, true).apply {
