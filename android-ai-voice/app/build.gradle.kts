@@ -61,7 +61,10 @@ android {
             version = "3.22.1"
         }
     }
-    sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/wan-jni"))
+    sourceSets.getByName("main").jniLibs.srcDirs(
+        layout.buildDirectory.dir("generated/wan-jni"),
+        layout.buildDirectory.dir("generated/qwen3-jni")
+    )
     packaging {
         jniLibs {
             // Wan is launched as a child process from nativeLibraryDir, so Android
@@ -135,4 +138,50 @@ val downloadWanVideoEngine by tasks.registering {
         check(partial.renameTo(target)) { "Could not install the verified Saient Wan engine." }
         logger.lifecycle("Downloaded and verified Saient Wan2.1 Android engine.")
     }
+}
+
+
+// Qwen3-TTS is built as an isolated native CMake project so its GGML targets
+// cannot collide with the app's existing llama.cpp GGML targets. The upstream
+// Android port currently supports arm64-v8a / API 31+ only.
+val qwenNativeBuildDir = layout.buildDirectory.dir("qwen3-native")
+val qwenNativeOutput = layout.buildDirectory.dir("generated/qwen3-jni/arm64-v8a/libqwen3_tts_jni.so")
+val configureQwenNative by tasks.registering(Exec::class) {
+    val qwenSource = layout.projectDirectory.dir("../qwen3-native")
+    inputs.dir(qwenSource)
+    inputs.dir(layout.projectDirectory.dir("../external/qwen3-tts.cpp"))
+    outputs.dir(qwenNativeBuildDir)
+    doFirst {
+        val qwenSubmodule = layout.projectDirectory.dir("../external/qwen3-tts.cpp").asFile
+        check(qwenSubmodule.resolve("ggml/CMakeLists.txt").isFile) {
+            "Qwen3-TTS source is missing. Run: git submodule update --init --recursive"
+        }
+    }
+    commandLine(
+        "cmake", "-S", qwenSource.asFile.absolutePath,
+        "-B", qwenNativeBuildDir.get().asFile.absolutePath,
+        "-DCMAKE_TOOLCHAIN_FILE=${android.ndkDirectory.absolutePath}/build/cmake/android.toolchain.cmake",
+        "-DANDROID_ABI=arm64-v8a",
+        "-DANDROID_PLATFORM=android-31",
+        "-DANDROID_STL=c++_shared",
+        "-DCMAKE_BUILD_TYPE=Release"
+    )
+}
+val buildQwenNative by tasks.registering(Exec::class) {
+    dependsOn(configureQwenNative)
+    outputs.file(qwenNativeOutput)
+    commandLine(
+        "cmake", "--build", qwenNativeBuildDir.get().asFile.absolutePath,
+        "--target", "qwen3_tts_jni", "--config", "Release", "--parallel", "2"
+    )
+    doLast {
+        val source = qwenNativeBuildDir.get().file("jni/arm64-v8a/libqwen3_tts_jni.so").asFile
+        check(source.isFile) { "Qwen3-TTS native build did not produce libqwen3_tts_jni.so" }
+        val target = qwenNativeOutput.get().asFile
+        target.parentFile.mkdirs()
+        source.copyTo(target, overwrite = true)
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(buildQwenNative)
 }
