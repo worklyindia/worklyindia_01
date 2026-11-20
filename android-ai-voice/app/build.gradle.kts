@@ -224,6 +224,56 @@ val stageQvacTtsSource by tasks.registering {
         if (!ggmlLink.exists()) {
             Files.createSymbolicLink(ggmlLink.toPath(), qvacGgmlSource.toPath())
         }
+
+        // The app ships a downloaded, verified reference WAV plus the S3Tok
+        // and CAM++ GGUF companions. QVAC's upstream constructor currently
+        // insists on a pre-baked voice.gguf even when reference_audio is
+        // supplied; that is redundant because the reference path overwrites
+        // all four baked voice tensors before first synthesis. Make that
+        // baked voice optional only for the explicit reference-audio path.
+        val cosyvoiceEngine = File(qvacTtsSource, "src/cosyvoice_engine.cpp")
+        check(cosyvoiceEngine.isFile) { "QVAC CosyVoice native engine source is missing." }
+        val engineSource = Files.readString(cosyvoiceEngine.toPath())
+        val oldVoiceBlock = """        require(voice_path, "voice.gguf");
+
+        // ---- backend selection -------------------------------------------"""
+        val newVoiceBlock = """        if (voice_path.empty() && opts.reference_audio.empty()) {
+            require(voice_path, "voice.gguf");
+        }
+
+        // ---- backend selection -------------------------------------------"""
+        val oldLoadBlock = """        // voice.gguf: read its four tensors into vectors, then free it.
+        {
+            model_ctx voice_m = cosyvoice_load_gguf(
+                voice_path, det::backend_is_cpu(backend) ? backend : nullptr);
+            ModelGuard voice_guard(voice_m);
+            voice_prompt_stok  = read_i32(voice_m, "voice/prompt_stok");
+            voice_prompt_token = read_i32(voice_m, "voice/prompt_token");
+            voice_prompt_feat  = read_f32(voice_m, "voice/prompt_feat");
+            voice_embedding    = read_f32(voice_m, "voice/embedding");
+        }
+        voice_mel_len1     = (int)(voice_prompt_feat.size() / 80);
+        voice_prompt_text  = cosyvoice_gguf_meta_str(voice_path, "voice.prompt_text", "");"""
+        val newLoadBlock = """        // A baked voice is optional when reference_audio is supplied below;
+        // that native path computes and replaces all voice tensors at load.
+        if (!voice_path.empty()) {
+            model_ctx voice_m = cosyvoice_load_gguf(
+                voice_path, det::backend_is_cpu(backend) ? backend : nullptr);
+            ModelGuard voice_guard(voice_m);
+            voice_prompt_stok  = read_i32(voice_m, "voice/prompt_stok");
+            voice_prompt_token = read_i32(voice_m, "voice/prompt_token");
+            voice_prompt_feat  = read_f32(voice_m, "voice/prompt_feat");
+            voice_embedding    = read_f32(voice_m, "voice/embedding");
+            voice_mel_len1     = (int)(voice_prompt_feat.size() / 80);
+            voice_prompt_text  = cosyvoice_gguf_meta_str(voice_path, "voice.prompt_text", "");
+        }"""
+        val patched = engineSource
+            .replace(oldVoiceBlock, newVoiceBlock)
+            .replace(oldLoadBlock, newLoadBlock)
+        check(patched != engineSource || engineSource.contains(newVoiceBlock)) {
+            "Could not apply the CosyVoice reference-only voice patch; upstream source changed."
+        }
+        if (patched != engineSource) Files.writeString(cosyvoiceEngine.toPath(), patched)
     }
 }
 
