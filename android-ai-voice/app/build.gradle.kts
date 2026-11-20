@@ -75,6 +75,7 @@ android {
 
 dependencies {
     implementation("com.airbnb.android:lottie:6.7.1")
+    implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.32.0")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
