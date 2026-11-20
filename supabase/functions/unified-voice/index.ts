@@ -371,7 +371,7 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   const isSimpleGreeting = /^(?:hi|hello|hey|good morning|good afternoon|good evening)\\b/i.test(text);
   if (isSimpleGreeting) {
     reply = reply.replace(
-      /\\s*(?:i['’]?m sorry|i am sorry|i don['’]?t have memory|i do not have memory|i can['’]?t remember|i cannot remember)[\\s\\S]*$/i,
+      /\\s*(?:i['’]?m sorry|i am sorry|i apologize|i don['’]?t have memory|i do not have memory|i can['’]?t remember|i cannot remember)[\\s\\S]*$/i,
       '',
     ).trim();
   }
