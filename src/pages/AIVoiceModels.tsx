@@ -170,7 +170,7 @@ export default function AIVoiceModels() {
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">ChatWork</p>
             <h1 className="text-2xl font-bold tracking-tight">TTS Model Library</h1>
-            <p className="text-sm text-muted-foreground">Browse, download and compare open-source voice models.</p>
+            <p className="text-sm text-muted-foreground">Browse model downloads, check language support and test compatible voices.</p>
           </div>
           <Mic2 className="h-7 w-7 text-primary" />
         </div>
@@ -179,7 +179,7 @@ export default function AIVoiceModels() {
           <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1 text-sm">
               <p className="font-semibold">Try Kokoro on this phone</p>
-              <p className="text-muted-foreground">Optional browser-local English TTS test. The model is downloaded on demand and runs on your device.</p>
+              <p className="text-muted-foreground">Kokoro browser-local English voice test. Download on demand and generate speech on this device.</p>
             </div>
             <Button className="shrink-0" onClick={() => navigate("/ai-voice-models/kokoro-mobile")}>Open mobile test</Button>
           </CardContent>
@@ -189,8 +189,8 @@ export default function AIVoiceModels() {
           <CardContent className="flex gap-3 p-4">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
             <div className="space-y-1 text-sm">
-              <p className="font-semibold">Download does not activate a model automatically</p>
-              <p className="text-muted-foreground">These are large model files for a compatible PC/GPU server. ChatWork currently plays replies through its paired-phone TTS relay. This library provides official downloads and setup links; connecting a downloaded model as ChatWork's live speech engine requires a compatible inference server and a separate integration.</p>
+              <p className="font-semibold">Model download and phone testing are separate</p>
+              <p className="text-muted-foreground">Each model opens its official download source; large checkpoints may need a PC/GPU runtime and may not run on a phone. Kokoro currently has the in-browser test here. The other seven models need their own compatible inference runtime before ChatWork can generate test audio. Existing paired-phone TTS relay remains unchanged.</p>
             </div>
           </CardContent>
         </Card>
@@ -221,9 +221,9 @@ export default function AIVoiceModels() {
                 <p className="text-xs text-muted-foreground"><strong>Licence:</strong> {model.license}</p>
                 <p className="text-xs text-muted-foreground">{model.note}</p>
                 <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                  <Button size="sm" onClick={() => model.id === "kokoro" ? navigate("/ai-voice-models/kokoro-mobile") : window.open(model.modelUrl, "_blank", "noopener,noreferrer")}><Download className="mr-2 h-4 w-4" />{model.id === "kokoro" ? "Download Model" : "Official download"}</Button>
+                  <Button size="sm" onClick={() => model.id === "kokoro" ? navigate("/ai-voice-models/kokoro-mobile") : window.open(model.modelUrl, "_blank", "noopener,noreferrer")}><Download className="mr-2 h-4 w-4" />Download Model</Button>
                   {model.id === "kokoro" && <Button size="sm" variant="outline" onClick={() => navigate("/ai-voice-models/kokoro-mobile")}><Volume2 className="mr-2 h-4 w-4" />Test Model</Button>}
-                  <Button size="sm" variant="outline" onClick={() => void copyDownloadCommand(model)}><Copy className="mr-2 h-4 w-4" />Copy command</Button>
+                  <Button size="sm" variant="outline" onClick={() => void copyDownloadCommand(model)}><Copy className="mr-2 h-4 w-4" />Copy setup command</Button>
                   <Button size="sm" variant="ghost" onClick={() => window.open(model.sourceUrl, "_blank", "noopener,noreferrer")}><ExternalLink className="mr-2 h-4 w-4" />Setup guide</Button>
                 </div>
               </CardContent>
