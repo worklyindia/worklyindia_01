@@ -630,25 +630,51 @@ class SpeechDownloadsActivity : Activity() {
         }
     }
 
+
     private fun showMossTest(pack: SpeechModelCatalog.Pack) {
+        val languages = listOf(
+            TtsLanguageChoice("English", "en", "Hello! This is MOSS text to speech running offline on Android."),
+            TtsLanguageChoice("Chinese (Mandarin)", "zh", "你好！这是 MOSS 离线语音测试。")
+        )
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(4))
+        }
+        layout.addView(label("LANGUAGE", 12, secondary, true))
+        val languageSpinner = Spinner(this)
+        languageSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, languages.map { it.label }).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        layout.addView(languageSpinner)
+        layout.addView(label("VOICE", 12, secondary, true))
+        layout.addView(label("Junhao · built-in model voice", 14, primary, false))
+        layout.addView(label("TEST TEXT", 12, secondary, true))
         val input = EditText(this).apply {
-            setText("Hello! This is MOSS text to speech running offline on Android.")
+            setText(languages.first().sample)
             minLines = 3
             maxLines = 6
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
+        layout.addView(input)
+        languageSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                input.setText(languages[position].sample)
+            }
+        }
         AlertDialog.Builder(this)
             .setTitle("Test MOSS-TTS-Nano")
-            .setMessage("Enter English text. SentencePiece tokenization and ONNX speech generation run locally.")
-            .setView(input)
+            .setMessage("Select English or Chinese and enter your own text. This pack exposes one built-in voice preset.")
+            .setView(layout)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Generate & Play") { _, _ ->
+                val selectedLanguage = languages[languageSpinner.selectedItemPosition]
                 val text = input.text.toString().trim()
                 if (text.isBlank()) {
                     Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                statusToast("Tokenizing text and generating speech on this phone…")
+                statusToast("Generating " + selectedLanguage.label + " speech on this phone…")
                 ttsExecutor.execute {
                     try {
                         val result = MossTtsOnnxEngine(
@@ -682,7 +708,7 @@ class SpeechDownloadsActivity : Activity() {
                                     setOnPreparedListener { it.start() }
                                     prepareAsync()
                                 }
-                                Toast.makeText(this, "MOSS speech generated · ${result.durationMs} ms", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this, "MOSS speech generated · " + selectedLanguage.label + " · " + result.durationMs + " ms", Toast.LENGTH_LONG).show()
                             } catch (error: Throwable) {
                                 Toast.makeText(this, error.message ?: "Could not play generated audio.", Toast.LENGTH_LONG).show()
                             }
