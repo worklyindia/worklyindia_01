@@ -7,3 +7,6 @@
 [submodule "android-ai-voice/external/qvac-fabric-llm.cpp"]
 	path = android-ai-voice/external/qvac-fabric-llm.cpp
 	url = https://github.com/tetherto/qvac-fabric-llm.cpp.git
+[submodule "android-ai-voice/external/sentencepiece"]
+	path = android-ai-voice/external/sentencepiece
+	url = https://github.com/google/sentencepiece.git
