@@ -63,7 +63,8 @@ android {
     }
     sourceSets.getByName("main").jniLibs.srcDirs(
         layout.buildDirectory.dir("generated/wan-jni"),
-        layout.buildDirectory.dir("generated/qwen3-jni")
+        layout.buildDirectory.dir("generated/qwen3-jni"),
+        layout.buildDirectory.dir("generated/qvac-jni")
     )
     packaging {
         jniLibs {
@@ -184,4 +185,74 @@ val buildQwenNative by tasks.registering(Exec::class) {
 }
 tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(buildQwenNative)
+}
+
+
+// QVAC's C++17 TTS stack provides Android-native Chatterbox, CosyVoice3 and
+// Parler engines. Build it in a separate CMake graph with its matching pinned
+// fabric GGML source so its target names cannot collide with llama.cpp/Qwen.
+val qvacRepo = layout.projectDirectory.dir("../external/qvac-fabric-speech.cpp").asFile
+val qvacTtsSource = File(qvacRepo, "engines/tts")
+val qvacGgmlSource = layout.projectDirectory.dir("../external/qvac-fabric-llm.cpp/ggml").asFile
+val qvacStagingDir = layout.buildDirectory.dir("qvac-tts-source")
+val qvacNativeBuildDir = layout.buildDirectory.dir("qvac-native")
+val qvacNativeOutput = layout.buildDirectory.file("generated/qvac-jni/arm64-v8a/libworkly_qvac_tts_jni.so")
+
+val stageQvacTtsSource by tasks.registering {
+    inputs.dir(qvacTtsSource)
+    inputs.dir(qvacGgmlSource)
+    outputs.dir(qvacStagingDir)
+    doLast {
+        check(File(qvacTtsSource, "CMakeLists.txt").isFile) {
+            "QVAC TTS source submodule is missing. Run: git submodule update --init --recursive"
+        }
+        check(File(qvacGgmlSource, "CMakeLists.txt").isFile) {
+            "QVAC fabric GGML submodule is missing. Run: git submodule update --init --recursive"
+        }
+        val stage = qvacStagingDir.get().asFile
+        stage.deleteRecursively()
+        stage.mkdirs()
+        project.copy {
+            from(qvacTtsSource)
+            into(stage)
+            exclude("ggml/**")
+        }
+        val ggmlLink = File(stage, "ggml")
+        java.nio.file.Files.createSymbolicLink(ggmlLink.toPath(), qvacGgmlSource.toPath())
+    }
+}
+
+val configureQvacNative by tasks.registering(Exec::class) {
+    dependsOn(stageQvacTtsSource)
+    inputs.dir(layout.projectDirectory.dir("../qvac-native"))
+    outputs.dir(qvacNativeBuildDir)
+    commandLine(
+        "cmake", "-S", layout.projectDirectory.dir("../qvac-native").asFile.absolutePath,
+        "-B", qvacNativeBuildDir.get().asFile.absolutePath,
+        "-DQVAC_TTS_ROOT=${qvacStagingDir.get().asFile.absolutePath}",
+        "-DCMAKE_TOOLCHAIN_FILE=${android.ndkDirectory.absolutePath}/build/cmake/android.toolchain.cmake",
+        "-DANDROID_ABI=arm64-v8a",
+        "-DANDROID_PLATFORM=android-26",
+        "-DANDROID_STL=c++_shared",
+        "-DCMAKE_BUILD_TYPE=Release"
+    )
+}
+
+val buildQvacNative by tasks.registering(Exec::class) {
+    dependsOn(configureQvacNative, buildQwenNative)
+    outputs.file(qvacNativeOutput)
+    commandLine(
+        "cmake", "--build", qvacNativeBuildDir.get().asFile.absolutePath,
+        "--target", "workly_qvac_tts_jni", "--config", "Release", "--parallel", "2"
+    )
+    doLast {
+        val source = qvacNativeBuildDir.get().file("jni/arm64-v8a/libworkly_qvac_tts_jni.so").asFile
+        check(source.isFile) { "QVAC native build did not produce libworkly_qvac_tts_jni.so" }
+        val target = qvacNativeOutput.get().asFile
+        target.parentFile.mkdirs()
+        source.copyTo(target, overwrite = true)
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(buildQvacNative)
 }
