@@ -75,7 +75,7 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
         addSpeechPack(list,"MOSS-TTS-Nano 100M","Native Android ONNX runtime + SentencePiece · approximately 717 MB download · custom English text test",SpeechModelCatalog.mossTtsNano())
-        addSpeechPack(list,"Qwen3-TTS 0.6B Base · Q4_K_M","Native C++/GGML Android engine · approximately 884 MB download · arm64 / Android 12+",SpeechModelCatalog.qwen3Tts())
+        addSpeechPack(list,"Qwen3-TTS 0.6B CustomVoice · Q4_K_M","Native C++/GGML Android engine · approximately 860 MB download · English named speaker · arm64 / Android 12+",SpeechModelCatalog.qwen3Tts())
         addSpeechPack(list,"Chatterbox Multilingual · Q4_K","Native QVAC C++ Android engine · Hindi included · approximately 637 MB",SpeechModelCatalog.chatterboxMultilingual())
         addSpeechPack(list,"CosyVoice 3 · Q4/Q8","Native QVAC C++ Android engine · approximately 950 MB · includes reference voice assets",SpeechModelCatalog.cosyVoice3())
         list.addView(label("ADDITIONAL TTS MODELS",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
