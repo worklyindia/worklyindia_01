@@ -360,7 +360,13 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   // Some free-tier models occasionally stop mid-list or mid-sentence even
   // when the requested token budget is available. Ask the same free model
   // chain to continue only when the first answer has no natural ending.
-  let reply = result.text.trim();
+  // Free-tier models sometimes append incomplete meta-commentary after a valid
+  // answer (for example, "The previous answer was complete..."). Remove that
+  // accidental tail before deciding whether a continuation is actually needed.
+  let reply = result.text.trim().replace(
+    /\\s+(?:The previous answer was|There is nothing further to|There is nothing else to add|The answer is complete)[\\s\\S]*$/i,
+    '',
+  ).trim();
   const hasNaturalEnding = /[.!?।॥…]["'”’)]*\\s*$/.test(reply);
   if (!hasNaturalEnding && reply.length > 0) {
     const continuation = await runAiChain([
