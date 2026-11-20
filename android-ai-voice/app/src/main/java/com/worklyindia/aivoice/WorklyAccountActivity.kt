@@ -43,7 +43,7 @@ class WorklyAccountActivity : Activity() {
             text = "Sign in and connect automatically"; isAllCaps = false
             setOnClickListener { signIn() }
         }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(18) })
-        status = TextView(this).apply { textSize = 13f; setTextColor(0xFF65748B.toInt()); setPadding(0, dp(12), 0, 0) }
+        status = TextView(this).apply { textSize = 13f; setTextColor(muted); setPadding(0, dp(12), 0, 0) }
         root.addView(status)
         setContentView(root)
     }
