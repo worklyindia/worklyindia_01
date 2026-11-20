@@ -30,7 +30,6 @@ object SpeechModelCatalog {
     }
 
     private const val INDICCONFORMER = "https://huggingface.co/parismitaglobalsolutions/indicconformer-sherpa-onnx/resolve/main"
-    private const val SHRUTI = "https://huggingface.co/udgamlabs/Shruti-ONNX/resolve/main"
     private const val TINY_GU = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-gujarati/resolve/main"
     private const val TINY_HI = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-hindi/resolve/main"
     private const val TINY_EN = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-english/resolve/main"
@@ -62,29 +61,6 @@ object SpeechModelCatalog {
             files = listOf(
                 ModelFile("$code/model.int8.onnx", "$INDICCONFORMER/$code/model.int8.onnx", modelBytes),
                 ModelFile("tokens.txt", if (isEnglish) "$INDICCONFORMER/en/tokens.txt" else "$INDICCONFORMER/tokens.txt", if (isEnglish) 11_433L else 67_605L)
-            )
-        )
-    }
-
-    // Shruti ships sherpa-onnx Moonshine packs. Do not use the ONNX Runtime
-    // folder here: the Android adapter expects the sherpa-onnx file layout.
-    fun shruti(language: String): Pack {
-        val code = language.lowercase()
-        require(code == "hi" || code == "gu") { "Shruti supports Hindi (hi) and Gujarati (gu) in this app." }
-        val root = "$SHRUTI/$code/sherpa-onnx"
-        val prefix = if (code == "hi") "hi" else "gu"
-        return Pack(
-            id = "shruti-$code",
-            title = "Shruti ONNX",
-            languageCode = code,
-            license = "Apache-2.0",
-            repository = "udgamlabs/Shruti-ONNX",
-            files = listOf(
-                ModelFile("preprocess.onnx", "$root/preprocess.onnx", 912_310L),
-                ModelFile("encode.onnx", "$root/encode.onnx", 19_637_087L),
-                ModelFile("uncached_decode.onnx", "$root/uncached_decode.onnx", 421_454L),
-                ModelFile("cached_decode.onnx", "$root/cached_decode.onnx", 32_801_767L),
-                ModelFile("tokens.txt", "$root/tokens.txt", if (prefix == "hi") 110_114L else 120_164L)
             )
         )
     }
