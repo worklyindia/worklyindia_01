@@ -152,55 +152,65 @@ export async function handleTranslate(req: Request): Promise<Response> {
       });
     }
 
-    // ── Translate mode ──
-    const targetName = LANG_NAMES[targetLang] || targetLang;
-    const sourceName = sourceLang && sourceLang !== "auto"
-      ? (LANG_NAMES[sourceLang] || sourceLang)
-      : null;
-
-    const systemPrompt = [
-      `You are an expert translator and language detector. Translate the user's text into ${targetName}.`,
-      sourceName
-        ? `Hint: the source language may be ${sourceName}, but verify yourself.`
-        : "Detect the source language yourself.",
-      'IMPORTANT: text may be romanized (e.g. Gujarati written in Latin script like "Tame panchayat bau karo so", or Hinglish). Detect the ACTUAL language, not the script, and translate the WHOLE text — never leave romanized words untranslated.',
-      "Rules:",
-      "- Translate every word into the target language, in its natural native script.",
-      "- First mentally proofread the source text: fix spelling/typing mistakes before translating, so the translation is accurate.",
-      "- Preserve meaning, tone, emojis, line breaks, markdown, numbers, URLs, and code as-is.",
-      "- Keep proper nouns and brand names untranslated.",
-      'Respond ONLY with strict JSON: {"detected":"<ISO 639-1/3 code of source language>","romanized":true|false,"corrected":"<source text with spelling mistakes fixed, same language and script>","translation":"<translated text>"} and nothing else.',
-    ].join("\n");
-
-    const result = await callGateway(systemPrompt, text);
-    if ("rateLimited" in result) {
-      return json({ error: "Rate limit exceeded, please try again shortly." }, 429);
+    // ── Translate mode: private self-hosted model service ──
+    const serviceUrl = Deno.env.get("TRANSLATION_SERVICE_URL")?.replace(/\/+$/, "");
+    const serviceToken = Deno.env.get("TRANSLATION_SERVICE_TOKEN");
+    if (!serviceUrl || !serviceToken) {
+      return json({ error: "Self-hosted translation service is not configured yet." }, 503);
     }
-    if ("noCredits" in result) {
-      return json({ error: "AI credits exhausted. Please top up to continue translating." }, 402);
+    if (text.length > 4000) {
+      return json({ error: "Text is too long. Please translate up to 4,000 characters at a time." }, 413);
     }
 
-    const translatedText = String(result.parsed?.translation || result.raw || "");
-    if (!translatedText) return json({ error: "Empty translation" }, 500);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    try {
+      const response = await fetch(`${serviceUrl}/translate`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${serviceToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text,
+          sourceLang: sourceLang || "auto",
+          targetLang,
+        }),
+        signal: controller.signal,
+      });
 
-    const rawDetected = String(
-      result.parsed?.detected || (sourceLang && sourceLang !== "auto" ? sourceLang : "auto"),
-    );
-    const detected = rawDetected.toLowerCase() === "auto" ? "auto" : normalizeCode(rawDetected);
-    const romanized = Boolean(result.parsed?.romanized);
-    const corrected = typeof result.parsed?.corrected === "string"
-      ? (result.parsed.corrected as string)
-      : "";
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const status = response.status === 400 ? 400
+          : response.status === 429 ? 429
+          : response.status === 413 ? 413
+          : 502;
+        return json({
+          error: typeof payload.detail === "string"
+            ? payload.detail
+            : "Self-hosted translation service failed.",
+        }, status);
+      }
 
-    return json({
-      translatedText,
-      detectedLanguage: detected,
-      romanized,
-      languageLabel: labelFor(detected, romanized),
-      correctedText: corrected,
-      hasCorrection: Boolean(corrected) && corrected.trim() !== text.trim(),
-      provider: "lovable-ai",
-    });
+      const translatedText = String(payload.translatedText || "").trim();
+      if (!translatedText) return json({ error: "Empty translation" }, 502);
+
+      const detected = sourceLang && sourceLang !== "auto"
+        ? normalizeCode(sourceLang)
+        : "auto";
+      return json({
+        translatedText,
+        detectedLanguage: detected,
+        romanized: false,
+        languageLabel: detected === "auto" ? "Auto-detected" : labelFor(detected, false),
+        correctedText: "",
+        hasCorrection: false,
+        provider: "workly-self-hosted",
+        model: payload.model || "google/madlad400-3b-mt",
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
   } catch (error) {
     console.error("Translation error:", error);
     const msg = error instanceof Error ? error.message : "Translation failed";
