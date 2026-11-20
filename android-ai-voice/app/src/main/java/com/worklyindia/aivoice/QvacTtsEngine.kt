@@ -25,6 +25,7 @@ class QvacTtsEngine private constructor(private var nativeHandle: Long) : Closea
             description: String = "",
             referenceAudio: File = File(""),
             referenceText: String = "",
+            language: String = "en",
             threads: Int = 2
         ): QvacTtsEngine {
             require(kind in CHATTERBOX..INDIC_PARLER) { "Unsupported native TTS engine." }
@@ -36,6 +37,7 @@ class QvacTtsEngine private constructor(private var nativeHandle: Long) : Closea
                 description,
                 referenceAudio.takeIf { it.path.isNotEmpty() }?.absolutePath.orEmpty(),
                 referenceText,
+                language,
                 threads.coerceIn(1, 4)
             )
             check(handle != 0L) { "Native TTS engine could not be initialized." }
@@ -50,6 +52,7 @@ class QvacTtsEngine private constructor(private var nativeHandle: Long) : Closea
             description: String,
             referenceAudio: String,
             referenceText: String,
+            language: String,
             threads: Int
         ): Long
 
