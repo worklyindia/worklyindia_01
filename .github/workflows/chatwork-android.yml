@@ -47,7 +47,16 @@ jobs:
         run: |
           sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           sudo apt-get update
-          sudo apt-get install -y protobuf-compiler flatbuffers-compiler
+          sudo apt-get install -y flatbuffers-compiler unzip curl
+          # SentencePiece's pinned protobuf runtime is v36.2. APT on Ubuntu
+          # 24.04 ships protoc 3.21, which generates incompatible C++ headers.
+          PROTOC_ZIP="$RUNNER_TEMP/protoc-36.2-linux-x86_64.zip"
+          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-x86_64.zip" -o "$PROTOC_ZIP"
+          echo "121f6c7afe1d4d0e3ea6aab9432038599250134cbf4474cb1167d2c7decd4278  $PROTOC_ZIP" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/protoc-36.2"
+          unzip -q "$PROTOC_ZIP" -d "$RUNNER_TEMP/protoc-36.2"
+          echo "$RUNNER_TEMP/protoc-36.2/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/protoc-36.2/bin/protoc" --version | grep -Fx "libprotoc 36.2"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
