@@ -344,18 +344,33 @@ class SpeechDownloadsActivity : Activity() {
             "gu" -> "નમસ્તે! આ ગુજરાતી ટેક્સ્ટ ટુ સ્પીચ મોડેલની કસોટી છે."
             else -> "Hello! This is an offline text to speech model test."
         }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(4))
+        }
+        layout.addView(label("LANGUAGE", 12, secondary, true))
+        layout.addView(label(when (language) { "hi" -> "Hindi"; "gu" -> "Gujarati"; else -> "English" }, 15, primary, true))
+        layout.addView(label("VOICE", 12, secondary, true))
+        val voiceSpinner = Spinner(this)
+        voiceSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, listOf("Female voice", "Male voice")).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        layout.addView(voiceSpinner)
+        layout.addView(label("TEST TEXT", 12, secondary, true))
         val input=EditText(this).apply { setText(sample); minLines=3; maxLines=6; setPadding(dp(12),dp(10),dp(12),dp(10)) }
+        layout.addView(input)
         AlertDialog.Builder(this).setTitle("Test ${pack.title}")
-            .setMessage("Enter text in the selected model language.")
-            .setView(input)
+            .setMessage("Select a voice and enter your own text in this language.")
+            .setView(layout)
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Generate & Play") { _,_ ->
                 val text=input.text.toString().trim()
+                val voice = if (voiceSpinner.selectedItemPosition == 1) "male" else "female"
                 if(text.isBlank()) { Toast.makeText(this,"Enter text to test.",Toast.LENGTH_SHORT).show(); return@setPositiveButton }
-                statusToast("Generating offline speech…")
+                statusToast("Generating " + voice + " voice offline…")
                 ttsExecutor.execute {
                     try {
-                        IndicTinyTtsEngine.create(this,language).use { it.speak(text) }
+                        IndicTinyTtsEngine.create(this,language).use { it.speak(text, voice = voice) }
                         runOnUiThread { Toast.makeText(this,"Voice test finished.",Toast.LENGTH_SHORT).show() }
                     } catch(error:Throwable) {
                         runOnUiThread { AlertDialog.Builder(this).setTitle("Voice test failed").setMessage(error.message ?: "Could not generate speech.").setPositiveButton("OK",null).show() }
