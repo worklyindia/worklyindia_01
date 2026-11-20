@@ -1,3 +1,8 @@
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -86,8 +91,8 @@ val downloadWanVideoEngine by tasks.registering {
         val target = wanEngineOutput.get().asFile
         val expectedBytes = 82_749_840L
         val expectedSha256 = "7f18eb1337e70bc69cbbd21adfe7a7bfe56401e50c33c7a41747104f6bfa49ca"
-        fun digest(file: java.io.File): String {
-            val md = java.security.MessageDigest.getInstance("SHA-256")
+        fun digest(file: File): String {
+            val md = MessageDigest.getInstance("SHA-256")
             file.inputStream().buffered(1024 * 1024).use { input ->
                 val buffer = ByteArray(1024 * 1024)
                 while (true) {
@@ -103,9 +108,9 @@ val downloadWanVideoEngine by tasks.registering {
             return@doLast
         }
         target.parentFile.mkdirs()
-        val partial = java.io.File(target.parentFile, target.name + ".part")
+        val partial = File(target.parentFile, target.name + ".part")
         partial.delete()
-        val url = java.net.URL("https://raw.githubusercontent.com/SaientAI/saient/73073fd7fe17dc565b33a148e42282bcc1eb926c/engine/arm64-v8a/libquartz-wan.so")
+        val url = URL("https://raw.githubusercontent.com/SaientAI/saient/73073fd7fe17dc565b33a148e42282bcc1eb926c/engine/arm64-v8a/libquartz-wan.so")
         val connection = url.openConnection().apply {
             connectTimeout = 30_000
             readTimeout = 120_000
@@ -115,7 +120,7 @@ val downloadWanVideoEngine by tasks.registering {
                 partial.outputStream().buffered(1024 * 1024).use { output -> input.copyTo(output) }
             }
         } finally {
-            (connection as? java.net.HttpURLConnection)?.disconnect()
+            (connection as? HttpURLConnection)?.disconnect()
         }
         check(partial.length() == expectedBytes) {
             "Saient Wan engine download has an unexpected size: " + partial.length()
@@ -128,4 +133,3 @@ val downloadWanVideoEngine by tasks.registering {
         logger.lifecycle("Downloaded and verified Saient Wan2.1 Android engine.")
     }
 }
-tasks.named("preBuild").configure { dependsOn(downloadWanVideoEngine) }
