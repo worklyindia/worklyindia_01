@@ -157,5 +157,6 @@ add_library(qwen3_tts_jni SHARED
 target_include_directories(qwen3_tts_jni PRIVATE "${QWEN3_TTS_ROOT}/src")
 target_compile_definitions(qwen3_tts_jni PRIVATE QWEN3_TTS_STATIC)
 target_link_libraries(qwen3_tts_jni PRIVATE qwen3_tts log)
+target_link_options(qwen3_tts_jni PRIVATE "-Wl,--no-undefined")
 
 set_target_properties(qwen3_tts_jni PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/jni/arm64-v8a")
