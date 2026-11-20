@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Base64
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -107,7 +108,7 @@ class ChatWorkTranslatorActivity : Activity() {
         root.addView(status)
 
         sourcePicker = Spinner(this).apply { adapter = languageAdapter() }
-        targetPicker = Spinner(this).apply { adapter = languageAdapter().also { it.remove(languages[0]) } }
+        targetPicker = Spinner(this).apply { adapter = languageAdapter(languages.filter { it.code != "auto" }) }
         sourcePicker.setSelection(0)
         targetPicker.setSelection(2) // Gujarati is a useful initial target for the India audience.
         root.addView(label("Translate from"))
@@ -143,7 +144,7 @@ class ChatWorkTranslatorActivity : Activity() {
             }
         }
         root.addView(ScrollView(this).apply {
-            addView(resultText, ScrollView.LayoutParams(-1, -2))
+            addView(resultText, ViewGroup.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         val copy = Button(this).apply {
             text = "Copy translation"; isAllCaps = false
@@ -164,8 +165,8 @@ class ChatWorkTranslatorActivity : Activity() {
         text = value; textSize = 13f; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(2))
     }
 
-    private fun languageAdapter(): ArrayAdapter<Language> =
-        ArrayAdapter(this, android.R.layout.simple_spinner_item, languages).also {
+    private fun languageAdapter(items: List<Language> = languages): ArrayAdapter<Language> =
+        ArrayAdapter(this, android.R.layout.simple_spinner_item, items).also {
             it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
 
