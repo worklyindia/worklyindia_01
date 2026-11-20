@@ -270,7 +270,7 @@ val stageQvacTtsSource by tasks.registering {
         val patched = engineSource
             .replace(oldVoiceBlock, newVoiceBlock)
             .replace(oldLoadBlock, newLoadBlock)
-        check(patched != engineSource || engineSource.contains(newVoiceBlock)) {
+        check(patched.contains(newVoiceBlock) && patched.contains(newLoadBlock)) {
             "Could not apply the CosyVoice reference-only voice patch; upstream source changed."
         }
         if (patched != engineSource) Files.writeString(cosyvoiceEngine.toPath(), patched)
