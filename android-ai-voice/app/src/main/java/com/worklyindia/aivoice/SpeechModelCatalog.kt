@@ -98,4 +98,36 @@ object SpeechModelCatalog {
             )
         )
     }
+
+    private const val MOSS_TTS = "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main"
+    private const val MOSS_CODEC = "https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main"
+
+    /**
+     * MOSS-TTS-Nano 100M Android ONNX package. Model weights are downloaded
+     * separately from the APK; this pack is roughly 712 MB and requires
+     * substantial free storage and RAM. The Android smoke test uses the
+     * upstream pre-tokenized English/Chinese prompts until a full SentencePiece
+     * tokenizer adapter is added.
+     */
+    fun mossTtsNano(): Pack = Pack(
+        id = "moss-tts-nano",
+        title = "MOSS-TTS-Nano 100M",
+        languageCode = "en",
+        license = "Apache-2.0",
+        repository = "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX + OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+        files = listOf(
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/browser_poc_manifest.json", "$MOSS_TTS/browser_poc_manifest.json", 503_354L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/tts_browser_onnx_meta.json", "$MOSS_TTS/tts_browser_onnx_meta.json", 4_487L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/tokenizer.model", "$MOSS_TTS/tokenizer.model", 470_897L, "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff"),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx", "$MOSS_TTS/moss_tts_prefill.onnx", 283_305L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_decode_step.onnx", "$MOSS_TTS/moss_tts_decode_step.onnx", 291_483L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_local_fixed_sampled_frame.onnx", "$MOSS_TTS/moss_tts_local_fixed_sampled_frame.onnx", 471_262L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_global_shared.data", "$MOSS_TTS/moss_tts_global_shared.data", 440_813_568L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_local_shared.data", "$MOSS_TTS/moss_tts_local_shared.data", 229_678_080L),
+            ModelFile("MOSS-Audio-Tokenizer-Nano-ONNX/codec_browser_onnx_meta.json", "$MOSS_CODEC/codec_browser_onnx_meta.json", 17_036L),
+            ModelFile("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_full.onnx", "$MOSS_CODEC/moss_audio_tokenizer_decode_full.onnx", 681_902L),
+            ModelFile("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data", "$MOSS_CODEC/moss_audio_tokenizer_decode_shared.data", 44_198_912L)
+        )
+    )
+
 }
