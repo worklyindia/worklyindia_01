@@ -20,7 +20,7 @@ class Qwen3TtsEngine(
 
     fun load() {
         check(engine.setCpuThreads(cpuThreads)) { "Could not set Qwen CPU thread count." }
-        check(engine.loadModels(modelDirectory.absolutePath, "qwen-talker-0.6b-base-Q4_K_M.gguf")) {
+        check(engine.loadModels(modelDirectory.absolutePath, "qwen-talker-0.6b-customvoice-Q4_K_M.gguf")) {
             engine.getLastError() ?: "Qwen3-TTS model load failed."
         }
     }
@@ -29,7 +29,7 @@ class Qwen3TtsEngine(
         require(text.isNotBlank()) { "Enter text to synthesize." }
         val result = engine.synthesize(
             text = text,
-            params = QwenEngine.NativeParams(languageId = 2050, maxAudioTokens = 256)
+            params = QwenEngine.NativeParams(languageId = 2050, speaker = "Ryan", maxAudioTokens = 256)
         )
         check(result.success && !result.audio.isNullOrEmpty()) {
             result.errorMsg ?: engine.getLastError() ?: "Qwen3-TTS did not return audio."
