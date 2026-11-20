@@ -79,3 +79,8 @@ Open the `android-ai-voice/` folder as a standalone Gradle project in Android St
 - Gradle: 8.14.4
 - Android NDK: 27.2.12479018
 - CMake: 3.22.1
+
+
+## Kokoro-82M multilingual offline text-to-speech
+
+ChatWork includes a native Android Kokoro-82M adapter using the MediaPipe Tasks Audio TextToSpeech runtime. The approximately 295 MB CPU-compatible `.litertlm` bundle is downloaded on demand to app-private storage, checked against its expected byte size and SHA-256, and can be tested or deleted from the model downloads screen. After download, synthesis runs locally without network access. The bundle supports Hindi and English (plus Spanish, French, Italian, Brazilian Portuguese, Mandarin Chinese and Japanese); Gujarati is not supported by this Kokoro bundle. Device inference and audio quality still require physical-phone verification.
