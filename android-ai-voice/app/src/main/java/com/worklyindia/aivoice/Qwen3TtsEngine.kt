@@ -31,10 +31,11 @@ class Qwen3TtsEngine(
             text = text,
             params = QwenEngine.NativeParams(languageId = 2050, speaker = "Ryan", maxAudioTokens = 256)
         )
-        check(result.success && result.audio.isNotEmpty()) {
+        val audio = result.audio
+        check(result.success && audio != null && audio.isNotEmpty()) {
             result.errorMsg ?: engine.getLastError() ?: "Qwen3-TTS did not return audio."
         }
-        writePcm16Wav(output, result.audio!!, result.sampleRate)
+        writePcm16Wav(output, audio, result.sampleRate)
         return output
     }
 
