@@ -10,11 +10,12 @@ val releaseKeyPassword = System.getenv("WORKLY_VOICE_KEY_PASSWORD")
 val releaseSigningReady = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { !it.isNullOrBlank() }
 
 android {
+    // Keep the Kotlin/manifest namespace stable; only the installed app identity changes.
     namespace = "com.worklyindia.aivoice"
     compileSdk = 35
     ndkVersion = "27.2.12479018"
     defaultConfig {
-        applicationId = "com.worklyindia.aivoice"
+        applicationId = "com.worklyindia.chatwork"
         minSdk = 26
         targetSdk = 35
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
