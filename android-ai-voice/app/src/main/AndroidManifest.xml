@@ -14,9 +14,9 @@
     </queries>
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_workly_voice"
+        android:icon="@mipmap/ic_launcher"
         android:label="ChatWork"
-        android:roundIcon="@drawable/ic_workly_voice"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/WorklyVoiceTheme">
         <service
