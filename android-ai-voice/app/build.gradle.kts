@@ -55,6 +55,7 @@ android {
             version = "3.22.1"
         }
     }
+    sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/wan-jni"))
     packaging {
         jniLibs {
             pickFirsts += setOf("**/libonnxruntime.so")
@@ -71,3 +72,57 @@ dependencies {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
     }
 }
+
+
+// Pinned Saient Wan2.1 Vulkan executable. Model weights remain a separate
+// 4.73 GB first-run download; only the arm64 runtime is packaged in the APK.
+val wanEngineOutput = layout.buildDirectory.file("generated/wan-jni/arm64-v8a/libquartz-wan.so")
+val downloadWanVideoEngine by tasks.registering {
+    outputs.file(wanEngineOutput)
+    doLast {
+        val target = wanEngineOutput.get().asFile
+        val expectedBytes = 82_749_840L
+        val expectedSha256 = "7f18eb1337e70bc69cbbd21adfe7a7bfe56401e50c33c7a41747104f6bfa49ca"
+        fun digest(file: java.io.File): String {
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().buffered(1024 * 1024).use { input ->
+                val buffer = ByteArray(1024 * 1024)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    md.update(buffer, 0, count)
+                }
+            }
+            return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        }
+        if (target.isFile && target.length() == expectedBytes && digest(target) == expectedSha256) {
+            logger.lifecycle("Verified cached Saient Wan2.1 Android engine.")
+            return@doLast
+        }
+        target.parentFile.mkdirs()
+        val partial = java.io.File(target.parentFile, target.name + ".part")
+        partial.delete()
+        val url = java.net.URL("https://raw.githubusercontent.com/SaientAI/saient/73073fd7fe17dc565b33a148e42282bcc1eb926c/engine/arm64-v8a/libquartz-wan.so")
+        val connection = url.openConnection().apply {
+            connectTimeout = 30_000
+            readTimeout = 120_000
+        }
+        try {
+            connection.getInputStream().buffered(1024 * 1024).use { input ->
+                partial.outputStream().buffered(1024 * 1024).use { output -> input.copyTo(output) }
+            }
+        } finally {
+            (connection as? java.net.HttpURLConnection)?.disconnect()
+        }
+        check(partial.length() == expectedBytes) {
+            "Saient Wan engine download has an unexpected size: " + partial.length()
+        }
+        check(digest(partial) == expectedSha256) {
+            "Saient Wan engine failed SHA-256 verification."
+        }
+        if (target.exists()) target.delete()
+        check(partial.renameTo(target)) { "Could not install the verified Saient Wan engine." }
+        logger.lifecycle("Downloaded and verified Saient Wan2.1 Android engine.")
+    }
+}
+tasks.named("preBuild").configure { dependsOn(downloadWanVideoEngine) }
