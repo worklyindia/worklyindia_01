@@ -76,11 +76,11 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
         addSpeechPack(list,"MOSS-TTS-Nano 100M","Native Android ONNX runtime · approximately 717 MB download · demo prompt test only; custom text tokenizer pending",SpeechModelCatalog.mossTtsNano())
         addSpeechPack(list,"Qwen3-TTS 0.6B Base · Q4_K_M","Native C++/GGML Android engine · approximately 884 MB download · arm64 / Android 12+",SpeechModelCatalog.qwen3Tts())
+        addSpeechPack(list,"Chatterbox Multilingual · Q4_K","Native QVAC C++ Android engine · Hindi included · approximately 637 MB",SpeechModelCatalog.chatterboxMultilingual())
+        addSpeechPack(list,"CosyVoice 3 · Q4/Q8","Native QVAC C++ Android engine · approximately 950 MB · includes reference voice assets",SpeechModelCatalog.cosyVoice3())
         list.addView(label("OTHER TTS MODELS · NATIVE ANDROID RUNTIME NOT YET INTEGRATED",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
-        addServerModelCard(list,"CosyVoice 3","Multilingual natural speech and voice cloning. Download source available; Android inference is not integrated yet.","https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512")
         addServerModelCard(list,"AI4Bharat IndicF5","Indian-language TTS including Hindi and Gujarati. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/IndicF5")
         addServerModelCard(list,"Indic Parler-TTS","Indian-language preset voices and style control. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/indic-parler-tts")
-        addServerModelCard(list,"Chatterbox","Expressive TTS model family. Check the selected checkpoint and runtime requirements.","https://huggingface.co/ResembleAI/chatterbox")
         addServerModelCard(list,"Fish Speech","Advanced expressive speech generation. Check model licence and runtime requirements.","https://github.com/fishaudio/fish-speech")
         addServerModelCard(list,"Kokoro-82M","Compact English-focused TTS. Browser test is available on the Workly India website; native Android engine is not integrated yet.","https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX")
         list.addView(label("These model-source links are not native Android integrations. Do not treat them as downloaded, installed or playable. Native local tests are available only for Indic Tiny TTS and the MOSS demo path.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
@@ -161,10 +161,12 @@ class SpeechDownloadsActivity : Activity() {
         val isTts = pack.id.startsWith("indic-tiny-tts-")
         val isMoss = pack.id == "moss-tts-nano"
         val isQwen = pack.id == "qwen3-tts-06b-q4"
+        val isQvacChatterbox = pack.id == "qvac-chatterbox-multilingual"
+        val isQvacCosyVoice = pack.id == "qvac-cosyvoice3"
         val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
         val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
         card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
-        test.setOnClickListener { when { isMoss -> showMossTest(pack); isQwen -> showQwenTest(pack); else -> showTtsTest(pack) } }
+        test.setOnClickListener { when { isMoss -> showMossTest(pack); isQwen -> showQwenTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); else -> showTtsTest(pack) } }
         delete.setOnClickListener {
             AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                 .setMessage("This removes this model's downloaded files from ChatWork storage.")
@@ -192,7 +194,7 @@ class SpeechDownloadsActivity : Activity() {
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
             action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-            test.visibility=if((isTts || isMoss || isQwen) && installed) View.VISIBLE else View.GONE
+            test.visibility=if((isTts || isMoss || isQwen || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
             delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
@@ -225,6 +227,95 @@ class SpeechDownloadsActivity : Activity() {
             }.show()
     }
 
+
+
+    private fun showQvacTest(pack: SpeechModelCatalog.Pack, kind: Int) {
+        val isChatterbox = kind == QvacTtsEngine.CHATTERBOX
+        val title = if (isChatterbox) "Test Chatterbox Multilingual" else "Test CosyVoice 3"
+        val sample = if (isChatterbox) {
+            "नमस्ते! यह Chatterbox का हिंदी ऑफलाइन वॉइस टेस्ट है।"
+        } else {
+            "Hello! This is CosyVoice three running locally on Android."
+        }
+        val input = EditText(this).apply {
+            setText(sample)
+            minLines = 3
+            maxLines = 6
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage("This model runs on-device. First load and generation can take time and use substantial RAM.")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Generate & Play") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isBlank()) {
+                    Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                statusToast("Loading native model and generating speech…")
+                ttsExecutor.execute {
+                    try {
+                        val directory = speechManager.modelDirectory(pack)
+                        val output = java.io.File(cacheDir, if (isChatterbox) "chatterbox_native_test.wav" else "cosyvoice3_native_test.wav")
+                        val sampleRate = if (isChatterbox) {
+                            QvacTtsEngine.create(
+                                kind = QvacTtsEngine.CHATTERBOX,
+                                modelDirectory = directory,
+                                modelA = java.io.File(directory, "chatterbox-t3-q4_k.gguf"),
+                                modelB = java.io.File(directory, "chatterbox-s3gen-q4_k.gguf"),
+                                language = "hi",
+                                threads = 2
+                            ).use { it.synthesizeToWav(text, output) }
+                        } else {
+                            QvacTtsEngine.create(
+                                kind = QvacTtsEngine.COSYVOICE3,
+                                modelDirectory = directory,
+                                modelA = java.io.File(directory, "vocab.json"),
+                                modelB = java.io.File(directory, "merges.txt"),
+                                referenceAudio = java.io.File(directory, "zero_shot_prompt.wav"),
+                                referenceText = "",
+                                language = "en",
+                                threads = 2
+                            ).use { it.synthesizeToWav(text, output) }
+                        }
+                        runOnUiThread {
+                            try {
+                                activeMossPlayer?.release()
+                                activeMossPlayer = MediaPlayer().apply {
+                                    setDataSource(output.absolutePath)
+                                    setOnCompletionListener { player ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                    }
+                                    setOnErrorListener { player, _, _ ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                        Toast.makeText(this@SpeechDownloadsActivity, "Native TTS audio playback failed.", Toast.LENGTH_LONG).show()
+                                        true
+                                    }
+                                    setOnPreparedListener { it.start() }
+                                    prepareAsync()
+                                }
+                                Toast.makeText(this, "Speech generated · ${sampleRate} Hz", Toast.LENGTH_LONG).show()
+                            } catch (error: Throwable) {
+                                Toast.makeText(this, error.message ?: "Could not play generated audio.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    } catch (error: Throwable) {
+                        runOnUiThread {
+                            AlertDialog.Builder(this)
+                                .setTitle("Native TTS test failed")
+                                .setMessage(error.message ?: "Could not load or run this on-device speech model.")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .show()
+    }
 
     private fun showQwenTest(pack: SpeechModelCatalog.Pack) {
         if (android.os.Build.VERSION.SDK_INT < 31) {
