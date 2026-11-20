@@ -140,7 +140,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             try {
                 val audioUrl = payload.optString("audio_url")
                 if (audioUrl.isBlank()) throw IllegalStateException("Caller audio URL is missing.")
-                setStatus("Transcribing caller audio on Workly Voice…")
+                setStatus("Transcribing caller audio on ChatWork…")
                 val audio = VoiceRelayApi.downloadAudio(audioUrl)
                 val result = VoiceRelayApi.transcribe(token, audio)
                 val transcript = result.optString("text").trim()
@@ -148,7 +148,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("text", transcript.take(4000))
                     .put("languageTag", result.optString("detected_language", "auto")))
-                setStatus("Caller speech transcribed by Workly Voice. Waiting for next request…")
+                setStatus("Caller speech transcribed by ChatWork. Waiting for next request…")
             } catch (error: Exception) {
                 runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Caller speech transcription failed.") }
                 setStatus("Speech recognition failed: " + (error.message ?: "network error"))
@@ -303,7 +303,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Workly Voice server")
+            .setContentTitle("ChatWork server")
             .setContentText(message.take(120))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -314,7 +314,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Workly Voice server", NotificationManager.IMPORTANCE_LOW).apply {
+                NotificationChannel(CHANNEL_ID, "ChatWork server", NotificationManager.IMPORTANCE_LOW).apply {
                     setSound(null, null)
                     enableVibration(false)
                     setShowBadge(false)
