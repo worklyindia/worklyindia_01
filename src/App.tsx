@@ -64,6 +64,7 @@ const Activity = lazyRetry(() => import("./pages/Activity"));
 const More = lazyRetry(() => import("./pages/More"));
 const AICareerAssistant = lazyRetry(() => import("./pages/AICareerAssistant"));
 const AIVoiceCall = lazyRetry(() => import("./pages/AIVoiceCall"));
+const AIVoiceModels = lazyRetry(() => import("./pages/AIVoiceModels"));
 import BannedUser from "./pages/BannedUser";
 import PasswordResetForm from "./components/PasswordResetForm";
 const VerifyEmailChange = lazyRetry(() => import("./pages/VerifyEmailChange"));
@@ -1227,6 +1228,13 @@ const AppContent = () => {
           <Suspense fallback={<AppLoadingSpinner />}>
             <AIVoiceCall />
           </Suspense>
+        } />
+        <Route path="/ai-voice-models" element={
+          <ProtectedRoute>
+            <Suspense fallback={<AppLoadingSpinner />}>
+              <AIVoiceModels />
+            </Suspense>
+          </ProtectedRoute>
         } />
         <Route path="/career-tricks" element={<CareerTricks />} />
         
