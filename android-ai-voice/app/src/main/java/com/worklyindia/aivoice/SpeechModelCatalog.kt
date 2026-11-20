@@ -195,4 +195,22 @@ object SpeechModelCatalog {
         )
     )
 
+
+    /** Kokoro-82M multilingual LiteRT bundle (Hindi + English and other supported locales). */
+    fun kokoro82m(): Pack = Pack(
+        id = "kokoro-82m",
+        title = "Kokoro-82M · Multilingual",
+        languageCode = "hi",
+        license = "Apache-2.0",
+        repository = "litert-community/Kokoro-82M",
+        files = listOf(
+            ModelFile(
+                "kokoro_int8_fp16.litertlm",
+                "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm",
+                294_783_298L,
+                "e7b931ee5d4b7104012a838c9eee240d19ea69cb3ca269041a3274f83dbb7fa1"
+            )
+        )
+    )
+
 }
