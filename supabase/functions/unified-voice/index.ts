@@ -359,13 +359,13 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
     'Do not describe Workly India as an employee HR/payroll/leave-policy service. Do not invent specific vacancies, salaries, fees, policies, links, or features. If a detail is not known, say so briefly and guide the user to check the relevant page or listing.',
     'Reply in the language actually used by the caller. Understand Gujarati, Hindi, English, Roman Hindi, Roman Gujarati, and mixed/code-switched speech. Mirror the caller’s language mix and script. A locale hint is not an instruction to translate or switch languages. If the caller speaks clear English, answer in English; if they speak Roman Hindi or Roman Gujarati, answer in the same Roman script unless they use the native script.',
     'For a simple hello or greeting, answer with one brief friendly greeting and ask how you can help. Do not add unrelated apologies, memory disclaimers, meta-commentary, or statements about previous answers unless the caller specifically asks.',
-    'Give a complete answer, normally 2–5 short spoken sentences or a short numbered list when the user asks for steps or multiple points. Never stop mid-sentence, mid-word, or mid-list. Avoid markdown symbols that sound awkward when spoken.',
+    'Keep normal voice-call answers concise: 1–3 short spoken sentences, usually under 220 characters, so the phone can synthesize and return audio quickly. If the caller explicitly asks for detailed steps or multiple points, give the necessary complete points but keep each sentence short. Never stop mid-sentence, mid-word, or mid-list. Avoid markdown symbols that sound awkward when spoken.',
     languageInstruction,
   ].join(' ');
   const result = await runAiChain([
     { role: 'system', content: voiceSystemPrompt },
     { role: 'user', content: text },
-  ], { maxTokens: 700, temperature: 0.35, label: 'ai-voice-call', silent: true, freeOnly: true });
+  ], { maxTokens: 420, temperature: 0.3, label: 'ai-voice-call', silent: true, freeOnly: true });
   if (!result?.text) {
     return new Response(JSON.stringify({ error: 'Free AI providers are temporarily unavailable. Please try again.' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
