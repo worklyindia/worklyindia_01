@@ -305,22 +305,68 @@ class IndicTinyTtsEngine private constructor(
         for (i in 0 until n) { real[i] /= n; imag[i] /= n }
     }
 
+    /**
+     * Use PCM 16-bit streaming rather than PCM_FLOAT + MODE_STATIC.
+     * PCM_FLOAT static tracks are not supported consistently by Android OEM audio
+     * drivers and can fail at AudioTrack initialization on otherwise capable phones.
+     */
     private fun play(samples: FloatArray) {
+        require(samples.isNotEmpty()) { "No audio was generated." }
+        val minBuffer = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        check(minBuffer > 0) { "This device does not support 24 kHz mono audio output (code $minBuffer)." }
+        val bufferBytes = max(minBuffer * 2, 8 * 1024)
         val track = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-            .setBufferSizeInBytes(samples.size * Float.SIZE_BYTES)
-            .setTransferMode(AudioTrack.MODE_STATIC)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(SAMPLE_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(bufferBytes)
+            .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         try {
             activeTrack = track
-            check(track.state == AudioTrack.STATE_INITIALIZED) { "Could not initialize audio playback." }
-            check(track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING) == samples.size) { "Could not write generated audio." }
+            check(track.state == AudioTrack.STATE_INITIALIZED) {
+                "Audio output could not start. Check media volume and device audio output."
+            }
+            val pcm = ShortArray(samples.size) { index ->
+                (samples[index].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+            }
             track.play()
-            val deadline = android.os.SystemClock.elapsedRealtime() + samples.size * 1000L / SAMPLE_RATE + 1000L
-            while (track.playState == AudioTrack.PLAYSTATE_PLAYING && android.os.SystemClock.elapsedRealtime() < deadline) Thread.sleep(30L)
+            var offset = 0
+            while (offset < pcm.size) {
+                if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                    throw IllegalStateException("Audio playback stopped before the voice finished.")
+                }
+                val written = track.write(pcm, offset, pcm.size - offset, AudioTrack.WRITE_BLOCKING)
+                check(written > 0) { "Audio output write failed (code $written)." }
+                offset += written
+            }
+            val expectedFrames = pcm.size
+            val deadline = android.os.SystemClock.elapsedRealtime() +
+                (expectedFrames * 1000L / SAMPLE_RATE) + 3000L
+            while (track.playState == AudioTrack.PLAYSTATE_PLAYING &&
+                track.playbackHeadPosition.toLong() < expectedFrames &&
+                android.os.SystemClock.elapsedRealtime() < deadline
+            ) {
+                Thread.sleep(20L)
+            }
         } finally {
             activeTrack = null
+            runCatching { track.pause() }
+            runCatching { track.flush() }
             runCatching { track.stop() }
             track.release()
         }
