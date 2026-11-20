@@ -23,6 +23,7 @@ let voiceCandidateFrames = 0;
 let transcribing = false;
 let transcriptionQueue: Float32Array[] = [];
 let pendingTranscriptParts: string[] = [];
+let pendingTranscriptLanguageTag = 'auto';
 let transcriptFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let active = false;
 
@@ -83,8 +84,9 @@ function scheduleTranscriptFlush() {
     if (!active || speechStartedAt || chunks.length || transcriptionQueue.length || transcribing) return;
     const text = pendingTranscriptParts.join(' ').replace(/\s+/g, ' ').trim();
     pendingTranscriptParts = [];
-    if (text) emit('workly-voice-transcript', { text, languageTag: 'auto', source: 'workly-voice-android-app-long-audio' });
-  }, 1800);
+    if (text) emit('workly-voice-transcript', { text, languageTag: pendingTranscriptLanguageTag, source: 'workly-voice-android-app-long-audio' });
+    pendingTranscriptLanguageTag = 'auto';
+  }, 2800);
 }
 
 async function processTranscriptionQueue() {
@@ -131,6 +133,7 @@ async function processTranscriptionQueue() {
       }
       const text = result.text.trim();
       if (text) pendingTranscriptParts.push(text);
+      if (result.languageTag && result.languageTag !== 'auto') pendingTranscriptLanguageTag = result.languageTag;
       emit('workly-shruti-status', {
         status: 'segment-transcribed',
         language: result.languageTag,
@@ -203,6 +206,7 @@ export async function startShrutiRecognition(): Promise<boolean> {
   preRoll = [];
   transcriptionQueue = [];
   pendingTranscriptParts = [];
+  pendingTranscriptLanguageTag = 'auto';
   if (transcriptFlushTimer) clearTimeout(transcriptFlushTimer);
   transcriptFlushTimer = null;
   noiseFloor = 0.003;
