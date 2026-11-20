@@ -4,6 +4,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+if(NOT DEFINED SENTENCEPIECE_ROOT OR NOT EXISTS "${SENTENCEPIECE_ROOT}/CMakeLists.txt")
+    message(FATAL_ERROR "SENTENCEPIECE_ROOT must point to the pinned SentencePiece source.")
+endif()
+
 if(NOT DEFINED QVAC_TTS_ROOT OR NOT EXISTS "${QVAC_TTS_ROOT}/CMakeLists.txt")
     message(FATAL_ERROR "QVAC_TTS_ROOT must point to the staged qvac-fabric-speech.cpp/engines/tts source.")
 endif()
@@ -27,9 +31,19 @@ set(GGML_CPU_ALL_VARIANTS OFF CACHE BOOL "" FORCE)
 set(GGML_CPU_REPACK OFF CACHE BOOL "" FORCE)
 add_subdirectory("${QVAC_TTS_ROOT}" qvac-tts)
 
+# SentencePiece is used by MOSS-TTS-Nano to tokenize arbitrary user text
+# instead of limiting its Test Model action to pre-tokenized demo prompts.
+set(SPM_ENABLE_SHARED OFF CACHE BOOL "" FORCE)
+set(SPM_BUILD_TEST OFF CACHE BOOL "" FORCE)
+set(SPM_ENABLE_BENCHMARK OFF CACHE BOOL "" FORCE)
+set(SPM_ENABLE_TCMALLOC OFF CACHE BOOL "" FORCE)
+set(SPM_ENABLE_NFKC_COMPILE OFF CACHE BOOL "" FORCE)
+set(SPM_ENABLE_LITE OFF CACHE BOOL "" FORCE)
+add_subdirectory("${SENTENCEPIECE_ROOT}" sentencepiece)
+
 add_library(workly_qvac_tts_jni SHARED qvac_tts_jni.cpp)
 target_include_directories(workly_qvac_tts_jni PRIVATE "${QVAC_TTS_ROOT}/include")
-target_link_libraries(workly_qvac_tts_jni PRIVATE tts-cpp log)
+target_link_libraries(workly_qvac_tts_jni PRIVATE tts-cpp sentencepiece-static log)
 set_target_properties(workly_qvac_tts_jni PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/jni/arm64-v8a"
 )
