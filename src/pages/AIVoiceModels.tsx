@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, Copy, Cpu, Download, ExternalLink, Languages, Mic2, Search, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Check, Copy, Cpu, Download, ExternalLink, Languages, Mic2, Search, ShieldAlert, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -221,7 +221,8 @@ export default function AIVoiceModels() {
                 <p className="text-xs text-muted-foreground"><strong>Licence:</strong> {model.license}</p>
                 <p className="text-xs text-muted-foreground">{model.note}</p>
                 <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                  <Button size="sm" onClick={() => window.open(model.modelUrl, "_blank", "noopener,noreferrer")}><Download className="mr-2 h-4 w-4" />Official download</Button>
+                  <Button size="sm" onClick={() => model.id === "kokoro" ? navigate("/ai-voice-models/kokoro-mobile") : window.open(model.modelUrl, "_blank", "noopener,noreferrer")}><Download className="mr-2 h-4 w-4" />{model.id === "kokoro" ? "Download Model" : "Official download"}</Button>
+                  {model.id === "kokoro" && <Button size="sm" variant="outline" onClick={() => navigate("/ai-voice-models/kokoro-mobile")}><Volume2 className="mr-2 h-4 w-4" />Test Model</Button>}
                   <Button size="sm" variant="outline" onClick={() => void copyDownloadCommand(model)}><Copy className="mr-2 h-4 w-4" />Copy command</Button>
                   <Button size="sm" variant="ghost" onClick={() => window.open(model.sourceUrl, "_blank", "noopener,noreferrer")}><ExternalLink className="mr-2 h-4 w-4" />Setup guide</Button>
                 </div>
