@@ -450,7 +450,6 @@ class WanVideoActivity : Activity() {
         setPadding(dp(14), dp(13), dp(14), dp(13))
         background = rounded(surface, if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
         elevation = dp(1).toFloat()
-        content.addView(this, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
     }
 
     private fun label(value: String, size: Int, color: Int, bold: Boolean) = TextView(this).apply {
