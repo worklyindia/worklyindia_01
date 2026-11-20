@@ -79,7 +79,7 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Chatterbox Multilingual · Q4_K","Native QVAC C++ Android engine · Hindi included · approximately 637 MB",SpeechModelCatalog.chatterboxMultilingual())
         addSpeechPack(list,"CosyVoice 3 · Q4/Q8","Native QVAC C++ Android engine · approximately 950 MB · includes reference voice assets",SpeechModelCatalog.cosyVoice3())
         list.addView(label("ADDITIONAL TTS MODELS",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
-        addServerModelCard(list,"Kokoro-82M","Compact English-focused TTS. Browser test is available on the Workly India website; native Android engine is not integrated yet.","https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX")
+        addSpeechPack(list,"Kokoro-82M · Multilingual","Native Android LiteRT TTS · Hindi + English · approximately 295 MB · offline after download",SpeechModelCatalog.kokoro82m())
         list.addView(label("Native Download/Test/Delete controls are provided for supported local model packs. Each model still requires a successful build and phone inference test before being marked verified.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
@@ -156,6 +156,7 @@ class SpeechDownloadsActivity : Activity() {
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         val isTts = pack.id.startsWith("indic-tiny-tts-")
+        val isKokoro = pack.id == "kokoro-82m"
         val isMoss = pack.id == "moss-tts-nano"
         val isQwen = pack.id == "qwen3-tts-06b-q4"
         val isQvacChatterbox = pack.id == "qvac-chatterbox-multilingual"
@@ -163,7 +164,7 @@ class SpeechDownloadsActivity : Activity() {
         val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
         val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
         card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
-        test.setOnClickListener { when { isMoss -> showMossTest(pack); isQwen -> showQwenTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); else -> showTtsTest(pack) } }
+        test.setOnClickListener { when { isKokoro -> showKokoroTest(pack); isMoss -> showMossTest(pack); isQwen -> showQwenTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); else -> showTtsTest(pack) } }
         delete.setOnClickListener {
             AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                 .setMessage("This removes this model's downloaded files from ChatWork storage.")
@@ -191,12 +192,79 @@ class SpeechDownloadsActivity : Activity() {
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
             action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-            test.visibility=if((isTts || isMoss || isQwen || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
+            test.visibility=if((isTts || isKokoro || isMoss || isQwen || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
             delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
         row.refresh()
     }
+
+    private fun showKokoroTest(pack: SpeechModelCatalog.Pack) {
+        val input = EditText(this).apply {
+            setText("नमस्ते! Kokoro मॉडल आपके Android फोन पर ऑफलाइन चल रहा है।")
+            minLines = 3
+            maxLines = 6
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Test Kokoro-82M")
+            .setMessage("Hindi and English are supported. Gujarati is not included in this model. Generation runs locally on this phone.")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Generate & Play") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isBlank()) {
+                    Toast.makeText(this, "Enter Hindi or English text.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                statusToast("Loading Kokoro and generating offline speech…")
+                ttsExecutor.execute {
+                    try {
+                        val output = KokoroTtsEngine(this).use { engine ->
+                            engine.synthesizeToWav(
+                                pack = pack,
+                                modelDirectory = speechManager.modelDirectory(pack),
+                                text = text,
+                                outputFile = java.io.File(cacheDir, "kokoro_tts_test.wav")
+                            )
+                        }
+                        runOnUiThread {
+                            try {
+                                activeMossPlayer?.release()
+                                activeMossPlayer = MediaPlayer().apply {
+                                    setDataSource(output.absolutePath)
+                                    setOnCompletionListener { player ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                    }
+                                    setOnErrorListener { player, _, _ ->
+                                        player.release()
+                                        if (activeMossPlayer === player) activeMossPlayer = null
+                                        Toast.makeText(this@SpeechDownloadsActivity, "Kokoro audio playback failed.", Toast.LENGTH_LONG).show()
+                                        true
+                                    }
+                                    setOnPreparedListener { it.start() }
+                                    prepareAsync()
+                                }
+                                Toast.makeText(this, "Kokoro speech generated successfully.", Toast.LENGTH_LONG).show()
+                            } catch (error: Throwable) {
+                                Toast.makeText(this, error.message ?: "Could not play Kokoro audio.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    } catch (error: Throwable) {
+                        runOnUiThread {
+                            AlertDialog.Builder(this)
+                                .setTitle("Kokoro voice test failed")
+                                .setMessage(error.message ?: "Could not load or run the on-device Kokoro model.")
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    }
+                }
+            }
+            .show()
+    }
+
     private fun showTtsTest(pack: SpeechModelCatalog.Pack) {
         val language = pack.languageCode
         val sample = when (language) {
