@@ -2,6 +2,7 @@
  * Kokoro-82M Android inference adapter.
  * MediaPipe Tasks Audio / LiteRT executes the model locally; no network inference.
  * Model weights are downloaded separately and verified by SpeechPackDownloadManager.
+ * The CPU-compatible bundle avoids optional GPU delegate libraries on older phones.
  */
 package com.worklyindia.aivoice
 
