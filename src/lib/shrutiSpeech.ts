@@ -21,6 +21,7 @@ let noiseFloor = 0.003;
 let speechThreshold = 0.018;
 let voiceCandidateFrames = 0;
 let transcribing = false;
+let sessionGeneration = 0;
 let transcriptionQueue: Float32Array[] = [];
 let pendingTranscriptParts: string[] = [];
 let pendingTranscriptLanguageTag = 'auto';
@@ -91,10 +92,11 @@ function scheduleTranscriptFlush() {
 
 async function processTranscriptionQueue() {
   if (transcribing || !active) return;
+  const generation = sessionGeneration;
   transcribing = true;
   emit('workly-shruti-status', { status: 'transcribing', queuedSegments: transcriptionQueue.length });
   try {
-    while (active && transcriptionQueue.length) {
+    while (active && generation === sessionGeneration && transcriptionQueue.length) {
       const pcm = transcriptionQueue.shift()!;
       const wav = new ArrayBuffer(44 + pcm.length * 2);
       const view = new DataView(wav);
@@ -117,7 +119,7 @@ async function processTranscriptionQueue() {
 
       let result: Awaited<ReturnType<typeof requestOwnerPhoneTranscription>> | null = null;
       let lastError: unknown = null;
-      for (let attempt = 0; attempt < 3 && active; attempt += 1) {
+      for (let attempt = 0; attempt < 3 && active && generation === sessionGeneration; attempt += 1) {
         try {
           result = await requestOwnerPhoneTranscription(btoa(binary));
           break;
@@ -126,7 +128,7 @@ async function processTranscriptionQueue() {
           if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
         }
       }
-      if (!active) break;
+      if (!active || generation !== sessionGeneration) break;
       if (!result) {
         emit('workly-voice-error', { message: lastError instanceof Error ? lastError.message : 'A speech segment could not be transcribed after 3 attempts.' });
         continue;
@@ -141,9 +143,11 @@ async function processTranscriptionQueue() {
       });
     }
   } finally {
-    transcribing = false;
-    if (active && transcriptionQueue.length) void processTranscriptionQueue();
-    else scheduleTranscriptFlush();
+    if (generation === sessionGeneration) {
+      transcribing = false;
+      if (active && transcriptionQueue.length) void processTranscriptionQueue();
+      else scheduleTranscriptFlush();
+    }
   }
 }
 
@@ -202,6 +206,8 @@ export async function startShrutiRecognition(): Promise<boolean> {
   highPass.connect(processor);
   processor.connect(silentGain);
   silentGain.connect(context.destination);
+  sessionGeneration += 1;
+  transcribing = false;
   chunks = [];
   preRoll = [];
   transcriptionQueue = [];
@@ -277,6 +283,7 @@ export async function startShrutiRecognition(): Promise<boolean> {
 
 export function stopShrutiRecognition(): void {
   active = false;
+  sessionGeneration += 1;
   if (processor) { processor.onaudioprocess = null; processor.disconnect(); processor = null; }
   if (source) { source.disconnect(); source = null; }
   if (highPass) { highPass.disconnect(); highPass = null; }
@@ -286,6 +293,7 @@ export function stopShrutiRecognition(): void {
   preRoll = [];
   transcriptionQueue = [];
   pendingTranscriptParts = [];
+  pendingTranscriptLanguageTag = 'auto';
   if (transcriptFlushTimer) clearTimeout(transcriptFlushTimer);
   transcriptFlushTimer = null;
   speechStartedAt = 0;
