@@ -20,6 +20,7 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.util.Base64
 import android.provider.MediaStore
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
