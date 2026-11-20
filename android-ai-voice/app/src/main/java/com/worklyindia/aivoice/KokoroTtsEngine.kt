@@ -25,6 +25,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         pack: SpeechModelCatalog.Pack,
         modelDirectory: File,
         text: String,
+        voiceId: String,
         outputFile: File
     ): File {
         require(pack.id == "kokoro-82m") { "This is not a Kokoro model pack." }
@@ -46,13 +47,11 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         engine = tts
 
         val voices = tts.listVoices()
-        check(voices.isNotEmpty()) { "Kokoro did not report any available voices." }
-        val isHindiScript = text.any { it in '\u0900'..'\u097F' }
-        val preferredLocale = if (isHindiScript) "hi" else "en"
-        val voice = voices.firstOrNull { it.locale.startsWith(preferredLocale, ignoreCase = true) }
-            ?: voices.firstOrNull { it.locale.startsWith("en", ignoreCase = true) }
-            ?: voices.first()
-        val audio = tts.synthesize(text, SynthesisOptions(voiceId = voice.voiceId))
+        check(voices.any { it.voiceId == voiceId }) {
+            "Selected voice is not available in this Kokoro model: $voiceId"
+        }
+        // Kokoro infers the phonemizer locale from the selected voice ID.
+        val audio = tts.synthesize(text, SynthesisOptions(voiceId = voiceId))
         check(audio.samples.isNotEmpty()) { "Kokoro returned empty audio." }
 
         writePcm16Wav(outputFile, audio.samples, audio.sampleRateHz)
