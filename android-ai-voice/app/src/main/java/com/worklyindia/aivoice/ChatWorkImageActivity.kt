@@ -28,7 +28,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
-/** Uses the same authenticated Workly AI Chat image-generation pipeline as the website. */
+/** Uses the same authenticated ChatWork AI Chat image-generation pipeline as the website. */
 class ChatWorkImageActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private lateinit var prompt: EditText
@@ -168,7 +168,7 @@ class ChatWorkImageActivity : Activity() {
         busy = true
         generateButton.isEnabled = false
         chooseButton.isEnabled = false
-        status.text = if (referenceImageDataUrl == null) "Creating image with Workly AI…" else "Editing your photo with Workly AI…"
+        status.text = if (referenceImageDataUrl == null) "Creating image with ChatWork AI…" else "Editing your photo with ChatWork AI…"
         worker.execute {
             try {
                 val token = getValidAccessToken()
@@ -301,7 +301,7 @@ class ChatWorkImageActivity : Activity() {
                     val json = JSONObject(raw)
                     json.optString("userMessage").ifBlank { json.optString("message").ifBlank { json.optString("error") } }
                 }.getOrDefault(raw)
-                throw IllegalStateException(detail.ifBlank { "Workly AI request failed (HTTP $code)." }.take(300))
+                throw IllegalStateException(detail.ifBlank { "ChatWork AI request failed (HTTP $code)." }.take(300))
             }
 
             // The website transport supports both JSON image responses and SSE image events.
@@ -314,7 +314,7 @@ class ChatWorkImageActivity : Activity() {
                     .ifBlank { json.optString("url") }
                 if (directUrl.startsWith("https://")) return directUrl
                 val message = json.optString("userMessage").ifBlank { json.optString("error") }
-                throw IllegalStateException(message.ifBlank { "Workly AI returned no image. Please try again." })
+                throw IllegalStateException(message.ifBlank { "ChatWork AI returned no image. Please try again." })
             }
 
             var imageUrl: String? = null
@@ -327,7 +327,7 @@ class ChatWorkImageActivity : Activity() {
                     val event = JSONObject(payload)
                     when (event.optString("type")) {
                         "image" -> imageUrl = event.optString("url").takeIf { it.startsWith("https://") }
-                        "error" -> streamError = event.optString("message").ifBlank { "Workly AI could not create the image." }
+                        "error" -> streamError = event.optString("message").ifBlank { "ChatWork AI could not create the image." }
                         "status" -> runOnUiThread { status.text = event.optString("text").ifBlank { "Creating image…" } }
                     }
                 }
@@ -336,7 +336,7 @@ class ChatWorkImageActivity : Activity() {
             if (!streamError.isNullOrBlank()) throw IllegalStateException(streamError)
             val markdown = Regex("!\\[[^]]*]\\((https?://[^)]+)\\)").find(raw)?.groupValues?.getOrNull(1)
             if (!markdown.isNullOrBlank()) return markdown
-            throw IllegalStateException("Workly AI finished without returning an image. Please try again.")
+            throw IllegalStateException("ChatWork AI finished without returning an image. Please try again.")
         } finally { connection.disconnect() }
     }
 
