@@ -416,9 +416,7 @@ export default function AIVoiceCall() {
         const queued = Number(detail.queuedSegments ?? 0);
         setVoiceStage(queued > 0 ? `Processing long audio · ${queued} segment(s) queued` : 'Processing voice audio…');
       }
-      if (detail?.status === 'segment-transcribed' && !queuedSpeechIsActive()) {
-        setVoiceStage('Speech processed; waiting for your next words…');
-      }
+
     };
     window.addEventListener('workly-shruti-status', handleShrutiStatus);
     return () => { window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
