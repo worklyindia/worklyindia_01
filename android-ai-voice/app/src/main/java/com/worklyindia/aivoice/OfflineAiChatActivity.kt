@@ -379,9 +379,9 @@ class OfflineAiChatActivity : Activity() {
         }
         val localeCode = Locale.getDefault().language.lowercase()
         val candidates = when (localeCode) {
-            "gu" -> listOf(SpeechModelCatalog.shruti("gu"), SpeechModelCatalog.indicConformer("gu"), SpeechModelCatalog.shruti("hi"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.indicConformer("en"))
-            "hi" -> listOf(SpeechModelCatalog.shruti("hi"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.shruti("gu"), SpeechModelCatalog.indicConformer("gu"), SpeechModelCatalog.indicConformer("en"))
-            else -> listOf(SpeechModelCatalog.indicConformer("en"), SpeechModelCatalog.shruti("hi"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.shruti("gu"), SpeechModelCatalog.indicConformer("gu"))
+            "gu" -> listOf(SpeechModelCatalog.indicConformer("gu"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.indicConformer("en"))
+            "hi" -> listOf(SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.indicConformer("gu"), SpeechModelCatalog.indicConformer("en"))
+            else -> listOf(SpeechModelCatalog.indicConformer("en"), SpeechModelCatalog.indicConformer("hi"), SpeechModelCatalog.indicConformer("gu"))
         }
         val pack = candidates.firstOrNull { OfflineSpeechEngineFactory.isReady(this, it) }
         if (pack == null) {
@@ -397,8 +397,7 @@ class OfflineAiChatActivity : Activity() {
             var recorder: AudioRecord? = null
             var speech: OfflineSpeechRecognizer? = null
             try {
-                speech = if (pack.id.startsWith("shruti-")) OfflineSpeechEngineFactory.openShruti(this, pack.languageCode)
-                    else OfflineSpeechEngineFactory.openIndicConformer(this, pack.languageCode)
+                speech = OfflineSpeechEngineFactory.openIndicConformer(this, pack.languageCode)
                 val audio = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, OfflineSpeechRecognizer.SAMPLE_RATE,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer * 2, 8192))
                 recorder = audio
