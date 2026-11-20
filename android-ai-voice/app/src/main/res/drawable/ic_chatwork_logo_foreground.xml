@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/chatwork_logo"
-    android:gravity="center" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,12C31.9,12 14,27.8 14,47.3C14,66.8 31.9,82.6 54,82.6C59.7,82.6 65.2,81.5 70.1,79.5L87,91L83.1,72.7C90,65.9 94,57 94,47.3C94,27.8 76.1,12 54,12Z" />
+    <path
+        android:fillColor="#315CDE"
+        android:pathData="M29,37L37,37L44,58L51,42L57,42L64,58L71,37L79,37L67,69L61,69L54,52L47,69L41,69Z" />
+    <path
+        android:fillColor="#27C7D9"
+        android:pathData="M75,25L82,25L82,32L75,32Z" />
+</vector>
