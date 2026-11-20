@@ -40,6 +40,25 @@ class MossTtsOnnxEngine(
     private val localFixedFrameSession = createSession(File(ttsDir, ttsMeta.files.localFixedSampledFrame))
     private val codecDecodeSession = createSession(File(codecDir, codecMeta.files.decodeFull))
 
+
+    /** Tokenize arbitrary user text with the downloaded SentencePiece model. */
+    fun synthesize(
+        text: String,
+        outputFile: File = File(outputDir, "moss_tts_nano_android.wav"),
+        voice: String = "Junhao",
+        maxFrames: Int = 160,
+        seed: Long = 1234L,
+    ): MossSynthesisResult {
+        require(text.isNotBlank()) { "Enter text to synthesize." }
+        val tokenizerFile = File(modelRoot, "MOSS-TTS-Nano-100M-ONNX/tokenizer.model")
+        require(tokenizerFile.isFile) {
+            "MOSS SentencePiece tokenizer is missing. Delete and download the model pack again."
+        }
+        val tokenIds = NativeSentencePiece.encode(tokenizerFile.absolutePath, text)
+        require(tokenIds.isNotEmpty()) { "MOSS tokenizer returned no text tokens." }
+        return synthesize(tokenIds, outputFile, voice, maxFrames, seed)
+    }
+
     fun synthesize(
         textTokenIds: IntArray,
         outputFile: File = File(outputDir, "moss_tts_nano_android.wav"),
