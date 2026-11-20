@@ -60,6 +60,7 @@ add_subdirectory("${SENTENCEPIECE_ROOT}" sentencepiece)
 add_library(workly_qvac_tts_jni SHARED qvac_tts_jni.cpp)
 target_include_directories(workly_qvac_tts_jni PRIVATE "${QVAC_TTS_ROOT}/include")
 target_link_libraries(workly_qvac_tts_jni PRIVATE tts-cpp sentencepiece-static log)
+target_link_options(workly_qvac_tts_jni PRIVATE "-Wl,--no-undefined")
 set_target_properties(workly_qvac_tts_jni PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/jni/arm64-v8a"
 )
