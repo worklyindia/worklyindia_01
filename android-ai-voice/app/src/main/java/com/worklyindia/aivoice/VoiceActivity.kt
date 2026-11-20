@@ -311,7 +311,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         speechPackStatusText.text = "IndicConformer ${language.uppercase()}: ${snapshot.state} (${snapshot.percent}%)"
     }
 
-    private fun startOfflineListening(shruti: Boolean) {
+    private fun startOfflineListening() {
         val language = when {
             selectedLanguage().tag.startsWith("hi") -> "hi"
             selectedLanguage().tag.startsWith("gu") -> "gu"
@@ -321,7 +321,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             }
         }
         val pack = runCatching {
-            if (shruti) SpeechModelCatalog.shruti(language) else SpeechModelCatalog.indicConformer(language)
+            SpeechModelCatalog.indicConformer(language)
         }.getOrElse {
             setStatus(it.message ?: "Could not select offline speech model.")
             return
@@ -406,7 +406,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             return
         }
         when (offlineSpeechEnginePicker.selectedItemPosition) {
-            0 -> { startOfflineListening(shruti = false); return }
+            0 -> { startOfflineListening(); return }
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             setStatus("No speech recognition service is installed on this phone.")
