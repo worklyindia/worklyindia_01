@@ -406,7 +406,7 @@ export default function AIVoiceCall() {
     setErrorMessage(message);
     setVoiceStage(message);
     setCallState('error');
-  }, [startRecognition]);
+  }, []);
 
   useEffect(() => {
     const handleShrutiStatus = (event: Event) => {
