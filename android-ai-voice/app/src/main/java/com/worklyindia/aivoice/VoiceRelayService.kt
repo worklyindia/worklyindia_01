@@ -102,9 +102,11 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                     continue
                 }
                 val response = VoiceRelayApi.poll(token)
+                getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putLong(LAST_POLL_KEY, System.currentTimeMillis()).apply()
                 val job = response.optJSONObject("job")
                 if (job != null) {
                     val jobId = job.optString("id")
+                    recordEvent("Website request", "Received " + job.optString("job_type").uppercase(Locale.ROOT) + " request", "Request ID: " + jobId)
                     when (job.optString("job_type")) {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
@@ -138,7 +140,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             try {
                 val audioUrl = payload.optString("audio_url")
                 if (audioUrl.isBlank()) throw IllegalStateException("Caller audio URL is missing.")
-                setStatus("Transcribing caller audio on Workly Voice…")
+                setStatus("Transcribing caller audio on ChatWork…")
                 val audio = VoiceRelayApi.downloadAudio(audioUrl)
                 val result = VoiceRelayApi.transcribe(token, audio)
                 val transcript = result.optString("text").trim()
@@ -146,7 +148,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("text", transcript.take(4000))
                     .put("languageTag", result.optString("detected_language", "auto")))
-                setStatus("Caller speech transcribed by Workly Voice. Waiting for next request…")
+                setStatus("Caller speech transcribed by ChatWork. Waiting for next request…")
             } catch (error: Exception) {
                 runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Caller speech transcription failed.") }
                 setStatus("Speech recognition failed: " + (error.message ?: "network error"))
@@ -215,9 +217,11 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             .orEmpty()
         // Prefer an online voice for natural cloud-connected call audio, while
         // retaining an installed offline voice as a resilience option.
+        // Prefer an installed on-device voice for low-latency calls.
+        // Use a network voice only when no offline voice exists for this language.
         val selectedVoice = matchingVoices
             .maxByOrNull { voice ->
-                (if (voice.locale == locale) 2 else 1) + (if (voice.isNetworkConnectionRequired) 2 else 0)
+                (if (voice.locale == locale) 2 else 1) + (if (!voice.isNetworkConnectionRequired) 4 else 0)
             }
         if (selectedVoice == null) {
             VoiceRelayApi.fail(token, jobId, "No installed Android TTS voice is available for $tag. Install a Hindi, Gujarati or English voice in Android language settings.")
@@ -266,9 +270,28 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun setStatus(value: String) {
-        getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, value).apply()
+        val prefs = getSharedPreferences(STATUS_PREFS, MODE_PRIVATE)
+        val previous = prefs.getString(STATUS_KEY, null)
+        prefs.edit().putString(STATUS_KEY, value).apply()
+        if (previous != value) recordEvent(
+            if (value.contains("failed", true) || value.contains("error", true) || value.contains("reconnect", true)) "Error / connection" else "Server status",
+            value
+        )
+    }
+
+    private fun recordEvent(kind: String, message: String, detail: String = "") {
+        val prefs = getSharedPreferences(STATUS_PREFS, MODE_PRIVATE)
+        val events = try { org.json.JSONArray(prefs.getString(EVENTS_KEY, "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
+        events.put(org.json.JSONObject().put("at", System.currentTimeMillis()).put("kind", kind).put("message", message).put("detail", detail).put("error", kind.contains("error", true)))
+        val trimmed = org.json.JSONArray()
+        val cutoff = System.currentTimeMillis() - 86_400_000L
+        for (i in 0 until events.length()) {
+            val item = events.optJSONObject(i) ?: continue
+            if (item.optLong("at") >= cutoff) trimmed.put(item)
+        }
+        prefs.edit().putString(EVENTS_KEY, trimmed.toString()).apply()
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(value))
+        manager.notify(NOTIFICATION_ID, buildNotification(message))
     }
 
     private fun buildNotification(message: String): Notification {
@@ -280,7 +303,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Workly Voice server")
+            .setContentTitle("ChatWork server")
             .setContentText(message.take(120))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -291,7 +314,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Workly Voice server", NotificationManager.IMPORTANCE_LOW).apply {
+                NotificationChannel(CHANNEL_ID, "ChatWork server", NotificationManager.IMPORTANCE_LOW).apply {
                     setSound(null, null)
                     enableVibration(false)
                     setShowBadge(false)
@@ -305,6 +328,8 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         const val NOTIFICATION_ID = 6401
         const val STATUS_PREFS = "workly_ai_voice_status"
         const val STATUS_KEY = "server_status"
-        const val POLL_INTERVAL_MS = 15_000L
+        const val LAST_POLL_KEY = "last_successful_relay_poll"
+        const val EVENTS_KEY = "recent_activity_events"
+        const val POLL_INTERVAL_MS = 1_000L
     }
 }

@@ -1,0 +1,13 @@
+<resources>
+    <style name="WorklyVoiceTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#2878F0</item>
+        <item name="android:windowBackground">#F4F7FF</item>
+        <item name="android:statusBarColor">#F4F7FF</item>
+        <item name="android:navigationBarColor">#F4F7FF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowSplashScreenBackground">#F4F7FF</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_workly_voice</item>
+    </style>
+</resources>

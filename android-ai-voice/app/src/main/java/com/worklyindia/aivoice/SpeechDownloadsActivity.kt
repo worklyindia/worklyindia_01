@@ -46,21 +46,41 @@ class SpeechDownloadsActivity : Activity() {
     }
     private fun buildUi() {
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(12),dp(18),dp(20)); setBackgroundColor(bg) }
-        page.addView(Button(this).apply { text="‹  Back to Workly Voice"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
+        page.addView(Button(this).apply { text="‹  Back to ChatWork"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
         page.addView(label("Model Downloads",27,primary,true))
         page.addView(label("Phone available RAM: %.1f GB. Unsupported models are locked on this device. Download progress shows transferred size and live network speed.".format(Locale.US,availableRam/1e9),13,secondary,false))
         val scroll=ScrollView(this); val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(list); page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
         qwenManager.models.forEach { addQwenCard(list,it) }
-        list.addView(label("VOICE RECOGNITION",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
-        addSpeechPack(list,"IndicConformer Hindi","AI4Bharat IndicConformer INT8 · Hindi offline speech-to-text",SpeechModelCatalog.indicConformer("hi"))
-        addSpeechPack(list,"IndicConformer English","AI4Bharat IndicConformer INT8 · English offline speech-to-text",SpeechModelCatalog.indicConformer("en"))
-        addSpeechPack(list,"IndicConformer Gujarati","AI4Bharat IndicConformer INT8 · Gujarati offline speech-to-text",SpeechModelCatalog.indicConformer("gu"))
-        list.addView(label("TEXT TO SPEECH",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
+        list.addView(label("VOICE RECOGNITION · OFFLINE SPEECH TO TEXT",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
+        val recognitionLanguages = listOf(
+            "as" to "Assamese", "bn" to "Bengali", "brx" to "Bodo", "doi" to "Dogri",
+            "gu" to "Gujarati", "hi" to "Hindi", "kn" to "Kannada", "kok" to "Konkani",
+            "ks" to "Kashmiri", "mai" to "Maithili", "ml" to "Malayalam", "mni" to "Manipuri",
+            "mr" to "Marathi", "ne" to "Nepali", "or" to "Odia", "pa" to "Punjabi",
+            "sa" to "Sanskrit", "sat" to "Santali", "sd" to "Sindhi", "ta" to "Tamil",
+            "te" to "Telugu", "ur" to "Urdu", "en" to "English"
+        )
+        recognitionLanguages.forEach { (code, language) ->
+            addSpeechPack(list,"IndicConformer · $language","AI4Bharat IndicConformer INT8 · $language offline speech-to-text",SpeechModelCatalog.indicConformer(code))
+        }
+        list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
         addSpeechPack(list,"Indic Tiny TTS Hindi","Indic Tiny TTS · Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
+        list.addView(label("AI IMAGE GENERATION · WEBSITE SERVER",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
+        addServerModelCard(list,"Image Generation Model","Stored and run on the Workly website model server.")
+        list.addView(label("AI VIDEO GENERATION · WEBSITE SERVER",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
+        addServerModelCard(list,"Wan 2.1 Text-to-Video 1.3B","Model weights are stored on the server; website requests run inference there.")
+        list.addView(label("LANGUAGE TRANSLATION · WEBSITE SERVER",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
+        addServerModelCard(list,"MADLAD-400 3B Translation","Multilingual model cached on the translation server.")
+        list.addView(label("Website server deployment is not yet connected. Server model downloads will be enabled only after the GPU host, secure API and health checks are configured.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         setContentView(page)
+    }
+    private fun addServerModelCard(parent:LinearLayout,title:String,subtitle:String) {
+        val c=card(parent,title,subtitle)
+        c.addView(label("Website server · Not deployed",12,secondary,true))
+        c.addView(Button(this).apply { text="Deployment pending"; isAllCaps=false; isEnabled=false })
     }
     private fun addQwenCard(parent: LinearLayout, model: QwenModelManager.Model) {
         val card=card(parent,model.title + if(model.premium) " · PREMIUM" else "","Download: " + "%.0f MB".format(Locale.US,model.size/1e6) + " · Requires about %.1f GB free RAM".format(Locale.US,model.minFreeRam/1e9))

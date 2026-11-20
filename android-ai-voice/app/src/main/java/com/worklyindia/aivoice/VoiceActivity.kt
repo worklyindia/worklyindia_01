@@ -92,7 +92,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         }
         val scroll = ScrollView(this).apply { addView(page) }
         page.addView(label("WORKLY INDIA", 12, 0xFF2878D0.toInt(), true))
-        page.addView(label("Workly Voice", 28, 0xFF142033.toInt(), true).also {
+        page.addView(label("ChatWork", 28, 0xFF142033.toInt(), true).also {
             it.setPadding(0, dp(5), 0, dp(4))
         })
         page.addView(label("Hindi · English · Gujarati", 15, 0xFF65748B.toInt(), false))
@@ -178,7 +178,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         page.addView(space(22))
 
         page.addView(space(10))
-        page.addView(label("WORKLY VOICE · VERSION 1.0.0", 11, 0xFF8491A3.toInt(), true).also {
+        page.addView(label("CHATWORK · VERSION 1.0.0", 11, 0xFF8491A3.toInt(), true).also {
             it.gravity = Gravity.CENTER
         })
         setContentView(scroll)
@@ -311,7 +311,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
         speechPackStatusText.text = "IndicConformer ${language.uppercase()}: ${snapshot.state} (${snapshot.percent}%)"
     }
 
-    private fun startOfflineListening(shruti: Boolean) {
+    private fun startOfflineListening() {
         val language = when {
             selectedLanguage().tag.startsWith("hi") -> "hi"
             selectedLanguage().tag.startsWith("gu") -> "gu"
@@ -321,7 +321,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             }
         }
         val pack = runCatching {
-            if (shruti) SpeechModelCatalog.shruti(language) else SpeechModelCatalog.indicConformer(language)
+            SpeechModelCatalog.indicConformer(language)
         }.getOrElse {
             setStatus(it.message ?: "Could not select offline speech model.")
             return
@@ -406,7 +406,7 @@ class VoiceActivity : Activity(), TextToSpeech.OnInitListener {
             return
         }
         when (offlineSpeechEnginePicker.selectedItemPosition) {
-            0 -> { startOfflineListening(shruti = false); return }
+            0 -> { startOfflineListening(); return }
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             setStatus("No speech recognition service is installed on this phone.")

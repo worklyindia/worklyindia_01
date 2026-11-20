@@ -8,7 +8,7 @@ type RelayJob = {
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export async function requestOwnerPhoneVoiceAudio(text: string, language: string): Promise<string> {
+export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000): Promise<string> {
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
     body: {
       action: 'create_job',
@@ -24,9 +24,9 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
     detail: { status: 'queued', queuePosition: created.queue_position ?? null },
   }));
 
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await wait(1200);
+    await wait(350);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
@@ -62,7 +62,7 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
   // Android online AI requests may take up to 60 seconds; allow time for the phone to finish.
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
-    await wait(900);
+    await wait(350);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
@@ -92,7 +92,7 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
   window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: 'queued' } }));
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    await wait(900);
+    await wait(350);
     const { data, error } = await supabase.functions.invoke('unified-voice', { body: { action: 'get_job', job_id: jobId } });
     if (error) throw error;
     const job = data?.job as RelayJob | undefined;

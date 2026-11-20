@@ -30,17 +30,28 @@ object SpeechModelCatalog {
     }
 
     private const val INDICCONFORMER = "https://huggingface.co/parismitaglobalsolutions/indicconformer-sherpa-onnx/resolve/main"
-    private const val SHRUTI = "https://huggingface.co/udgamlabs/Shruti-ONNX/resolve/main"
     private const val TINY_GU = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-gujarati/resolve/main"
     private const val TINY_HI = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-hindi/resolve/main"
     private const val TINY_EN = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-english/resolve/main"
 
-    // IndicConformer CTC INT8 exports. English has a dedicated tokens file.
-    // Per-language ONNX files are ~198 MB; shared tokens are 67,605 bytes.
+    // IndicConformer CTC INT8 exports: all 22 scheduled Indian languages plus English.
+    // Each Indian-language ONNX file is approximately 197.6 MB; shared tokens are 67,605 bytes.
+    private val indicConformerBytes = mapOf(
+        "as" to 197_595_509L, "bn" to 197_595_578L, "brx" to 197_584_960L,
+        "doi" to 197_584_880L, "gu" to 197_595_461L, "hi" to 197_595_593L,
+        "kn" to 197_595_728L, "kok" to 197_585_030L, "ks" to 197_584_968L,
+        "mai" to 197_585_045L, "ml" to 197_595_555L, "mni" to 197_585_042L,
+        "mr" to 197_595_593L, "ne" to 197_585_135L, "or" to 197_584_928L,
+        "pa" to 197_595_548L, "sa" to 197_585_030L, "sat" to 197_584_818L,
+        "sd" to 197_584_945L, "ta" to 197_595_513L, "te" to 197_595_693L,
+        "ur" to 197_585_089L, "en" to 174_610_057L
+    )
+
     fun indicConformer(language: String): Pack {
         val code = language.lowercase()
-        require(code == "hi" || code == "gu" || code == "en") { "Only Hindi, English and Gujarati are supported." }
-        val modelBytes = when (code) { "hi" -> 197_595_593L; "gu" -> 197_595_461L; else -> 174_610_057L }
+        val modelBytes = indicConformerBytes[code]
+            ?: throw IllegalArgumentException("IndicConformer language is not supported: $code")
+        val isEnglish = code == "en"
         return Pack(
             id = "indicconformer-$code",
             title = "AI4Bharat IndicConformer INT8",
@@ -48,31 +59,8 @@ object SpeechModelCatalog {
             license = "MIT (source model); see repository README for export provenance",
             repository = "parismitaglobalsolutions/indicconformer-sherpa-onnx",
             files = listOf(
-                ModelFile("model.int8.onnx", "$INDICCONFORMER/$code/model.int8.onnx", modelBytes),
-                ModelFile("tokens.txt", if (code == "en") "$INDICCONFORMER/en/tokens.txt" else "$INDICCONFORMER/tokens.txt", if (code == "en") 11_433L else 67_605L)
-            )
-        )
-    }
-
-    // Shruti ships sherpa-onnx Moonshine packs. Do not use the ONNX Runtime
-    // folder here: the Android adapter expects the sherpa-onnx file layout.
-    fun shruti(language: String): Pack {
-        val code = language.lowercase()
-        require(code == "hi" || code == "gu") { "Shruti supports Hindi (hi) and Gujarati (gu) in this app." }
-        val root = "$SHRUTI/$code/sherpa-onnx"
-        val prefix = if (code == "hi") "hi" else "gu"
-        return Pack(
-            id = "shruti-$code",
-            title = "Shruti ONNX",
-            languageCode = code,
-            license = "Apache-2.0",
-            repository = "udgamlabs/Shruti-ONNX",
-            files = listOf(
-                ModelFile("preprocess.onnx", "$root/preprocess.onnx", 912_310L),
-                ModelFile("encode.onnx", "$root/encode.onnx", 19_637_087L),
-                ModelFile("uncached_decode.onnx", "$root/uncached_decode.onnx", 421_454L),
-                ModelFile("cached_decode.onnx", "$root/cached_decode.onnx", 32_801_767L),
-                ModelFile("tokens.txt", "$root/tokens.txt", if (prefix == "hi") 110_114L else 120_164L)
+                ModelFile("$code/model.int8.onnx", "$INDICCONFORMER/$code/model.int8.onnx", modelBytes),
+                ModelFile("tokens.txt", if (isEnglish) "$INDICCONFORMER/en/tokens.txt" else "$INDICCONFORMER/tokens.txt", if (isEnglish) 11_433L else 67_605L)
             )
         )
     }

@@ -1,10 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <queries>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
@@ -12,19 +14,16 @@
     </queries>
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_workly_voice"
-        android:label="Workly Voice"
-        android:roundIcon="@drawable/ic_workly_voice"
+        android:icon="@mipmap/ic_launcher"
+        android:label="ChatWork"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/WorklyVoiceTheme">
         <service
             android:name=".VoiceRelayService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
-        <activity android:name=".OfflineAiChatActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
-        <activity android:name=".VoiceActivity" android:exported="false" />
-        <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

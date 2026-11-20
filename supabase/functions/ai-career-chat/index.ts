@@ -2008,7 +2008,7 @@ const allTools = [{
   type: "function",
   function: {
     name: "generate_image_for_user",
-    description: "🎨 Generate an image in ANY exact size the user wants. Use when user asks to create/generate/make/draw any image, logo, banner, poster, thumbnail, illustration or visual content. Examples: 'logo bana do', 'instagram post bana do', 'YouTube thumbnail chahiye 1280x720', 'website banner 1920x1080', 'story size image', 'profile picture 400x400'. IMPORTANT: ALWAYS pass the right size — use size_preset when the user names a platform (instagram post/story/reel, youtube thumbnail, facebook post, x/twitter post, website banner, blog image, profile picture, mobile app banner, linkedin, whatsapp status, pinterest, poster, email header), or pass exact width+height when the user gives pixel numbers. If the user gives no size, pick the most suitable preset for their use case and tell them which size you used. The image is delivered at the EXACT pixel size requested.",
+    description: "🎨 Create a new image or edit an image attached in the current message, in ANY exact size the user wants. Use when user asks to create/generate/make/draw an image, or edit/transform/restyle/retouch an attached photo, logo, banner, poster, thumbnail, illustration or visual content. Examples: 'logo bana do', 'instagram post bana do', 'YouTube thumbnail chahiye 1280x720', 'website banner 1920x1080', 'story size image', 'profile picture 400x400'. IMPORTANT: ALWAYS pass the right size — use size_preset when the user names a platform (instagram post/story/reel, youtube thumbnail, facebook post, x/twitter post, website banner, blog image, profile picture, mobile app banner, linkedin, whatsapp status, pinterest, poster, email header), or pass exact width+height when the user gives pixel numbers. If the user gives no size, pick the most suitable preset for their use case and tell them which size you used. The image is delivered at the EXACT pixel size requested.",
     parameters: {
       type: "object",
       properties: {
@@ -2037,6 +2037,10 @@ const allTools = [{
           type: "string",
           enum: ["professional", "creative", "minimal", "vibrant", "corporate", "artistic", "cartoon", "realistic"],
           description: "Visual style of the image (default: professional)"
+        },
+        use_reference_image: {
+          type: "boolean",
+          description: "Set true when the user asks to edit, transform, restyle, or modify an image attached in the current message. Use the attached image as the visual reference. Leave false for a brand-new image."
         }
       },
       required: ["prompt"]
@@ -4290,6 +4294,17 @@ Create a visually striking, professional image prompt with unique style, color s
     } = requestBody;
     const requestedAudience = audience === "employer" || audience === "job_seeker" || audience === "developer" ? audience : pageContext?.audience === "employer" || pageContext?.audience === "job_seeker" ? pageContext.audience : null;
     let hasImages = initialHasImages;
+    // Keep only the current user turn's inline image as an optional edit reference.
+    // It is passed to the image model only when the model explicitly selects edit mode.
+    const latestUserMessage = Array.isArray(messages) ? [...messages].reverse().find((m: any) => m?.role === "user") : null;
+    const latestUserImagePart = Array.isArray(latestUserMessage?.content)
+      ? latestUserMessage.content.find((part: any) => part?.type === "image_url" && typeof part?.image_url?.url === "string")
+      : null;
+    const latestUserImageDataUrl = typeof latestUserImagePart?.image_url?.url === "string"
+      && /^data:image\/(?:png|jpe?g|webp);base64,/i.test(latestUserImagePart.image_url.url)
+      && latestUserImagePart.image_url.url.length <= 12_000_000
+      ? latestUserImagePart.image_url.url
+      : null;
 
     // Signed-in user's Supabase access token — forwarded to the Workly MCP
     // server so its tools run with that user's own RLS permissions.
@@ -6197,7 +6212,16 @@ Create a visually striking, professional image prompt with unique style, color s
               const target = resolveTargetSize(args.size_preset, args.width, args.height);
               const ratioHint = aspectRatioHint(target.width, target.height);
               const textRule = args.include_text ? "TEXT RULES (critical): render every word COMPLETE and correctly spelled — never cut, crop or clip any letter. " + "Keep all text fully inside a safe area with at least 8% margin from every edge, never touching or bleeding past the frame. " + "Scale the text down so the longest line fits comfortably in the width. Use one clean, highly legible bold font, strong contrast against the background, max 2 short lines." : "Do NOT include any text, letters or words in the image.";
-              const enhancedPrompt = `${args.prompt}. Style: ${style}. Ultra high quality, sharp, professional, well-composed, balanced layout, clean modern design, crisp details, no artifacts, no distortion, no watermark, no gibberish text. ` + `Compose this image for a ${ratioHint} frame — fill the entire frame edge to edge with no borders, ` + `no letterboxing and no padding, and keep the important subject centered and safely inside the frame. ${textRule}`;
+              const referenceImageDataUrl = args.use_reference_image === true
+                && typeof args.reference_image_data_url === "string"
+                && /^data:image\/(?:png|jpe?g|webp);base64,/i.test(args.reference_image_data_url)
+                && args.reference_image_data_url.length <= 12_000_000
+                ? args.reference_image_data_url
+                : null;
+              const editInstruction = referenceImageDataUrl
+                ? "Edit the supplied reference image according to the user's request. Preserve the original subject and identity unless the user explicitly asks to change them. Apply only the requested visual changes; do not simply describe the reference."
+                : "";
+              const enhancedPrompt = `${args.prompt}. ${editInstruction} Style: ${style}. Ultra high quality, sharp, professional, well-composed, balanced layout, clean modern design, crisp details, no artifacts, no distortion, no watermark, no gibberish text. ` + `Compose this image for a ${ratioHint} frame — fill the entire frame edge to edge with no borders, ` + `no letterboxing and no padding, and keep the important subject centered and safely inside the frame. ${textRule}`;
               // ⏱️ Hard timeout so a stuck image gateway never hangs the whole chat request.
               // Gemini image gen is usually 4-12s; 45s gives plenty of buffer without
               // blowing the frontend's overall budget when the user requests multiple images.
@@ -6230,7 +6254,12 @@ Create a visually striking, professional image prompt with unique style, color s
                           model: imgModel,
                           messages: [{
                             role: "user",
-                            content: enhancedPrompt
+                            content: referenceImageDataUrl
+                              ? [
+                                  { type: "text", text: enhancedPrompt },
+                                  { type: "image_url", image_url: { url: referenceImageDataUrl } }
+                                ]
+                              : enhancedPrompt
                           }],
                           modalities: ["image", "text"]
                         }),
@@ -11345,6 +11374,12 @@ Remember: Tu ChatWork hai - ${BRAND_CONFIG.name} ki COMPLETE CUSTOMER SERVICE AI
         }
         const toolResults = await runWithConcurrency(currentMessage.tool_calls, 3, async (toolCall: any) => {
           const args = JSON.parse(toolCall.function.arguments);
+          // This tool is reached only for a generation/edit request. If the current turn
+          // includes a photo, use it as the reference rather than silently dropping it.
+          if (toolCall.function.name === "generate_image_for_user" && latestUserImageDataUrl) {
+            args.use_reference_image = true;
+            args.reference_image_data_url = latestUserImageDataUrl;
+          }
           const result = await executeTool(toolCall.function.name, args);
           return {
             role: "tool",

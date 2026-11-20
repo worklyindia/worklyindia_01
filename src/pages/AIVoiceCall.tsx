@@ -55,7 +55,6 @@ export default function AIVoiceCall() {
   const [callState, setCallState] = useState<CallState>('idle');
   const [callStarted, setCallStarted] = useState(false);
   const [lastReply, setLastReply] = useState('');
-  const [spokenLines, setSpokenLines] = useState<string[]>([]);
   const [lastTranscript, setLastTranscript] = useState('');
   const [partialTranscript, setPartialTranscript] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -74,6 +73,9 @@ export default function AIVoiceCall() {
   const mutedRef = useRef(false);
   const lastReplyRef = useRef('');
   const replyAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioGainRef = useRef<GainNode | null>(null);
   const replyAudioUrlRef = useRef<string | null>(null);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
   useEffect(() => { mutedRef.current = muted; }, [muted]);
@@ -92,58 +94,58 @@ export default function AIVoiceCall() {
   const speakReply = useCallback(async (text: string, language: string) => {
     const resolvedLanguage = language === 'und' ? (navigator.language || 'en-US') : language;
     try {
-      // All callers use the paired Workly Voice Android app for reply audio.
-      // Do not silently fall back to browser or host-app TTS: that would hide relay failures.
+      // AudioContext is unlocked synchronously from the Start Call tap. Playing the
+      // decoded buffer avoids a later HTMLMediaElement.play() autoplay rejection.
+      const context = audioContextRef.current;
+      if (!context) throw new Error('Audio playback was not initialized. End the call and start it again.');
+      if (context.state !== 'running') await context.resume();
+
       const sourceUrl = await requestOwnerPhoneVoiceAudio(text, resolvedLanguage);
       if (!sourceUrl) throw new Error('The shared Workly Voice phone did not return audio.');
+      const response = await fetch(sourceUrl);
+      if (!response.ok) throw new Error('The voice audio could not be downloaded.');
+      const audioBuffer = await context.decodeAudioData(await response.arrayBuffer());
+      if (context.state !== 'running') await context.resume();
 
-      const audio = replyAudioRef.current ?? new Audio();
-      replyAudioRef.current = audio;
-      const speechWords = text.split(/\s+/).filter(Boolean);
-      const wordsPerLine = 7;
-      setSpokenLines(speechWords.slice(0, wordsPerLine).join(' ').trim() ? [speechWords.slice(0, wordsPerLine).join(' ')] : []);
-      audio.ontimeupdate = () => {
-        if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
-        const progress = Math.min(1, audio.currentTime / audio.duration);
-        const visibleWordCount = Math.max(1, Math.ceil(progress * speechWords.length));
-        const visibleWords = speechWords.slice(0, visibleWordCount);
-        const visibleLines: string[] = [];
-        for (let index = 0; index < visibleWords.length; index += wordsPerLine) {
-          visibleLines.push(visibleWords.slice(index, index + wordsPerLine).join(' '));
+      audioSourceRef.current?.stop();
+      const source = context.createBufferSource();
+      const gain = context.createGain();
+      source.buffer = audioBuffer;
+      gain.gain.value = speakerOn ? 1 : 0;
+      source.connect(gain);
+      gain.connect(context.destination);
+      audioSourceRef.current = source;
+      audioGainRef.current = gain;
+      source.onended = () => {
+        if (audioSourceRef.current === source) {
+          audioSourceRef.current = null;
+          audioGainRef.current = null;
+          window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
         }
-        setSpokenLines(visibleLines.slice(-2));
       };
-      audio.onended = () => {
-        audio.ontimeupdate = null;
-        setSpokenLines([]);
-        window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
-      };
-      audio.onerror = () => {
-        audio.ontimeupdate = null;
-        setSpokenLines([]);
-        window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
-      };
-      audio.src = sourceUrl;
-      audio.volume = speakerOn ? 1 : 0;
-      audio.currentTime = 0;
-      await audio.play();
+      source.start(0);
       window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Workly Voice app could not return audio.';
-      setErrorMessage(message);
-      setVoiceStage('Workly Voice app audio failed');
-      toast.error(message);
+      console.warn('Workly Voice audio playback failed:', message);
       return false;
     }
   }, [speakerOn]);
 
   const stopReply = useCallback(() => {
     if (bridge) bridge.stopVoiceReply?.();
+    const source = audioSourceRef.current;
+    audioSourceRef.current = null;
+    if (source) {
+      source.onended = null;
+      try { source.stop(0); } catch { /* already stopped */ }
+      source.disconnect();
+    }
+    audioGainRef.current?.disconnect();
+    audioGainRef.current = null;
     const audio = replyAudioRef.current;
-    setSpokenLines([]);
     if (audio) {
-      audio.ontimeupdate = null;
       audio.pause();
       audio.currentTime = 0;
     }
@@ -159,6 +161,9 @@ export default function AIVoiceCall() {
     conversationTurnRef.current += 1;
     stopRecognition();
     stopReply();
+    const audioContext = audioContextRef.current;
+    audioContextRef.current = null;
+    if (audioContext && audioContext.state !== 'closed') void audioContext.close();
     setCallState('idle');
     setVoiceStage('Call ended');
     setMicLevel(0);
@@ -252,18 +257,10 @@ export default function AIVoiceCall() {
       }
       if (!reply) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      const assistantMessage: StoredMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: historyReply || reply,
-        timestamp: formatChatStamp(),
-        status: 'read',
-      };
-      chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
       setAiRequestStatus('Reply received');
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
-      setLastReply(reply);
+      // Keep the reply hidden until its audio has successfully started.
       // Lock the UI into the speaking state before playback begins. The
       // microphone has already been stopped above, so it cannot overwrite this
       // state while the AI is answering.
@@ -279,6 +276,17 @@ export default function AIVoiceCall() {
 
       const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (spoken) {
+        setLastReply(reply);
+        // Commit the assistant message only once voice playback has actually started,
+        // so the text never appears ahead of the spoken reply in chat history.
+        const assistantMessage: StoredMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: historyReply || reply,
+          timestamp: formatChatStamp(),
+          status: 'read',
+        };
+        chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
         lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
         setVoiceStage('AI is speaking…');
@@ -395,8 +403,7 @@ export default function AIVoiceCall() {
     const handleShrutiStatus = (event: Event) => {
       const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
       if (detail?.status === 'ready') setNativeAvailable(true);
-      if (detail?.status === 'transcribing-on-workly-voice-app') setVoiceStage('Sending microphone audio to Workly Voice Android app…');
-      if (detail?.status === 'transcribed-by-workly-voice-app') setVoiceStage('Speech recognized by Workly Voice Android app');
+      // Keep internal microphone relay progress hidden from the call UI.
     };
     window.addEventListener('workly-shruti-status', handleShrutiStatus);
     return () => { window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
@@ -440,6 +447,15 @@ export default function AIVoiceCall() {
     if (!user) { toast.error('Please log in to use AI voice calls.'); return; }
     startingCallRef.current = true;
     try {
+      // Unlock Web Audio immediately inside the user's Start Call gesture.
+      // Keep this context alive for the whole call so later AI audio can play after
+      // the network/phone relay finishes without another play() gesture.
+      const AudioContextClass = window.AudioContext;
+      if (!AudioContextClass) throw new Error('This browser does not support audio playback.');
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        audioContextRef.current = new AudioContextClass();
+      }
+      await audioContextRef.current.resume();
       // Load the offline model only after the user taps Start AI Call.
       // The model is persisted in IndexedDB and reused on later visits.
       try { await navigator.storage?.persist?.(); } catch { /* browser may deny persistent storage */ }
@@ -498,8 +514,7 @@ export default function AIVoiceCall() {
   const toggleSpeaker = () => {
     const next = !speakerOn;
     setSpeakerOn(next);
-    const audio = replyAudioRef.current;
-    if (audio) audio.volume = next ? 1 : 0;
+    if (audioGainRef.current) audioGainRef.current.gain.value = next ? 1 : 0;
   };
 
   return (
@@ -537,26 +552,10 @@ export default function AIVoiceCall() {
         <div className="mt-5 min-h-6 text-sm font-medium tracking-wide text-white/70">
           {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'Listening…' : ''}
         </div>
-        <div
-          className="mt-5 flex min-h-[76px] w-full max-w-[340px] flex-col items-center justify-center gap-1 px-3 text-center"
-          aria-live="polite"
-          aria-atomic="false"
-        >
-          {spokenLines.length > 0 ? spokenLines.map((line, index) => (
-            <p
-              key={`${line}-${index}`}
-              className="w-full text-xl font-semibold leading-7 tracking-wide text-white drop-shadow-[0_0_14px_rgba(103,232,249,.35)] transition-all duration-300"
-              style={{ animation: "chatwork-line-in 280ms ease-out both" }}
-            >
-              {line}
-            </p>
-          )) : callState === 'speaking' && lastReply ? (
-            <p className="line-clamp-2 text-lg font-medium leading-7 text-white/80">{lastReply}</p>
-          ) : null}
-        </div>
+        <div className="mt-5 min-h-[76px] w-full" aria-hidden="true" />
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
-        <p className={`mt-2 max-w-xs text-xs ${errorMessage ? 'text-rose-300' : 'text-cyan-100/55'}`} aria-live="polite">{errorMessage || voiceStage}</p>
+        <p className="sr-only" aria-live="polite">{voiceStage}</p>
         <div className="mt-10 w-full">
           {!callStarted ? (
             <Button onClick={startCall} className="h-14 w-full rounded-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500">
