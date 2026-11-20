@@ -410,7 +410,7 @@ export default function AIVoiceCall() {
 
   useEffect(() => {
     const handleShrutiStatus = (event: Event) => {
-      const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
+      const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string; queuedSegments?: number }>).detail;
       if (detail?.status === 'ready') setNativeAvailable(true);
       if (detail?.status === 'transcribing' || detail?.status === 'segment-queued') {
         const queued = Number(detail.queuedSegments ?? 0);
