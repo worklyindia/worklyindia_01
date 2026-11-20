@@ -12,6 +12,7 @@
 #include "tts-cpp/chatterbox/engine.h"
 #include "tts-cpp/cosyvoice/engine.h"
 #include "tts-cpp/parler/engine.h"
+#include "sentencepiece_processor.h"
 
 namespace fs = std::filesystem;
 
@@ -190,4 +191,37 @@ Java_com_worklyindia_aivoice_QvacTtsEngine_nativeSynthesize(
 extern "C" JNIEXPORT void JNICALL
 Java_com_worklyindia_aivoice_QvacTtsEngine_nativeDestroy(JNIEnv*, jclass, jlong handle) {
     delete reinterpret_cast<Instance*>(handle);
+}
+
+extern "C" JNIEXPORT jintArray JNICALL
+Java_com_worklyindia_aivoice_NativeSentencePiece_encode(
+    JNIEnv* env, jclass, jstring modelPath, jstring text) {
+    try {
+        const std::string model = utf8(env, modelPath);
+        const std::string input = utf8(env, text);
+        if (model.empty() || input.empty()) {
+            throw std::runtime_error("SentencePiece model path and text are required.");
+        }
+        sentencepiece::SentencePieceProcessor processor;
+        const auto loadStatus = processor.Load(model);
+        if (!loadStatus.ok()) {
+            throw std::runtime_error("Could not load MOSS SentencePiece tokenizer: " + loadStatus.ToString());
+        }
+        std::vector<int> ids;
+        const auto encodeStatus = processor.Encode(input, &ids);
+        if (!encodeStatus.ok()) {
+            throw std::runtime_error("MOSS text tokenization failed: " + encodeStatus.ToString());
+        }
+        if (ids.empty()) throw std::runtime_error("MOSS tokenizer returned no tokens.");
+        jintArray result = env->NewIntArray(static_cast<jsize>(ids.size()));
+        if (!result) throw std::runtime_error("Could not allocate MOSS token array.");
+        std::vector<jint> values(ids.begin(), ids.end());
+        env->SetIntArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+        return result;
+    } catch (const std::exception& e) {
+        throwJava(env, e.what());
+    } catch (...) {
+        throwJava(env, "Unknown SentencePiece tokenization error.");
+    }
+    return nullptr;
 }
