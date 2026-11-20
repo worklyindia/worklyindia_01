@@ -11,6 +11,7 @@ import android.os.Environment
 import android.util.Base64
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
@@ -70,7 +71,7 @@ class ChatWorkImageActivity : Activity() {
             visibility = View.GONE
         }
         root.addView(ScrollView(this).apply {
-            addView(preview, ScrollView.LayoutParams(-1, -2))
+            addView(preview, ViewGroup.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         saveButton = Button(this).apply {
             text = "Save image to Gallery"
