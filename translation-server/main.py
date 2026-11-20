@@ -15,15 +15,6 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MAX_INPUT_CHARS = int(os.getenv("MAX_INPUT_CHARS", "4000"))
 MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "512"))
 
-# ISO language tags accepted by the current Workly translation UI.
-SUPPORTED_LANGUAGES = {
-    "en", "hi", "gu", "bn", "mr", "te", "ta", "kn", "ml", "pa", "or",
-    "as", "ur", "ne", "sd", "sa", "es", "fr", "de", "zh", "ar", "pt",
-    "ru", "ja", "ko", "it", "nl", "pl", "tr", "uk", "th", "id", "vi",
-    "fa", "he", "el", "sv", "cs", "ro", "hu", "fi", "da", "sk", "bg",
-    "ms", "tl", "sw", "si", "my",
-}
-
 tokenizer = None
 model = None
 model_lock = threading.Lock()
