@@ -1,5 +1,6 @@
 import java.io.File
 import java.net.HttpURLConnection
+import java.nio.file.Files
 import java.net.URL
 import java.security.MessageDigest
 
@@ -213,15 +214,15 @@ val stageQvacTtsSource by tasks.registering {
             "SentencePiece submodule is missing. Run: git submodule update --init --recursive"
         }
         val ggmlLink = File(qvacTtsSource, "ggml")
-        if (java.nio.file.Files.isSymbolicLink(ggmlLink.toPath())) {
-            java.nio.file.Files.delete(ggmlLink.toPath())
+        if (Files.isSymbolicLink(ggmlLink.toPath())) {
+            Files.delete(ggmlLink.toPath())
         } else if (ggmlLink.exists()) {
             check(ggmlLink.isDirectory && File(ggmlLink, "CMakeLists.txt").isFile) {
                 "Unexpected QVAC engines/tts/ggml path; refusing to overwrite it."
             }
         }
         if (!ggmlLink.exists()) {
-            java.nio.file.Files.createSymbolicLink(ggmlLink.toPath(), qvacGgmlSource.toPath())
+            Files.createSymbolicLink(ggmlLink.toPath(), qvacGgmlSource.toPath())
         }
     }
 }
