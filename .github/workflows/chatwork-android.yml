@@ -1,0 +1,129 @@
+name: ChatWork Android
+
+on:
+  push:
+    branches:
+      - main
+      - feature/workly-ai-voice-server-app
+      - feat/voice-settings-connection-call-history
+    paths:
+      - "android-ai-voice/**"
+      - ".github/workflows/chatwork-android.yml"
+  pull_request:
+    paths:
+      - "android-ai-voice/**"
+      - ".github/workflows/chatwork-android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build ChatWork update APK
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK and native build tools
+        uses: android-actions/setup-android@v4
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Install Android SDK, NDK and CMake
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.5.1"
+
+      - name: Check release signing configuration
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WORKLY_VOICE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.WORKLY_VOICE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.WORKLY_VOICE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.WORKLY_VOICE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$KEYSTORE_BASE64" ] && [ -z "$KEYSTORE_PASSWORD" ] && [ -z "$KEY_ALIAS" ] && [ -z "$KEY_PASSWORD" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Release signing secrets are only partially configured. Add all four WORKLY_VOICE_* secrets."
+            exit 1
+          fi
+
+      - name: Configure stable release signing
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.WORKLY_VOICE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.WORKLY_VOICE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.WORKLY_VOICE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.WORKLY_VOICE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/workly-signing"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/workly-signing/chatwork-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/workly-signing/chatwork-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          {
+            echo "WORKLY_VOICE_KEYSTORE_PATH=$RUNNER_TEMP/workly-signing/chatwork-release.jks"
+            echo "WORKLY_VOICE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "WORKLY_VOICE_KEY_ALIAS=$KEY_ALIAS"
+            echo "WORKLY_VOICE_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build signed update APK
+        if: steps.signing.outputs.enabled == 'true'
+        working-directory: android-ai-voice
+        run: gradle --no-daemon assembleRelease
+
+      - name: Build preview APK (not update-compatible)
+        if: steps.signing.outputs.enabled == 'false'
+        working-directory: android-ai-voice
+        run: gradle --no-daemon assembleDebug
+
+      - name: Rename APK
+        shell: bash
+        run: |
+          if [ -f android-ai-voice/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android-ai-voice/app/build/outputs/apk/release/app-release.apk "android-ai-voice/app/build/outputs/apk/release/ChatWork-v1.0.$GITHUB_RUN_NUMBER.apk"
+            echo "APK_PATH=android-ai-voice/app/build/outputs/apk/release/ChatWork-v1.0.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_ENV"
+          else
+            cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk "android-ai-voice/app/build/outputs/apk/debug/ChatWork-preview-v1.0.$GITHUB_RUN_NUMBER.apk"
+            echo "APK_PATH=android-ai-voice/app/build/outputs/apk/debug/ChatWork-preview-v1.0.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_ENV"
+          fi
+
+      - name: Publish build summary
+        shell: bash
+        run: |
+          echo "# ChatWork APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Application ID: com.worklyindia.chatwork" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version code: $GITHUB_RUN_NUMBER" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.signing.outputs.enabled }}" = "true" ]; then
+            echo "- Signing: stable release key (in-place update compatible with installs signed by this same key)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Signing: temporary debug key; this APK cannot safely update a release-signed install." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload ChatWork APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ChatWork-v1.0.${{ github.run_number }}
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
+          retention-days: 30
