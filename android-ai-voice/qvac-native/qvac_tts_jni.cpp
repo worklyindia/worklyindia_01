@@ -11,19 +11,17 @@
 
 #include "tts-cpp/chatterbox/engine.h"
 #include "tts-cpp/cosyvoice/engine.h"
-#include "tts-cpp/parler/engine.h"
 #include "sentencepiece_processor.h"
 
 namespace fs = std::filesystem;
 
 namespace {
-enum EngineKind { CHATTERBOX = 0, COSYVOICE = 1, PARLER = 2 };
+enum EngineKind { CHATTERBOX = 0, COSYVOICE = 1 };
 
 struct Instance {
     EngineKind kind;
     std::unique_ptr<tts_cpp::chatterbox::Engine> chatterbox;
     std::unique_ptr<tts_cpp::cosyvoice::Engine> cosyvoice;
-    std::unique_ptr<tts_cpp::parler::Engine> parler;
 };
 
 std::string utf8(JNIEnv* env, jstring value) {
@@ -134,16 +132,6 @@ Java_com_worklyindia_aivoice_QvacTtsEngine_nativeCreate(
             opts.n_threads = nThreads;
             opts.n_gpu_layers = 0;
             instance->cosyvoice = std::make_unique<tts_cpp::cosyvoice::Engine>(opts);
-        } else if (kind == PARLER) {
-            tts_cpp::parler::EngineOptions opts;
-            opts.model_gguf_path = a;
-            opts.default_description = desc.empty()
-                ? "A clear, natural Indian English speaker with a warm, friendly tone."
-                : desc;
-            opts.n_threads = nThreads;
-            opts.n_gpu_layers = 0;
-            opts.max_frames = 1200;
-            instance->parler = std::make_unique<tts_cpp::parler::Engine>(opts);
         } else {
             throw std::runtime_error("Unsupported native TTS engine.");
         }
@@ -177,9 +165,7 @@ Java_com_worklyindia_aivoice_QvacTtsEngine_nativeSynthesize(
             writeWav(path, result.pcm, result.sample_rate);
             return result.sample_rate;
         }
-        auto result = instance->parler->synthesize(input);
-        writeWav(path, result.pcm, result.sample_rate);
-        return result.sample_rate;
+        throw std::runtime_error("Unsupported native TTS engine.");
     } catch (const std::exception& e) {
         throwJava(env, e.what());
     } catch (...) {
