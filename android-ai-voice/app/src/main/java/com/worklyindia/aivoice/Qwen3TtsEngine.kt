@@ -25,11 +25,14 @@ class Qwen3TtsEngine(
         }
     }
 
-    fun synthesizeToWav(text: String, output: File): File {
+    fun availableSpeakers(): List<String> = engine.getAvailableSpeakers()
+
+    fun synthesizeToWav(text: String, output: File, speaker: String = "Ryan"): File {
         require(text.isNotBlank()) { "Enter text to synthesize." }
+        require(speaker.isNotBlank()) { "Choose a speaker voice." }
         val result = engine.synthesize(
             text = text,
-            params = QwenEngine.NativeParams(languageId = 2050, speaker = "Ryan", maxAudioTokens = 256)
+            params = QwenEngine.NativeParams(languageId = 2050, speaker = speaker, maxAudioTokens = 256)
         )
         val audio = result.audio
         check(result.success && audio != null && audio.isNotEmpty()) {
