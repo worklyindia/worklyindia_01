@@ -381,32 +381,85 @@ class SpeechDownloadsActivity : Activity() {
 
 
 
+
+    private data class TtsLanguageChoice(val label: String, val code: String, val sample: String)
+
     private fun showQvacTest(pack: SpeechModelCatalog.Pack, kind: Int) {
         val isChatterbox = kind == QvacTtsEngine.CHATTERBOX
         val title = if (isChatterbox) "Test Chatterbox Multilingual" else "Test CosyVoice 3"
-        val sample = if (isChatterbox) {
-            "नमस्ते! यह Chatterbox का हिंदी ऑफलाइन वॉइस टेस्ट है।"
-        } else {
-            "Hello! This is CosyVoice three running locally on Android."
+        val languages = if (isChatterbox) listOf(
+            TtsLanguageChoice("Arabic", "ar", "مرحباً، هذا اختبار صوتي."),
+            TtsLanguageChoice("Danish", "da", "Hej, dette er en stemmetest."),
+            TtsLanguageChoice("German", "de", "Hallo, dies ist ein Sprachtest."),
+            TtsLanguageChoice("Greek", "el", "Γεια σας, αυτή είναι μια δοκιμή φωνής."),
+            TtsLanguageChoice("Spanish", "es", "Hola, esta es una prueba de voz."),
+            TtsLanguageChoice("Finnish", "fi", "Hei, tämä on äänitesti."),
+            TtsLanguageChoice("French", "fr", "Bonjour, ceci est un test vocal."),
+            TtsLanguageChoice("Hebrew", "he", "שלום, זוהי בדיקת קול."),
+            TtsLanguageChoice("Hindi", "hi", "नमस्ते! यह हिंदी आवाज़ का परीक्षण है।"),
+            TtsLanguageChoice("Italian", "it", "Ciao, questo è un test vocale."),
+            TtsLanguageChoice("Japanese", "ja", "こんにちは、これは音声テストです。"),
+            TtsLanguageChoice("Korean", "ko", "안녕하세요, 음성 테스트입니다."),
+            TtsLanguageChoice("Malay", "ms", "Hai, ini ujian suara."),
+            TtsLanguageChoice("Dutch", "nl", "Hallo, dit is een stemtest."),
+            TtsLanguageChoice("Norwegian", "no", "Hei, dette er en stemmetest."),
+            TtsLanguageChoice("Polish", "pl", "Cześć, to jest test głosu."),
+            TtsLanguageChoice("Portuguese", "pt", "Olá, este é um teste de voz."),
+            TtsLanguageChoice("Russian", "ru", "Здравствуйте, это проверка голоса."),
+            TtsLanguageChoice("Swedish", "sv", "Hej, det här är ett rösttest."),
+            TtsLanguageChoice("Swahili", "sw", "Habari, huu ni mtihani wa sauti."),
+            TtsLanguageChoice("Turkish", "tr", "Merhaba, bu bir ses testidir."),
+            TtsLanguageChoice("Chinese", "zh", "你好，这是语音测试。")
+        ) else listOf(
+            TtsLanguageChoice("Chinese", "zh", "你好，这是 CosyVoice 离线语音测试。"),
+            TtsLanguageChoice("English", "en", "Hello! This is a CosyVoice offline voice test."),
+            TtsLanguageChoice("Japanese", "ja", "こんにちは、これは CosyVoice の音声テストです。"),
+            TtsLanguageChoice("Korean", "ko", "안녕하세요, CosyVoice 음성 테스트입니다."),
+            TtsLanguageChoice("German", "de", "Hallo, dies ist ein CosyVoice Sprachtest."),
+            TtsLanguageChoice("French", "fr", "Bonjour, ceci est un test vocal CosyVoice."),
+            TtsLanguageChoice("Russian", "ru", "Здравствуйте, это тест голоса CosyVoice."),
+            TtsLanguageChoice("Spanish", "es", "Hola, esta es una prueba de voz de CosyVoice."),
+            TtsLanguageChoice("Italian", "it", "Ciao, questo è un test vocale CosyVoice.")
+        )
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(4))
         }
+        layout.addView(label("LANGUAGE", 12, secondary, true))
+        val languageSpinner = Spinner(this)
+        languageSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, languages.map { it.label }).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        layout.addView(languageSpinner)
+        layout.addView(label(if (isChatterbox) "BUILT-IN VOICE" else "REFERENCE VOICE", 12, secondary, true))
+        layout.addView(label(if (isChatterbox) "Model voice conditioning" else "Bundled reference voice · zero_shot_prompt.wav", 14, primary, false))
+        layout.addView(label("TEST TEXT", 12, secondary, true))
         val input = EditText(this).apply {
-            setText(sample)
             minLines = 3
             maxLines = 6
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
+        layout.addView(input)
+        input.setText(languages.first().sample)
+        languageSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                input.setText(languages[position].sample)
+            }
+        }
         AlertDialog.Builder(this)
             .setTitle(title)
-            .setMessage("This model runs on-device. First load and generation can take time and use substantial RAM.")
-            .setView(input)
+            .setMessage("Select a supported language. Speech generation runs locally; voice identity comes from the model or bundled reference audio.")
+            .setView(layout)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Generate & Play") { _, _ ->
+                val selectedLanguage = languages[languageSpinner.selectedItemPosition]
                 val text = input.text.toString().trim()
                 if (text.isBlank()) {
                     Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                statusToast("Loading native model and generating speech…")
+                statusToast("Loading native model · " + selectedLanguage.label + "…")
                 ttsExecutor.execute {
                     try {
                         val directory = speechManager.modelDirectory(pack)
@@ -417,7 +470,7 @@ class SpeechDownloadsActivity : Activity() {
                                 modelDirectory = directory,
                                 modelA = java.io.File(directory, "chatterbox-t3-q4_k.gguf"),
                                 modelB = java.io.File(directory, "chatterbox-s3gen-q4_k.gguf"),
-                                language = "hi",
+                                language = selectedLanguage.code,
                                 threads = 2
                             ).use { it.synthesizeToWav(text, output) }
                         } else {
@@ -428,7 +481,7 @@ class SpeechDownloadsActivity : Activity() {
                                 modelB = java.io.File(directory, "merges.txt"),
                                 referenceAudio = java.io.File(directory, "zero_shot_prompt.wav"),
                                 referenceText = "",
-                                language = "en",
+                                language = selectedLanguage.code,
                                 threads = 2
                             ).use { it.synthesizeToWav(text, output) }
                         }
@@ -450,7 +503,7 @@ class SpeechDownloadsActivity : Activity() {
                                     setOnPreparedListener { it.start() }
                                     prepareAsync()
                                 }
-                                Toast.makeText(this, "Speech generated · ${sampleRate} Hz", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this, "Playing " + selectedLanguage.label + " · " + sampleRate + " Hz", Toast.LENGTH_LONG).show()
                             } catch (error: Throwable) {
                                 Toast.makeText(this, error.message ?: "Could not play generated audio.", Toast.LENGTH_LONG).show()
                             }
