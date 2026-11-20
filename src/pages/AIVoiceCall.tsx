@@ -472,7 +472,7 @@ export default function AIVoiceCall() {
       await prepareShrutiRecognition();
       activeRef.current = true;
       setCallStarted(true);
-      setCallState('listening');
+      setCallState('speaking');
       if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
       partialFinalizeTimerRef.current = null;
       lastSubmittedTranscriptRef.current = '';
@@ -480,19 +480,32 @@ export default function AIVoiceCall() {
       setLastTranscript('');
       setPartialTranscript('');
       setErrorMessage('');
-      setVoiceStage('Starting secure on-device microphone…');
+      setVoiceStage('ChatWork is preparing your greeting…');
       setMicLevel(0);
-      setAiRequestStatus('Not sent');
+      setAiRequestStatus('Ready');
       chatStorage.setCurrentUserId(user.id);
       chatStorage.setAudience('default');
       startingCallRef.current = false;
-      if (!startRecognition('auto')) {
-        activeRef.current = false;
-        setCallStarted(false);
-        setVoiceStage('Could not start speech recognition');
-        setErrorMessage('Could not start speech recognition. Check microphone permission and browser speech settings, then try again.');
-        setCallState('error');
-        toast.error('Could not start on-device speech recognition.');
+
+      // Start every call with a spoken greeting. The microphone is deliberately
+      // started after the greeting finishes so it cannot transcribe ChatWork's
+      // own hello as the caller's first message.
+      const greeting = "Hello! I'm ChatWork. How can I help you today?";
+      setLastReply(greeting);
+      const greetingMessage: StoredMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: greeting,
+        timestamp: formatChatStamp(),
+        status: 'read',
+      };
+      chatStorage.saveMessages([...chatStorage.loadMessages(), greetingMessage].slice(-50));
+      const greetingSpoken = await speakReply(greeting, 'en-IN');
+      if (!activeRef.current) return;
+      if (!greetingSpoken) {
+        setCallState('listening');
+        setVoiceStage('Listening…');
+        startRecognition('auto');
       }
     } catch (error) {
       startingCallRef.current = false;
