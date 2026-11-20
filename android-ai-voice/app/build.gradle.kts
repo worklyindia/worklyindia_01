@@ -237,7 +237,7 @@ val stageQvacTtsSource by tasks.registering {
         val oldVoiceBlock = """        require(voice_path, "voice.gguf");"""
         val newVoiceBlock = """        if (voice_path.empty() && opts.reference_audio.empty()) {
             require(voice_path, "voice.gguf");
-        }""
+        }"""
         val oldLoadBlock = """        // voice.gguf: read its four tensors into vectors, then free it.
         {
             model_ctx voice_m = cosyvoice_load_gguf(
