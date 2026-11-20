@@ -155,4 +155,44 @@ object SpeechModelCatalog {
         )
     )
 
+
+    private const val CHATTERBOX_GGUF = "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main"
+    private const val COSYVOICE_GGUF = "https://huggingface.co/cstr/cosyvoice3-0.5b-2512-GGUF/resolve/main"
+    private const val COSYVOICE_BASE = "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/main/CosyVoice-BlankEN"
+
+    /** QVAC native multilingual Chatterbox pack (Hindi included). */
+    fun chatterboxMultilingual(): Pack = Pack(
+        id = "qvac-chatterbox-multilingual",
+        title = "Chatterbox Multilingual · Q4_K",
+        languageCode = "hi",
+        license = "MIT model weights; MIT native runtime",
+        repository = "cstr/chatterbox-GGUF",
+        files = listOf(
+            ModelFile("chatterbox-t3-q4_k.gguf", "$CHATTERBOX_GGUF/chatterbox-t3-q4_k.gguf", 382_171_840L),
+            ModelFile("chatterbox-s3gen-q4_k.gguf", "$CHATTERBOX_GGUF/chatterbox-s3gen-q4_k.gguf", 254_658_880L)
+        )
+    )
+
+    /**
+     * CosyVoice3 Android native GGUF bundle. Includes the small tokenizer
+     * files and reference audio needed by the native zero-shot voice path.
+     */
+    fun cosyVoice3(): Pack = Pack(
+        id = "qvac-cosyvoice3",
+        title = "CosyVoice 3 · Q4/Q8",
+        languageCode = "en",
+        license = "Apache-2.0 model weights; MIT native runtime; sample voice attribution in upstream repository",
+        repository = "cstr/cosyvoice3-0.5b-2512-GGUF + FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+        files = listOf(
+            ModelFile("cosyvoice3-llm-q4_k.gguf", "$COSYVOICE_GGUF/cosyvoice3-llm-q4_k.gguf", 383_891_200L),
+            ModelFile("cosyvoice3-flow-q8_0.gguf", "$COSYVOICE_GGUF/cosyvoice3-flow-q8_0.gguf", 360_751_936L),
+            ModelFile("cosyvoice3-hift-f16.gguf", "$COSYVOICE_GGUF/cosyvoice3-hift-f16.gguf", 41_601_888L),
+            ModelFile("cosyvoice3-s3tok-q4_k.gguf", "$COSYVOICE_GGUF/cosyvoice3-s3tok-q4_k.gguf", 145_258_240L),
+            ModelFile("cosyvoice3-campplus-f16.gguf", "$COSYVOICE_GGUF/cosyvoice3-campplus-f16.gguf", 14_153_600L),
+            ModelFile("vocab.json", "$COSYVOICE_BASE/vocab.json", 2_776_833L),
+            ModelFile("merges.txt", "$COSYVOICE_BASE/merges.txt", 1_402_109L),
+            ModelFile("zero_shot_prompt.wav", "https://raw.githubusercontent.com/lcretan/FunAudioLLM.CosyVoice/main/zero_shot_prompt.wav", 111_496L)
+        )
+    )
+
 }
