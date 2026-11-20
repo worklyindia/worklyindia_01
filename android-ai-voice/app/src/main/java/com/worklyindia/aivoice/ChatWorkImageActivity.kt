@@ -8,7 +8,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.Environment
-import android.util.Base64
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -22,11 +21,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.provider.MediaStore
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
 
 /** Uses the same authenticated ChatWork AI Chat image-generation pipeline as the website. */
@@ -168,51 +163,7 @@ class ChatWorkImageActivity : Activity() {
     }
 
     private fun generateImage() {
-        val text = prompt.text?.toString()?.trim().orEmpty()
-        if (text.isBlank()) {
-            prompt.error = "Describe the image you want"
-            return
-        }
-        if (busy) return
-        busy = true
-        generateButton.isEnabled = false
-        chooseButton.isEnabled = false
-        status.text = if (referenceImageDataUrl == null) "Creating image with ChatWork AI…" else "Editing your photo with ChatWork AI…"
-        worker.execute {
-            try {
-                val token = getValidAccessToken()
-                val content = JSONArray().put(JSONObject().put("type", "text").put("text", text))
-                referenceImageDataUrl?.let { dataUrl ->
-                    content.put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", dataUrl)))
-                }
-                val userMessage = JSONObject().put("role", "user").put("content", content)
-                val body = JSONObject()
-                    .put("messages", JSONArray().put(userMessage))
-                    .put("hasImages", referenceImageDataUrl != null)
-                    .put("current_domain", "worklyindia.devs.surf")
-                    .put("currentPage", "ChatWork Android AI Image Studio")
-                val imageUrl = callWorklyAiImage(token, body)
-                val bitmap = downloadGeneratedImage(imageUrl)
-                runOnUiThread {
-                    lastGeneratedBitmap = bitmap
-                    preview.setImageBitmap(bitmap)
-                    preview.visibility = View.VISIBLE
-                    saveButton.visibility = View.VISIBLE
-                    status.text = "Image ready. Tap Save image to Gallery to keep it on your phone."
-                    prompt.setText("")
-                    referenceImageDataUrl = null
-                    chooseButton.text = "Add photo"
-                }
-            } catch (error: Exception) {
-                runOnUiThread { status.text = error.message ?: "Image generation failed. Please try again." }
-            } finally {
-                runOnUiThread {
-                    busy = false
-                    generateButton.isEnabled = true
-                    chooseButton.isEnabled = true
-                }
-            }
-        }
+        status.text = "Image generation is disabled: this phone does not have a supported on-device image model."
     }
 
     private fun saveImageToGallery() {
@@ -258,110 +209,6 @@ class ChatWorkImageActivity : Activity() {
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) saveImageToGallery()
             else status.text = "Storage permission was not granted."
         }
-    }
-
-    private fun getValidAccessToken(): String {
-        var access = SecureDeviceTokenStore.readAccessToken(this)
-            ?: throw IllegalStateException("Connect your Workly India account in ChatWork Settings first.")
-        val refresh = SecureDeviceTokenStore.readRefreshToken(this)
-            ?: throw IllegalStateException("Your secure sign-in session is missing. Reconnect your Workly India account.")
-        val expiresAt = runCatching {
-            val part = access.split(".")[1]
-            val payload = String(Base64.decode(part, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING), Charsets.UTF_8)
-            JSONObject(payload).optLong("exp", 0L)
-        }.getOrDefault(0L)
-        if (expiresAt > System.currentTimeMillis() / 1000L + 90L) return access
-        val connection = (URL("${BuildConfig.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 15000; readTimeout = 20000; doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-        }
-        try {
-            connection.outputStream.use {
-                it.write(JSONObject().put("refresh_token", refresh).toString().toByteArray(Charsets.UTF_8))
-            }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val result = JSONObject(stream?.bufferedReader()?.use { it.readText() }.orEmpty().ifBlank { "{}" })
-            if (code !in 200..299) throw IllegalStateException("Workly sign-in expired. Reconnect your account in ChatWork Settings.")
-            access = result.optString("access_token")
-            val nextRefresh = result.optString("refresh_token", refresh)
-            if (access.isBlank()) throw IllegalStateException("Could not refresh your Workly sign-in.")
-            SecureDeviceTokenStore.saveAuthSession(this, access, nextRefresh)
-            return access
-        } finally { connection.disconnect() }
-    }
-
-    private fun callWorklyAiImage(accessToken: String, body: JSONObject): String {
-        val connection = (URL("${BuildConfig.SUPABASE_URL}/functions/v1/ai-career-chat").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 30000; readTimeout = 180000; doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Accept", "text/event-stream, application/json")
-            setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-            setRequestProperty("Authorization", "Bearer $accessToken")
-        }
-        try {
-            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) {
-                val detail = runCatching {
-                    val json = JSONObject(raw)
-                    json.optString("userMessage").ifBlank { json.optString("message").ifBlank { json.optString("error") } }
-                }.getOrDefault(raw)
-                throw IllegalStateException(detail.ifBlank { "ChatWork AI request failed (HTTP $code)." }.take(300))
-            }
-
-            // The website transport supports both JSON image responses and SSE image events.
-            // Keep the Android client compatible with both response modes.
-            val contentType = connection.contentType.orEmpty()
-            if (contentType.contains("application/json", ignoreCase = true) || raw.trimStart().startsWith("{")) {
-                val json = JSONObject(raw)
-                val directUrl = json.optString("imageUrl")
-                    .ifBlank { json.optString("image_url") }
-                    .ifBlank { json.optString("url") }
-                if (directUrl.startsWith("https://")) return directUrl
-                val message = json.optString("userMessage").ifBlank { json.optString("error") }
-                throw IllegalStateException(message.ifBlank { "ChatWork AI returned no image. Please try again." })
-            }
-
-            var imageUrl: String? = null
-            var streamError: String? = null
-            raw.lineSequence().forEach { line ->
-                if (!line.startsWith("data: ")) return@forEach
-                val payload = line.removePrefix("data: ").trim()
-                if (payload.isBlank() || payload == "[DONE]") return@forEach
-                runCatching {
-                    val event = JSONObject(payload)
-                    when (event.optString("type")) {
-                        "image" -> imageUrl = event.optString("url").takeIf { it.startsWith("https://") }
-                        "error" -> streamError = event.optString("message").ifBlank { "ChatWork AI could not create the image." }
-                        "status" -> runOnUiThread { status.text = event.optString("text").ifBlank { "Creating image…" } }
-                    }
-                }
-            }
-            if (!imageUrl.isNullOrBlank()) return imageUrl!!
-            if (!streamError.isNullOrBlank()) throw IllegalStateException(streamError)
-            val markdown = Regex("!\\[[^]]*]\\((https?://[^)]+)\\)").find(raw)?.groupValues?.getOrNull(1)
-            if (!markdown.isNullOrBlank()) return markdown
-            throw IllegalStateException("ChatWork AI finished without returning an image. Please try again.")
-        } finally { connection.disconnect() }
-    }
-
-    private fun downloadGeneratedImage(imageUrl: String): Bitmap {
-        require(imageUrl.startsWith("https://")) { "AI returned an unsafe image link." }
-        val connection = (URL(imageUrl).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20000; readTimeout = 30000; requestMethod = "GET"
-        }
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) throw IllegalStateException("Generated image could not be downloaded.")
-            val bytes = connection.inputStream.use { it.readBytes() }
-            require(bytes.isNotEmpty() && bytes.size <= 15 * 1024 * 1024) { "Generated image is empty or too large." }
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                ?: throw IllegalStateException("Generated image format is not supported.")
-        } finally { connection.disconnect() }
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
