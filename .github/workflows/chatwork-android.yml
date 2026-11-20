@@ -45,7 +45,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-apk:
@@ -111,18 +111,26 @@ jobs:
             echo "| Application ID | com.worklyindia.aivoice |"
             echo
             echo "Preview APK: debug build, not a signed production release."
+            echo "For push-to-main or manual runs, the APK is published as a direct .apk asset in GitHub Releases (not wrapped in an Actions artifact ZIP)."
+            echo "Pull-request runs build and validate the APK but do not publish a release."
             echo "AI models are downloaded separately. Device performance requires physical-device testing."
             echo "Website and Supabase source checks run in the other jobs; this workflow does not deploy them."
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Rename APK for download
         run: cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
-      - name: Upload ChatWork APK
-        uses: actions/upload-artifact@v7
+      - name: Publish direct APK download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
-          name: ChatWork-v1.0.0
-          path: android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
-          if-no-files-found: error
-          retention-days: 14
+          tag_name: chatwork-preview-${{ github.run_number }}
+          name: ChatWork APK Preview #${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false
+          files: android-ai-voice/app/build/outputs/apk/debug/ChatWork-v1.0.0.apk
+          body: |
+            ChatWork debug preview APK. This is not a signed production release.
+            AI models download separately; device performance requires physical-device testing.
 
   ai-context-website-checks:
     name: ChatWork AI Context & Website Checks
