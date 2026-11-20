@@ -6,6 +6,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Qwen ships inside an APK that also contains llama.cpp/QVAC. Keep this
+# isolated GGML build static so identically named ggml shared objects from
+# other engines cannot satisfy Qwen symbols with an incompatible ABI.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(GGML_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
+
 set(QWEN3_TTS_ROOT "${CMAKE_CURRENT_LIST_DIR}/../external/qwen3-tts.cpp")
 set(GGML_DIR "${QWEN3_TTS_ROOT}/ggml")
 
