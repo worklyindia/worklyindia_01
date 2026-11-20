@@ -4,6 +4,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Android TTS must not depend on an unbundled libomp.so. Disable CMake
+# OpenMP discovery as well as GGML OpenMP so the JNI library is self-contained.
+set(CMAKE_DISABLE_FIND_PACKAGE_OpenMP TRUE)
+set(OpenMP_C_FLAGS "" CACHE STRING "" FORCE)
+set(OpenMP_CXX_FLAGS "" CACHE STRING "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(GGML_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+
 if(NOT DEFINED SENTENCEPIECE_ROOT OR NOT EXISTS "${SENTENCEPIECE_ROOT}/CMakeLists.txt")
     message(FATAL_ERROR "SENTENCEPIECE_ROOT must point to the pinned SentencePiece source.")
 endif()
