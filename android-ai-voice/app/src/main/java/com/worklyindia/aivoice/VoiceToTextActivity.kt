@@ -70,12 +70,6 @@ class VoiceToTextActivity : Activity() {
     private val poll = object : Runnable {
         override fun run() {
             refreshPack()
-            val state = runCatching { manager.snapshot(selectedPack()).state }.getOrNull()
-            if (state == SpeechPackDownloadManager.State.RUNNING ||
-                state == SpeechPackDownloadManager.State.PENDING ||
-                state == SpeechPackDownloadManager.State.PAUSED) {
-                handler.postDelayed(this, 1000L)
-            }
         }
     }
 
