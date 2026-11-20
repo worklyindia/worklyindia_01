@@ -140,7 +140,7 @@ class WanVideoActivity : Activity() {
         content.addView(label("Avoid (optional)", 13, secondary, true).apply { setPadding(0, dp(12), 0, dp(5)) })
         negativeInput = EditText(this).apply {
             hint = "blurry, distorted, static, text"
-            singleLine = true; textSize = 14f
+            setSingleLine(true); textSize = 14f
             setTextColor(primary); setHintTextColor(secondary)
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = rounded(surface, if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
