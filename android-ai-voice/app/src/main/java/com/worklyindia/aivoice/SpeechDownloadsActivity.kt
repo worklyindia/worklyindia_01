@@ -47,7 +47,6 @@ class SpeechDownloadsActivity : Activity() {
     private fun buildUi() {
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(12),dp(18),dp(20)); setBackgroundColor(bg) }
         page.addView(Button(this).apply { text="‹  Back to ChatWork"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
-        page.addView(label("Model Downloads",27,primary,true))
         val scroll=ScrollView(this); val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(list); page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
         qwenManager.models.forEach { addQwenCard(list,it) }
