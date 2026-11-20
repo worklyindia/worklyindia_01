@@ -326,7 +326,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle(if (message.contains("Waiting for Data on", ignoreCase = true)) "ChatWork" else "ChatWork server")
+            .setContentTitle("ChatWork")
             .setContentText(message.take(120))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
