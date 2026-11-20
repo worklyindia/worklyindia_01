@@ -270,7 +270,7 @@ class WanVideoActivity : Activity() {
                     if (!connectivity.bindProcessToNetwork(wifi)) throw IllegalStateException("Could not bind this download to Wi-Fi.")
                     wifiBound = true
                 }
-                val snapshot = WanVideoManager.download(this) { progress ->
+                val snapshot = WanVideoManager.download(this, allowMobileData) { progress ->
                     val percent = if (progress.totalBytes > 0) (progress.completedBytes * 100 / progress.totalBytes).toInt().coerceIn(0, 100) else 0
                     main.post {
                         downloadProgress.progress = percent
