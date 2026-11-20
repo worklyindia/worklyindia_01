@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 
 type KokoroEngine = Awaited<ReturnType<typeof KokoroTTS.from_pretrained>>;
+type KokoroVoice = "af_heart" | "af_bella" | "am_michael";
 const MODEL_ID = "onnx-community/Kokoro-82M-v1.0-ONNX";
 const MODEL_CACHE_MATCH = /transformers|kokoro/i;
 
@@ -18,7 +19,7 @@ export default function KokoroMobileTest() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const [text, setText] = useState("Hello! Welcome to Workly India. This is a voice quality test.");
-  const [voice, setVoice] = useState("af_heart");
+  const [voice, setVoice] = useState<KokoroVoice>("af_heart");
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [ready, setReady] = useState(false);
@@ -137,7 +138,7 @@ export default function KokoroMobileTest() {
             </label>
             <label className="block space-y-2 text-sm font-medium">
               Voice
-              <Select value={voice} onValueChange={setVoice}>
+              <Select value={voice} onValueChange={(value) => setVoice(value as KokoroVoice)}>
                 <SelectTrigger><SelectValue placeholder="Choose a voice" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="af_heart">Heart — female</SelectItem>
