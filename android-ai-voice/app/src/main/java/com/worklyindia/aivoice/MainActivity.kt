@@ -77,55 +77,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
 
         root.addView(TextView(this).apply {
-            text = "🌐   Language Translator"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            isClickable = true
-            isFocusable = true
-            contentDescription = "Translate text online using Workly website service"
-            background = null
-            setOnClickListener {
-                startActivity(Intent(this@MainActivity, ChatWorkTranslatorActivity::class.java))
-            }
-        }, LinearLayout.LayoutParams(-1, dp(64)))
-
-        root.addView(TextView(this).apply {
-            text = "🎨   AI Image Studio"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            isClickable = true
-            isFocusable = true
-            contentDescription = "Create or edit an image with Workly AI"
-            background = null
-            setOnClickListener {
-                startActivity(Intent(this@MainActivity, ChatWorkImageActivity::class.java))
-            }
-        }, LinearLayout.LayoutParams(-1, dp(64)))
-
-        root.addView(TextView(this).apply {
-            text = "🎬   AI Video Studio"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
-            isClickable = true
-            isFocusable = true
-            contentDescription = "Generate videos on this phone with AI"
-            background = null
-            setOnClickListener {
-                startActivity(Intent(this@MainActivity, WanVideoActivity::class.java))
-            }
-        }, LinearLayout.LayoutParams(-1, dp(64)))
-
-        root.addView(TextView(this).apply {
-            text = "↓   Download Model"
+            text = "Download Model"
             textSize = 19f
             gravity = Gravity.CENTER
             setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
