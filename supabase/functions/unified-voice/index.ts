@@ -370,10 +370,14 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   ).trim();
   const isSimpleGreeting = /^(?:hi|hello|hey|good morning|good afternoon|good evening)\\b/i.test(text);
   if (isSimpleGreeting) {
-    reply = reply.replace(
-      /\\s*(?:i['’]?m sorry|i am sorry|i apologize|i don['’]?t have memory|i do not have memory|i can['’]?t remember|i cannot remember)[\\s\\S]*$/i,
-      '',
-    ).trim();
+    // Greeting turns should stay short and must not grow an unrelated model disclaimer.
+    const questionEnd = reply.indexOf('?');
+    if (questionEnd >= 0) {
+      reply = reply.slice(0, questionEnd + 1).trim();
+    } else {
+      const sentenceEnd = reply.search(/[.!?।॥]/);
+      if (sentenceEnd >= 0) reply = reply.slice(0, sentenceEnd + 1).trim();
+    }
   }
   const hasNaturalEnding = /[.!?।॥…]["'”’)]*\\s*$/.test(reply);
   if (!hasNaturalEnding && reply.length > 0) {
