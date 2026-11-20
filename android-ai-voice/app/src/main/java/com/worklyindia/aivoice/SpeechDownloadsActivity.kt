@@ -392,6 +392,7 @@ class SpeechDownloadsActivity : Activity() {
             TtsLanguageChoice("Danish", "da", "Hej, dette er en stemmetest."),
             TtsLanguageChoice("German", "de", "Hallo, dies ist ein Sprachtest."),
             TtsLanguageChoice("Greek", "el", "Γεια σας, αυτή είναι μια δοκιμή φωνής."),
+            TtsLanguageChoice("English", "en", "Hello! This is a Chatterbox multilingual voice test."),
             TtsLanguageChoice("Spanish", "es", "Hola, esta es una prueba de voz."),
             TtsLanguageChoice("Finnish", "fi", "Hei, tämä on äänitesti."),
             TtsLanguageChoice("French", "fr", "Bonjour, ceci est un test vocal."),
