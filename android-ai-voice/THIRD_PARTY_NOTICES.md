@@ -64,3 +64,8 @@ SOFTWARE.
 The separate model pack is based on Wan2.1 T2V 1.3B and is downloaded from the Saient model host. Model weights are not bundled in the APK. Review the upstream model card and license before redistribution:
 
 https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B
+
+
+## Kokoro-82M
+
+ChatWork downloads the `kokoro_int8_fp16.litertlm` multilingual speech bundle from [litert-community/Kokoro-82M](https://huggingface.co/litert-community/Kokoro-82M). The model bundle is licensed under Apache-2.0. Android inference uses the MediaPipe Tasks Audio TextToSpeech API; MediaPipe Tasks are Apache-2.0. Retain upstream notices when redistributing.
