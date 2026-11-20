@@ -9,6 +9,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.firebase.messaging.FirebaseMessaging
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
 
@@ -24,6 +25,16 @@ class MainActivity : Activity() {
             startActivity(Intent(this, WorklyAccountActivity::class.java))
             finish()
             return
+        }
+
+        // Register this installation's push token after the owner device is paired.
+        val deviceToken = SecureDeviceTokenStore.read(this)
+        if (!deviceToken.isNullOrBlank()) {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { fcmToken ->
+                Thread {
+                    runCatching { VoiceRelayApi.registerFcmToken(deviceToken, fcmToken) }
+                }.start()
+            }
         }
 
         // Keep the website relay worker active; it is required for website voice processing.
