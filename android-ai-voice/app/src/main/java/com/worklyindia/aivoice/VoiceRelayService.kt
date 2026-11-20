@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -78,7 +80,9 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             return START_NOT_STICKY
         }
         activeToken = token
-        startForeground(NOTIFICATION_ID, buildNotification("Connecting to secure relay…"))
+        val initialStatus = if (hasValidatedInternet()) "Connecting to secure relay…" else "Waiting for Data on…"
+        startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
+        if (initialStatus == "Waiting for Data on…") setStatus(initialStatus)
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         relayWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:WorklyVoiceRelay").apply {
             setReferenceCounted(false)
@@ -93,9 +97,28 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         return START_STICKY
     }
 
+    private fun hasValidatedInternet(): Boolean {
+        val manager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     private fun pollLoop(token: String) {
-        setStatus("Connecting to Supabase relay…")
+        setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
+        var wasWaitingForData = !hasValidatedInternet()
         while (running.get()) {
+            if (!hasValidatedInternet()) {
+                wasWaitingForData = true
+                setStatus("Waiting for Data on…")
+                try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
+                continue
+            }
+            if (wasWaitingForData) {
+                wasWaitingForData = false
+                setStatus("Shared phone server is online")
+            }
             try {
                 if (activeJobId != null) {
                     Thread.sleep(500)
@@ -303,7 +326,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("ChatWork server")
+            .setContentTitle(if (message.contains("Waiting for Data on", ignoreCase = true)) "ChatWork" else "ChatWork server")
             .setContentText(message.take(120))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
