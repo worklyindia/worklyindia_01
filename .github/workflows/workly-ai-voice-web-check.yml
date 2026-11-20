@@ -1,5 +1,5 @@
-name: Workly AI Voice Website Checks
-# Validates shared owner-phone voice relay integration.
+name: ChatWork AI Website Checks
+# Validates the ChatWork shared phone voice relay integration.
 
 on:
   push:
