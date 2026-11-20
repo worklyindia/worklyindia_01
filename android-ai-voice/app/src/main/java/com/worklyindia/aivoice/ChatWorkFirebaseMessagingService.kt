@@ -24,6 +24,14 @@ class ChatWorkFirebaseMessagingService : FirebaseMessagingService() {
             .edit()
             .putString(FCM_TOKEN_KEY, token)
             .apply()
+        registerTokenWithRelay(token)
+    }
+
+    private fun registerTokenWithRelay(fcmToken: String) {
+        val deviceToken = SecureDeviceTokenStore.read(this) ?: return
+        Thread {
+            runCatching { VoiceRelayApi.registerFcmToken(deviceToken, fcmToken) }
+        }.start()
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
