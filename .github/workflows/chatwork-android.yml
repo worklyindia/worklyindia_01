@@ -43,8 +43,11 @@ jobs:
         with:
           accept-android-sdk-licenses: true
 
-      - name: Install Android SDK, NDK and CMake
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Install Android SDK, NDK, CMake and host tokenizer tools
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler flatbuffers-compiler
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
