@@ -314,6 +314,13 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   if (!text) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
+  // Deterministic greeting avoids free-model filler and gives voice calls an instant, clean opening.
+  if (/^(?:hi|hello|hey|good morning|good afternoon|good evening)\\b/i.test(text)) {
+    return new Response(JSON.stringify({
+      reply: 'Hello! How can I help you today?',
+      languageTag: languageTag.startsWith('und') || languageTag === 'auto' ? 'en-IN' : languageTag,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  }
   const scriptDetected =
     /[\u0A80-\u0AFF]/.test(text) ? 'Gujarati' :
     /[\u0B80-\u0BFF]/.test(text) ? 'Tamil' :
