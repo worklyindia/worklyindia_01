@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlertDialog
 import android.content.res.Configuration
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -70,6 +72,16 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Indic Tiny TTS Hindi","Indic Tiny TTS · Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
+        list.addView(label("NEW TEXT TO SPEECH MODELS · MODEL LIBRARY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
+        addServerModelCard(list,"Qwen3-TTS","Expressive multilingual TTS and voice design. Requires a compatible server/runtime; not yet an offline Android engine.","https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-Base")
+        addServerModelCard(list,"CosyVoice 3","Multilingual natural speech and voice cloning. Download source available; Android inference is not integrated yet.","https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512")
+        addServerModelCard(list,"MOSS-TTS","Long-form and expressive speech model family. Requires its own compatible runtime.","https://github.com/OpenMOSS/MOSS-TTS")
+        addServerModelCard(list,"AI4Bharat IndicF5","Indian-language TTS including Hindi and Gujarati. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/IndicF5")
+        addServerModelCard(list,"Indic Parler-TTS","Indian-language preset voices and style control. Requires a compatible inference backend.","https://huggingface.co/ai4bharat/indic-parler-tts")
+        addServerModelCard(list,"Chatterbox","Expressive TTS model family. Check the selected checkpoint and runtime requirements.","https://huggingface.co/ResembleAI/chatterbox")
+        addServerModelCard(list,"Fish Speech","Advanced expressive speech generation. Check model licence and runtime requirements.","https://github.com/fishaudio/fish-speech")
+        addServerModelCard(list,"Kokoro-82M","Compact English-focused TTS. Browser test is available on the Workly India website; native Android engine is not integrated yet.","https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX")
+        list.addView(label("The eight models above are listed as source downloads, not falsely marked as installed or playable. Hindi/Gujarati/English offline Test Model remains available on the verified Indic Tiny TTS cards.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
         addLocalOnlyCard(list,"Wan 2.1 Text-to-Video 1.3B","Not supported on this phone: Wan needs a multi-gigabyte model pack and substantially more RAM. Download is disabled to prevent storage and memory failures.")
@@ -82,10 +94,17 @@ class SpeechDownloadsActivity : Activity() {
         c.addView(label("On-device · Not available",12,secondary,true))
         c.addView(Button(this).apply { text="Not supported on this phone"; isAllCaps=false; isEnabled=false })
     }
-    private fun addServerModelCard(parent:LinearLayout,title:String,subtitle:String) {
+    private fun addServerModelCard(parent:LinearLayout,title:String,subtitle:String,downloadUrl:String) {
         val c=card(parent,title,subtitle)
-        c.addView(label("Website server · Not deployed",12,secondary,true))
-        c.addView(Button(this).apply { text="Deployment pending"; isAllCaps=false; isEnabled=false })
+        c.addView(label("Official model source · Runtime compatibility required",12,secondary,true))
+        c.addView(Button(this).apply {
+            text="Open Model Download"
+            isAllCaps=false
+            setOnClickListener {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))) }
+                    .onFailure { Toast.makeText(this@SpeechDownloadsActivity,"Could not open model source.",Toast.LENGTH_SHORT).show() }
+            }
+        })
     }
     private fun addQwenCard(parent: LinearLayout, model: QwenModelManager.Model) {
         val card=card(parent,model.title + if(model.premium) " · PREMIUM" else "","Download: " + "%.0f MB".format(Locale.US,model.size/1e6) + " · Requires about %.1f GB free RAM".format(Locale.US,model.minFreeRam/1e9))
