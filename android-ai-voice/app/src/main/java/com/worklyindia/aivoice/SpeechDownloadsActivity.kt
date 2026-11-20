@@ -78,7 +78,7 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
         addSpeechPack(list,"MOSS-TTS-Nano 100M","Languages: English and Chinese · built-in Junhao voice · approximately 717 MB · offline ONNX",SpeechModelCatalog.mossTtsNano())
         addSpeechPack(list,"Qwen3-TTS 0.6B CustomVoice · Q4_K_M","Preset speaker model · language controls are limited by this GGUF build · approximately 860 MB · arm64 / Android 12+",SpeechModelCatalog.qwen3Tts())
-        addSpeechPack(list,"Chatterbox Multilingual · Q4_K","Language picker · 22 selectable languages from this Chatterbox multilingual build · approximately 637 MB",SpeechModelCatalog.chatterboxMultilingual())
+        addSpeechPack(list,"Chatterbox Multilingual · Q4_K","Language picker · 23 selectable languages from this Chatterbox multilingual build · approximately 637 MB",SpeechModelCatalog.chatterboxMultilingual())
         addSpeechPack(list,"CosyVoice 3 · Q4/Q8","9-language picker · bundled reference voice · approximately 950 MB",SpeechModelCatalog.cosyVoice3())
         list.addView(label("ADDITIONAL TTS MODELS",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
         addSpeechPack(list,"Kokoro-82M · Multilingual","9 locales · 54 selectable female and male voices · approximately 295 MB · offline LiteRT",SpeechModelCatalog.kokoro82m())
