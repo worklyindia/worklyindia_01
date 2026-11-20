@@ -11,7 +11,6 @@ class QvacTtsEngine private constructor(private var nativeHandle: Long) : Closea
     companion object {
         const val CHATTERBOX = 0
         const val COSYVOICE3 = 1
-        const val INDIC_PARLER = 2
 
         init {
             System.loadLibrary("workly_qvac_tts_jni")
@@ -28,7 +27,7 @@ class QvacTtsEngine private constructor(private var nativeHandle: Long) : Closea
             language: String = "en",
             threads: Int = 2
         ): QvacTtsEngine {
-            require(kind in CHATTERBOX..INDIC_PARLER) { "Unsupported native TTS engine." }
+            require(kind == CHATTERBOX || kind == COSYVOICE3) { "Unsupported native TTS engine." }
             val handle = nativeCreate(
                 kind,
                 modelDirectory.absolutePath,
