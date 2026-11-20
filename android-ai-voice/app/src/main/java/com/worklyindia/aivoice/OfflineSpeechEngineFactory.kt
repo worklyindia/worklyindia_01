@@ -30,15 +30,6 @@ object OfflineSpeechEngineFactory {
         )
     }
 
-    fun openShruti(
-        context: Context,
-        language: String
-    ): OfflineSpeechRecognizer {
-        val pack = SpeechModelCatalog.shruti(language)
-        check(isReady(context, pack)) { "${pack.title} (${pack.languageCode}) is not fully downloaded." }
-        return OfflineSpeechRecognizer.shruti(packDirectory(context, pack))
-    }
-
     private fun packDirectory(context: Context, pack: SpeechModelCatalog.Pack): File {
         return File(
             context.applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
