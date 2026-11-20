@@ -6,8 +6,8 @@ type WorkerMessage =
   | { type: 'error'; id?: number; stage: string; message: string };
 
 let worker: Worker | null = null;
-let workerReady: Promise<void> | null = null;
-let requestId = 0;
+const workerReady: Promise<void> | null = null;
+const requestId = 0;
 let media: MediaStream | null = null;
 let context: AudioContext | null = null;
 let processor: ScriptProcessorNode | null = null;
