@@ -18,6 +18,8 @@ import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import android.widget.TextView
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -199,25 +201,94 @@ class SpeechDownloadsActivity : Activity() {
         row.refresh()
     }
 
+
+    private data class KokoroVoice(val id: String, val label: String)
+    private data class KokoroLanguage(val label: String, val code: String, val sample: String, val voices: List<KokoroVoice>)
+
+    private val kokoroLanguages by lazy {
+        listOf(
+            KokoroLanguage("English (US)", "en-US", "Hello! This is a Kokoro offline voice test on my Android phone.", listOf(
+                "af_heart" to "Heart · Female", "af_alloy" to "Alloy · Female", "af_aoede" to "Aoede · Female", "af_bella" to "Bella · Female", "af_jessica" to "Jessica · Female", "af_kore" to "Kore · Female", "af_nicole" to "Nicole · Female", "af_nova" to "Nova · Female", "af_river" to "River · Female", "af_sarah" to "Sarah · Female", "af_sky" to "Sky · Female",
+                "am_adam" to "Adam · Male", "am_echo" to "Echo · Male", "am_eric" to "Eric · Male", "am_fenrir" to "Fenrir · Male", "am_liam" to "Liam · Male", "am_michael" to "Michael · Male", "am_onyx" to "Onyx · Male", "am_puck" to "Puck · Male", "am_santa" to "Santa · Male"
+            )),
+            KokoroLanguage("English (UK)", "en-GB", "Hello! This is a British English Kokoro voice test.", listOf(
+                "bf_alice" to "Alice · Female", "bf_emma" to "Emma · Female", "bf_isabella" to "Isabella · Female", "bf_lily" to "Lily · Female", "bm_daniel" to "Daniel · Male", "bm_fable" to "Fable · Male", "bm_george" to "George · Male", "bm_lewis" to "Lewis · Male"
+            )),
+            KokoroLanguage("Hindi", "hi", "नमस्ते! यह कोकोरो हिंदी आवाज़ का परीक्षण है।", listOf(
+                "hf_alpha" to "Alpha · Female", "hf_beta" to "Beta · Female", "hm_omega" to "Omega · Male", "hm_psi" to "Psi · Male"
+            )),
+            KokoroLanguage("Spanish", "es", "¡Hola! Esta es una prueba de voz sin conexión de Kokoro.", listOf(
+                "ef_dora" to "Dora · Female", "em_alex" to "Alex · Male", "em_santa" to "Santa · Male"
+            )),
+            KokoroLanguage("French", "fr-FR", "Bonjour ! Ceci est un test vocal hors ligne de Kokoro.", listOf(
+                "ff_siwis" to "Siwis · Female"
+            )),
+            KokoroLanguage("Italian", "it", "Ciao! Questo è un test vocale offline di Kokoro.", listOf(
+                "if_sara" to "Sara · Female", "im_nicola" to "Nicola · Male"
+            )),
+            KokoroLanguage("Portuguese (Brazil)", "pt-BR", "Olá! Este é um teste de voz offline do Kokoro.", listOf(
+                "pf_dora" to "Dora · Female", "pm_alex" to "Alex · Male", "pm_santa" to "Santa · Male"
+            )),
+            KokoroLanguage("Chinese (Mandarin)", "zh-CN", "你好！这是 Kokoro 离线语音测试。", listOf(
+                "zf_xiaobei" to "Xiaobei · Female", "zf_xiaoni" to "Xiaoni · Female", "zf_xiaoxiao" to "Xiaoxiao · Female", "zf_xiaoyi" to "Xiaoyi · Female", "zm_yunjian" to "Yunjian · Male", "zm_yunxi" to "Yunxi · Male", "zm_yunxia" to "Yunxia · Male", "zm_yunyang" to "Yunyang · Male"
+            )),
+            KokoroLanguage("Japanese", "ja", "こんにちは！これは Kokoro のオフライン音声テストです。", listOf(
+                "jf_alpha" to "Alpha · Female", "jf_gongitsune" to "Gongitsune · Female", "jf_nezumi" to "Nezumi · Female", "jf_tebukuro" to "Tebukuro · Female", "jm_kumo" to "Kumo · Male"
+            ))
+        ).map { language -> language.copy(voices = language.voices.map { KokoroVoice(it.first, it.second) }) }
+    }
+
     private fun showKokoroTest(pack: SpeechModelCatalog.Pack) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        layout.addView(label("LANGUAGE", 12, secondary, true))
+        val languageSpinner = Spinner(this)
+        languageSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, kokoroLanguages.map { it.label }).also {
+            it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+        layout.addView(languageSpinner)
+        layout.addView(label("VOICE · 54 VOICES AVAILABLE", 12, secondary, true))
+        val voiceSpinner = Spinner(this)
+        layout.addView(voiceSpinner)
         val input = EditText(this).apply {
-            setText("नमस्ते! Kokoro मॉडल आपके Android फोन पर ऑफलाइन चल रहा है।")
             minLines = 3
             maxLines = 6
             setPadding(dp(12), dp(10), dp(12), dp(10))
         }
+        layout.addView(label("TEST TEXT", 12, secondary, true))
+        layout.addView(input)
+
+        fun updateLanguage(position: Int) {
+            val language = kokoroLanguages[position]
+            voiceSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, language.voices.map { it.label }).also {
+                it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
+            input.setText(language.sample)
+        }
+        languageSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                updateLanguage(position)
+            }
+        }
+        updateLanguage(0)
+
         AlertDialog.Builder(this)
-            .setTitle("Test Kokoro-82M")
-            .setMessage("Hindi and English are supported. Gujarati is not included in this model. Generation runs locally on this phone.")
-            .setView(input)
+            .setTitle("Test Kokoro-82M · 54 Voices")
+            .setMessage("Choose a language and voice, then generate speech. All 54 voices run offline on this phone. Gujarati is not supported by this model.")
+            .setView(layout)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Generate & Play") { _, _ ->
+                val selectedLanguage = kokoroLanguages[languageSpinner.selectedItemPosition]
+                val selectedVoice = selectedLanguage.voices[voiceSpinner.selectedItemPosition]
                 val text = input.text.toString().trim()
                 if (text.isBlank()) {
-                    Toast.makeText(this, "Enter Hindi or English text.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                statusToast("Loading Kokoro and generating offline speech…")
+                statusToast("Generating " + selectedLanguage.label + " · " + selectedVoice.label + " offline…")
                 ttsExecutor.execute {
                     try {
                         val output = KokoroTtsEngine(this).use { engine ->
@@ -225,6 +296,7 @@ class SpeechDownloadsActivity : Activity() {
                                 pack = pack,
                                 modelDirectory = speechManager.modelDirectory(pack),
                                 text = text,
+                                voiceId = selectedVoice.id,
                                 outputFile = java.io.File(cacheDir, "kokoro_tts_test.wav")
                             )
                         }
@@ -246,7 +318,7 @@ class SpeechDownloadsActivity : Activity() {
                                     setOnPreparedListener { it.start() }
                                     prepareAsync()
                                 }
-                                Toast.makeText(this, "Kokoro speech generated successfully.", Toast.LENGTH_LONG).show()
+                                Toast.makeText(this, "Playing " + selectedLanguage.label + " · " + selectedVoice.label, Toast.LENGTH_LONG).show()
                             } catch (error: Throwable) {
                                 Toast.makeText(this, error.message ?: "Could not play Kokoro audio.", Toast.LENGTH_LONG).show()
                             }
@@ -255,7 +327,7 @@ class SpeechDownloadsActivity : Activity() {
                         runOnUiThread {
                             AlertDialog.Builder(this)
                                 .setTitle("Kokoro voice test failed")
-                                .setMessage(error.message ?: "Could not load or run the on-device Kokoro model.")
+                                .setMessage(error.message ?: "Could not load or run the selected Kokoro voice.")
                                 .setPositiveButton("OK", null)
                                 .show()
                         }
