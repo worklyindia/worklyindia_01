@@ -50,7 +50,7 @@ jobs:
       # Build the pinned Saient Wan Vulkan worker from source. Do not fetch or trust an
       # unverified prebuilt executable; the upstream build script checks its exact backend commit.
       - name: Install Vulkan host headers
-        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev spirv-headers glslc
+        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev spirv-headers glslc ripgrep
 
       - name: Checkout pinned Saient build recipe
         uses: actions/checkout@v7
