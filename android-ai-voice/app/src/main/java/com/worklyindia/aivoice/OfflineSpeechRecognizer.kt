@@ -49,7 +49,7 @@ class OfflineSpeechRecognizer private constructor(
                 modelConfig = OfflineModelConfig(
                     nemo = OfflineNemoEncDecCtcModelConfig(model = modelFile.absolutePath),
                     tokens = tokensFile.absolutePath,
-                    numThreads = 2,
+                    numThreads = inferenceThreads(),
                     provider = "cpu"
                 )
             )
@@ -78,12 +78,14 @@ class OfflineSpeechRecognizer private constructor(
                         cachedDecoder = cached.absolutePath
                     ),
                     tokens = tokens.absolutePath,
-                    numThreads = 2,
+                    numThreads = inferenceThreads(),
                     provider = "cpu"
                 )
             )
             return OfflineSpeechRecognizer(OfflineRecognizer(config = config))
         }
+
+        private fun inferenceThreads(): Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
 
         private fun requireModel(file: File) {
             require(file.isFile && file.length() > 0L) {
