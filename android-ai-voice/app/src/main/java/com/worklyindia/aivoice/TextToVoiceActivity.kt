@@ -45,38 +45,20 @@ class TextToVoiceActivity : Activity() {
     private lateinit var textInput: EditText
     private val models = listOf(
         ModelChoice("Kokoro-82M", "kokoro"),
-        ModelChoice("Qwen3-TTS", "qwen"),
         ModelChoice("Indic Tiny TTS", "indic")
     )
     private val languages = mapOf(
         "indic" to listOf(
-            Language("Hindi", "hi", "नमस्ते! यह हिंदी टेक्स्ट टू वॉइस परीक्षण है।"),
-            Language("Gujarati", "gu", "નમસ્તે! આ ગુજરાતી ટેક્સ્ટ ટુ વૉઇસ પરીક્ષણ છે."),
-            Language("English", "en", "Hello! This is an offline text to voice test.")
+            Language("Gujarati", "gu", "નમસ્તે! આ ગુજરાતી ટેક્સ્ટ ટુ વૉઇસ પરીક્ષણ છે.")
         ),
         "kokoro" to listOf(
-            Language("English (US)", "en-US", "Hello! This is a Kokoro voice test."),
-            Language("English (UK)", "en-GB", "Hello! This is a British English voice test."),
-            Language("Hindi", "hi", "नमस्ते! यह कोकोरो हिंदी आवाज़ का परीक्षण है।"),
-            Language("Spanish", "es", "¡Hola! Esta es una prueba de voz."),
-            Language("French", "fr-FR", "Bonjour ! Ceci est un test vocal."),
-            Language("Italian", "it", "Ciao! Questo è un test vocale."),
-            Language("Portuguese (Brazil)", "pt-BR", "Olá! Este é um teste de voz."),
-            Language("Chinese", "zh-CN", "你好！这是语音测试。"),
-            Language("Japanese", "ja", "こんにちは！これは音声テストです。")
-        ),
-        "qwen" to listOf(Language("English", "en", "Hello! This is Qwen3 offline text to speech."))
+            Language("English", "en-US", "Hello! This is a Kokoro English voice test."),
+            Language("Hindi", "hi", "नमस्ते! यह कोकोरो हिंदी आवाज़ का परीक्षण है।")
+        )
     )
     private val kokoroVoices = mapOf(
         "en-US" to listOf("af_heart · Female","af_bella · Female","af_nicole · Female","af_sarah · Female","af_sky · Female","am_adam · Male","am_michael · Male","am_puck · Male"),
-        "en-GB" to listOf("bf_alice · Female","bf_emma · Female","bf_isabella · Female","bf_lily · Female","bm_daniel · Male","bm_george · Male","bm_lewis · Male"),
-        "hi" to listOf("hf_alpha · Female","hf_beta · Female","hm_omega · Male","hm_psi · Male"),
-        "es" to listOf("ef_dora · Female","em_alex · Male","em_santa · Male"),
-        "fr-FR" to listOf("ff_siwis · Female"),
-        "it" to listOf("if_sara · Female","im_nicola · Male"),
-        "pt-BR" to listOf("pf_dora · Female","pm_alex · Male","pm_santa · Male"),
-        "zh-CN" to listOf("zf_xiaobei · Female","zf_xiaoni · Female","zf_xiaoxiao · Female","zf_xiaoyi · Female","zm_yunjian · Male","zm_yunxi · Male","zm_yunxia · Male","zm_yunyang · Male"),
-        "ja" to listOf("jf_alpha · Female","jf_gongitsune · Female","jf_nezumi · Female","jf_tebukuro · Female","jm_kumo · Male")
+        "hi" to listOf("hf_alpha · Female","hf_beta · Female","hm_omega · Male","hm_psi · Male")
     )
     private val background get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
@@ -163,7 +145,6 @@ class TextToVoiceActivity : Activity() {
         val voices=when(key) {
             "indic" -> listOf("Female","Male")
             "kokoro" -> kokoroVoices[language.code] ?: emptyList()
-            "qwen" -> listOf("Ryan · English")
             else -> emptyList()
         }
         voiceSpinner.adapter=adapter(voices)
@@ -179,7 +160,6 @@ class TextToVoiceActivity : Activity() {
         return when(key) {
             "indic" -> SpeechModelCatalog.indicTinyTts(language.code)
             "kokoro" -> SpeechModelCatalog.kokoro82m()
-            "qwen" -> SpeechModelCatalog.qwen3Tts()
             else -> SpeechModelCatalog.indicTinyTts(language.code)
         }
     }
@@ -255,7 +235,6 @@ class TextToVoiceActivity : Activity() {
                         val id=voice.substringBefore(" ·")
                         KokoroTtsEngine(this).use { it.synthesizeToWav(pack,manager.modelDirectory(pack),text,id,output) }
                     }
-                    "qwen" -> Qwen3TtsEngine(manager.modelDirectory(pack),2).use { engine -> engine.load(); engine.synthesizeToWav(text,output,"Ryan") }
                 }
                 check(output.isFile && output.length()>44L) { "Audio file was not generated." }
                 runOnUiThread {
