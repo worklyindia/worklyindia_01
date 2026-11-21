@@ -9,22 +9,18 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.content.Intent
 import android.os.Build
-import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
 
-class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
+class VoiceRelayService : Service() {
     private val running = AtomicBoolean(false)
-    @Volatile private var ttsReady = false
     @Volatile private var activeJobId: String? = null
     @Volatile private var activeAudioFile: File? = null
-    private var tts: TextToSpeech? = null
+    private val speechManager by lazy { SpeechPackDownloadManager(this) }
     private var pollThread: Thread? = null
     private var activeToken: String? = null
     private var relayWakeLock: PowerManager.WakeLock? = null
@@ -32,45 +28,6 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        tts = TextToSpeech(this, this)
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                setStatus("Generating voice audio for a website user…")
-            }
-            override fun onDone(utteranceId: String?) {
-                val jobId = utteranceId ?: return
-                val token = activeToken ?: return
-                val audioFile = activeAudioFile
-                Thread {
-                    try {
-                        if (audioFile == null || !audioFile.isFile || audioFile.length() == 0L) {
-                            throw IllegalStateException("Android did not create the voice audio file.")
-                        }
-                        VoiceRelayApi.uploadAudio(token, jobId, audioFile.readBytes())
-                        setStatus("Voice audio delivered to website user. Processing next request…")
-                    } catch (error: Exception) {
-                        runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Voice audio upload failed.") }
-                        setStatus("Could not deliver voice audio: " + (error.message ?: "network error"))
-                    } finally {
-                        audioFile?.delete()
-                        activeAudioFile = null
-                        activeJobId = null
-                    }
-                }.start()
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                val jobId = utteranceId ?: return
-                val token = activeToken ?: return
-                Thread {
-                    runCatching { VoiceRelayApi.fail(token, jobId, "Android offline text-to-speech synthesis failed.") }
-                    activeAudioFile?.delete()
-                    activeAudioFile = null
-                    activeJobId = null
-                    setStatus("A voice request failed on this phone.")
-                }.start()
-            }
-        })
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -212,61 +169,68 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         }.start()
     }
 
+    /** Website Text To Voice uses only the two approved offline model families. */
     private fun handleTtsJob(token: String, jobId: String, payload: JSONObject) {
         if (activeJobId != null) {
             VoiceRelayApi.fail(token, jobId, "Phone is already processing another voice request.")
             return
         }
         activeJobId = jobId
-        val text = payload.optString("text").trim()
-        if (text.isEmpty()) {
-            VoiceRelayApi.fail(token, jobId, "TTS request has no text.")
-            activeJobId = null
-            return
-        }
-        if (!ttsReady) {
-            VoiceRelayApi.fail(token, jobId, "Android text-to-speech engine is not ready.")
-            activeJobId = null
-            return
-        }
-        val tag = payload.optString("language", "hi-IN")
-        val locale = Locale.forLanguageTag(tag)
-        val engine = tts ?: run {
-            VoiceRelayApi.fail(token, jobId, "Android text-to-speech engine is unavailable.")
-            activeJobId = null
-            return
-        }
-        val matchingVoices = engine.voices
-            ?.filter { voice -> voice.locale.language == locale.language }
-            .orEmpty()
-        // Prefer an online voice for natural cloud-connected call audio, while
-        // retaining an installed offline voice as a resilience option.
-        // Prefer an installed on-device voice for low-latency calls.
-        // Use a network voice only when no offline voice exists for this language.
-        val selectedVoice = matchingVoices
-            .maxByOrNull { voice ->
-                (if (voice.locale == locale) 2 else 1) + (if (!voice.isNetworkConnectionRequired) 4 else 0)
+        Thread {
+            val outputFile = File(cacheDir, "workly-voice-$jobId.wav")
+            activeAudioFile = outputFile
+            try {
+                val text = payload.optString("text").trim()
+                require(text.isNotEmpty()) { "TTS request has no text." }
+                val languageTag = payload.optString("language", "hi-IN")
+                val language = Locale.forLanguageTag(languageTag).language
+                val voiceId = payload.optString("voice").trim()
+                outputFile.delete()
+                when (language) {
+                    "gu" -> {
+                        val pack = SpeechModelCatalog.indicTinyTts("gu")
+                        check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                            "Indic Tiny TTS Gujarati is not downloaded. Download it from ChatWork → Model Downloads."
+                        }
+                        val selectedVoice = voiceId.ifBlank { "female" }
+                        check(selectedVoice == "female" || selectedVoice == "male") {
+                            "Selected Gujarati voice is not available in Indic Tiny TTS."
+                        }
+                        IndicTinyTtsEngine.create(this, "gu").use { engine ->
+                            engine.synthesizeToWav(text, outputFile, selectedVoice)
+                        }
+                    }
+                    "hi", "en" -> {
+                        val pack = SpeechModelCatalog.kokoro82m()
+                        check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                            "Kokoro-82M is not downloaded. Download it from ChatWork → Model Downloads."
+                        }
+                        val defaultVoice = if (language == "hi") "hf_alpha" else "af_heart"
+                        val selectedVoice = voiceId.ifBlank { defaultVoice }
+                        KokoroTtsEngine(this).use { engine ->
+                            engine.synthesizeToWav(
+                                pack = pack,
+                                modelDirectory = speechManager.modelDirectory(pack),
+                                text = text,
+                                voiceId = selectedVoice,
+                                outputFile = outputFile
+                            )
+                        }
+                    }
+                    else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
+                }
+                check(outputFile.isFile && outputFile.length() > 44L) { "The selected offline model returned empty audio." }
+                VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
+                setStatus("Offline model voice audio delivered to website. Waiting for next request…")
+            } catch (error: Exception) {
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Offline TTS synthesis failed.") }
+                setStatus("Voice conversion failed: " + (error.message ?: "unknown error"))
+            } finally {
+                outputFile.delete()
+                activeAudioFile = null
+                activeJobId = null
             }
-        if (selectedVoice == null) {
-            VoiceRelayApi.fail(token, jobId, "No installed Android TTS voice is available for $tag. Install a Hindi, Gujarati or English voice in Android language settings.")
-            activeJobId = null
-            return
-        }
-        engine.voice = selectedVoice
-        val outputFile = File(cacheDir, "workly-voice-" + jobId + ".wav")
-        activeAudioFile?.delete()
-        activeAudioFile = outputFile
-        val result = engine.synthesizeToFile(text.take(1000), Bundle(), outputFile, jobId)
-        if (result == TextToSpeech.ERROR) {
-            VoiceRelayApi.fail(token, jobId, "Android could not synthesize voice audio.")
-            outputFile.delete()
-            activeAudioFile = null
-            activeJobId = null
-        }
-    }
-
-    override fun onInit(status: Int) {
-        ttsReady = status == TextToSpeech.SUCCESS
+        }.start()
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
@@ -281,8 +245,6 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         running.set(false)
         pollThread?.interrupt()
-        tts?.stop()
-        tts?.shutdown()
         if (relayWakeLock?.isHeld == true) relayWakeLock?.release()
         relayWakeLock = null
         getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, "Phone server stopped.").apply()
