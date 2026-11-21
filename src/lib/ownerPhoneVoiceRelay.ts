@@ -137,7 +137,11 @@ export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: st
 export async function requestOwnerPhoneLongVoiceAudioBlob(text: string, language: string, voice = ''): Promise<Blob> {
   const chunks: string[] = [];
   let remaining = text.trim();
-  const maxChunkChars = 180;
+  // Send substantially larger sentence-aware batches. Each 180-char batch created
+  // another Supabase job, phone poll, model inference, upload and cleanup cycle.
+  // The Android relay safely splits each request into bounded Kokoro inference
+  // segments and returns one continuous WAV, so 900 chars cuts round trips ~5x.
+  const maxChunkChars = 900;
   while (remaining.length) {
     if (remaining.length <= maxChunkChars) { chunks.push(remaining); break; }
 
