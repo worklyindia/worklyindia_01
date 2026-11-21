@@ -472,7 +472,7 @@ class IndicTinyTtsEngine private constructor(
 
         fun create(context: Context, language: String): IndicTinyTtsEngine {
             val code = language.lowercase()
-            require(code in listOf("hi", "gu", "en")) { "Indic Tiny TTS supports Hindi, Gujarati and English." }
+            require(code == "gu") { "Indic Tiny TTS is enabled only for Gujarati. Hindi and English use Kokoro-82M." }
             val pack = SpeechModelCatalog.indicTinyTts(code)
             check(OfflineSpeechEngineFactory.isReady(context, pack)) { "Indic Tiny TTS $code is not fully downloaded." }
             val directory = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "workly-voice-models/${pack.id}")
