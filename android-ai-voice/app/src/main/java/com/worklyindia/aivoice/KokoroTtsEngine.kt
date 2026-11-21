@@ -22,6 +22,15 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     private var activeDelegate: Delegate? = null
     private var forceCpu = false
     private var delegateBenchmarked = false
+    private var gpuBenchmarkMs: Long? = null
+    private var cpuBenchmarkMs: Long? = null
+
+    @Synchronized
+    fun diagnosticMetadata(): org.json.JSONObject = org.json.JSONObject()
+        .put("delegate", activeDelegate?.name ?: "unknown")
+        .put("delegate_benchmarked", delegateBenchmarked)
+        .put("gpu_benchmark_ms", gpuBenchmarkMs ?: org.json.JSONObject.NULL)
+        .put("cpu_benchmark_ms", cpuBenchmarkMs ?: org.json.JSONObject.NULL)
 
     private fun checkedModelFile(pack: SpeechModelCatalog.Pack, modelDirectory: File): File {
         require(pack.id == "kokoro-82m") { "This is not a Kokoro model pack." }
@@ -63,7 +72,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
      */
     @Synchronized
     private fun benchmarkAndSelectDelegate(modelFile: File, voiceId: String) {
-        val sampleText = if (voiceId == "hf_alpha") "नमस्ते।" else "Hello."
+        val sampleText = if (voiceId == "hf_alpha") "नमस्ते! यह हिंदी आवाज़ की गति और गुणवत्ता जाँचने के लिए एक वास्तविक परीक्षण वाक्य है।" else "Hello! This is a realistic speech benchmark to measure voice generation speed and audio quality on this phone."
         fun measure(delegate: Delegate): Long? {
             var candidate: TextToSpeech? = null
             return try {
@@ -91,6 +100,8 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
 
         val gpuMs = measure(Delegate.GPU)
         val cpuMs = measure(Delegate.CPU)
+        gpuBenchmarkMs = gpuMs
+        cpuBenchmarkMs = cpuMs
         val selected = when {
             gpuMs != null && (cpuMs == null || gpuMs <= cpuMs) -> Delegate.GPU
             cpuMs != null -> Delegate.CPU
@@ -167,6 +178,10 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     ): File {
         require(text.isNotBlank()) { "Enter text to speak." }
         val modelFile = checkedModelFile(pack, modelDirectory)
+        // The relay may claim a job before the background warm-up thread starts.
+        // Never synthesize with an unbenchmarked runtime: select and record the
+        // fastest supported delegate here as a synchronized last line of defense.
+        if (!delegateBenchmarked) benchmarkAndSelectDelegate(modelFile, voiceId)
         val chunks = splitText(text)
         require(chunks.isNotEmpty()) { "Enter text to speak." }
         var tts = getRuntime(modelFile)
@@ -271,6 +286,8 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     override fun close() {
         closeRuntime()
         delegateBenchmarked = false
+        gpuBenchmarkMs = null
+        cpuBenchmarkMs = null
         forceCpu = false
     }
 }
