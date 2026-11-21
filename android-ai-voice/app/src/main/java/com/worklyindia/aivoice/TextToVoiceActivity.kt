@@ -44,12 +44,9 @@ class TextToVoiceActivity : Activity() {
     private lateinit var saveButton: Button
     private lateinit var textInput: EditText
     private val models = listOf(
-        ModelChoice("Indic Tiny TTS", "indic"),
         ModelChoice("Kokoro-82M", "kokoro"),
-        ModelChoice("Chatterbox Multilingual", "chatterbox"),
-        ModelChoice("CosyVoice 3", "cosy"),
-        ModelChoice("MOSS-TTS-Nano", "moss"),
-        ModelChoice("Qwen3-TTS", "qwen")
+        ModelChoice("Qwen3-TTS", "qwen"),
+        ModelChoice("Indic Tiny TTS", "indic")
     )
     private val languages = mapOf(
         "indic" to listOf(
@@ -68,44 +65,7 @@ class TextToVoiceActivity : Activity() {
             Language("Chinese", "zh-CN", "你好！这是语音测试。"),
             Language("Japanese", "ja", "こんにちは！これは音声テストです。")
         ),
-        "chatterbox" to listOf(
-            Language("Arabic","ar","مرحباً، هذا اختبار صوتي."),
-            Language("Danish","da","Hej, dette er en stemmetest."),
-            Language("German","de","Hallo, dies ist ein Sprachtest."),
-            Language("Greek","el","Γεια σας, αυτή είναι μια δοκιμή φωνής."),
-            Language("English","en","Hello! This is a multilingual voice test."),
-            Language("Spanish","es","Hola, esta es una prueba de voz."),
-            Language("Finnish","fi","Hei, tämä on äänitesti."),
-            Language("French","fr","Bonjour, ceci est un test vocal."),
-            Language("Hebrew","he","שלום, זוהי בדיקת קול."),
-            Language("Hindi","hi","नमस्ते! यह हिंदी आवाज़ का परीक्षण है।"),
-            Language("Italian","it","Ciao, questo è un test vocale."),
-            Language("Japanese","ja","こんにちは、これは音声テストです。"),
-            Language("Korean","ko","안녕하세요, 음성 테스트입니다."),
-            Language("Malay","ms","Hai, ini ujian suara."),
-            Language("Dutch","nl","Hallo, dit is een stemtest."),
-            Language("Norwegian","no","Hei, dette er en stemmetest."),
-            Language("Polish","pl","Cześć, to jest test głosu."),
-            Language("Portuguese","pt","Olá, este é um teste de voz."),
-            Language("Russian","ru","Здравствуйте, это проверка голоса."),
-            Language("Swedish","sv","Hej, det här är ett rösttest."),
-            Language("Swahili","sw","Habari, huu ni mtihani wa sauti."),
-            Language("Turkish","tr","Merhaba, bu bir ses testidir."),
-            Language("Chinese","zh","你好，这是语音测试。")
-        ),
-        "cosy" to listOf(
-            Language("Chinese","zh","你好，这是语音测试。"),
-            Language("English","en","Hello! This is an offline voice test."),
-            Language("Japanese","ja","こんにちは、音声テストです。"),
-            Language("Korean","ko","안녕하세요, 음성 테스트입니다."),
-            Language("German","de","Hallo, dies ist ein Sprachtest."),
-            Language("French","fr","Bonjour, ceci est un test vocal."),
-            Language("Russian","ru","Здравствуйте, это проверка голоса."),
-            Language("Spanish","es","Hola, esta es una prueba de voz."),
-            Language("Italian","it","Ciao, questo è un test vocale.")
-        ),
-        "moss" to listOf(Language("English","en","Hello! This is MOSS offline text to speech."), Language("Chinese","zh","你好！这是 MOSS 离线语音测试。")),
-        "qwen" to listOf(Language("English","en","Hello! This is Qwen3 offline text to speech."))
+        "qwen" to listOf(Language("English", "en", "Hello! This is Qwen3 offline text to speech."))
     )
     private val kokoroVoices = mapOf(
         "en-US" to listOf("af_heart · Female","af_bella · Female","af_nicole · Female","af_sarah · Female","af_sky · Female","am_adam · Male","am_michael · Male","am_puck · Male"),
@@ -203,10 +163,7 @@ class TextToVoiceActivity : Activity() {
         val voices=when(key) {
             "indic" -> listOf("Female","Male")
             "kokoro" -> kokoroVoices[language.code] ?: emptyList()
-            "moss" -> listOf("Junhao · Built-in")
             "qwen" -> listOf("Ryan · English")
-            "chatterbox" -> listOf("Built-in multilingual voice")
-            "cosy" -> listOf("Bundled reference voice")
             else -> emptyList()
         }
         voiceSpinner.adapter=adapter(voices)
@@ -222,10 +179,8 @@ class TextToVoiceActivity : Activity() {
         return when(key) {
             "indic" -> SpeechModelCatalog.indicTinyTts(language.code)
             "kokoro" -> SpeechModelCatalog.kokoro82m()
-            "chatterbox" -> SpeechModelCatalog.chatterboxMultilingual()
-            "cosy" -> SpeechModelCatalog.cosyVoice3()
-            "moss" -> SpeechModelCatalog.mossTtsNano()
-            else -> SpeechModelCatalog.qwen3Tts()
+            "qwen" -> SpeechModelCatalog.qwen3Tts()
+            else -> SpeechModelCatalog.indicTinyTts(language.code)
         }
     }
 
@@ -300,10 +255,7 @@ class TextToVoiceActivity : Activity() {
                         val id=voice.substringBefore(" ·")
                         KokoroTtsEngine(this).use { it.synthesizeToWav(pack,manager.modelDirectory(pack),text,id,output) }
                     }
-                    "moss" -> MossTtsOnnxEngine(manager.modelDirectory(pack),cacheDir,2).use { it.synthesize(text,outputFile=output,voice="Junhao",maxFrames=160,seed=1234L) }
                     "qwen" -> Qwen3TtsEngine(manager.modelDirectory(pack),2).use { engine -> engine.load(); engine.synthesizeToWav(text,output,"Ryan") }
-                    "chatterbox" -> QvacTtsEngine.create(QvacTtsEngine.CHATTERBOX,manager.modelDirectory(pack),modelA=File(manager.modelDirectory(pack),"chatterbox-t3-q4_k.gguf"),modelB=File(manager.modelDirectory(pack),"chatterbox-s3gen-q4_k.gguf"),language=language.code,threads=2).use { it.synthesizeToWav(text,output) }
-                    "cosy" -> QvacTtsEngine.create(QvacTtsEngine.COSYVOICE3,manager.modelDirectory(pack),modelA=File(manager.modelDirectory(pack),"vocab.json"),modelB=File(manager.modelDirectory(pack),"merges.txt"),referenceAudio=File(manager.modelDirectory(pack),"zero_shot_prompt.wav"),referenceText="",language=language.code,threads=2).use { it.synthesizeToWav(text,output) }
                 }
                 check(output.isFile && output.length()>44L) { "Audio file was not generated." }
                 runOnUiThread {
