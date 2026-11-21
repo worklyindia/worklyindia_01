@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { requestOwnerPhoneVoiceAudioBlob } from "@/lib/ownerPhoneVoiceRelay";
+import { requestOwnerPhoneLongVoiceAudioBlob } from "@/lib/ownerPhoneVoiceRelay";
 import { toast } from "@/hooks/use-toast";
 
 const LANGUAGES = [
@@ -27,7 +27,7 @@ export default function TextToVoice() {
   useEffect(() => {
     const onStatus = (event: Event) => {
       const detail = (event as CustomEvent).detail;
-      setStatus(detail?.status === "generating" ? "Generating audio on your Workly Android app…" : "Waiting for your Workly Android app…");
+      setStatus(detail?.status === "generating" ? (detail.total > 1 ? `Generating audio on your Workly Android app… Part ${detail.part} of ${detail.total}` : "Generating audio on your Workly Android app…") : "Waiting for your Workly Android app…");
     };
     window.addEventListener("workly-voice-status", onStatus);
     return () => {
@@ -39,7 +39,6 @@ export default function TextToVoice() {
   const convert = async () => {
     const clean = text.trim();
     if (!clean) { toast({ title: "Enter text first", description: "Add text to convert into voice." }); return; }
-    if (clean.length > 1000) { toast({ title: "Text is too long", description: "The connected phone currently supports up to 1,000 characters per conversion." }); return; }
     setBusy(true); setStatus("Sending request to your Workly Android app…");
     setAudioBlob(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -84,8 +83,8 @@ export default function TextToVoice() {
           </Select>
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between"><label className="text-sm font-medium" htmlFor="tts-text">Your text</label><span className="text-xs text-muted-foreground">{text.length}/1,000</span></div>
-          <Textarea id="tts-text" value={text} onChange={e => setText(e.target.value)} placeholder="Type or paste your text here…" className="min-h-48 resize-y text-base" maxLength={1000} disabled={busy} />
+          <div className="flex items-center justify-between"><label className="text-sm font-medium" htmlFor="tts-text">Your text</label><span className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters</span></div>
+          <Textarea id="tts-text" value={text} onChange={e => setText(e.target.value)} placeholder="Type or paste as much text as you need…" className="min-h-48 resize-y text-base" disabled={busy} />
         </div>
         <Button className="w-full" onClick={convert} disabled={busy || !text.trim()}>
           {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Converting…</> : <><Volume2 className="mr-2 h-4 w-4" />Convert To Voice</>}
@@ -102,7 +101,7 @@ export default function TextToVoice() {
         <Button variant="ghost" className="w-full" onClick={() => { if (audioUrl) URL.revokeObjectURL(audioUrl); setAudioUrl(""); setAudioBlob(null); setStatus(""); }}><RefreshCw className="mr-2 h-4 w-4" />Clear audio</Button>
         <p className="text-xs text-muted-foreground">Audio is held temporarily in this browser session. It is not saved to your Workly profile.</p>
       </Card>}
-      <p className="text-xs text-muted-foreground">Keep the Workly Android app connected and its shared phone server online. The selected language voice must be installed on that phone.</p>
+      <p className="text-xs text-muted-foreground">Long text is split into short parts and joined into one WAV file in this browser. Keep the Workly Android app connected and its shared phone server online. The selected language voice must be installed on that phone.</p>
     </main>
   </div>;
 }
