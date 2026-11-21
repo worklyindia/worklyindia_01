@@ -120,10 +120,14 @@ export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: st
     return blob;
   } finally {
     // Best-effort cleanup; expiry cleanup remains the fallback if the browser disconnects.
-    const { data: session } = await supabase.auth.getSession();
-    const { data: jobList } = await supabase.functions.invoke("unified-voice", {
-      body: { action: "cleanup_completed_audio", audio_url: audioUrl },
-    });
-    void session; void jobList;
+    const marker = "/workly-ai-voice-audio/";
+    const pathname = new URL(audioUrl).pathname;
+    const markerIndex = pathname.indexOf(marker);
+    if (markerIndex >= 0) {
+      const audioPath = decodeURIComponent(pathname.slice(markerIndex + marker.length));
+      await supabase.functions.invoke("unified-voice", {
+        body: { action: "cleanup_completed_audio", audio_path: audioPath },
+      });
+    }
   }
 }
