@@ -90,37 +90,60 @@ class IndicTinyTtsEngine private constructor(
         val scale = (if (selectedVoice == "male") maleLengthScale else femaleLengthScale) / speed
         val normalized = normalizeInput(text)
         require(normalized.isNotBlank()) { "Enter text to speak." }
-        val parts = ArrayList<FloatArray>()
+        val chunks = splitChunks(normalized)
+        require(chunks.isNotEmpty()) { "Enter text to speak." }
         val random = Random(System.nanoTime())
-        for (chunk in splitChunks(normalized)) {
-            val ids = encodeCharacters(chunk)
-            require(ids.size <= MAX_TOKENS) { "Text is too long. Split it into shorter sentences." }
-            val spoken = synthesizeChunk(ids, speaker, random, scale)
-            if (spoken.isNotEmpty()) {
-                if (parts.isNotEmpty()) parts.add(FloatArray(pauseSamples))
-                parts.add(spoken)
+        output.parentFile?.mkdirs()
+        var dataBytes = 0L
+        var spokenChunks = 0
+        java.io.RandomAccessFile(output, "rw").use { wav ->
+            wav.setLength(0L)
+            writeWavHeader(wav, 0)
+            fun append(samples: FloatArray) {
+                val nextBytes = dataBytes + samples.size.toLong() * 2L
+                require(nextBytes <= Int.MAX_VALUE - 36L) { "Generated audio is too large for a WAV file. Split the text into smaller files." }
+                val buffer = ByteArray(min(16_384, samples.size * 2))
+                var sampleIndex = 0
+                while (sampleIndex < samples.size) {
+                    val count = min(buffer.size / 2, samples.size - sampleIndex)
+                    for (i in 0 until count) {
+                        val pcm = (samples[sampleIndex + i].coerceIn(-1f, 1f) * 32767f).toInt()
+                        buffer[i * 2] = pcm.toByte()
+                        buffer[i * 2 + 1] = (pcm shr 8).toByte()
+                    }
+                    wav.write(buffer, 0, count * 2)
+                    sampleIndex += count
+                }
+                dataBytes = nextBytes
             }
+            for (chunk in chunks) {
+                val ids = encodeCharacters(chunk)
+                require(ids.size <= MAX_TOKENS) { "Text is too long for one speech segment." }
+                val spoken = synthesizeChunk(ids, speaker, random, scale)
+                if (spoken.isNotEmpty()) {
+                    if (spokenChunks > 0 && pauseSamples > 0) append(FloatArray(pauseSamples))
+                    append(spoken)
+                    spokenChunks++
+                }
+            }
+            require(spokenChunks > 0 && dataBytes > 0L) { "No supported speech characters found for this voice." }
+            wav.seek(0L)
+            writeWavHeader(wav, dataBytes.toInt())
+            wav.fd.sync()
         }
-        val samples = FloatArray(parts.sumOf { it.size })
-        var offset = 0
-        parts.forEach { it.copyInto(samples, offset); offset += it.size }
-        require(samples.isNotEmpty()) { "No supported speech characters found for this voice." }
-        writeWav(output, samples)
         return output
     }
 
-    private fun writeWav(output: File, samples: FloatArray) {
-        output.parentFile?.mkdirs()
-        val dataBytes = samples.size * 2
-        java.io.DataOutputStream(output.outputStream().buffered()).use { out ->
-            fun ascii(value: String) = out.write(value.toByteArray(Charsets.US_ASCII))
-            fun leInt(value: Int) { out.writeByte(value); out.writeByte(value ushr 8); out.writeByte(value ushr 16); out.writeByte(value ushr 24) }
-            fun leShort(value: Int) { out.writeByte(value); out.writeByte(value ushr 8) }
-            ascii("RIFF"); leInt(36 + dataBytes); ascii("WAVE"); ascii("fmt "); leInt(16)
-            leShort(1); leShort(1); leInt(SAMPLE_RATE); leInt(SAMPLE_RATE * 2); leShort(2); leShort(16)
-            ascii("data"); leInt(dataBytes)
-            samples.forEach { leShort((it.coerceIn(-1f, 1f) * 32767f).toInt()) }
+    private fun writeWavHeader(wav: java.io.RandomAccessFile, dataBytes: Int) {
+        fun ascii(value: String) = wav.write(value.toByteArray(Charsets.US_ASCII))
+        fun leInt(value: Int) {
+            wav.write(value and 0xff); wav.write((value ushr 8) and 0xff)
+            wav.write((value ushr 16) and 0xff); wav.write((value ushr 24) and 0xff)
         }
+        fun leShort(value: Int) { wav.write(value and 0xff); wav.write((value ushr 8) and 0xff) }
+        ascii("RIFF"); leInt(36 + dataBytes); ascii("WAVE"); ascii("fmt "); leInt(16)
+        leShort(1); leShort(1); leInt(SAMPLE_RATE); leInt(SAMPLE_RATE * 2); leShort(2); leShort(16)
+        ascii("data"); leInt(dataBytes)
     }
 
     private fun splitChunks(text: String): List<String> {
