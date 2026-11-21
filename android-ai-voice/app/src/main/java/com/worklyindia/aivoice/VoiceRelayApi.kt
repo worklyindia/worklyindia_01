@@ -101,6 +101,13 @@ object VoiceRelayApi {
         }
     }
 
+    fun recordDiagnostic(token: String, event: JSONObject) {
+        val result = post("record_diagnostic", event, deviceToken = token)
+        if (result.statusCode !in 200..299) {
+            throw RelayApiException(result.statusCode, result.body.optString("error", "Could not upload diagnostic event"))
+        }
+    }
+
     fun downloadAudio(audioUrl: String): ByteArray {
         val connection = (URL(audioUrl).openConnection() as HttpURLConnection).apply {
             connectTimeout = TIMEOUT_MS

@@ -90,6 +90,8 @@ async function cleanupExpiredJobs(db: any, now: string) {
   const retentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { error: retentionError } = await db.from("workly_ai_voice_jobs").delete().lt("created_at", retentionCutoff);
   if (retentionError) throw retentionError;
+  const { error: diagnosticRetentionError } = await db.from("workly_ai_voice_diagnostics").delete().lt("created_at", retentionCutoff);
+  if (diagnosticRetentionError) throw diagnosticRetentionError;
 }
 
 export async function handleWorklyVoiceRelay(req: Request) {
@@ -141,6 +143,47 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .is("revoked_at", null);
       if (error) throw error;
       return json({ registered: true });
+    }
+
+    if (action === "record_diagnostic") {
+      const device = await deviceFor(req);
+      if (!device || device.user_id !== ownerUserId) return json({ error: "Device authentication failed" }, 401);
+      const allowedEvents = new Set([
+        "relay_online", "relay_error", "model_warmup_failed",
+        "tts_started", "tts_synthesis_complete", "tts_upload_complete", "tts_failed"
+      ]);
+      const eventType = typeof body?.event_type === "string" ? body.event_type : "";
+      if (!allowedEvents.has(eventType)) return json({ error: "Unsupported diagnostic event" }, 400);
+      const rawJobId = typeof body?.job_id === "string" ? body.job_id : "";
+      const jobId = /^[0-9a-f-]{36}$/i.test(rawJobId) ? rawJobId : null;
+      const numeric = (value: unknown, max: number) =>
+        typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max ? Math.round(value) : null;
+      const redact = (value: unknown, max: number) => String(value ?? "")
+        .replace(/Bearer\\s+[A-Za-z0-9._~+\\/-]+=*/gi, "Bearer [REDACTED]")
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, "[EMAIL]")
+        .replace(/\\+?\\d[\\d\\s().-]{7,}\\d/g, "[PHONE]")
+        .slice(0, max);
+      const { error } = await db.from("workly_ai_voice_diagnostics").insert({
+        device_id: device.id,
+        job_id: jobId,
+        event_type: eventType,
+        language: redact(body?.language, 24) || null,
+        duration_ms: numeric(body?.duration_ms, 3600000),
+        audio_bytes: numeric(body?.audio_bytes, 2000000),
+        error_type: redact(body?.error_type, 120) || null,
+        error_message: redact(body?.error_message, 800) || null,
+        app_version: redact(body?.app_version, 40) || null,
+        android_version: redact(body?.android_version, 40) || null,
+        device_model: redact(body?.device_model, 100) || null,
+        metadata: {
+          delegate: redact(body?.metadata?.delegate, 16) || null,
+          delegate_benchmarked: body?.metadata?.delegate_benchmarked === true,
+          gpu_benchmark_ms: numeric(body?.metadata?.gpu_benchmark_ms, 3600000),
+          cpu_benchmark_ms: numeric(body?.metadata?.cpu_benchmark_ms, 3600000),
+        }
+      });
+      if (error) throw error;
+      return json({ recorded: true });
     }
 
     if (action === "create_job") {
