@@ -79,7 +79,7 @@ class IndicTinyTtsEngine private constructor(
         play(waveform)
     }
 
-    fun synthesizeToWav(text: String, output: File, voice: String = "female", speed: Float = 1.0f): File {
+    fun synthesizeToWav(text: String, output: File, voice: String = "female", speed: Float = 1.0f, onProgress: (Int, Int) -> Unit = { _, _ -> }): File {
         require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
         val selectedVoice = voice.lowercase()
         val speaker = when (selectedVoice) {
@@ -116,7 +116,7 @@ class IndicTinyTtsEngine private constructor(
                 }
                 dataBytes = nextBytes
             }
-            for (chunk in chunks) {
+            for ((chunkIndex, chunk) in chunks.withIndex()) {
                 val ids = encodeCharacters(chunk)
                 require(ids.size <= MAX_TOKENS) { "Text is too long for one speech segment." }
                 val spoken = synthesizeChunk(ids, speaker, random, scale)
@@ -125,6 +125,7 @@ class IndicTinyTtsEngine private constructor(
                     append(spoken)
                     spokenChunks++
                 }
+                onProgress(chunkIndex + 1, chunks.size)
             }
             require(spokenChunks > 0 && dataBytes > 0L) { "No supported speech characters found for this voice." }
             wav.seek(0L)
