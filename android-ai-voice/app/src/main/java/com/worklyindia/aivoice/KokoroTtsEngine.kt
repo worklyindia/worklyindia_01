@@ -67,11 +67,12 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         fun measure(delegate: Delegate): Long? {
             var candidate: TextToSpeech? = null
             return try {
-                candidate = createRuntime(modelFile, delegate)
-                val warmAudio = candidate.synthesize(sampleText, SynthesisOptions(voiceId = voiceId))
+                val runtime = createRuntime(modelFile, delegate)
+                candidate = runtime
+                val warmAudio = runtime.synthesize(sampleText, SynthesisOptions(voiceId = voiceId))
                 check(warmAudio.samples.isNotEmpty()) { "$delegate warm-up returned empty audio." }
                 val startedAt = SystemClock.elapsedRealtime()
-                val measuredAudio = candidate.synthesize(sampleText, SynthesisOptions(voiceId = voiceId))
+                val measuredAudio = runtime.synthesize(sampleText, SynthesisOptions(voiceId = voiceId))
                 check(measuredAudio.samples.isNotEmpty()) { "$delegate benchmark returned empty audio." }
                 (SystemClock.elapsedRealtime() - startedAt).also {
                     Log.i(TAG, "Kokoro delegate benchmark delegate=$delegate durationMs=$it")
