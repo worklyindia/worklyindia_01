@@ -188,4 +188,39 @@ object SpeechModelCatalog {
         )
     )
 
+
+    private const val SHERPA_TTS_BASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models"
+
+    /**
+     * iTantra-compatible Sherpa-ONNX VITS packs. Voice archives are official
+     * sherpa-onnx release assets; the Gujarati voice is Mimic3/CMU-Indic.
+     * A shared espeak-ng-data archive is included in each language pack so
+     * each pack can be installed and removed independently.
+     */
+    fun itantraVits(language: String): Pack {
+        val code = language.lowercase()
+        val (asset, voiceBytes, voiceSha, label) = when (code) {
+            "hi" -> listOf("vits-piper-hi_IN-pratham-medium-int8.tar.bz2", 20_987_965L, "20f568c56207c13b9a0d9478aec8b7d1449122e618aeebc7211f6abc942b58b7", "Hindi · Pratham")
+            "gu" -> listOf("vits-mimic3-gu_IN-cmu-indic_low.tar.bz2", 79_992_004L, null, "Gujarati · Mimic3")
+            "en" -> listOf("vits-piper-en_US-lessac-low-int8.tar.bz2", 21_070_568L, "af63fbe60d8bdcfccdee61ba057304a11dfc077145da383d4d351ec3c594d5e2", "English · Lessac")
+            else -> throw IllegalArgumentException("iTantra VITS supports Hindi, Gujarati and English.")
+        }
+        @Suppress("UNCHECKED_CAST")
+        val voice = asset as String
+        val size = voiceBytes as Long
+        val sha = voiceSha as String?
+        val title = label as String
+        return Pack(
+            id = "itantra-vits-$code",
+            title = "iTantra VITS · $title",
+            languageCode = code,
+            license = if (code == "gu") "Mimic3/CMU-Indic model; see upstream model card and sherpa-onnx notices" else "Piper voice model; see upstream model card and sherpa-onnx notices",
+            repository = "k2-fsa/sherpa-onnx · tts-models release",
+            files = listOf(
+                ModelFile("archives/voice.tar.bz2", "$SHERPA_TTS_BASE/$voice", size, sha),
+                ModelFile("archives/espeak-ng-data.tar.bz2", "$SHERPA_TTS_BASE/espeak-ng-data.tar.bz2", 7_252_012L)
+            )
+        )
+    }
+
 }
