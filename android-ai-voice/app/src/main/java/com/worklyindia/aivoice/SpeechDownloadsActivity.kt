@@ -10,6 +10,7 @@ import android.media.MediaPlayer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.Environment
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
@@ -51,9 +52,33 @@ class SpeechDownloadsActivity : Activity() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(true)
         window.statusBarColor = bg; window.navigationBarColor = bg
         if (android.os.Build.VERSION.SDK_INT >= 23) { @Suppress("DEPRECATION") window.decorView.systemUiVisibility = if (dark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR }
+        removeUnsupportedTtsModels()
         buildUi()
         refreshAll()
     }
+
+    /**
+     * Keep only the approved TTS model families. Remove old optional TTS packs
+     * from earlier app versions (including any tracked DownloadManager transfers).
+     */
+    private fun removeUnsupportedTtsModels() {
+        val obsoletePacks = listOf(
+            SpeechModelCatalog.indicTinyTts("hi"),
+            SpeechModelCatalog.indicTinyTts("en"),
+            SpeechModelCatalog.mossTtsNano(),
+            SpeechModelCatalog.chatterboxMultilingual(),
+            SpeechModelCatalog.cosyVoice3()
+        )
+        obsoletePacks.forEach { pack ->
+            runCatching { speechManager.delete(pack) }
+        }
+        val root = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "workly-voice-models")
+        listOf(
+            "indic-tiny-tts-hi", "indic-tiny-tts-en", "moss-tts-nano",
+            "qvac-chatterbox-multilingual", "qvac-cosyvoice3"
+        ).forEach { File(root, it).deleteRecursively() }
+    }
+
     private fun buildUi() {
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(12),dp(18),dp(20)); setBackgroundColor(bg) }
         page.addView(Button(this).apply { text="‹  Back to ChatWork"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
