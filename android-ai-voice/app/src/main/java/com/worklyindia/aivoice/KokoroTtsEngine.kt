@@ -178,6 +178,10 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     ): File {
         require(text.isNotBlank()) { "Enter text to speak." }
         val modelFile = checkedModelFile(pack, modelDirectory)
+        // The relay may claim a job before the background warm-up thread starts.
+        // Never synthesize with an unbenchmarked runtime: select and record the
+        // fastest supported delegate here as a synchronized last line of defense.
+        if (!delegateBenchmarked) benchmarkAndSelectDelegate(modelFile, voiceId)
         val chunks = splitText(text)
         require(chunks.isNotEmpty()) { "Enter text to speak." }
         var tts = getRuntime(modelFile)
