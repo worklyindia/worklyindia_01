@@ -91,7 +91,9 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         return outputFile
     }
 
-    private fun splitText(text: String, maxChars: Int = 350): List<String> {
+    private fun splitText(text: String, maxChars: Int = 500): List<String> {
+        // Larger bounded segments reduce per-call overhead while keeping each
+        // temporary waveform limited for mobile memory usage.
         val result = ArrayList<String>()
         val sentences = text.trim().split(Regex("(?<=[.!?।؟])\\s+"))
         for (value in sentences) {
