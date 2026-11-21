@@ -15,6 +15,7 @@ const LANGUAGES = [
 ];
 
 const VOICES_BY_LANGUAGE: Record<string, { value: string; label: string }[]> = {
+  // These IDs match the voice catalog exposed by the installed Kokoro-82M model.
   "hi-IN": [
     { value: "hf_alpha", label: "Alpha · Female" },
     { value: "hf_beta", label: "Beta · Female" },
@@ -23,14 +24,27 @@ const VOICES_BY_LANGUAGE: Record<string, { value: string; label: string }[]> = {
   ],
   "en-IN": [
     { value: "af_heart", label: "Heart · Female" },
+    { value: "af_alloy", label: "Alloy · Female" },
+    { value: "af_aoede", label: "Aoede · Female" },
     { value: "af_bella", label: "Bella · Female" },
+    { value: "af_jessica", label: "Jessica · Female" },
+    { value: "af_kore", label: "Kore · Female" },
     { value: "af_nicole", label: "Nicole · Female" },
+    { value: "af_nova", label: "Nova · Female" },
+    { value: "af_river", label: "River · Female" },
     { value: "af_sarah", label: "Sarah · Female" },
     { value: "af_sky", label: "Sky · Female" },
     { value: "am_adam", label: "Adam · Male" },
+    { value: "am_echo", label: "Echo · Male" },
+    { value: "am_eric", label: "Eric · Male" },
+    { value: "am_fenrir", label: "Fenrir · Male" },
+    { value: "am_liam", label: "Liam · Male" },
     { value: "am_michael", label: "Michael · Male" },
+    { value: "am_onyx", label: "Onyx · Male" },
     { value: "am_puck", label: "Puck · Male" },
+    { value: "am_santa", label: "Santa · Male" },
   ],
+  // Indic Tiny TTS Gujarati exposes only these two speaker choices.
   "gu-IN": [
     { value: "female", label: "Female" },
     { value: "male", label: "Male" },
@@ -140,7 +154,7 @@ export default function TextToVoice() {
         <Button variant="ghost" className="w-full" onClick={() => { if (audioUrl) URL.revokeObjectURL(audioUrl); setAudioUrl(""); setAudioBlob(null); setStatus(""); }}><RefreshCw className="mr-2 h-4 w-4" />Clear audio</Button>
         <p className="text-xs text-muted-foreground">Audio is held temporarily in this browser session. It is not saved to your Workly profile.</p>
       </Card>}
-      <p className="text-xs text-muted-foreground">Long text is split into short parts and joined into one WAV file in this browser. Keep the Workly Android app connected and its shared phone server online. The selected language voice must be installed on that phone.</p>
+      <p className="text-xs text-muted-foreground">Long text is split into short parts and joined into one WAV file in this browser. Keep the Workly Android app connected and its shared phone server online. The matching offline TTS model must be downloaded in ChatWork on that phone.</p>
     </main>
   </div>;
 }
