@@ -33,6 +33,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -70,6 +71,8 @@ class VoiceToTextActivity : Activity() {
     // Keep the native ASR session warm between conversions; model initialization is expensive.
     private var cachedRecognizer: OfflineSpeechRecognizer? = null
     private var cachedRecognizerLanguage: String? = null
+    private val liveInferencePending = AtomicBoolean(false)
+    @Volatile private var liveTranscript = ""
 
     private val poll = object : Runnable {
         override fun run() {
@@ -240,6 +243,19 @@ class VoiceToTextActivity : Activity() {
         })
 
         setContentView(page)
+        // Android 15+ may enforce edge-to-edge even when decor fitting is requested.
+        // Apply the status-bar inset explicitly so the app header never sits under clock/icons.
+        window.decorView.setOnApplyWindowInsetsListener { _, insets ->
+            val topInset = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                insets.getInsets(android.view.WindowInsets.Type.statusBars()).top
+            } else {
+                @Suppress("DEPRECATION")
+                insets.systemWindowInsetTop
+            }
+            page.setPadding(0, topInset, 0, 0)
+            insets
+        }
+        window.decorView.requestApplyInsets()
     }
 
     private fun refreshPack() {
@@ -326,16 +342,20 @@ class VoiceToTextActivity : Activity() {
 
     private fun transcribeUri(uri: Uri) {
         val languageCode = selectedLanguage.code
-        setBusy(true, "Reading audio file…")
+        setBusy(true, "Processing audio…")
+        uploadButton.text = "Processing Audio…"
         worker.execute {
             try {
                 val samples = decodeAudio(uri)
                 require(samples.size >= OfflineSpeechRecognizer.SAMPLE_RATE / 2) {
                     "Audio is too short or contains no speech. Please choose a longer recording."
                 }
-                transcribeSamples(samples, languageCode)
+                runOnUiThread { status.text = "Transcribing audio… Please wait." }
+                transcribeSamples(samples, languageCode, true)
             } catch (error: Throwable) {
                 showError(error.message ?: "Could not read this audio file.")
+            } finally {
+                runOnUiThread { uploadButton.text = "Upload Audio" }
             }
         }
     }
@@ -496,6 +516,8 @@ class VoiceToTextActivity : Activity() {
         recordButton.text = "■  Stop & Convert"
         recordButton.isEnabled = true
         status.text = "Recording… Speak clearly, then tap Stop & Convert."
+        liveTranscript = ""
+        output.setText("")
         recordThread = Thread {
             var recorder: AudioRecord? = null
             try {
@@ -517,9 +539,28 @@ class VoiceToTextActivity : Activity() {
                 val bytes = ByteArrayOutputStream()
                 val chunk = ByteArray(max(minimum, 4096))
                 val maximumBytes = OfflineSpeechRecognizer.SAMPLE_RATE * 2 * 600
+                var lastLiveUpdateAt = SystemClock.elapsedRealtime()
                 while (recording && bytes.size() < maximumBytes) {
                     val count = recorder.read(chunk, 0, chunk.size)
                     if (count > 0) bytes.write(chunk, 0, count)
+                    val now = SystemClock.elapsedRealtime()
+                    // Run short rolling offline passes while recording; microphone capture
+                    // continues independently so inference never blocks the recorder.
+                    if (now - lastLiveUpdateAt >= 6_000L && liveInferencePending.compareAndSet(false, true)) {
+                        lastLiveUpdateAt = now
+                        val captured = bytes.toByteArray()
+                        val tailBytes = min(captured.size, OfflineSpeechRecognizer.SAMPLE_RATE * 2 * 12)
+                        val tail = captured.copyOfRange(captured.size - tailBytes, captured.size)
+                        worker.execute {
+                            try {
+                                val shortBuffer = ByteBuffer.wrap(tail).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                                val liveSamples = FloatArray(shortBuffer.remaining()) { shortBuffer.get() / 32768f }
+                                transcribeSamples(liveSamples, languageCode, false)
+                            } finally {
+                                liveInferencePending.set(false)
+                            }
+                        }
+                    }
                 }
                 recording = false
                 recorder.stop()
@@ -529,7 +570,7 @@ class VoiceToTextActivity : Activity() {
                 val shortBuffer = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
                 val samples = FloatArray(shortBuffer.remaining()) { shortBuffer.get() / 32768f }
                 if (samples.isEmpty()) throw IllegalStateException("No speech was recorded.")
-                transcribeSamples(samples, languageCode)
+                worker.execute { transcribeSamples(samples, languageCode, true) }
             } catch (error: Throwable) {
                 recording = false
                 showError(error.message ?: "Microphone recording failed.")
@@ -544,8 +585,12 @@ class VoiceToTextActivity : Activity() {
         }.apply { name = "VoiceToTextRecorder"; start() }
     }
 
-    private fun transcribeSamples(samples: FloatArray, languageCode: String = selectedLanguage.code) {
-        runOnUiThread { setBusy(true, "Loading speech model…") }
+    private fun transcribeSamples(
+        samples: FloatArray,
+        languageCode: String = selectedLanguage.code,
+        finalResult: Boolean = true
+    ) {
+        if (finalResult) runOnUiThread { setBusy(true, "Transcribing audio…") }
         try {
             val engine = if (cachedRecognizerLanguage == languageCode && cachedRecognizer != null) {
                 cachedRecognizer!!
@@ -558,12 +603,38 @@ class VoiceToTextActivity : Activity() {
             }
             val text = engine.transcribe(samples)
             runOnUiThread {
-                output.setText(text)
-                setBusy(false, if (text.isBlank()) "No speech detected. Try a clearer recording." else "Transcription complete · Offline")
+                if (finalResult) {
+                    output.setText(text)
+                    liveTranscript = text
+                    setBusy(false, if (text.isBlank()) "No speech detected. Try a clearer recording." else "Transcription complete · Offline")
+                } else if (text.isNotBlank()) {
+                    liveTranscript = appendLiveText(liveTranscript, text)
+                    output.setText(liveTranscript)
+                    output.setSelection(output.text.length)
+                    status.text = "Listening… Live transcription · Offline"
+                }
             }
         } catch (error: Throwable) {
             showError(error.message ?: "Speech-to-text conversion failed.")
         }
+    }
+
+    private fun appendLiveText(previous: String, next: String): String {
+        if (previous.isBlank()) return next.trim()
+        val left = previous.trim().split(Regex("\\s+"))
+        val right = next.trim().split(Regex("\\s+"))
+        val maxMatch = min(12, min(left.size, right.size))
+        for (count in maxMatch downTo 1) {
+            var matches = true
+            for (i in 0 until count) {
+                if (!left[left.size - count + i].equals(right[i], ignoreCase = true)) {
+                    matches = false
+                    break
+                }
+            }
+            if (matches) return (left + right.drop(count)).joinToString(" ")
+        }
+        return (left + right).joinToString(" ")
     }
 
     private fun setBusy(busy: Boolean, message: String) {
@@ -572,7 +643,13 @@ class VoiceToTextActivity : Activity() {
             uploadButton.isEnabled = !busy && isModelReady()
             downloadButton.isEnabled = !busy && !isModelReady()
             recordButton.isEnabled = !busy && isModelReady()
-            if (busy) progress.visibility = View.VISIBLE else refreshPack()
+            if (busy) {
+                progress.isIndeterminate = true
+                progress.visibility = View.VISIBLE
+            } else {
+                progress.isIndeterminate = false
+                refreshPack()
+            }
         }
     }
 
