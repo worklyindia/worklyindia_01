@@ -199,17 +199,31 @@ object SpeechModelCatalog {
      */
     fun itantraVits(language: String): Pack {
         val code = language.lowercase()
-        val (asset, voiceBytes, voiceSha, label) = when (code) {
-            "hi" -> listOf("vits-piper-hi_IN-pratham-medium-int8.tar.bz2", 20_987_965L, "20f568c56207c13b9a0d9478aec8b7d1449122e618aeebc7211f6abc942b58b7", "Hindi · Pratham")
-            "gu" -> listOf("vits-mimic3-gu_IN-cmu-indic_low.tar.bz2", 79_992_004L, null, "Gujarati · Mimic3")
-            "en" -> listOf("vits-piper-en_US-lessac-low-int8.tar.bz2", 21_070_568L, "af63fbe60d8bdcfccdee61ba057304a11dfc077145da383d4d351ec3c594d5e2", "English · Lessac")
+        val voice: String
+        val size: Long
+        val sha: String?
+        val title: String
+        when (code) {
+            "hi" -> {
+                voice = "vits-piper-hi_IN-pratham-medium-int8.tar.bz2"
+                size = 20_987_965L
+                sha = "20f568c56207c13b9a0d9478aec8b7d1449122e618aeebc7211f6abc942b58b7"
+                title = "Hindi · Pratham"
+            }
+            "gu" -> {
+                voice = "vits-mimic3-gu_IN-cmu-indic_low.tar.bz2"
+                size = 79_992_004L
+                sha = null
+                title = "Gujarati · Mimic3"
+            }
+            "en" -> {
+                voice = "vits-piper-en_US-lessac-low-int8.tar.bz2"
+                size = 21_070_568L
+                sha = "af63fbe60d8bdcfccdee61ba057304a11dfc077145da383d4d351ec3c594d5e2"
+                title = "English · Lessac"
+            }
             else -> throw IllegalArgumentException("iTantra VITS supports Hindi, Gujarati and English.")
         }
-        @Suppress("UNCHECKED_CAST")
-        val voice = asset as String
-        val size = voiceBytes as Long
-        val sha = voiceSha as String?
-        val title = label as String
         return Pack(
             id = "itantra-vits-$code",
             title = "iTantra VITS · $title",
