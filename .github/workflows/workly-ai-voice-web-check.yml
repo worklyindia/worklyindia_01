@@ -27,6 +27,8 @@ on:
       - "src/App.tsx"
       - "src/lib/browserOfflineVoice.ts"
       - "src/lib/nativeAppBridge.ts"
+      - "src/lib/shrutiSpeech.ts"
+      - "src/pages/AIVoiceCall.tsx"
       - "src/pages/Settings.tsx"
       - ".github/workflows/workly-ai-voice-web-check.yml"
   workflow_dispatch:
@@ -51,4 +53,4 @@ jobs:
       - name: Type-check website
         run: npx tsc --noEmit -p tsconfig.app.json
       - name: Lint website voice modules
-        run: npx eslint src/lib/browserOfflineVoice.ts src/lib/nativeAppBridge.ts src/lib/ownerPhoneVoiceRelay.ts src/pages/AIVoiceCall.tsx --max-warnings 0
+        run: npx eslint src/lib/browserOfflineVoice.ts src/lib/nativeAppBridge.ts src/lib/ownerPhoneVoiceRelay.ts src/lib/shrutiSpeech.ts src/pages/AIVoiceCall.tsx --max-warnings 0

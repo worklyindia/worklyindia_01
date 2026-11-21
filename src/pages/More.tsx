@@ -297,6 +297,7 @@ const More = () => {
             <div className="border-y border-border/60 divide-y divide-border/60">
             {[
               ...(isWorklyAndroidApp() ? [{ label: "App Settings", path: "/settings?tab=app" }] : []),
+              { label: "Text To Voice", path: "/text-to-voice" },
               { label: "Website Pricing", path: "/pricing" },
               { label: "About Us", path: "/about-us" },
               { label: "Mission", path: "/mission" },

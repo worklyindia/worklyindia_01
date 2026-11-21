@@ -25,7 +25,7 @@ object OfflineSpeechEngineFactory {
         check(isReady(context, pack)) { "${pack.title} (${pack.languageCode}) is not fully downloaded." }
         val directory = packDirectory(context, pack)
         return OfflineSpeechRecognizer.indicConformer(
-            File(directory, "model.int8.onnx"),
+            File(directory, "${language.lowercase()}/model.int8.onnx"),
             File(directory, "tokens.txt")
         )
     }

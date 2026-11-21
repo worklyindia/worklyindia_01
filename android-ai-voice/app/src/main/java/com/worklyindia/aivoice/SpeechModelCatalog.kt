@@ -98,4 +98,94 @@ object SpeechModelCatalog {
             )
         )
     }
+
+    private const val MOSS_TTS = "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/main"
+    private const val MOSS_CODEC = "https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/main"
+
+    /**
+     * MOSS-TTS-Nano 100M Android ONNX package. Model weights are downloaded
+     * separately from the APK; this pack is roughly 712 MB and requires
+     * substantial free storage and RAM. The Android smoke test uses the
+     * upstream pre-tokenized English/Chinese prompts until a full SentencePiece
+     * tokenizer adapter is added.
+     */
+    fun mossTtsNano(): Pack = Pack(
+        id = "moss-tts-nano",
+        title = "MOSS-TTS-Nano 100M",
+        languageCode = "en",
+        license = "Apache-2.0",
+        repository = "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX + OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+        files = listOf(
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/browser_poc_manifest.json", "$MOSS_TTS/browser_poc_manifest.json", 503_354L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/tts_browser_onnx_meta.json", "$MOSS_TTS/tts_browser_onnx_meta.json", 4_487L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/tokenizer.model", "$MOSS_TTS/tokenizer.model", 470_897L, "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff"),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx", "$MOSS_TTS/moss_tts_prefill.onnx", 283_305L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_decode_step.onnx", "$MOSS_TTS/moss_tts_decode_step.onnx", 291_483L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_local_fixed_sampled_frame.onnx", "$MOSS_TTS/moss_tts_local_fixed_sampled_frame.onnx", 471_262L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_global_shared.data", "$MOSS_TTS/moss_tts_global_shared.data", 440_813_568L),
+            ModelFile("MOSS-TTS-Nano-100M-ONNX/moss_tts_local_shared.data", "$MOSS_TTS/moss_tts_local_shared.data", 229_678_080L),
+            ModelFile("MOSS-Audio-Tokenizer-Nano-ONNX/codec_browser_onnx_meta.json", "$MOSS_CODEC/codec_browser_onnx_meta.json", 17_036L),
+            ModelFile("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_full.onnx", "$MOSS_CODEC/moss_audio_tokenizer_decode_full.onnx", 681_902L),
+            ModelFile("MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data", "$MOSS_CODEC/moss_audio_tokenizer_decode_shared.data", 44_198_912L)
+        )
+    )
+
+
+    private const val CHATTERBOX_GGUF = "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main"
+    private const val COSYVOICE_GGUF = "https://huggingface.co/cstr/cosyvoice3-0.5b-2512-GGUF/resolve/main"
+    private const val COSYVOICE_BASE = "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/main/CosyVoice-BlankEN"
+
+    /** QVAC native multilingual Chatterbox pack (Hindi included). */
+    fun chatterboxMultilingual(): Pack = Pack(
+        id = "qvac-chatterbox-multilingual",
+        title = "Chatterbox Multilingual · Q4_K",
+        languageCode = "hi",
+        license = "MIT model weights; MIT native runtime",
+        repository = "cstr/chatterbox-GGUF",
+        files = listOf(
+            ModelFile("chatterbox-t3-q4_k.gguf", "$CHATTERBOX_GGUF/chatterbox-t3-q4_k.gguf", 382_171_840L),
+            ModelFile("chatterbox-s3gen-q4_k.gguf", "$CHATTERBOX_GGUF/chatterbox-s3gen-q4_k.gguf", 254_658_880L)
+        )
+    )
+
+    /**
+     * CosyVoice3 Android native GGUF bundle. Includes the small tokenizer
+     * files and reference audio needed by the native zero-shot voice path.
+     */
+    fun cosyVoice3(): Pack = Pack(
+        id = "qvac-cosyvoice3",
+        title = "CosyVoice 3 · Q4/Q8",
+        languageCode = "en",
+        license = "Apache-2.0 model weights; MIT native runtime; sample voice attribution in upstream repository",
+        repository = "cstr/cosyvoice3-0.5b-2512-GGUF + FunAudioLLM/Fun-CosyVoice3-0.5B-2512",
+        files = listOf(
+            ModelFile("cosyvoice3-llm-q4_k.gguf", "$COSYVOICE_GGUF/cosyvoice3-llm-q4_k.gguf", 383_891_200L),
+            ModelFile("cosyvoice3-flow-q8_0.gguf", "$COSYVOICE_GGUF/cosyvoice3-flow-q8_0.gguf", 360_751_936L),
+            ModelFile("cosyvoice3-hift-f16.gguf", "$COSYVOICE_GGUF/cosyvoice3-hift-f16.gguf", 41_601_888L),
+            ModelFile("cosyvoice3-s3tok-q4_k.gguf", "$COSYVOICE_GGUF/cosyvoice3-s3tok-q4_k.gguf", 145_258_240L),
+            ModelFile("cosyvoice3-campplus-f16.gguf", "$COSYVOICE_GGUF/cosyvoice3-campplus-f16.gguf", 14_153_600L),
+            ModelFile("vocab.json", "$COSYVOICE_BASE/vocab.json", 2_776_833L),
+            ModelFile("merges.txt", "$COSYVOICE_BASE/merges.txt", 1_402_109L),
+            ModelFile("zero_shot_prompt.wav", "https://raw.githubusercontent.com/lcretan/FunAudioLLM.CosyVoice/main/zero_shot_prompt.wav", 111_496L)
+        )
+    )
+
+
+    /** Kokoro-82M multilingual LiteRT bundle (Hindi + English and other supported locales). */
+    fun kokoro82m(): Pack = Pack(
+        id = "kokoro-82m",
+        title = "Kokoro-82M · Multilingual",
+        languageCode = "hi",
+        license = "Apache-2.0",
+        repository = "litert-community/Kokoro-82M",
+        files = listOf(
+            ModelFile(
+                "kokoro_int8_fp16.litertlm",
+                "https://huggingface.co/litert-community/Kokoro-82M/resolve/main/kokoro_int8_fp16.litertlm",
+                294_783_298L,
+                "e7b931ee5d4b7104012a838c9eee240d19ea69cb3ca269041a3274f83dbb7fa1"
+            )
+        )
+    )
+
 }

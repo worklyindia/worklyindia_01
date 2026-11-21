@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Set up Java 17
         uses: actions/setup-java@v6
@@ -41,8 +43,20 @@ jobs:
         with:
           accept-android-sdk-licenses: true
 
-      - name: Install Android SDK, NDK and CMake
-        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Install Android SDK, NDK, CMake and host tokenizer tools
+        run: |
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          sudo apt-get update
+          sudo apt-get install -y flatbuffers-compiler unzip curl
+          # SentencePiece's pinned protobuf runtime is v36.2. APT on Ubuntu
+          # 24.04 ships protoc 3.21, which generates incompatible C++ headers.
+          PROTOC_ZIP="$RUNNER_TEMP/protoc-36.2-linux-x86_64.zip"
+          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-x86_64.zip" -o "$PROTOC_ZIP"
+          echo "121f6c7afe1d4d0e3ea6aab9432038599250134cbf4474cb1167d2c7decd4278  $PROTOC_ZIP" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/protoc-36.2"
+          unzip -q "$PROTOC_ZIP" -d "$RUNNER_TEMP/protoc-36.2"
+          echo "$RUNNER_TEMP/protoc-36.2/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/protoc-36.2/bin/protoc" --version | grep -Fx "libprotoc 36.2"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -96,6 +110,30 @@ jobs:
         if: steps.signing.outputs.enabled == 'false'
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleDebug
+
+      - name: Verify native TTS runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android-ai-voice/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then APK="android-ai-voice/app/build/outputs/apk/debug/app-debug.apk"; fi
+          test -f "$APK"
+          NDK_READelf="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          test -x "$NDK_READelf"
+          mkdir -p "$RUNNER_TEMP/chatwork-apk-check"
+          unzip -q "$APK" 'lib/arm64-v8a/*.so' -d "$RUNNER_TEMP/chatwork-apk-check"
+          QVAC="$RUNNER_TEMP/chatwork-apk-check/lib/arm64-v8a/libworkly_qvac_tts_jni.so"
+          QWEN="$RUNNER_TEMP/chatwork-apk-check/lib/arm64-v8a/libqwen3_tts_jni.so"
+          test -f "$QVAC" && test -f "$QWEN"
+          if "$NDK_READelf" -d "$QVAC" | grep -q 'Shared library: \[libomp.so\]'; then
+            echo '::error::QVAC TTS still depends on libomp.so, which is not provided by Android.'
+            exit 1
+          fi
+          if "$NDK_READelf" -d "$QWEN" | grep -Eq 'Shared library: \[libggml(-base|-cpu)?\.so\]'; then
+            echo '::error::Qwen JNI still dynamically links GGML; this can load an incompatible GGML from another engine.'
+            exit 1
+          fi
+          echo 'Verified: QVAC has no libomp.so dependency and Qwen has no shared GGML dependency.'
 
       - name: Rename APK
         shell: bash

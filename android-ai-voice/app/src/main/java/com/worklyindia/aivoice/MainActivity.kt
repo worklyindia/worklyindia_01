@@ -2,13 +2,17 @@ package com.worklyindia.aivoice
 
 import android.app.Activity
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.firebase.messaging.FirebaseMessaging
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
 
@@ -24,6 +28,16 @@ class MainActivity : Activity() {
             startActivity(Intent(this, WorklyAccountActivity::class.java))
             finish()
             return
+        }
+
+        // Register this installation's push token after the owner device is paired.
+        val deviceToken = SecureDeviceTokenStore.read(this)
+        if (!deviceToken.isNullOrBlank()) {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { fcmToken ->
+                Thread {
+                    runCatching { VoiceRelayApi.registerFcmToken(deviceToken, fcmToken) }
+                }.start()
+            }
         }
 
         // Keep the website relay worker active; it is required for website voice processing.
@@ -77,6 +91,36 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
 
         root.addView(TextView(this).apply {
+            text = "Text To Voice"
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            isClickable = true
+            isFocusable = true
+            background = null
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, TextToVoiceActivity::class.java))
+            }
+        }, LinearLayout.LayoutParams(-1, dp(58)))
+
+        root.addView(TextView(this).apply {
+            text = "Voice To Text"
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            isClickable = true
+            isFocusable = true
+            background = null
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, VoiceToTextActivity::class.java))
+            }
+        }, LinearLayout.LayoutParams(-1, dp(58)))
+
+        root.addView(TextView(this).apply {
             text = "Download Model"
             textSize = 19f
             gravity = Gravity.CENTER
@@ -93,6 +137,12 @@ class MainActivity : Activity() {
 
         setContentView(root)
         signalAnimation.playAnimation()
+        // Ask for notifications at first launch on Android 13+.
+        // Microphone permission is requested only when the user taps Start Speaking.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+        }
     }
 
     override fun onResume() {
@@ -110,6 +160,8 @@ class MainActivity : Activity() {
         signalAnimationView = null
         super.onDestroy()
     }
+
+    companion object { private const val REQUEST_NOTIFICATIONS = 2101 }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

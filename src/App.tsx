@@ -62,8 +62,11 @@ const Index = lazyRetry(() => import("./pages/Index"));
 const Jobs = lazyRetry(() => import("./pages/Jobs"));
 const Activity = lazyRetry(() => import("./pages/Activity"));
 const More = lazyRetry(() => import("./pages/More"));
+const TextToVoice = lazyRetry(() => import("./pages/TextToVoice"));
 const AICareerAssistant = lazyRetry(() => import("./pages/AICareerAssistant"));
 const AIVoiceCall = lazyRetry(() => import("./pages/AIVoiceCall"));
+const AIVoiceModels = lazyRetry(() => import("./pages/AIVoiceModels"));
+const KokoroMobileTest = lazyRetry(() => import("./pages/KokoroMobileTest"));
 import BannedUser from "./pages/BannedUser";
 import PasswordResetForm from "./components/PasswordResetForm";
 const VerifyEmailChange = lazyRetry(() => import("./pages/VerifyEmailChange"));
@@ -1223,10 +1226,25 @@ const AppContent = () => {
         } />
         <Route path="/settings/account/:field" element={<ProtectedRoute requireCompleteProfile><AccountChangePage /></ProtectedRoute>} />
         <Route path="/more" element={<More />} />
+         <Route path="/text-to-voice" element={<TextToVoice />} />
         <Route path="/ai-voice-call" element={
           <Suspense fallback={<AppLoadingSpinner />}>
             <AIVoiceCall />
           </Suspense>
+        } />
+        <Route path="/ai-voice-models" element={
+          <ProtectedRoute>
+            <Suspense fallback={<AppLoadingSpinner />}>
+              <AIVoiceModels />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/ai-voice-models/kokoro-mobile" element={
+          <ProtectedRoute>
+            <Suspense fallback={<AppLoadingSpinner />}>
+              <KokoroMobileTest />
+            </Suspense>
+          </ProtectedRoute>
         } />
         <Route path="/career-tricks" element={<CareerTricks />} />
         

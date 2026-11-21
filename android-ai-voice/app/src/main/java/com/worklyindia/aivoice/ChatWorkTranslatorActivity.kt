@@ -2,7 +2,6 @@ package com.worklyindia.aivoice
 
 import android.app.Activity
 import android.os.Bundle
-import android.util.Base64
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -15,15 +14,14 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.Executors
+import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.Translator
+import com.google.mlkit.nl.translate.TranslatorOptions
 
-/** Online translator that uses the same authenticated Workly website translation endpoint. */
+/** Offline on-device translator. Language packs are downloaded to this phone on first use. */
 class ChatWorkTranslatorActivity : Activity() {
-    private val worker = Executors.newSingleThreadExecutor()
     private lateinit var sourcePicker: Spinner
     private lateinit var targetPicker: Spinner
     private lateinit var sourceText: EditText
@@ -31,58 +29,35 @@ class ChatWorkTranslatorActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var translateButton: Button
     private lateinit var progress: ProgressBar
+    private var activeTranslator: Translator? = null
 
     private data class Language(val code: String, val label: String) {
         override fun toString() = label
     }
 
+    // Only languages supported by ML Kit's on-device translation API.
     private val languages = listOf(
-        Language("auto", "Detect language"),
-        Language("en", "English"),
-        Language("as", "Assamese · অসমীয়া"),
-        Language("bn", "Bengali · বাংলা"),
-        Language("brx", "Bodo"),
-        Language("doi", "Dogri"),
-        Language("gu", "Gujarati · ગુજરાતી"),
-        Language("hi", "Hindi · हिन्दी"),
-        Language("kn", "Kannada · ಕನ್ನಡ"),
-        Language("kok", "Konkani"),
-        Language("ks", "Kashmiri · کشمیری"),
-        Language("mai", "Maithili"),
-        Language("ml", "Malayalam · മലയാളം"),
-        Language("mni", "Manipuri"),
-        Language("mr", "Marathi · मराठी"),
-        Language("ne", "Nepali · नेपाली"),
-        Language("or", "Odia · ଓଡ଼ିଆ"),
-        Language("pa", "Punjabi · ਪੰਜਾਬੀ"),
-        Language("sa", "Sanskrit · संस्कृतम्"),
-        Language("sat", "Santali"),
-        Language("sd", "Sindhi"),
-        Language("ta", "Tamil · தமிழ்"),
-        Language("te", "Telugu · తెలుగు"),
-        Language("ur", "Urdu · اردو"),
-        Language("es", "Spanish"),
-        Language("fr", "French"),
-        Language("de", "German"),
-        Language("it", "Italian"),
-        Language("pt", "Portuguese"),
-        Language("ru", "Russian"),
-        Language("zh", "Chinese"),
-        Language("ja", "Japanese"),
-        Language("ko", "Korean"),
-        Language("ar", "Arabic"),
-        Language("tr", "Turkish"),
-        Language("id", "Indonesian"),
-        Language("vi", "Vietnamese"),
-        Language("th", "Thai"),
-        Language("fa", "Persian"),
-        Language("he", "Hebrew"),
-        Language("nl", "Dutch"),
-        Language("pl", "Polish"),
-        Language("uk", "Ukrainian"),
-        Language("sv", "Swedish"),
-        Language("ro", "Romanian"),
-        Language("sw", "Swahili")
+        Language("af", "Afrikaans"), Language("ar", "Arabic · العربية"),
+        Language("be", "Belarusian"), Language("bg", "Bulgarian"),
+        Language("bn", "Bengali · বাংলা"), Language("ca", "Catalan"),
+        Language("cs", "Czech"), Language("cy", "Welsh"), Language("da", "Danish"),
+        Language("de", "German"), Language("el", "Greek"), Language("en", "English"),
+        Language("eo", "Esperanto"), Language("es", "Spanish"), Language("et", "Estonian"),
+        Language("fa", "Persian · فارسی"), Language("fi", "Finnish"), Language("fr", "French"),
+        Language("ga", "Irish"), Language("gl", "Galician"), Language("gu", "Gujarati · ગુજરાતી"),
+        Language("he", "Hebrew"), Language("hi", "Hindi · हिन्दी"), Language("hr", "Croatian"),
+        Language("ht", "Haitian Creole"), Language("hu", "Hungarian"), Language("id", "Indonesian"),
+        Language("is", "Icelandic"), Language("it", "Italian"), Language("ja", "Japanese"),
+        Language("ka", "Georgian"), Language("kn", "Kannada · ಕನ್ನಡ"), Language("ko", "Korean"),
+        Language("lt", "Lithuanian"), Language("lv", "Latvian"), Language("mk", "Macedonian"),
+        Language("mr", "Marathi · मराठी"), Language("ms", "Malay"), Language("mt", "Maltese"),
+        Language("nl", "Dutch"), Language("no", "Norwegian"), Language("pl", "Polish"),
+        Language("pt", "Portuguese"), Language("ro", "Romanian"), Language("ru", "Russian"),
+        Language("sk", "Slovak"), Language("sl", "Slovenian"), Language("sq", "Albanian"),
+        Language("sv", "Swedish"), Language("sw", "Swahili"), Language("ta", "Tamil · தமிழ்"),
+        Language("te", "Telugu · తెలుగు"), Language("th", "Thai"), Language("tl", "Tagalog"),
+        Language("tr", "Turkish"), Language("uk", "Ukrainian"), Language("ur", "Urdu · اردو"),
+        Language("vi", "Vietnamese"), Language("zh", "Chinese · 中文")
     )
 
     private val bg get() = ChatWorkTheme.color(this, 0xFFF4F7FB.toInt())
@@ -90,7 +65,6 @@ class ChatWorkTranslatorActivity : Activity() {
     private val muted get() = ChatWorkTheme.color(this, 0xFF65748B.toInt())
     private val surface get() = ChatWorkTheme.color(this, 0xFFFFFFFF.toInt())
     private val border get() = ChatWorkTheme.color(this, 0xFFD8E0EA.toInt())
-    private val blue = 0xFF1769C2.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,20 +83,24 @@ class ChatWorkTranslatorActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = "Language Translator"; textSize = 21f; setTextColor(ink)
+            text = "Offline Language Translator"; textSize = 20f; setTextColor(ink)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
 
         status = TextView(this).apply {
-            text = "Online translation · Uses Workly website translation service"
-            textSize = 12f; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(8))
+            text = "On-device translation · Your text stays on this phone"
+            textSize = 12f; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(4))
         }
         root.addView(status)
+        root.addView(TextView(this).apply {
+            text = "First use: download the language model over Wi-Fi (about 30 MB per language). After download, translation runs offline on your phone."
+            textSize = 12f; setTextColor(muted); setPadding(dp(4), dp(2), dp(4), dp(10))
+        })
 
         sourcePicker = Spinner(this).apply { adapter = languageAdapter() }
-        targetPicker = Spinner(this).apply { adapter = languageAdapter(languages.filter { it.code != "auto" }) }
-        sourcePicker.setSelection(0)
-        targetPicker.setSelection(2) // Gujarati is a useful initial target for the India audience.
+        targetPicker = Spinner(this).apply { adapter = languageAdapter() }
+        sourcePicker.setSelection(languages.indexOfFirst { it.code == "en" })
+        targetPicker.setSelection(languages.indexOfFirst { it.code == "gu" })
         root.addView(label("Translate from"))
         root.addView(sourcePicker, LinearLayout.LayoutParams(-1, dp(52)))
         root.addView(label("Translate to"))
@@ -141,8 +119,8 @@ class ChatWorkTranslatorActivity : Activity() {
         root.addView(sourceText, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
         translateButton = Button(this).apply {
-            text = "Translate online"; isAllCaps = false
-            setOnClickListener { translate() }
+            text = "Translate offline"; isAllCaps = false
+            setOnClickListener { translateOffline() }
         }
         root.addView(translateButton, LinearLayout.LayoutParams(-1, dp(50)).apply { topMargin = dp(10) })
         progress = ProgressBar(this).apply { visibility = View.GONE }
@@ -152,13 +130,13 @@ class ChatWorkTranslatorActivity : Activity() {
             text = "Your translation will appear here."
             textSize = 16f; setTextColor(ink); setPadding(dp(12), dp(12), dp(12), dp(12))
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFFFFFFFF.toInt()); setStroke(dp(1), 0xFFD8E0EA.toInt()); cornerRadius = dp(12).toFloat()
+                setColor(surface); setStroke(dp(1), border); cornerRadius = dp(12).toFloat()
             }
         }
         root.addView(ScrollView(this).apply {
             addView(resultText, ViewGroup.LayoutParams(-1, -2))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
-        val copy = Button(this).apply {
+        root.addView(Button(this).apply {
             text = "Copy translation"; isAllCaps = false
             setOnClickListener {
                 val value = resultText.text.toString()
@@ -168,8 +146,7 @@ class ChatWorkTranslatorActivity : Activity() {
                     status.text = "Translation copied."
                 }
             }
-        }
-        root.addView(copy, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
+        }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
         setContentView(root)
     }
 
@@ -177,104 +154,74 @@ class ChatWorkTranslatorActivity : Activity() {
         text = value; textSize = 13f; setTextColor(muted); setPadding(dp(4), dp(8), dp(4), dp(2))
     }
 
-    private fun languageAdapter(items: List<Language> = languages): ArrayAdapter<Language> =
-        ArrayAdapter(this, android.R.layout.simple_spinner_item, items).also {
+    private fun languageAdapter(): ArrayAdapter<Language> =
+        ArrayAdapter(this, android.R.layout.simple_spinner_item, languages).also {
             it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
 
-    private fun translate() {
+    private fun translateOffline() {
         val input = sourceText.text?.toString()?.trim().orEmpty()
-        if (input.isBlank()) {
-            sourceText.error = "Enter text to translate"
-            return
-        }
-        if (input.length > 4000) {
-            sourceText.error = "Maximum 4,000 characters"
-            return
-        }
+        if (input.isBlank()) { sourceText.error = "Enter text to translate"; return }
+        if (input.length > 4000) { sourceText.error = "Maximum 4,000 characters"; return }
         val source = languages[sourcePicker.selectedItemPosition].code
-        val target = (targetPicker.selectedItem as Language).code
-        if (target == "auto") {
-            status.text = "Choose a target language."
+        val target = languages[targetPicker.selectedItemPosition].code
+        if (source == target) { resultText.text = input; status.text = "Source and target languages are the same."; return }
+
+        val sourceLanguage = TranslateLanguage.fromLanguageTag(source)
+        val targetLanguage = TranslateLanguage.fromLanguageTag(target)
+        if (sourceLanguage == null || targetLanguage == null) {
+            status.text = "This language pair is not supported by the offline model."
             return
         }
         translateButton.isEnabled = false
         progress.visibility = View.VISIBLE
-        status.text = "Translating using Workly online service…"
-        worker.execute {
-            try {
-                val accessToken = getValidAccessToken()
-                val payload = JSONObject()
-                    .put("text", input)
-                    .put("sourceLang", source)
-                    .put("targetLang", target)
-                val connection = (URL("${BuildConfig.SUPABASE_URL}/functions/v1/ai-career-chat/translate").openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"; connectTimeout = 20000; readTimeout = 100000; doOutput = true
-                    setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-                    setRequestProperty("Authorization", "Bearer $accessToken")
-                }
-                val result = try {
-                    connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                    val code = connection.responseCode
-                    val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-                    val response = JSONObject(stream?.bufferedReader()?.use { it.readText() }.orEmpty().ifBlank { "{}" })
-                    if (code !in 200..299) {
-                        throw IllegalStateException(response.optString("error").ifBlank { "Translation request failed (HTTP $code)." })
+        status.text = "Preparing offline language model…"
+        activeTranslator?.close()
+        val translator = Translation.getClient(
+            TranslatorOptions.Builder()
+                .setSourceLanguage(sourceLanguage)
+                .setTargetLanguage(targetLanguage)
+                .build()
+        )
+        activeTranslator = translator
+        val conditions = DownloadConditions.Builder().requireWifi().build()
+        translator.downloadModelIfNeeded(conditions)
+            .addOnSuccessListener {
+                if (isFinishing || isDestroyed) return@addOnSuccessListener
+                status.text = "Translating on this phone…"
+                translator.translate(input)
+                    .addOnSuccessListener { translated ->
+                        if (!isFinishing && !isDestroyed) {
+                            resultText.text = translated
+                            status.text = "Translation complete · Offline on-device"
+                        }
+                        finishOperation(translator)
                     }
-                    response.optString("translatedText").trim().also {
-                        if (it.isBlank()) throw IllegalStateException("The translation service returned an empty result.")
+                    .addOnFailureListener { error ->
+                        if (!isFinishing && !isDestroyed) status.text = error.localizedMessage ?: "Offline translation failed."
+                        finishOperation(translator)
                     }
-                } finally { connection.disconnect() }
-                runOnUiThread {
-                    resultText.text = result
-                    status.text = "Translation complete · Online"
-                }
-            } catch (error: Exception) {
-                runOnUiThread {
-                    status.text = error.message ?: "Translation failed. Please try again."
-                }
-            } finally {
-                runOnUiThread {
-                    progress.visibility = View.GONE
-                    translateButton.isEnabled = true
-                }
             }
-        }
+            .addOnFailureListener { error ->
+                if (!isFinishing && !isDestroyed) {
+                    status.text = error.localizedMessage ?: "Could not download the language model. Connect to Wi-Fi and retry."
+                }
+                finishOperation(translator)
+            }
     }
 
-    private fun getValidAccessToken(): String {
-        var access = SecureDeviceTokenStore.readAccessToken(this)
-            ?: throw IllegalStateException("Connect your Workly India account in ChatWork Settings first.")
-        val refresh = SecureDeviceTokenStore.readRefreshToken(this)
-            ?: throw IllegalStateException("Your secure sign-in session is missing. Reconnect your account.")
-        val expiresAt = runCatching {
-            val part = access.split(".")[1]
-            val payload = String(Base64.decode(part, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING), Charsets.UTF_8)
-            JSONObject(payload).optLong("exp", 0L)
-        }.getOrDefault(0L)
-        if (expiresAt > System.currentTimeMillis() / 1000L + 90L) return access
-        val connection = (URL("${BuildConfig.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 15000; readTimeout = 20000; doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
+    private fun finishOperation(translator: Translator) {
+        if (activeTranslator === translator) activeTranslator = null
+        translator.close()
+        if (!isFinishing && !isDestroyed) {
+            progress.visibility = View.GONE
+            translateButton.isEnabled = true
         }
-        try {
-            connection.outputStream.use { it.write(JSONObject().put("refresh_token", refresh).toString().toByteArray(Charsets.UTF_8)) }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val response = JSONObject(stream?.bufferedReader()?.use { it.readText() }.orEmpty().ifBlank { "{}" })
-            if (code !in 200..299) throw IllegalStateException("Workly sign-in expired. Reconnect your account.")
-            access = response.optString("access_token")
-            val nextRefresh = response.optString("refresh_token", refresh)
-            if (access.isBlank()) throw IllegalStateException("Could not refresh your Workly sign-in.")
-            SecureDeviceTokenStore.saveAuthSession(this, access, nextRefresh)
-            return access
-        } finally { connection.disconnect() }
     }
 
     override fun onDestroy() {
-        worker.shutdownNow()
+        activeTranslator?.close()
+        activeTranslator = null
         super.onDestroy()
     }
 

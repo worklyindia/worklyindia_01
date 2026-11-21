@@ -57,7 +57,7 @@ serve(async (req) => {
     console.log(`[unified-voice] Action: ${action}`);
 
     // Shared owner-phone relay actions are handled by the isolated relay module.
-    if (['register_device', 'create_job', 'create_stt_job', 'get_job', 'poll', 'fail_job', 'upload_audio', 'complete_job', 'list_devices', 'revoke_device'].includes(action)) {
+    if (['register_device', 'create_job', 'create_stt_job', 'get_job', 'poll', 'fail_job', 'upload_audio', 'complete_job', 'list_devices', 'revoke_device', 'cleanup_completed_audio'].includes(action)) {
       return await handleWorklyVoiceRelay(new Request(req.url, { method: req.method, headers: req.headers, body: JSON.stringify({ action, ...params }) }));
     }
 
@@ -309,10 +309,22 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
       return new Response(JSON.stringify({ error: 'Owner phone authentication failed' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
   }
-  const text = typeof params.text === 'string' ? params.text.trim().slice(0, 4000) : '';
+  const text = typeof params.text === 'string' ? params.text.trim().slice(0, 12000) : '';
   const languageTag = typeof params.languageTag === 'string' ? params.languageTag.trim().slice(0, 24) : 'und';
   if (!text) {
     return new Response(JSON.stringify({ error: 'Text is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  // Detect a simple greeting even when the relay sends a conversation transcript
+  // such as "User: Hello ChatWork." rather than the raw utterance.
+  const latestUserUtterance = text.split(/\r?\n/).reverse()
+    .find((line: string) => /^(?:user|caller)\s*:/i.test(line))
+    ?.replace(/^(?:user|caller)\s*:\s*/i, '').trim() ?? text;
+  const isSimpleGreeting = /^(?:hi|hello|hey|good morning|good afternoon|good evening)(?:\s+chatwork)?[.!?,\s]*$/i.test(latestUserUtterance);
+  if (isSimpleGreeting) {
+    return new Response(JSON.stringify({
+      reply: 'Hello! How can I help you today?',
+      languageTag: languageTag.startsWith('und') || languageTag === 'auto' ? 'en-IN' : languageTag,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
   }
   const scriptDetected =
     /[\u0A80-\u0AFF]/.test(text) ? 'Gujarati' :
@@ -345,14 +357,15 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
     'Your main purpose is to help job seekers find suitable jobs and help employers understand hiring and job-posting features on Workly India.',
     'Answer the actual question directly. For job-search questions, explain practical steps such as choosing a role and location, using filters, checking job details and applying through the job listing. For resume questions, give the requested complete points. For safety questions, clearly warn users not to pay recruiters or employers to obtain a job and advise reporting suspicious listings.',
     'Do not describe Workly India as an employee HR/payroll/leave-policy service. Do not invent specific vacancies, salaries, fees, policies, links, or features. If a detail is not known, say so briefly and guide the user to check the relevant page or listing.',
-    'Reply in the language actually used by the caller. Understand Gujarati, Hindi, English, Roman Hindi, Roman Gujarati, and mixed/code-switched speech. Mirror the caller’s language mix and script. A locale hint is not an instruction to translate or switch languages.',
-    'Give a complete answer, normally 2–5 short spoken sentences or a short numbered list when the user asks for steps or multiple points. Never stop mid-sentence, mid-word, or mid-list. Avoid markdown symbols that sound awkward when spoken.',
+    'Reply in the language actually used by the caller. Understand Gujarati, Hindi, English, Roman Hindi, Roman Gujarati, and mixed/code-switched speech. Mirror the caller’s language mix and script. A locale hint is not an instruction to translate or switch languages. If the caller speaks clear English, answer in English; if they speak Roman Hindi or Roman Gujarati, answer in the same Roman script unless they use the native script.',
+    'For a simple hello or greeting, answer with one brief friendly greeting and ask how you can help. Do not add unrelated apologies, memory disclaimers, meta-commentary, or statements about previous answers unless the caller specifically asks.',
+    'Keep normal voice-call answers concise: 1–3 short spoken sentences, usually under 220 characters, so the phone can synthesize and return audio quickly. If the caller explicitly asks for detailed steps or multiple points, give the necessary complete points but keep each sentence short. Never stop mid-sentence, mid-word, or mid-list. Avoid markdown symbols that sound awkward when spoken.',
     languageInstruction,
   ].join(' ');
   const result = await runAiChain([
     { role: 'system', content: voiceSystemPrompt },
     { role: 'user', content: text },
-  ], { maxTokens: 700, temperature: 0.35, label: 'ai-voice-call', silent: true, freeOnly: true });
+  ], { maxTokens: 420, temperature: 0.3, label: 'ai-voice-call', silent: true, freeOnly: true });
   if (!result?.text) {
     return new Response(JSON.stringify({ error: 'Free AI providers are temporarily unavailable. Please try again.' }), { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
@@ -360,7 +373,23 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
   // Some free-tier models occasionally stop mid-list or mid-sentence even
   // when the requested token budget is available. Ask the same free model
   // chain to continue only when the first answer has no natural ending.
-  let reply = result.text.trim();
+  // Free-tier models sometimes append incomplete meta-commentary after a valid
+  // answer (for example, "The previous answer was complete..."). Remove that
+  // accidental tail before deciding whether a continuation is actually needed.
+  let reply = result.text.trim().replace(
+    /\s+(?:The previous answer was|There is nothing further to|There is nothing else to add|The answer is complete)[\s\S]*$/i,
+    '',
+  ).trim();
+  if (isSimpleGreeting) {
+    // Greeting turns should stay short and must not grow an unrelated model disclaimer.
+    const questionEnd = reply.indexOf('?');
+    if (questionEnd >= 0) {
+      reply = reply.slice(0, questionEnd + 1).trim();
+    } else {
+      const sentenceEnd = reply.search(/[.!?।॥]/);
+      if (sentenceEnd >= 0) reply = reply.slice(0, sentenceEnd + 1).trim();
+    }
+  }
   const hasNaturalEnding = /[.!?।॥…]["'”’)]*\\s*$/.test(reply);
   if (!hasNaturalEnding && reply.length > 0) {
     const continuation = await runAiChain([
@@ -373,6 +402,17 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
       if (nextPart) reply = `${reply.replace(/[\\s,;:—-]+$/, '')} ${nextPart}`.trim();
     }
   }
+
+  // Remove exact consecutive sentence duplicates sometimes emitted by small free models.
+  const sentenceParts = reply.match(/[^.!?।॥]+[.!?।॥]?/gu) ?? [reply];
+  const uniqueSentences: string[] = [];
+  for (const part of sentenceParts) {
+    const normalized = part.trim().replace(/[.!?।॥]+$/u, '').toLocaleLowerCase();
+    const previous = uniqueSentences.at(-1)?.replace(/[.!?।॥]+$/u, '').toLocaleLowerCase();
+    if (normalized && normalized === previous) continue;
+    if (part.trim()) uniqueSentences.push(part.trim());
+  }
+  reply = uniqueSentences.join(' ').replace(/\s+/g, ' ').trim();
 
   const replyLanguageTag = detectLanguageTag(reply, detectLanguageTag(text, languageTag));
   return new Response(JSON.stringify({ reply, languageTag: replyLanguageTag }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });

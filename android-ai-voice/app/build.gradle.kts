@@ -1,11 +1,13 @@
 import java.io.File
 import java.net.HttpURLConnection
+import java.nio.file.Files
 import java.net.URL
 import java.security.MessageDigest
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
 
 val releaseStoreFile = System.getenv("WORKLY_VOICE_KEYSTORE_PATH")
@@ -60,7 +62,11 @@ android {
             version = "3.22.1"
         }
     }
-    sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/wan-jni"))
+    sourceSets.getByName("main").jniLibs.srcDirs(
+        layout.buildDirectory.dir("generated/wan-jni"),
+        layout.buildDirectory.dir("generated/qwen3-jni"),
+        layout.buildDirectory.dir("generated/qvac-jni")
+    )
     packaging {
         jniLibs {
             // Wan is launched as a child process from nativeLibraryDir, so Android
@@ -74,7 +80,10 @@ android {
 }
 
 dependencies {
+    implementation("com.google.mediapipe:tasks-audio:1.2.2")
     implementation("com.airbnb.android:lottie:6.7.1")
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.firebase:firebase-messaging:24.1.2")
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.32.0")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
@@ -132,4 +141,178 @@ val downloadWanVideoEngine by tasks.registering {
         check(partial.renameTo(target)) { "Could not install the verified Saient Wan engine." }
         logger.lifecycle("Downloaded and verified Saient Wan2.1 Android engine.")
     }
+}
+
+
+// Qwen3-TTS is built as an isolated native CMake project so its GGML targets
+// cannot collide with the app's existing llama.cpp GGML targets. The upstream
+// Android port currently supports arm64-v8a / API 31+ only.
+val qwenNativeBuildDir = layout.buildDirectory.dir("qwen3-native")
+val qwenNativeOutput = layout.buildDirectory.dir("generated/qwen3-jni/arm64-v8a/libqwen3_tts_jni.so")
+val configureQwenNative by tasks.registering(Exec::class) {
+    val qwenSource = layout.projectDirectory.dir("../qwen3-native")
+    inputs.dir(qwenSource)
+    inputs.dir(layout.projectDirectory.dir("../external/qwen3-tts.cpp"))
+    outputs.dir(qwenNativeBuildDir)
+    doFirst {
+        val qwenSubmodule = layout.projectDirectory.dir("../external/qwen3-tts.cpp").asFile
+        check(qwenSubmodule.resolve("ggml/CMakeLists.txt").isFile) {
+            "Qwen3-TTS source is missing. Run: git submodule update --init --recursive"
+        }
+    }
+    commandLine(
+        "cmake", "-S", qwenSource.asFile.absolutePath,
+        "-B", qwenNativeBuildDir.get().asFile.absolutePath,
+        "-DCMAKE_TOOLCHAIN_FILE=${android.ndkDirectory.absolutePath}/build/cmake/android.toolchain.cmake",
+        "-DANDROID_ABI=arm64-v8a",
+        "-DANDROID_PLATFORM=android-31",
+        "-DANDROID_STL=c++_shared",
+        "-DCMAKE_BUILD_TYPE=Release"
+    )
+}
+val buildQwenNative by tasks.registering(Exec::class) {
+    dependsOn(configureQwenNative)
+    outputs.file(qwenNativeOutput)
+    commandLine(
+        "cmake", "--build", qwenNativeBuildDir.get().asFile.absolutePath,
+        "--target", "qwen3_tts_jni", "--config", "Release", "--parallel", "2"
+    )
+    doLast {
+        val source = qwenNativeBuildDir.get().file("jni/arm64-v8a/libqwen3_tts_jni.so").asFile
+        check(source.isFile) { "Qwen3-TTS native build did not produce libqwen3_tts_jni.so" }
+        val target = qwenNativeOutput.get().asFile
+        target.parentFile.mkdirs()
+        source.copyTo(target, overwrite = true)
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(buildQwenNative)
+}
+
+
+// QVAC's C++17 TTS stack provides Android-native Chatterbox, CosyVoice3 and
+// Parler engines. Build it in a separate CMake graph with its matching pinned
+// fabric GGML source so its target names cannot collide with llama.cpp/Qwen.
+val qvacRepo = layout.projectDirectory.dir("../external/qvac-fabric-speech.cpp").asFile
+val qvacTtsSource = File(qvacRepo, "engines/tts")
+val qvacGgmlSource = layout.projectDirectory.dir("../external/qvac-fabric-llm.cpp/ggml").asFile
+val sentencePieceSource = layout.projectDirectory.dir("../external/sentencepiece").asFile
+val qvacNativeBuildDir = layout.buildDirectory.dir("qvac-native")
+val qvacNativeOutput = layout.buildDirectory.file("generated/qvac-jni/arm64-v8a/libworkly_qvac_tts_jni.so")
+
+val stageQvacTtsSource by tasks.registering {
+    inputs.dir(qvacTtsSource)
+    inputs.dir(qvacGgmlSource)
+    inputs.dir(sentencePieceSource)
+    doLast {
+        check(File(qvacTtsSource, "CMakeLists.txt").isFile) {
+            "QVAC TTS source submodule is missing. Run: git submodule update --init --recursive"
+        }
+        check(File(qvacGgmlSource, "CMakeLists.txt").isFile) {
+            "QVAC fabric GGML submodule is missing. Run: git submodule update --init --recursive"
+        }
+        check(File(sentencePieceSource, "CMakeLists.txt").isFile) {
+            "SentencePiece submodule is missing. Run: git submodule update --init --recursive"
+        }
+        val ggmlLink = File(qvacTtsSource, "ggml")
+        if (Files.isSymbolicLink(ggmlLink.toPath())) {
+            Files.delete(ggmlLink.toPath())
+        } else if (ggmlLink.exists()) {
+            check(ggmlLink.isDirectory && File(ggmlLink, "CMakeLists.txt").isFile) {
+                "Unexpected QVAC engines/tts/ggml path; refusing to overwrite it."
+            }
+        }
+        if (!ggmlLink.exists()) {
+            Files.createSymbolicLink(ggmlLink.toPath(), qvacGgmlSource.toPath())
+        }
+
+        // The app ships a downloaded, verified reference WAV plus the S3Tok
+        // and CAM++ GGUF companions. QVAC's upstream constructor currently
+        // insists on a pre-baked voice.gguf even when reference_audio is
+        // supplied; that is redundant because the reference path overwrites
+        // all four baked voice tensors before first synthesis. Make that
+        // baked voice optional only for the explicit reference-audio path.
+        val cosyvoiceEngine = File(qvacTtsSource, "src/cosyvoice_engine.cpp")
+        check(cosyvoiceEngine.isFile) { "QVAC CosyVoice native engine source is missing." }
+        val engineSource = Files.readString(cosyvoiceEngine.toPath())
+        val oldVoiceBlock = """        require(voice_path, "voice.gguf");"""
+        val newVoiceBlock = """        if (voice_path.empty() && opts.reference_audio.empty()) {
+            require(voice_path, "voice.gguf");
+        }"""
+        val oldLoadBlock = """        // voice.gguf: read its four tensors into vectors, then free it.
+        {
+            model_ctx voice_m = cosyvoice_load_gguf(
+                voice_path, det::backend_is_cpu(backend) ? backend : nullptr);
+            ModelGuard voice_guard(voice_m);
+            voice_prompt_stok  = read_i32(voice_m, "voice/prompt_stok");
+            voice_prompt_token = read_i32(voice_m, "voice/prompt_token");
+            voice_prompt_feat  = read_f32(voice_m, "voice/prompt_feat");
+            voice_embedding    = read_f32(voice_m, "voice/embedding");
+        }
+        voice_mel_len1     = (int)(voice_prompt_feat.size() / 80);
+        voice_prompt_text  = cosyvoice_gguf_meta_str(voice_path, "voice.prompt_text", "");"""
+        val newLoadBlock = """        // A baked voice is optional when reference_audio is supplied below;
+        // that native path computes and replaces all voice tensors at load.
+        if (!voice_path.empty()) {
+            model_ctx voice_m = cosyvoice_load_gguf(
+                voice_path, det::backend_is_cpu(backend) ? backend : nullptr);
+            ModelGuard voice_guard(voice_m);
+            voice_prompt_stok  = read_i32(voice_m, "voice/prompt_stok");
+            voice_prompt_token = read_i32(voice_m, "voice/prompt_token");
+            voice_prompt_feat  = read_f32(voice_m, "voice/prompt_feat");
+            voice_embedding    = read_f32(voice_m, "voice/embedding");
+            voice_mel_len1     = (int)(voice_prompt_feat.size() / 80);
+            voice_prompt_text  = cosyvoice_gguf_meta_str(voice_path, "voice.prompt_text", "");
+        }"""
+        val patched = engineSource
+            .replace(oldVoiceBlock, newVoiceBlock)
+            .replace(oldLoadBlock, newLoadBlock)
+        check(patched.contains(newVoiceBlock) && patched.contains(newLoadBlock)) {
+            "Could not apply the CosyVoice reference-only voice patch; upstream source changed."
+        }
+        if (patched != engineSource) Files.writeString(cosyvoiceEngine.toPath(), patched)
+    }
+}
+
+val configureQvacNative by tasks.registering(Exec::class) {
+    dependsOn(stageQvacTtsSource)
+    inputs.dir(layout.projectDirectory.dir("../qvac-native"))
+    inputs.dir(qvacTtsSource)
+    inputs.dir(qvacGgmlSource)
+    inputs.dir(sentencePieceSource)
+    outputs.dir(qvacNativeBuildDir)
+    commandLine(
+        "cmake", "-S", layout.projectDirectory.dir("../qvac-native").asFile.absolutePath,
+        "-B", qvacNativeBuildDir.get().asFile.absolutePath,
+        "-DQVAC_TTS_ROOT=${qvacTtsSource.absolutePath}",
+        "-DSENTENCEPIECE_ROOT=${sentencePieceSource.absolutePath}",
+        "-DCMAKE_TOOLCHAIN_FILE=${android.ndkDirectory.absolutePath}/build/cmake/android.toolchain.cmake",
+        "-DANDROID_ABI=arm64-v8a",
+        "-DANDROID_PLATFORM=android-26",
+        "-DANDROID_STL=c++_shared",
+        "-DCMAKE_BUILD_TYPE=Release"
+    )
+}
+
+val buildQvacNative by tasks.registering(Exec::class) {
+    dependsOn(configureQvacNative, buildQwenNative)
+    inputs.dir(qvacNativeBuildDir)
+    inputs.dir(qvacTtsSource)
+    inputs.dir(qvacGgmlSource)
+    inputs.dir(sentencePieceSource)
+    outputs.file(qvacNativeOutput)
+    commandLine(
+        "cmake", "--build", qvacNativeBuildDir.get().asFile.absolutePath,
+        "--target", "workly_qvac_tts_jni", "--config", "Release", "--parallel", "2"
+    )
+    doLast {
+        val source = qvacNativeBuildDir.get().file("jni/arm64-v8a/libworkly_qvac_tts_jni.so").asFile
+        check(source.isFile) { "QVAC native build did not produce libworkly_qvac_tts_jni.so" }
+        val target = qvacNativeOutput.get().asFile
+        target.parentFile.mkdirs()
+        source.copyTo(target, overwrite = true)
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(buildQvacNative)
 }

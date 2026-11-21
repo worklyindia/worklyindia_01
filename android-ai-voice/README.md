@@ -79,3 +79,22 @@ Open the `android-ai-voice/` folder as a standalone Gradle project in Android St
 - Gradle: 8.14.4
 - Android NDK: 27.2.12479018
 - CMake: 3.22.1
+
+
+## Kokoro-82M multilingual offline text-to-speech
+
+ChatWork includes a native Android Kokoro-82M adapter using MediaPipe Tasks Audio. Its approximately 295 MB CPU-compatible `.litertlm` bundle is downloaded on demand to app-private storage, checked against expected size and SHA-256, and can be tested or deleted from the model downloads screen. The test screen groups all **54 voices by 9 locales**: American English, British English, Hindi, Spanish, French, Italian, Brazilian Portuguese, Mandarin Chinese and Japanese. Users select language, individual female/male voice, and custom test text before generating audio. After download, synthesis runs locally without network access. Gujarati is not supported by this Kokoro bundle. Device inference and audio quality still require physical-phone verification.
+
+
+## Offline text-to-speech model language and voice testing
+
+The ChatWork Download Model page lists every integrated local TTS pack. Each downloaded TTS model exposes its own Test Model dialog; available language and speaker choices are model-specific rather than a shared, unsupported list.
+
+- **Indic Tiny TTS:** separate Hindi, Gujarati and English model downloads. Test dialog provides Female and Male speaker styles for each language pack.
+- **MOSS-TTS-Nano:** English and Mandarin Chinese test text selector; one bundled Junhao voice preset.
+- **Qwen3-TTS CustomVoice:** reads the speaker names exposed by the loaded GGUF at runtime and lets the user select one. The current Android test path is English; other language controls are not exposed until native language-ID mapping is verified.
+- **Chatterbox Multilingual:** language selector for the 23 languages in the multilingual model pack, including Hindi and English. The model uses its built-in voice conditioning; it does not expose a list of named voice presets in this Android adapter.
+- **CosyVoice 3:** language selector for Chinese, English, Japanese, Korean, German, French, Russian, Spanish and Italian. The current pack uses its bundled reference voice audio; users can select language but not multiple bundled speaker identities.
+- **Kokoro-82M:** 54 selectable voices grouped across 9 locales: American/British English, Hindi, Spanish, French, Italian, Brazilian Portuguese, Mandarin Chinese and Japanese.
+
+Every model card shows its language/voice capability. The test screen lets users enter custom text and play generated audio. These integrations still require Android CI success and physical-device inference verification; language choices are not a claim that every accent or text input has been validated on every phone.

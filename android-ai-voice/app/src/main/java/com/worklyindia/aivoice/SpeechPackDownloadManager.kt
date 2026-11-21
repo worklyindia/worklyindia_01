@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Environment
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Downloads optional offline speech packs without bundling model weights in the APK.
@@ -40,7 +41,7 @@ class SpeechPackDownloadManager(context: Context) {
     fun start(pack: SpeechModelCatalog.Pack, allowMobileData: Boolean): Snapshot {
         pack.files.forEachIndexed { index, modelFile ->
             val target = targetFile(pack, modelFile.relativePath)
-            if (isCompleteFile(target, modelFile.expectedBytes)) return@forEachIndexed
+            if (isCompleteFile(target, modelFile)) return@forEachIndexed
 
             val savedId = prefs.getLong(fileKey(pack.id, modelFile.relativePath), -1L)
             if (isActiveDownload(savedId)) return@forEachIndexed
@@ -69,7 +70,7 @@ class SpeechPackDownloadManager(context: Context) {
     fun snapshot(pack: SpeechModelCatalog.Pack): Snapshot {
         val rows = pack.files.map { file ->
             val target = targetFile(pack, file.relativePath)
-            if (isCompleteFile(target, file.expectedBytes)) {
+            if (isCompleteFile(target, file)) {
                 return@map FileStatus(file.relativePath, State.COMPLETE, file.expectedBytes, file.expectedBytes)
             }
 
@@ -89,7 +90,7 @@ class SpeechPackDownloadManager(context: Context) {
                         DownloadManager.STATUS_PENDING -> State.PENDING
                         DownloadManager.STATUS_RUNNING -> State.RUNNING
                         DownloadManager.STATUS_PAUSED -> State.PAUSED
-                        DownloadManager.STATUS_SUCCESSFUL -> if (isCompleteFile(target, file.expectedBytes)) State.COMPLETE else State.FAILED
+                        DownloadManager.STATUS_SUCCESSFUL -> if (isCompleteFile(target, file)) State.COMPLETE else State.FAILED
                         else -> State.FAILED
                     }
                     FileStatus(file.relativePath, state, downloaded, if (total > 0L) total else file.expectedBytes)
@@ -133,8 +134,21 @@ class SpeechPackDownloadManager(context: Context) {
     private fun targetFile(pack: SpeechModelCatalog.Pack, relativePath: String): File =
         File(modelDirectory(pack), relativePath)
 
-    private fun isCompleteFile(file: File, expectedBytes: Long): Boolean =
-        file.isFile && file.length() == expectedBytes
+    private fun isCompleteFile(file: File, modelFile: SpeechModelCatalog.ModelFile): Boolean {
+        if (!file.isFile || file.length() != modelFile.expectedBytes) return false
+        val expectedSha = modelFile.sha256?.takeIf { it.isNotBlank() } ?: return true
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        val actualSha = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        return actualSha.equals(expectedSha, ignoreCase = true)
+    }
 
     private fun isActiveDownload(id: Long): Boolean {
         if (id <= 0L) return false

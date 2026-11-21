@@ -24,8 +24,8 @@ import kotlin.math.PI
 
 /**
  * ONNX Runtime implementation of Indic Tiny TTS (Matcha acoustic model + Vocos).
- * Each language pack is loaded only when speech is requested and all three sessions
- * are closed after playback to keep memory bounded on 6 GB phones.
+ * Each language pack is loaded on demand and its ONNX sessions are retained by the Activity
+ * between conversions, then closed when the screen is destroyed.
  */
 class IndicTinyTtsEngine private constructor(
     private val env: OrtEnvironment,
@@ -77,6 +77,74 @@ class IndicTinyTtsEngine private constructor(
         var offset = 0
         audioParts.forEach { part -> part.copyInto(waveform, offset); offset += part.size }
         play(waveform)
+    }
+
+    fun synthesizeToWav(text: String, output: File, voice: String = "female", speed: Float = 1.0f, onProgress: (Int, Int) -> Unit = { _, _ -> }): File {
+        require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
+        val selectedVoice = voice.lowercase()
+        val speaker = when (selectedVoice) {
+            "female" -> femaleSpeakerId
+            "male" -> maleSpeakerId
+            else -> throw IllegalArgumentException("Choose female or male voice.")
+        }
+        val scale = (if (selectedVoice == "male") maleLengthScale else femaleLengthScale) / speed
+        val normalized = normalizeInput(text)
+        require(normalized.isNotBlank()) { "Enter text to speak." }
+        val chunks = splitChunks(normalized)
+        require(chunks.isNotEmpty()) { "Enter text to speak." }
+        val random = Random(System.nanoTime())
+        output.parentFile?.mkdirs()
+        var dataBytes = 0L
+        var spokenChunks = 0
+        java.io.RandomAccessFile(output, "rw").use { wav ->
+            wav.setLength(0L)
+            writeWavHeader(wav, 0)
+            fun append(samples: FloatArray) {
+                val nextBytes = dataBytes + samples.size.toLong() * 2L
+                require(nextBytes <= Int.MAX_VALUE - 36L) { "Generated audio is too large for a WAV file. Split the text into smaller files." }
+                val buffer = ByteArray(min(16_384, samples.size * 2))
+                var sampleIndex = 0
+                while (sampleIndex < samples.size) {
+                    val count = min(buffer.size / 2, samples.size - sampleIndex)
+                    for (i in 0 until count) {
+                        val pcm = (samples[sampleIndex + i].coerceIn(-1f, 1f) * 32767f).toInt()
+                        buffer[i * 2] = pcm.toByte()
+                        buffer[i * 2 + 1] = (pcm shr 8).toByte()
+                    }
+                    wav.write(buffer, 0, count * 2)
+                    sampleIndex += count
+                }
+                dataBytes = nextBytes
+            }
+            for ((chunkIndex, chunk) in chunks.withIndex()) {
+                val ids = encodeCharacters(chunk)
+                require(ids.size <= MAX_TOKENS) { "Text is too long for one speech segment." }
+                val spoken = synthesizeChunk(ids, speaker, random, scale)
+                if (spoken.isNotEmpty()) {
+                    if (spokenChunks > 0 && pauseSamples > 0) append(FloatArray(pauseSamples))
+                    append(spoken)
+                    spokenChunks++
+                }
+                onProgress(chunkIndex + 1, chunks.size)
+            }
+            require(spokenChunks > 0 && dataBytes > 0L) { "No supported speech characters found for this voice." }
+            wav.seek(0L)
+            writeWavHeader(wav, dataBytes.toInt())
+            wav.fd.sync()
+        }
+        return output
+    }
+
+    private fun writeWavHeader(wav: java.io.RandomAccessFile, dataBytes: Int) {
+        fun ascii(value: String) = wav.write(value.toByteArray(Charsets.US_ASCII))
+        fun leInt(value: Int) {
+            wav.write(value and 0xff); wav.write((value ushr 8) and 0xff)
+            wav.write((value ushr 16) and 0xff); wav.write((value ushr 24) and 0xff)
+        }
+        fun leShort(value: Int) { wav.write(value and 0xff); wav.write((value ushr 8) and 0xff) }
+        ascii("RIFF"); leInt(36 + dataBytes); ascii("WAVE"); ascii("fmt "); leInt(16)
+        leShort(1); leShort(1); leInt(SAMPLE_RATE); leInt(SAMPLE_RATE * 2); leShort(2); leShort(16)
+        ascii("data"); leInt(dataBytes)
     }
 
     private fun splitChunks(text: String): List<String> {
@@ -305,22 +373,68 @@ class IndicTinyTtsEngine private constructor(
         for (i in 0 until n) { real[i] /= n; imag[i] /= n }
     }
 
+    /**
+     * Use PCM 16-bit streaming rather than PCM_FLOAT + MODE_STATIC.
+     * PCM_FLOAT static tracks are not supported consistently by Android OEM audio
+     * drivers and can fail at AudioTrack initialization on otherwise capable phones.
+     */
     private fun play(samples: FloatArray) {
+        require(samples.isNotEmpty()) { "No audio was generated." }
+        val minBuffer = AudioTrack.getMinBufferSize(
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        check(minBuffer > 0) { "This device does not support 24 kHz mono audio output (code $minBuffer)." }
+        val bufferBytes = max(minBuffer * 2, 8 * 1024)
         val track = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-            .setBufferSizeInBytes(samples.size * Float.SIZE_BYTES)
-            .setTransferMode(AudioTrack.MODE_STATIC)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(SAMPLE_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(bufferBytes)
+            .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         try {
             activeTrack = track
-            check(track.state == AudioTrack.STATE_INITIALIZED) { "Could not initialize audio playback." }
-            check(track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING) == samples.size) { "Could not write generated audio." }
+            check(track.state == AudioTrack.STATE_INITIALIZED) {
+                "Audio output could not start. Check media volume and device audio output."
+            }
+            val pcm = ShortArray(samples.size) { index ->
+                (samples[index].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+            }
             track.play()
-            val deadline = android.os.SystemClock.elapsedRealtime() + samples.size * 1000L / SAMPLE_RATE + 1000L
-            while (track.playState == AudioTrack.PLAYSTATE_PLAYING && android.os.SystemClock.elapsedRealtime() < deadline) Thread.sleep(30L)
+            var offset = 0
+            while (offset < pcm.size) {
+                if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                    throw IllegalStateException("Audio playback stopped before the voice finished.")
+                }
+                val written = track.write(pcm, offset, pcm.size - offset, AudioTrack.WRITE_BLOCKING)
+                check(written > 0) { "Audio output write failed (code $written)." }
+                offset += written
+            }
+            val expectedFrames = pcm.size
+            val deadline = android.os.SystemClock.elapsedRealtime() +
+                (expectedFrames * 1000L / SAMPLE_RATE) + 3000L
+            while (track.playState == AudioTrack.PLAYSTATE_PLAYING &&
+                track.playbackHeadPosition.toLong() < expectedFrames &&
+                android.os.SystemClock.elapsedRealtime() < deadline
+            ) {
+                Thread.sleep(20L)
+            }
         } finally {
             activeTrack = null
+            runCatching { track.pause() }
+            runCatching { track.flush() }
             runCatching { track.stop() }
             track.release()
         }
@@ -375,7 +489,7 @@ class IndicTinyTtsEngine private constructor(
             val maleName = voices.keys().asSequence().firstOrNull { it.startsWith(voicePrefix) && it.endsWith("_M") } ?: femaleName
             val env = OrtEnvironment.getEnvironment()
             val options = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(2)
+                setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 4))
                 setInterOpNumThreads(1)
             }
             try {

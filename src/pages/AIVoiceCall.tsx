@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, PhoneOff } from 'lucide-react';
+import { Download, Mic, PhoneOff } from 'lucide-react';
 import LottieSearchIcon from '@/components/LottieSearchIcon';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -127,8 +127,25 @@ export default function AIVoiceCall() {
       window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Workly Voice app could not return audio.';
-      console.warn('Workly Voice audio playback failed:', message);
+      const message = error instanceof Error ? error.message : 'ChatWork phone audio is unavailable.';
+      console.warn('ChatWork phone audio playback failed; using browser voice fallback:', message);
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = resolvedLanguage;
+          utterance.rate = 1;
+          utterance.volume = speakerOn ? 1 : 0;
+          utterance.onstart = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'speaking' } }));
+          utterance.onend = () => window.dispatchEvent(new CustomEvent('workly-voice-status', { detail: { status: 'finished' } }));
+          utterance.onerror = (event) => window.dispatchEvent(new CustomEvent('workly-voice-error', { detail: { message: event.error || 'Device voice playback failed.' } }));
+          window.speechSynthesis.speak(utterance);
+          return true;
+        } catch (fallbackError) {
+          console.warn('Browser voice fallback failed:', fallbackError);
+        }
+      }
+      setErrorMessage('AI reply is ready, but voice playback is unavailable. Check the ChatWork phone and installed language voice.');
       return false;
     }
   }, [speakerOn]);
@@ -258,6 +275,15 @@ export default function AIVoiceCall() {
       if (!reply) throw (lastError instanceof Error ? lastError : new Error('AI did not return a voice response.'));
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       setAiRequestStatus('Reply received');
+      setLastReply(reply);
+      const assistantMessage: StoredMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: historyReply || reply,
+        timestamp: formatChatStamp(),
+        status: 'read',
+      };
+      chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
       setVoiceStage('AI reply received; starting speech playback…');
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
       // Keep the reply hidden until its audio has successfully started.
@@ -276,25 +302,14 @@ export default function AIVoiceCall() {
 
       const spoken = await speakReply(reply, detail?.languageTag || 'und');
       if (spoken) {
-        setLastReply(reply);
-        // Commit the assistant message only once voice playback has actually started,
-        // so the text never appears ahead of the spoken reply in chat history.
-        const assistantMessage: StoredMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: historyReply || reply,
-          timestamp: formatChatStamp(),
-          status: 'read',
-        };
-        chatStorage.saveMessages([...chatStorage.loadMessages(), assistantMessage].slice(-50));
         lastSubmittedTranscriptRef.current = '';
         setCallState('speaking');
         setVoiceStage('AI is speaking…');
       } else {
-        // TTS failure must never end or navigate away from the call screen.
-        setCallState('listening');
-        setVoiceStage('Listening…');
-        if (activeRef.current && !mutedRef.current) startRecognition('auto');
+        lastSubmittedTranscriptRef.current = '';
+        setCallState('error');
+        setVoiceStage('AI text reply is ready; voice playback failed.');
+        setErrorMessage('Your AI text reply is ready above. Check ChatWork TTS and the phone voice language settings.');
       }
     } catch (error) {
       if (!activeRef.current || turnId !== conversationTurnRef.current) return;
@@ -340,11 +355,10 @@ export default function AIVoiceCall() {
 
     setPartialTranscript(text);
     if (callStateRef.current !== 'speaking' && callStateRef.current !== 'thinking') setVoiceStage('Listening…');
+    // Interim speech is display-only. Final STT segments are queued and combined
+    // by shrutiSpeech.ts; never send an interim partial as a separate AI turn.
     if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
-    partialFinalizeTimerRef.current = setTimeout(() => {
-      if (!activeRef.current || text === lastSubmittedTranscriptRef.current) return;
-      window.dispatchEvent(new CustomEvent('workly-voice-transcript', { detail: { text, languageTag: detail?.languageTag || 'und', source: 'partial-fallback' } }));
-    }, 1400);
+    partialFinalizeTimerRef.current = null;
   }, [lastTranscript]);
 
   const handleNativeStatus = useCallback((event: Event) => {
@@ -389,21 +403,20 @@ export default function AIVoiceCall() {
   const handleNativeError = useCallback((event: Event) => {
     if (!activeRef.current) return;
     const message = (event as CustomEvent<{ message?: string }>).detail?.message || 'Voice service error.';
-    setErrorMessage('');
-    setVoiceStage('Microphone reconnecting…');
-    setCallState('listening');
-    if (activeRef.current && !mutedRef.current) {
-      window.setTimeout(() => {
-        if (activeRef.current && !mutedRef.current) startRecognition('auto');
-      }, 300);
-    }
-  }, [startRecognition]);
+    setErrorMessage(message);
+    setVoiceStage(message);
+    setCallState('error');
+  }, []);
 
   useEffect(() => {
     const handleShrutiStatus = (event: Event) => {
-      const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string }>).detail;
+      const detail = (event as CustomEvent<{ status?: string; loaded?: number; total?: number; message?: string; queuedSegments?: number }>).detail;
       if (detail?.status === 'ready') setNativeAvailable(true);
-      // Keep internal microphone relay progress hidden from the call UI.
+      if (detail?.status === 'transcribing' || detail?.status === 'segment-queued') {
+        const queued = Number(detail.queuedSegments ?? 0);
+        setVoiceStage(queued > 0 ? `Processing long audio · ${queued} segment(s) queued` : 'Processing voice audio…');
+      }
+
     };
     window.addEventListener('workly-shruti-status', handleShrutiStatus);
     return () => { window.removeEventListener('workly-shruti-status', handleShrutiStatus); };
@@ -462,7 +475,7 @@ export default function AIVoiceCall() {
       await prepareShrutiRecognition();
       activeRef.current = true;
       setCallStarted(true);
-      setCallState('listening');
+      setCallState('speaking');
       if (partialFinalizeTimerRef.current) clearTimeout(partialFinalizeTimerRef.current);
       partialFinalizeTimerRef.current = null;
       lastSubmittedTranscriptRef.current = '';
@@ -470,19 +483,32 @@ export default function AIVoiceCall() {
       setLastTranscript('');
       setPartialTranscript('');
       setErrorMessage('');
-      setVoiceStage('Starting secure on-device microphone…');
+      setVoiceStage('ChatWork is preparing your greeting…');
       setMicLevel(0);
-      setAiRequestStatus('Not sent');
+      setAiRequestStatus('Ready');
       chatStorage.setCurrentUserId(user.id);
       chatStorage.setAudience('default');
       startingCallRef.current = false;
-      if (!startRecognition('auto')) {
-        activeRef.current = false;
-        setCallStarted(false);
-        setVoiceStage('Could not start speech recognition');
-        setErrorMessage('Could not start speech recognition. Check microphone permission and browser speech settings, then try again.');
-        setCallState('error');
-        toast.error('Could not start on-device speech recognition.');
+
+      // Start every call with a spoken greeting. The microphone is deliberately
+      // started after the greeting finishes so it cannot transcribe ChatWork's
+      // own hello as the caller's first message.
+      const greeting = "Hello! I'm ChatWork. How can I help you today?";
+      setLastReply(greeting);
+      const greetingMessage: StoredMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: greeting,
+        timestamp: formatChatStamp(),
+        status: 'read',
+      };
+      chatStorage.saveMessages([...chatStorage.loadMessages(), greetingMessage].slice(-50));
+      const greetingSpoken = await speakReply(greeting, 'en-IN');
+      if (!activeRef.current) return;
+      if (!greetingSpoken) {
+        setCallState('listening');
+        setVoiceStage('Listening…');
+        startRecognition('auto');
       }
     } catch (error) {
       startingCallRef.current = false;
@@ -552,7 +578,14 @@ export default function AIVoiceCall() {
         <div className="mt-5 min-h-6 text-sm font-medium tracking-wide text-white/70">
           {callState === 'speaking' ? 'AI is speaking…' : callState === 'thinking' ? 'Thinking…' : callState === 'listening' ? 'Listening…' : ''}
         </div>
-        <div className="mt-5 min-h-[76px] w-full" aria-hidden="true" />
+        <div className="mt-5 min-h-[76px] max-h-40 w-full overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left" aria-live="polite">
+          {lastTranscript && <p className="text-sm text-white/70"><span className="font-semibold text-cyan-200">You:</span> {lastTranscript}</p>}
+          {partialTranscript && <p className="mt-1 text-sm text-white/45">{partialTranscript}</p>}
+          {lastReply && <p className="mt-2 text-sm leading-relaxed text-white"><span className="font-semibold text-fuchsia-200">ChatWork:</span> {lastReply}</p>}
+          {!lastTranscript && !partialTranscript && !lastReply && <p className="text-center text-xs text-white/35">Your speech and ChatWork replies will appear here</p>}
+        </div>
+        <p className="mt-2 min-h-4 text-xs text-white/45" aria-live="polite">{callStarted ? `${aiRequestStatus} · ${voiceStage}` : ''}</p>
+        {errorMessage && <p className="mt-2 max-w-sm text-xs text-rose-300" role="alert">{errorMessage}</p>}
         <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white">ChatWork</h1>
         <p className="mt-1 text-sm text-cyan-100/45">AI Voice Call</p>
         <p className="sr-only" aria-live="polite">{voiceStage}</p>
@@ -568,6 +601,10 @@ export default function AIVoiceCall() {
               <span>End Call</span>
             </button>
           )}
+          <Button variant="outline" onClick={() => navigate('/ai-voice-models')} className="mt-3 h-11 w-full rounded-full border-white/20 bg-white/5 text-white hover:bg-white/10 hover:text-white">
+            <Download className="mr-2 h-4 w-4" />
+            TTS Model Library & Downloads
+          </Button>
         </div>
       </section>
     </main>

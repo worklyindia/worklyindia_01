@@ -20,11 +20,23 @@
         android:supportsRtl="true"
         android:theme="@style/WorklyVoiceTheme">
         <service
+            android:name=".ChatWorkFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <service
             android:name=".VoiceRelayService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <receiver
+            android:name=".VoiceRelayNotificationRestoreReceiver"
+            android:exported="false" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
+        <activity android:name=".TextToVoiceActivity" android:exported="false" />
+        <activity android:name=".VoiceToTextActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

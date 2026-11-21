@@ -102,6 +102,19 @@ export async function handleWorklyVoiceRelay(req: Request) {
       });
     }
 
+    if (action === "register_fcm_token") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const fcmToken = typeof body?.fcm_token === "string" ? body.fcm_token.trim() : "";
+      if (fcmToken.length < 20 || fcmToken.length > 4096) return json({ error: "Invalid Firebase registration token" }, 400);
+      const { error } = await db.from("workly_ai_voice_devices")
+        .update({ fcm_token: fcmToken, fcm_token_updated_at: new Date().toISOString() })
+        .eq("id", device.id)
+        .is("revoked_at", null);
+      if (error) throw error;
+      return json({ registered: true });
+    }
+
     if (action === "create_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
@@ -305,6 +318,28 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const inputAudioPath = jobBeforeComplete?.payload?.audio_path;
       if (typeof inputAudioPath === "string") await db.storage.from("workly-ai-voice-audio").remove([inputAudioPath]);
       return json({ job: data });
+    }
+
+    if (action === "cleanup_completed_audio") {
+      const user = await authenticatedUser(req);
+      if (!user) return json({ error: "Authentication required" }, 401);
+      const path = typeof body?.audio_path === "string" ? body.audio_path : "";
+      if (!path || path.length > 512 || path.includes("..")) return json({ error: "Invalid audio reference" }, 400);
+      // Delete only the exact completed audio object belonging to the signed-in user.
+      const { data: match, error: jobsError } = await db.from("workly_ai_voice_jobs")
+        .select("id,result")
+        .eq("user_id", user.id)
+        .eq("status", "completed")
+        .filter("result->>audio_path", "eq", path)
+        .maybeSingle();
+      if (jobsError) throw jobsError;
+      if (!match) return json({ cleaned: true });
+      const { error: removeError } = await db.storage.from("workly-ai-voice-audio").remove([path]);
+      if (removeError) throw removeError;
+      const { error: deleteError } = await db.from("workly_ai_voice_jobs").delete()
+        .eq("id", match.id).eq("user_id", user.id);
+      if (deleteError) throw deleteError;
+      return json({ cleaned: true });
     }
 
     if (action === "list_devices") {

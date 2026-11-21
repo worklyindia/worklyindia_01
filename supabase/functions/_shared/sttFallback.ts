@@ -42,7 +42,7 @@ async function transcribeWithAssemblyAI(
   // 3) Poll
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise((r) => setTimeout(r, 600));
     const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, {
       headers: { authorization: key },
     });

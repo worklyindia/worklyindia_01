@@ -107,3 +107,91 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
   }
   throw new Error('Workly Voice speech recognition timed out.');
 }
+
+
+/** Fetches generated audio into browser memory, then removes its temporary relay object and job row. */
+export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: string, timeoutMs = 180_000): Promise<Blob> {
+  const audioUrl = await requestOwnerPhoneVoiceAudio(text, language, timeoutMs);
+  try {
+    const response = await fetch(audioUrl);
+    if (!response.ok) throw new Error("Could not download generated voice audio from the phone relay.");
+    const blob = await response.blob();
+    if (!blob.size) throw new Error("The phone returned an empty audio file.");
+    return blob;
+  } finally {
+    // Best-effort cleanup; expiry cleanup remains the fallback if the browser disconnects.
+    const marker = "/workly-ai-voice-audio/";
+    const pathname = new URL(audioUrl).pathname;
+    const markerIndex = pathname.indexOf(marker);
+    if (markerIndex >= 0) {
+      const audioPath = decodeURIComponent(pathname.slice(markerIndex + marker.length));
+      await supabase.functions.invoke("unified-voice", {
+        body: { action: "cleanup_completed_audio", audio_path: audioPath },
+      });
+    }
+  }
+}
+
+
+/** Splits long text into phone-sized requests and joins the returned PCM WAV chunks in browser memory. */
+export async function requestOwnerPhoneLongVoiceAudioBlob(text: string, language: string): Promise<Blob> {
+  const chunks: string[] = [];
+  let remaining = text.trim();
+  while (remaining.length) {
+    if (remaining.length <= 900) { chunks.push(remaining); break; }
+    let cut = remaining.lastIndexOf(" ", 900);
+    if (cut < 450) cut = 900;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (!chunks.length) throw new Error("Enter text before converting.");
+  const wavParts: Uint8Array[] = [];
+  let formatHeader: Uint8Array | null = null;
+  let dataOffset = 44;
+  let totalDataBytes = 0;
+  for (let index = 0; index < chunks.length; index++) {
+    window.dispatchEvent(new CustomEvent("workly-voice-status", {
+      detail: { status: "generating", part: index + 1, total: chunks.length },
+    }));
+    const blob = await requestOwnerPhoneVoiceAudioBlob(chunks[index], language);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (bytes.length < 44 || String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF") {
+      throw new Error("The phone returned an unsupported WAV audio file.");
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let offset = 12;
+    let partDataOffset = -1;
+    let partDataLength = 0;
+    while (offset + 8 <= bytes.length) {
+      const id = String.fromCharCode(...bytes.slice(offset, offset + 4));
+      const size = view.getUint32(offset + 4, true);
+      if (id === "data") { partDataOffset = offset + 8; partDataLength = size; break; }
+      offset += 8 + size + (size % 2);
+    }
+    if (partDataOffset < 0 || partDataOffset + partDataLength > bytes.length) {
+      throw new Error("The generated WAV file has an invalid audio data section.");
+    }
+    if (!formatHeader) {
+      dataOffset = partDataOffset;
+      formatHeader = bytes.slice(0, dataOffset);
+    }
+    wavParts.push(bytes.slice(partDataOffset, partDataOffset + partDataLength));
+    totalDataBytes += partDataLength;
+  }
+  if (!formatHeader) throw new Error("No audio was generated.");
+  const output = new Uint8Array(dataOffset + totalDataBytes);
+  output.set(formatHeader, 0);
+  let cursor = dataOffset;
+  for (const part of wavParts) { output.set(part, cursor); cursor += part.length; }
+  const resultView = new DataView(output.buffer);
+  resultView.setUint32(4, output.length - 8, true);
+  // Standard PCM WAV data chunk header follows the fmt chunk in the preserved header.
+  let chunkOffset = 12;
+  while (chunkOffset + 8 <= dataOffset) {
+    const id = String.fromCharCode(...output.slice(chunkOffset, chunkOffset + 4));
+    const size = resultView.getUint32(chunkOffset + 4, true);
+    if (id === "data") { resultView.setUint32(chunkOffset + 4, totalDataBytes, true); break; }
+    chunkOffset += 8 + size + (size % 2);
+  }
+  return new Blob([output], { type: "audio/wav" });
+}
