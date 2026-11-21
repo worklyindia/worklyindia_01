@@ -131,31 +131,6 @@ object SpeechModelCatalog {
     )
 
 
-    /**
-     * Qwen3-TTS 0.6B Base, GGUF Q4_K_M. This model uses the isolated
-     * qwen3-tts.cpp native Android arm64 runtime (API 31+).
-     */
-    fun qwen3Tts(): Pack = Pack(
-        id = "qwen3-tts-06b-q4",
-        title = "Qwen3-TTS 0.6B CustomVoice · Q4_K_M",
-        languageCode = "en",
-        license = "Apache-2.0 (Qwen3-TTS model); MIT (qwen3-tts.cpp runtime)",
-        repository = "Serveurperso/Qwen3-TTS-GGUF",
-        files = listOf(
-            ModelFile(
-                "qwen-talker-0.6b-customvoice-Q4_K_M.gguf",
-                "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-talker-0.6b-customvoice-Q4_K_M.gguf",
-                604_878_080L
-            ),
-            ModelFile(
-                "qwen-tokenizer-12hz-Q4_K_M.gguf",
-                "https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF/resolve/main/qwen-tokenizer-12hz-Q4_K_M.gguf",
-                254_974_752L
-            )
-        )
-    )
-
-
     private const val CHATTERBOX_GGUF = "https://huggingface.co/cstr/chatterbox-GGUF/resolve/main"
     private const val COSYVOICE_GGUF = "https://huggingface.co/cstr/cosyvoice3-0.5b-2512-GGUF/resolve/main"
     private const val COSYVOICE_BASE = "https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512/resolve/main/CosyVoice-BlankEN"
