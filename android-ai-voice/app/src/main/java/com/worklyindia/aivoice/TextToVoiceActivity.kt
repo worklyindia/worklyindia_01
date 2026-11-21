@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ContentValues
 import android.content.Intent
+import android.speech.RecognizerIntent
 import android.content.res.Configuration
 import android.media.MediaPlayer
 import android.net.Uri
@@ -106,6 +107,12 @@ class TextToVoiceActivity : Activity() {
         content.addView(label("TEXT",12,secondary,true))
         textInput=EditText(this).apply { minLines=5; maxLines=10; gravity=Gravity.TOP; textSize=16f; hint="Type or paste text here"; setPadding(dp(12),dp(12),dp(12),dp(12)); setBackgroundColor(surface); setTextColor(primary); setHintTextColor(secondary) }
         content.addView(textInput,LinearLayout.LayoutParams(-1,dp(150)))
+        val speakTextButton=Button(this).apply {
+            text="Speak Text"
+            isAllCaps=false
+            setOnClickListener { startSpeechInput() }
+        }
+        content.addView(speakTextButton,LinearLayout.LayoutParams(-1,dp(46)))
         convertButton=Button(this).apply { text="Convert To Voice"; isAllCaps=false; setOnClickListener { convert() } }
         content.addView(convertButton,LinearLayout.LayoutParams(-1,dp(52)))
         val actions=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER; visibility=View.GONE }
@@ -216,6 +223,44 @@ class TextToVoiceActivity : Activity() {
         }
     }
 
+    private fun startSpeechInput() {
+        val language = languages[models[modelSpinner.selectedItemPosition].id]
+            ?.getOrNull(languageSpinner.selectedItemPosition)?.code ?: "en-US"
+        val locale = when (language) {
+            "hi" -> "hi-IN"
+            "gu" -> "gu-IN"
+            "en-US" -> "en-US"
+            else -> language
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak the text you want to convert to voice")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+        try {
+            startActivityForResult(intent, REQUEST_SPEECH_INPUT)
+        } catch (_: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, "Speech input service is not available on this phone.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Deprecated("Use Activity Result API in a future cleanup")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_SPEECH_INPUT && resultCode == RESULT_OK) {
+            val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
+            if (spoken.isNotBlank()) {
+                val existing = textInput.text.toString().trim()
+                textInput.setText(if (existing.isBlank()) spoken else "$existing $spoken")
+                textInput.setSelection(textInput.text.length)
+            } else {
+                Toast.makeText(this, "No speech was recognized. Please try again.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun convert() {
         val pack=selectedPack()
         val text=textInput.text.toString().trim()
@@ -290,6 +335,8 @@ class TextToVoiceActivity : Activity() {
     private fun <T> adapter(items: List<T>): ArrayAdapter<T> = ArrayAdapter(this,android.R.layout.simple_spinner_item,items).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
     private fun label(value:String,size:Int,color:Int,bold:Boolean)=TextView(this).apply { text=value; textSize=size.toFloat(); setTextColor(color); if(bold) setTypeface(typeface,android.graphics.Typeface.BOLD); setPadding(0,dp(12),0,dp(5)) }
     private fun dp(value:Int)=(value*resources.displayMetrics.density).toInt()
+
+    companion object { private const val REQUEST_SPEECH_INPUT = 1401 }
     private fun selectionListener(action:()->Unit)=object: android.widget.AdapterView.OnItemSelectedListener {
         override fun onNothingSelected(parent:android.widget.AdapterView<*>?)=Unit
         override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:View?,position:Int,id:Long) { action() }
