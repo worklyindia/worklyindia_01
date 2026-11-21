@@ -24,7 +24,8 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         modelDirectory: File,
         text: String,
         voiceId: String,
-        outputFile: File
+        outputFile: File,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
     ): File {
         require(pack.id == "kokoro-82m") { "This is not a Kokoro model pack." }
         require(text.isNotBlank()) { "Enter text to speak." }
@@ -59,7 +60,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         java.io.RandomAccessFile(outputFile, "rw").use { wav ->
             wav.setLength(0L)
             writeWavHeader(wav, 0, 24_000)
-            for (chunk in chunks) {
+            for ((chunkIndex, chunk) in chunks.withIndex()) {
                 val audio = tts.synthesize(chunk, SynthesisOptions(voiceId = voiceId))
                 check(audio.samples.isNotEmpty()) { "Kokoro returned empty audio for a text segment." }
                 if (sampleRate == 0) sampleRate = audio.sampleRateHz
@@ -79,6 +80,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
                     offset += count
                 }
                 dataBytes = nextBytes
+                onProgress(chunkIndex + 1, chunks.size)
             }
             check(dataBytes > 0L && sampleRate > 0) { "Kokoro returned no audio." }
             wav.seek(0L)
