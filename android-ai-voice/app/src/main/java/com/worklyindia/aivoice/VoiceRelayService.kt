@@ -225,6 +225,35 @@ class VoiceRelayService : Service() {
         }.start()
     }
 
+    private fun reportDiagnostic(
+        token: String,
+        eventType: String,
+        jobId: String? = null,
+        language: String? = null,
+        durationMs: Long? = null,
+        audioBytes: Long? = null,
+        error: Throwable? = null
+    ) {
+        val event = JSONObject()
+            .put("event_type", eventType)
+            .put("app_version", runCatching { packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown" }.getOrDefault("unknown"))
+            .put("android_version", Build.VERSION.RELEASE ?: "unknown")
+            .put("device_model", "${Build.MANUFACTURER} ${Build.MODEL}".take(100))
+        if (!jobId.isNullOrBlank()) event.put("job_id", jobId)
+        if (!language.isNullOrBlank()) event.put("language", language)
+        if (durationMs != null) event.put("duration_ms", durationMs)
+        if (audioBytes != null) event.put("audio_bytes", audioBytes)
+        if (error != null) {
+            event.put("error_type", error.javaClass.simpleName.take(120))
+            event.put("error_message", (error.message ?: "Unknown error").take(800))
+        }
+        // Diagnostics are best-effort and never block voice synthesis or delivery.
+        Thread({
+            runCatching { VoiceRelayApi.recordDiagnostic(token, event) }
+                .onFailure { Log.w(TAG, "Could not upload diagnostic event $eventType", it) }
+        }, "ChatWorkDiagnostics").start()
+    }
+
     /** Website Text To Voice uses only the two approved offline model families. */
     private fun handleTtsJob(token: String, jobId: String, payload: JSONObject) {
         if (activeJobId != null) {
@@ -236,12 +265,15 @@ class VoiceRelayService : Service() {
             val jobStartedAt = SystemClock.elapsedRealtime()
             val outputFile = File(cacheDir, "workly-voice-$jobId.wav")
             activeAudioFile = outputFile
+            var diagnosticLanguage: String? = null
             try {
                 val text = payload.optString("text").trim()
                 require(text.isNotEmpty()) { "TTS request has no text." }
                 val languageTag = payload.optString("language", "hi-IN")
                 val language = Locale.forLanguageTag(languageTag).language
+                diagnosticLanguage = language
                 val voiceId = payload.optString("voice").trim()
+                reportDiagnostic(token, "tts_started", jobId, language)
                 outputFile.delete()
                 val synthesisStartedAt = SystemClock.elapsedRealtime()
                 when (language) {
@@ -276,12 +308,15 @@ class VoiceRelayService : Service() {
                 check(outputFile.isFile && outputFile.length() > 44L) { "The selected offline model returned empty audio." }
                 val synthesisMs = SystemClock.elapsedRealtime() - synthesisStartedAt
                 Log.i(TAG, "TTS synthesis ready job=$jobId language=$language chars=${text.length} audioBytes=${outputFile.length()} synthesisMs=$synthesisMs")
+                reportDiagnostic(token, "tts_synthesis_complete", jobId, language, synthesisMs, outputFile.length())
                 val uploadStartedAt = SystemClock.elapsedRealtime()
                 VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
                 val uploadMs = SystemClock.elapsedRealtime() - uploadStartedAt
                 Log.i(TAG, "TTS upload complete job=$jobId uploadMs=$uploadMs totalMs=${SystemClock.elapsedRealtime() - jobStartedAt}")
+                reportDiagnostic(token, "tts_upload_complete", jobId, language, uploadMs, outputFile.length())
                 setStatus("Offline model voice audio delivered to website. Waiting for next request…")
             } catch (error: Exception) {
+                reportDiagnostic(token, "tts_failed", jobId, diagnosticLanguage, SystemClock.elapsedRealtime() - jobStartedAt, outputFile.length().coerceAtLeast(0L), error)
                 runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Offline TTS synthesis failed.") }
                 setStatus("Voice conversion failed: " + (error.message ?: "unknown error"))
             } finally {
