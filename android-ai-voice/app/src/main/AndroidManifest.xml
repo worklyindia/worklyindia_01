@@ -35,6 +35,7 @@
             android:exported="false" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
+        <activity android:name=".VoiceModeActivity" android:exported="false" />
         <activity android:name=".TextToVoiceActivity" android:exported="false" />
         <activity android:name=".VoiceToTextActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">

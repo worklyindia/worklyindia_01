@@ -91,7 +91,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
 
         root.addView(TextView(this).apply {
-            text = "Text To Voice"
+            text = "Voice Studio"
             textSize = 19f
             gravity = Gravity.CENTER
             setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
@@ -101,7 +101,7 @@ class MainActivity : Activity() {
             isFocusable = true
             background = null
             setOnClickListener {
-                startActivity(Intent(this@MainActivity, TextToVoiceActivity::class.java))
+                startActivity(Intent(this@MainActivity, VoiceModeActivity::class.java))
             }
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
