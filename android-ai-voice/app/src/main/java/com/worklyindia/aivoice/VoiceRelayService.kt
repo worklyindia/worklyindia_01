@@ -3,6 +3,7 @@ package com.worklyindia.aivoice
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -80,7 +81,7 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
             return START_NOT_STICKY
         }
         activeToken = token
-        val initialStatus = if (hasValidatedInternet()) "Connecting to secure relay…" else "Waiting for Data on…"
+        val initialStatus = currentConnectionNotificationText()
         startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
         if (initialStatus == "Waiting for Data on…") setStatus(initialStatus)
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
@@ -317,7 +318,16 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         manager.notify(NOTIFICATION_ID, buildNotification(message))
     }
 
-    private fun buildNotification(message: String): Notification {
+    private fun currentConnectionNotificationText(): String =
+        if (hasValidatedInternet()) ONLINE_NOTIFICATION_TEXT else WAITING_NOTIFICATION_TEXT
+
+    private fun buildNotification(@Suppress("UNUSED_PARAMETER") message: String): Notification {
+        val restoreIntent = Intent(this, VoiceRelayNotificationRestoreReceiver::class.java)
+            .setAction(ACTION_RESTORE_NOTIFICATION)
+        val restorePendingIntent = PendingIntent.getBroadcast(
+            this, NOTIFICATION_ID, restoreIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -327,9 +337,11 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         return builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("ChatWork")
-            .setContentText(message.take(120))
+            .setContentText(currentConnectionNotificationText())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .setDeleteIntent(restorePendingIntent)
             .build()
     }
 
@@ -354,5 +366,8 @@ class VoiceRelayService : Service(), TextToSpeech.OnInitListener {
         const val LAST_POLL_KEY = "last_successful_relay_poll"
         const val EVENTS_KEY = "recent_activity_events"
         const val POLL_INTERVAL_MS = 1_000L
+        const val ACTION_RESTORE_NOTIFICATION = "com.worklyindia.aivoice.RESTORE_SERVER_NOTIFICATION"
+        const val ONLINE_NOTIFICATION_TEXT = "Shared phone server is online."
+        const val WAITING_NOTIFICATION_TEXT = "Waiting for Data on..."
     }
 }
