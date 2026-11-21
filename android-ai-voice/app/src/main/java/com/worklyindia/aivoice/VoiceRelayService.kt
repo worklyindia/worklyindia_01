@@ -21,6 +21,9 @@ class VoiceRelayService : Service() {
     @Volatile private var activeJobId: String? = null
     @Volatile private var activeAudioFile: File? = null
     private val speechManager by lazy { SpeechPackDownloadManager(this) }
+    // Keep the 295 MB Kokoro runtime alive between website jobs. Recreating it
+    // for every request forces the model to reload and makes Hindi/English slow.
+    @Volatile private var kokoroTtsEngine: KokoroTtsEngine? = null
     private var pollThread: Thread? = null
     private var activeToken: String? = null
     private var relayWakeLock: PowerManager.WakeLock? = null
@@ -207,15 +210,16 @@ class VoiceRelayService : Service() {
                         }
                         val defaultVoice = if (language == "hi") "hf_alpha" else "af_heart"
                         val selectedVoice = voiceId.ifBlank { defaultVoice }
-                        KokoroTtsEngine(this).use { engine ->
-                            engine.synthesizeToWav(
-                                pack = pack,
-                                modelDirectory = speechManager.modelDirectory(pack),
-                                text = text,
-                                voiceId = selectedVoice,
-                                outputFile = outputFile
-                            )
+                        val engine = kokoroTtsEngine ?: synchronized(this@VoiceRelayService) {
+                            kokoroTtsEngine ?: KokoroTtsEngine(this@VoiceRelayService).also { kokoroTtsEngine = it }
                         }
+                        engine.synthesizeToWav(
+                            pack = pack,
+                            modelDirectory = speechManager.modelDirectory(pack),
+                            text = text,
+                            voiceId = selectedVoice,
+                            outputFile = outputFile
+                        )
                     }
                     else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
                 }
@@ -247,6 +251,8 @@ class VoiceRelayService : Service() {
         pollThread?.interrupt()
         if (relayWakeLock?.isHeld == true) relayWakeLock?.release()
         relayWakeLock = null
+        kokoroTtsEngine?.close()
+        kokoroTtsEngine = null
         getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, "Phone server stopped.").apply()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
         else stopForeground(true)
