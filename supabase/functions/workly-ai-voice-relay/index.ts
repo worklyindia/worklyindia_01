@@ -312,7 +312,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .upload(path, bytes, { contentType: "audio/wav", upsert: true });
       if (uploadError) throw uploadError;
       const { data, error } = await db.from("workly_ai_voice_jobs")
-        .update({ status: "completed", result: { audio_path: path, content_type: "audio/wav" }, completed_at: new Date().toISOString() })
+        .update({ status: "completed", result: { audio_path: path, content_type: "audio/wav", audio_bytes: bytes.byteLength }, completed_at: new Date().toISOString() })
         .eq("id", jobId)
         .eq("device_id", device.id)
         .eq("status", "running")
