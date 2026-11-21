@@ -159,9 +159,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const numeric = (value: unknown, max: number) =>
         typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max ? Math.round(value) : null;
       const redact = (value: unknown, max: number) => String(value ?? "")
-        .replace(/Bearer\\s+[A-Za-z0-9._~+\\/-]+=*/gi, "Bearer [REDACTED]")
-        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi, "[EMAIL]")
-        .replace(/\\+?\\d[\\d\\s().-]{7,}\\d/g, "[PHONE]")
+        .replace(/Bearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]")
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[EMAIL]")
+        .replace(/\+?\d[\d\s().-]{7,}\d/g, "[PHONE]")
         .slice(0, max);
       const { error } = await db.from("workly_ai_voice_diagnostics").insert({
         device_id: device.id,
