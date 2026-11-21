@@ -35,6 +35,9 @@ class TextToVoiceActivity : Activity() {
     private var dark = false
     private var currentOutput: File? = null
     private var player: MediaPlayer? = null
+    // Reuse the loaded Indic Tiny ONNX sessions for repeat conversions in this screen.
+    private var cachedTinyEngine: IndicTinyTtsEngine? = null
+    private var cachedTinyLanguage: String? = null
     private lateinit var modelSpinner: Spinner
     private lateinit var languageSpinner: Spinner
     private lateinit var voiceSpinner: Spinner
@@ -276,7 +279,18 @@ class TextToVoiceActivity : Activity() {
             try {
                 val output=File(cacheDir,"text_to_voice_${System.currentTimeMillis()}.wav")
                 when(model) {
-                    "indic" -> IndicTinyTtsEngine.create(this,language.code).use { it.synthesizeToWav(text,output,if(voice.startsWith("Male")) "male" else "female") }
+                    "indic" -> {
+                        val engine = if (cachedTinyLanguage == language.code && cachedTinyEngine != null) {
+                            cachedTinyEngine!!
+                        } else {
+                            cachedTinyEngine?.close()
+                            IndicTinyTtsEngine.create(this, language.code).also {
+                                cachedTinyEngine = it
+                                cachedTinyLanguage = language.code
+                            }
+                        }
+                        engine.synthesizeToWav(text, output, if (voice.startsWith("Male")) "male" else "female")
+                    }
                     "kokoro" -> {
                         val id=voice.substringBefore(" ·")
                         KokoroTtsEngine(this).use { it.synthesizeToWav(pack,manager.modelDirectory(pack),text,id,output) }
@@ -341,5 +355,5 @@ class TextToVoiceActivity : Activity() {
         override fun onNothingSelected(parent:android.widget.AdapterView<*>?)=Unit
         override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:View?,position:Int,id:Long) { action() }
     }
-    override fun onDestroy() { player?.release(); player=null; executor.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { player?.release(); player=null; executor.shutdownNow(); runCatching { cachedTinyEngine?.close() }; cachedTinyEngine=null; cachedTinyLanguage=null; super.onDestroy() }
 }
