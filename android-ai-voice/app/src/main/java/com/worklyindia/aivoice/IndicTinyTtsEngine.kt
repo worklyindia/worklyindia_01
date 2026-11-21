@@ -24,8 +24,8 @@ import kotlin.math.PI
 
 /**
  * ONNX Runtime implementation of Indic Tiny TTS (Matcha acoustic model + Vocos).
- * Each language pack is loaded only when speech is requested and all three sessions
- * are closed after playback to keep memory bounded on 6 GB phones.
+ * Each language pack is loaded on demand and its ONNX sessions are retained by the Activity
+ * between conversions, then closed when the screen is destroyed.
  */
 class IndicTinyTtsEngine private constructor(
     private val env: OrtEnvironment,
@@ -465,7 +465,7 @@ class IndicTinyTtsEngine private constructor(
             val maleName = voices.keys().asSequence().firstOrNull { it.startsWith(voicePrefix) && it.endsWith("_M") } ?: femaleName
             val env = OrtEnvironment.getEnvironment()
             val options = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(2)
+                setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceIn(2, 4))
                 setInterOpNumThreads(1)
             }
             try {
