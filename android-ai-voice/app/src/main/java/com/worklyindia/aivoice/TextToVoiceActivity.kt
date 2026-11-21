@@ -75,7 +75,7 @@ class TextToVoiceActivity : Activity() {
         super.onCreate(savedInstanceState)
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(true)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(false)
         window.statusBarColor = background
         window.navigationBarColor = background
         @Suppress("DEPRECATION")
@@ -85,7 +85,15 @@ class TextToVoiceActivity : Activity() {
     }
 
     private fun buildUi() {
-        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(this@TextToVoiceActivity.background) }
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(this@TextToVoiceActivity.background)
+            // Keep system bars visible and lay out app content inside their safe area.
+            setOnApplyWindowInsetsListener { view, insets ->
+                view.setPadding(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
+                insets
+            }
+        }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(18),dp(8),dp(18),dp(8)); setBackgroundColor(surface) }
         header.addView(Button(this).apply { text = "‹"; textSize=28f; isAllCaps=false; setTextColor(primary); setBackgroundColor(surface); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(48),dp(52)))
         header.addView(TextView(this).apply { text="Text To Voice"; textSize=20f; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(52),1f))
@@ -130,6 +138,7 @@ class TextToVoiceActivity : Activity() {
         modelSpinner.onItemSelectedListener=selectionListener { updateModel() }
         languageSpinner.onItemSelectedListener=selectionListener { updateLanguage() }
         setContentView(page)
+        page.requestApplyInsets()
     }
 
     private lateinit var resultActions: LinearLayout
