@@ -313,7 +313,9 @@ class TextToVoiceActivity : Activity() {
                                 cachedTinyLanguage = language.code
                             }
                         }
-                        engine.synthesizeToWav(text, output, if (voice.startsWith("Male")) "male" else "female")
+                        engine.synthesizeToWav(text, output, if (voice.startsWith("Male")) "male" else "female", onProgress = { done, total ->
+                            runOnUiThread { if (!isFinishing) modelStatus.text = "Generating audio · ${done * 100 / total}% · $done/$total parts" }
+                        })
                     }
                     "kokoro" -> {
                         val id = voice.substringBefore(" ·")
@@ -328,7 +330,9 @@ class TextToVoiceActivity : Activity() {
                                 cachedKokoroModelPath = modelPath
                             }
                         }
-                        engine.synthesizeToWav(pack, modelDirectory, text, id, output)
+                        engine.synthesizeToWav(pack, modelDirectory, text, id, output, onProgress = { done, total ->
+                            runOnUiThread { if (!isFinishing) modelStatus.text = "Generating audio · ${done * 100 / total}% · $done/$total parts" }
+                        })
                     }
                 }
                 check(output.isFile && output.length()>44L) { "Audio file was not generated." }
