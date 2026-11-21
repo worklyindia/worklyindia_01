@@ -122,13 +122,18 @@ class VoiceToTextActivity : Activity() {
             text = "‹"
             textSize = 28f
             isAllCaps = false
+            minWidth = 0
+            minimumWidth = 0
             setTextColor(primary)
             setBackgroundColor(surface)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(48), dp(52)))
+        }, LinearLayout.LayoutParams(dp(44), dp(52)))
         header.addView(TextView(this).apply {
             text = "Voice To Text"
             textSize = 20f
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            singleLine = true
+            includeFontPadding = false
             setTextColor(primary)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, dp(52), 1f))
