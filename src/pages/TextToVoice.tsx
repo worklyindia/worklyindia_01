@@ -44,7 +44,7 @@ export default function TextToVoice() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl("");
     try {
-      const blob = await requestOwnerPhoneVoiceAudioBlob(clean, language);
+      const blob = await requestOwnerPhoneLongVoiceAudioBlob(clean, language);
       const url = URL.createObjectURL(blob);
       setAudioBlob(blob); setAudioUrl(url); setStatus("Audio is ready on this device.");
       toast({ title: "Voice ready", description: "Your audio is available to play or download." });
