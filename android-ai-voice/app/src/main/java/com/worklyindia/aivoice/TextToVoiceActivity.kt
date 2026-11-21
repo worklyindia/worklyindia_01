@@ -84,6 +84,7 @@ class TextToVoiceActivity : Activity() {
         header.addView(Button(this).apply { text = "‹"; textSize=28f; isAllCaps=false; setTextColor(primary); setBackgroundColor(surface); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(48),dp(52)))
         header.addView(TextView(this).apply { text="Text To Voice"; textSize=20f; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(52),1f))
         page.addView(header)
+        page.addView(View(this).apply { setBackgroundColor(if(dark) 0x334A5B70 else 0x2234475E) }, LinearLayout.LayoutParams(-1,dp(1)))
         val scroll=ScrollView(this)
         val content=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(18),dp(16),dp(18),dp(24)) }
         scroll.addView(content)
