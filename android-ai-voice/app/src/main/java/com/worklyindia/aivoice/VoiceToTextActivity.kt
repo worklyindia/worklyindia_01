@@ -352,6 +352,8 @@ class VoiceToTextActivity : Activity() {
         uploadButton.text = "Processing Audio…"
         worker.execute {
             try {
+                runOnUiThread { status.text = "Loading speech model…" }
+                ensureRecognizer(languageCode)
                 val samples = decodeAudio(uri)
                 require(samples.size >= OfflineSpeechRecognizer.SAMPLE_RATE / 2) {
                     "Audio is too short or contains no speech. Please choose a longer recording."
@@ -518,6 +520,24 @@ class VoiceToTextActivity : Activity() {
 
     private fun startRecording() {
         val languageCode = selectedLanguage.code
+        recordButton.isEnabled = false
+        recordButton.text = "Preparing…"
+        status.text = "Loading speech model…"
+        worker.execute {
+            try {
+                ensureRecognizer(languageCode)
+                runOnUiThread { if (!isFinishing) beginRecording(languageCode) }
+            } catch (error: Throwable) {
+                showError(error.message ?: "Could not load the selected speech model.")
+                runOnUiThread {
+                    recordButton.text = "●  Start Speaking"
+                    recordButton.isEnabled = isModelReady()
+                }
+            }
+        }
+    }
+
+    private fun beginRecording(languageCode: String) {
         recording = true
         recordButton.text = "■  Stop & Convert"
         recordButton.isEnabled = true
@@ -591,6 +611,15 @@ class VoiceToTextActivity : Activity() {
         }.apply { name = "VoiceToTextRecorder"; start() }
     }
 
+    private fun ensureRecognizer(languageCode: String): OfflineSpeechRecognizer {
+        if (cachedRecognizerLanguage == languageCode && cachedRecognizer != null) return cachedRecognizer!!
+        cachedRecognizer?.close()
+        return OfflineSpeechEngineFactory.openIndicConformer(this, languageCode).also {
+            cachedRecognizer = it
+            cachedRecognizerLanguage = languageCode
+        }
+    }
+
     private fun transcribeSamples(
         samples: FloatArray,
         languageCode: String = selectedLanguage.code,
@@ -598,15 +627,7 @@ class VoiceToTextActivity : Activity() {
     ) {
         if (finalResult) runOnUiThread { setBusy(true, "Transcribing audio…") }
         try {
-            val engine = if (cachedRecognizerLanguage == languageCode && cachedRecognizer != null) {
-                cachedRecognizer!!
-            } else {
-                cachedRecognizer?.close()
-                OfflineSpeechEngineFactory.openIndicConformer(this, languageCode).also {
-                    cachedRecognizer = it
-                    cachedRecognizerLanguage = languageCode
-                }
-            }
+            val engine = ensureRecognizer(languageCode)
             val text = engine.transcribe(samples)
             runOnUiThread {
                 if (finalResult) {
