@@ -132,7 +132,7 @@ class VoiceToTextActivity : Activity() {
             text = "Voice To Text"
             textSize = 20f
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            singleLine = true
+            setSingleLine(true)
             includeFontPadding = false
             setTextColor(primary)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
