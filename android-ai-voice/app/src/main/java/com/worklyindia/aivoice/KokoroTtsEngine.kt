@@ -19,24 +19,18 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     private val app = context.applicationContext
     private var engine: TextToSpeech? = null
 
-    fun synthesizeToWav(
-        pack: SpeechModelCatalog.Pack,
-        modelDirectory: File,
-        text: String,
-        voiceId: String,
-        outputFile: File,
-        onProgress: (Int, Int) -> Unit = { _, _ -> }
-    ): File {
+    private fun checkedModelFile(pack: SpeechModelCatalog.Pack, modelDirectory: File): File {
         require(pack.id == "kokoro-82m") { "This is not a Kokoro model pack." }
-        require(text.isNotBlank()) { "Enter text to speak." }
-
         val modelFile = File(modelDirectory, "kokoro_int8_fp16.litertlm")
         check(modelFile.isFile && modelFile.length() == 294_783_298L) {
             "Kokoro model is incomplete or failed its size check. Delete it and download again."
         }
+        return modelFile
+    }
 
-        // Reuse the MediaPipe runtime after the first request; model initialization is costly.
-        val tts = engine ?: TextToSpeech.create(
+    @Synchronized
+    private fun getRuntime(modelFile: File): TextToSpeech {
+        return engine ?: TextToSpeech.create(
             TextToSpeechOptions(
                 baseOptions = BaseOptions.builder()
                     .setModelAssetPath(modelFile.absolutePath)
@@ -45,7 +39,27 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
                 cacheDirectory = app.cacheDir.absolutePath
             )
         ).also { engine = it }
+    }
 
+    /** Initialize and retain the offline model before a website request arrives. */
+    @Synchronized
+    fun warm(pack: SpeechModelCatalog.Pack, modelDirectory: File, voiceId: String) {
+        val tts = getRuntime(checkedModelFile(pack, modelDirectory))
+        check(tts.listVoices().any { it.voiceId == voiceId }) {
+            "Selected voice is not available in this Kokoro model: $voiceId"
+        }
+    }
+
+    fun synthesizeToWav(
+        pack: SpeechModelCatalog.Pack,
+        modelDirectory: File,
+        text: String,
+        voiceId: String,
+        outputFile: File,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
+    ): File {
+        require(text.isNotBlank()) { "Enter text to speak." }
+        val tts = getRuntime(checkedModelFile(pack, modelDirectory))
         val voices = tts.listVoices()
         check(voices.any { it.voiceId == voiceId }) {
             "Selected voice is not available in this Kokoro model: $voiceId"
@@ -123,6 +137,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         ascii("data"); leInt(dataBytes)
     }
 
+    @Synchronized
     override fun close() {
         val current = engine
         engine = null
