@@ -36,15 +36,16 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
             "Kokoro model is incomplete or failed its size check. Delete it and download again."
         }
 
-        val options = TextToSpeechOptions(
-            baseOptions = BaseOptions.builder()
-                .setModelAssetPath(modelFile.absolutePath)
-                .setDelegate(Delegate.CPU)
-                .build(),
-            cacheDirectory = app.cacheDir.absolutePath
-        )
-        val tts = TextToSpeech.create(options)
-        engine = tts
+        // Reuse the MediaPipe runtime after the first request; model initialization is costly.
+        val tts = engine ?: TextToSpeech.create(
+            TextToSpeechOptions(
+                baseOptions = BaseOptions.builder()
+                    .setModelAssetPath(modelFile.absolutePath)
+                    .setDelegate(Delegate.CPU)
+                    .build(),
+                cacheDirectory = app.cacheDir.absolutePath
+            )
+        ).also { engine = it }
 
         val voices = tts.listVoices()
         check(voices.any { it.voiceId == voiceId }) {
