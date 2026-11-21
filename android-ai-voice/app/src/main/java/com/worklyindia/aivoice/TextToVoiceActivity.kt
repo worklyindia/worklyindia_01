@@ -40,6 +40,8 @@ class TextToVoiceActivity : Activity() {
     private var cachedTinyLanguage: String? = null
     private var cachedKokoroEngine: KokoroTtsEngine? = null
     private var cachedKokoroModelPath: String? = null
+    private var cachedVitsEngine: SherpaVitsTtsEngine? = null
+    private var cachedVitsPackId: String? = null
     private lateinit var modelSpinner: Spinner
     private lateinit var languageSpinner: Spinner
     private lateinit var voiceSpinner: Spinner
@@ -51,7 +53,8 @@ class TextToVoiceActivity : Activity() {
     private lateinit var textInput: EditText
     private val models = listOf(
         ModelChoice("Kokoro-82M", "kokoro"),
-        ModelChoice("Indic Tiny TTS", "indic")
+        ModelChoice("Indic Tiny TTS", "indic"),
+        ModelChoice("iTantra VITS · Sherpa-ONNX", "itantra")
     )
     private val languages = mapOf(
         "indic" to listOf(
@@ -60,6 +63,11 @@ class TextToVoiceActivity : Activity() {
         "kokoro" to listOf(
             Language("English", "en-US", "Hello! This is a Kokoro English voice test."),
             Language("Hindi", "hi", "नमस्ते! यह कोकोरो हिंदी आवाज़ का परीक्षण है।")
+        ),
+        "itantra" to listOf(
+            Language("Gujarati", "gu", "નમસ્તે! આ iTantra ગુજરાતી અવાજની કસોટી છે."),
+            Language("Hindi", "hi", "नमस्ते! यह iTantra हिंदी आवाज़ का परीक्षण है।"),
+            Language("English", "en", "Hello! This is the iTantra English voice test.")
         )
     )
     private val kokoroVoices = mapOf(
@@ -180,6 +188,7 @@ class TextToVoiceActivity : Activity() {
         val voices=when(key) {
             "indic" -> listOf("Female","Male")
             "kokoro" -> kokoroVoices[language.code] ?: emptyList()
+            "itantra" -> listOf("Default voice")
             else -> emptyList()
         }
         voiceSpinner.adapter=adapter(voices)
@@ -195,6 +204,7 @@ class TextToVoiceActivity : Activity() {
         return when(key) {
             "indic" -> SpeechModelCatalog.indicTinyTts(language.code)
             "kokoro" -> SpeechModelCatalog.kokoro82m()
+            "itantra" -> SpeechModelCatalog.itantraVits(language.code)
             else -> SpeechModelCatalog.indicTinyTts(language.code)
         }
     }
@@ -317,6 +327,19 @@ class TextToVoiceActivity : Activity() {
                             runOnUiThread { if (!isFinishing) modelStatus.text = "Generating audio · ${done * 100 / total}% · $done/$total parts" }
                         })
                     }
+                    "itantra" -> {
+                        val packId = pack.id
+                        val engine = if (cachedVitsPackId == packId && cachedVitsEngine != null) {
+                            cachedVitsEngine!!
+                        } else {
+                            cachedVitsEngine?.close()
+                            SherpaVitsTtsEngine.create(this, pack).also {
+                                cachedVitsEngine = it
+                                cachedVitsPackId = packId
+                            }
+                        }
+                        engine.synthesizeToWav(text, output)
+                    }
                     "kokoro" -> {
                         val id = voice.substringBefore(" ·")
                         val modelDirectory = manager.modelDirectory(pack)
@@ -394,5 +417,5 @@ class TextToVoiceActivity : Activity() {
         override fun onNothingSelected(parent:android.widget.AdapterView<*>?)=Unit
         override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:View?,position:Int,id:Long) { action() }
     }
-    override fun onDestroy() { player?.release(); player=null; executor.shutdownNow(); runCatching { cachedTinyEngine?.close() }; cachedTinyEngine=null; cachedTinyLanguage=null; runCatching { cachedKokoroEngine?.close() }; cachedKokoroEngine=null; cachedKokoroModelPath=null; super.onDestroy() }
+    override fun onDestroy() { player?.release(); player=null; executor.shutdownNow(); runCatching { cachedTinyEngine?.close() }; cachedTinyEngine=null; cachedTinyLanguage=null; runCatching { cachedKokoroEngine?.close() }; cachedKokoroEngine=null; cachedKokoroModelPath=null; runCatching { cachedVitsEngine?.close() }; cachedVitsEngine=null; cachedVitsPackId=null; super.onDestroy() }
 }
