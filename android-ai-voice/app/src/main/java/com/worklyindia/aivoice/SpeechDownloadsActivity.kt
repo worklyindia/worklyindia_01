@@ -199,33 +199,21 @@ class SpeechDownloadsActivity : Activity() {
 
     private val kokoroLanguages by lazy {
         listOf(
-            KokoroLanguage("English (US)", "en-US", "Hello! This is a Kokoro offline voice test on my Android phone.", listOf(
-                KokoroVoice("af_heart", "Heart · Female"), KokoroVoice("af_alloy", "Alloy · Female"), KokoroVoice("af_aoede", "Aoede · Female"), KokoroVoice("af_bella", "Bella · Female"), KokoroVoice("af_jessica", "Jessica · Female"), KokoroVoice("af_kore", "Kore · Female"), KokoroVoice("af_nicole", "Nicole · Female"), KokoroVoice("af_nova", "Nova · Female"), KokoroVoice("af_river", "River · Female"), KokoroVoice("af_sarah", "Sarah · Female"), KokoroVoice("af_sky", "Sky · Female"),
-                KokoroVoice("am_adam", "Adam · Male"), KokoroVoice("am_echo", "Echo · Male"), KokoroVoice("am_eric", "Eric · Male"), KokoroVoice("am_fenrir", "Fenrir · Male"), KokoroVoice("am_liam", "Liam · Male"), KokoroVoice("am_michael", "Michael · Male"), KokoroVoice("am_onyx", "Onyx · Male"), KokoroVoice("am_puck", "Puck · Male"), KokoroVoice("am_santa", "Santa · Male")
+            KokoroLanguage("English", "en-IN", "Hello! This is an English Kokoro offline voice test.", listOf(
+                KokoroVoice("af_heart", "Heart · Female"), KokoroVoice("af_alloy", "Alloy · Female"),
+                KokoroVoice("af_aoede", "Aoede · Female"), KokoroVoice("af_bella", "Bella · Female"),
+                KokoroVoice("af_jessica", "Jessica · Female"), KokoroVoice("af_kore", "Kore · Female"),
+                KokoroVoice("af_nicole", "Nicole · Female"), KokoroVoice("af_nova", "Nova · Female"),
+                KokoroVoice("af_river", "River · Female"), KokoroVoice("af_sarah", "Sarah · Female"),
+                KokoroVoice("af_sky", "Sky · Female"), KokoroVoice("am_adam", "Adam · Male"),
+                KokoroVoice("am_echo", "Echo · Male"), KokoroVoice("am_eric", "Eric · Male"),
+                KokoroVoice("am_fenrir", "Fenrir · Male"), KokoroVoice("am_liam", "Liam · Male"),
+                KokoroVoice("am_michael", "Michael · Male"), KokoroVoice("am_onyx", "Onyx · Male"),
+                KokoroVoice("am_puck", "Puck · Male"), KokoroVoice("am_santa", "Santa · Male")
             )),
-            KokoroLanguage("English (UK)", "en-GB", "Hello! This is a British English Kokoro voice test.", listOf(
-                KokoroVoice("bf_alice", "Alice · Female"), KokoroVoice("bf_emma", "Emma · Female"), KokoroVoice("bf_isabella", "Isabella · Female"), KokoroVoice("bf_lily", "Lily · Female"), KokoroVoice("bm_daniel", "Daniel · Male"), KokoroVoice("bm_fable", "Fable · Male"), KokoroVoice("bm_george", "George · Male"), KokoroVoice("bm_lewis", "Lewis · Male")
-            )),
-            KokoroLanguage("Hindi", "hi", "नमस्ते! यह कोकोरो हिंदी आवाज़ का परीक्षण है।", listOf(
-                KokoroVoice("hf_alpha", "Alpha · Female"), KokoroVoice("hf_beta", "Beta · Female"), KokoroVoice("hm_omega", "Omega · Male"), KokoroVoice("hm_psi", "Psi · Male")
-            )),
-            KokoroLanguage("Spanish", "es", "¡Hola! Esta es una prueba de voz sin conexión de Kokoro.", listOf(
-                KokoroVoice("ef_dora", "Dora · Female"), KokoroVoice("em_alex", "Alex · Male"), KokoroVoice("em_santa", "Santa · Male")
-            )),
-            KokoroLanguage("French", "fr-FR", "Bonjour ! Ceci est un test vocal hors ligne de Kokoro.", listOf(
-                KokoroVoice("ff_siwis", "Siwis · Female")
-            )),
-            KokoroLanguage("Italian", "it", "Ciao! Questo è un test vocale offline di Kokoro.", listOf(
-                KokoroVoice("if_sara", "Sara · Female"), KokoroVoice("im_nicola", "Nicola · Male")
-            )),
-            KokoroLanguage("Portuguese (Brazil)", "pt-BR", "Olá! Este é um teste de voz offline do Kokoro.", listOf(
-                KokoroVoice("pf_dora", "Dora · Female"), KokoroVoice("pm_alex", "Alex · Male"), KokoroVoice("pm_santa", "Santa · Male")
-            )),
-            KokoroLanguage("Chinese (Mandarin)", "zh-CN", "你好！这是 Kokoro 离线语音测试。", listOf(
-                KokoroVoice("zf_xiaobei", "Xiaobei · Female"), KokoroVoice("zf_xiaoni", "Xiaoni · Female"), KokoroVoice("zf_xiaoxiao", "Xiaoxiao · Female"), KokoroVoice("zf_xiaoyi", "Xiaoyi · Female"), KokoroVoice("zm_yunjian", "Yunjian · Male"), KokoroVoice("zm_yunxi", "Yunxi · Male"), KokoroVoice("zm_yunxia", "Yunxia · Male"), KokoroVoice("zm_yunyang", "Yunyang · Male")
-            )),
-            KokoroLanguage("Japanese", "ja", "こんにちは！これは Kokoro のオフライン音声テストです。", listOf(
-                KokoroVoice("jf_alpha", "Alpha · Female"), KokoroVoice("jf_gongitsune", "Gongitsune · Female"), KokoroVoice("jf_nezumi", "Nezumi · Female"), KokoroVoice("jf_tebukuro", "Tebukuro · Female"), KokoroVoice("jm_kumo", "Kumo · Male")
+            KokoroLanguage("Hindi", "hi-IN", "नमस्ते! यह कोकोरो हिंदी आवाज़ का परीक्षण है।", listOf(
+                KokoroVoice("hf_alpha", "Alpha · Female"), KokoroVoice("hf_beta", "Beta · Female"),
+                KokoroVoice("hm_omega", "Omega · Male"), KokoroVoice("hm_psi", "Psi · Male")
             ))
         )
     }
@@ -241,7 +229,7 @@ class SpeechDownloadsActivity : Activity() {
             it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
         layout.addView(languageSpinner)
-        layout.addView(label("VOICE · 54 VOICES AVAILABLE", 12, secondary, true))
+        layout.addView(label("VOICE · AVAILABLE MODEL VOICES", 12, secondary, true))
         val voiceSpinner = Spinner(this)
         layout.addView(voiceSpinner)
         val input = EditText(this).apply {
@@ -269,7 +257,7 @@ class SpeechDownloadsActivity : Activity() {
 
         AlertDialog.Builder(this)
             .setTitle("Test Kokoro-82M · Hindi & English Voices")
-            .setMessage("Choose a language and voice, then generate speech. All 54 voices run offline on this phone. Gujarati is not supported by this model.")
+            .setMessage("Choose Hindi or English and a voice, then generate speech offline. Gujarati voice is provided by Indic Tiny TTS.")
             .setView(layout)
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Generate & Play") { _, _ ->
