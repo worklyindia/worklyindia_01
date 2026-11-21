@@ -107,3 +107,23 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
   }
   throw new Error('Workly Voice speech recognition timed out.');
 }
+
+
+/** Fetches generated audio into browser memory, then removes its temporary relay object and job row. */
+export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: string, timeoutMs = 180_000): Promise<Blob> {
+  const audioUrl = await requestOwnerPhoneVoiceAudio(text, language, timeoutMs);
+  try {
+    const response = await fetch(audioUrl);
+    if (!response.ok) throw new Error("Could not download generated voice audio from the phone relay.");
+    const blob = await response.blob();
+    if (!blob.size) throw new Error("The phone returned an empty audio file.");
+    return blob;
+  } finally {
+    // Best-effort cleanup; expiry cleanup remains the fallback if the browser disconnects.
+    const { data: session } = await supabase.auth.getSession();
+    const { data: jobList } = await supabase.functions.invoke("unified-voice", {
+      body: { action: "cleanup_completed_audio", audio_url: audioUrl },
+    });
+    void session; void jobList;
+  }
+}
