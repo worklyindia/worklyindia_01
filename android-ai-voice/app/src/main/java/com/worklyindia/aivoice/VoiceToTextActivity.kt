@@ -110,11 +110,7 @@ class VoiceToTextActivity : Activity() {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(bg)
-            // Keep system bars visible and lay out app content inside their safe area.
-            setOnApplyWindowInsetsListener { view, insets ->
-                view.setPadding(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
-                insets
-            }
+            // Insets are applied once by the decor view below.
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
