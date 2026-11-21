@@ -100,6 +100,9 @@ class SpeechDownloadsActivity : Activity() {
         }
         list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
         addSpeechPack(list,"Indic Tiny TTS · Gujarati","Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
+        addSpeechPack(list,"iTantra VITS · Gujarati","Sherpa-ONNX · Mimic3/CMU-Indic · offline voice",SpeechModelCatalog.itantraVits("gu"))
+        addSpeechPack(list,"iTantra VITS · Hindi","Sherpa-ONNX · Piper Pratham · offline voice",SpeechModelCatalog.itantraVits("hi"))
+        addSpeechPack(list,"iTantra VITS · English","Sherpa-ONNX · Piper Lessac · offline voice",SpeechModelCatalog.itantraVits("en"))
         addSpeechPack(list,"Kokoro-82M · Hindi & English","Hindi and English · selectable female and male voices · approximately 295 MB · offline LiteRT",SpeechModelCatalog.kokoro82m())
         list.addView(label("Native Download/Test/Delete controls are provided for supported local model packs. Each model still requires a successful build and phone inference test before being marked verified.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
@@ -177,6 +180,7 @@ class SpeechDownloadsActivity : Activity() {
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         val isTts = pack.id.startsWith("indic-tiny-tts-")
+        val isSherpaVits = pack.id.startsWith("itantra-vits-")
         val isKokoro = pack.id == "kokoro-82m"
         val isMoss = pack.id == "moss-tts-nano"
         val isQvacChatterbox = pack.id == "qvac-chatterbox-multilingual"
@@ -184,7 +188,7 @@ class SpeechDownloadsActivity : Activity() {
         val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
         val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
         card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
-        test.setOnClickListener { when { isKokoro -> showKokoroTest(pack); isMoss -> showMossTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); else -> showTtsTest(pack) } }
+        test.setOnClickListener { when { isKokoro -> showKokoroTest(pack); isMoss -> showMossTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); isSherpaVits -> showSherpaVitsTest(pack); else -> showTtsTest(pack) } }
         delete.setOnClickListener {
             AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                 .setMessage("This removes this model's downloaded files from ChatWork storage.")
@@ -212,13 +216,62 @@ class SpeechDownloadsActivity : Activity() {
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
             action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-            test.visibility=if((isTts || isKokoro || isMoss || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
+            test.visibility=if((isTts || isSherpaVits || isKokoro || isMoss || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
             delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
         row.refresh()
     }
 
+
+
+    private fun showSherpaVitsTest(pack: SpeechModelCatalog.Pack) {
+        val language = pack.languageCode
+        val sample = when (language) {
+            "gu" -> "નમસ્તે! આ iTantra ગુજરાતી અવાજની કસોટી છે."
+            "hi" -> "नमस्ते! यह iTantra हिंदी आवाज़ का परीक्षण है।"
+            else -> "Hello! This is the iTantra English voice test."
+        }
+        val input = EditText(this).apply {
+            setText(sample)
+            minLines = 3
+            maxLines = 6
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Test ${pack.title}")
+            .setMessage("Generate a short sample locally with the downloaded VITS voice.")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Generate & Play") { _, _ ->
+                val textToSpeak = input.text.toString().trim()
+                if (textToSpeak.isBlank()) {
+                    Toast.makeText(this, "Enter test text.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                ttsExecutor.execute {
+                    val output = File(cacheDir, "itantra_vits_test_${System.currentTimeMillis()}.wav")
+                    try {
+                        SherpaVitsTtsEngine.create(this, pack).use { it.synthesizeToWav(textToSpeak, output) }
+                        runOnUiThread {
+                            if (isFinishing || !output.isFile) return@runOnUiThread
+                            activeMossPlayer?.release()
+                            activeMossPlayer = MediaPlayer().apply {
+                                setDataSource(output.absolutePath)
+                                setOnCompletionListener { it.release(); activeMossPlayer = null }
+                                setOnPreparedListener { it.start() }
+                                prepareAsync()
+                            }
+                        }
+                    } catch (error: Throwable) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "VITS test failed.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+            .show()
+    }
 
     private data class KokoroVoice(val id: String, val label: String)
     private data class KokoroLanguage(val label: String, val code: String, val sample: String, val voices: List<KokoroVoice>)
