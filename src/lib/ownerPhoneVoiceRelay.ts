@@ -133,15 +133,29 @@ export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: st
 }
 
 
-/** Splits long text into phone-sized requests and joins the returned PCM WAV chunks in browser memory. */
+/** Splits long text into short phone-sized requests to keep each WAV below the relay upload limit. */
 export async function requestOwnerPhoneLongVoiceAudioBlob(text: string, language: string): Promise<Blob> {
   const chunks: string[] = [];
   let remaining = text.trim();
+  const maxChunkChars = 180;
   while (remaining.length) {
-    if (remaining.length <= 900) { chunks.push(remaining); break; }
-    let cut = remaining.lastIndexOf(" ", 900);
-    if (cut < 450) cut = 900;
-    chunks.push(remaining.slice(0, cut).trim());
+    if (remaining.length <= maxChunkChars) { chunks.push(remaining); break; }
+
+    // Prefer a complete sentence so Hindi, Gujarati and English prosody sounds natural.
+    const windowText = remaining.slice(0, maxChunkChars);
+    const sentenceCuts = ["।", ".", "!", "?", "।", "…"]
+      .map((mark) => windowText.lastIndexOf(mark) + 1)
+      .filter((position) => position >= 80);
+    let cut = sentenceCuts.length ? Math.max(...sentenceCuts) : -1;
+
+    // If there is no sentence boundary, split at a word boundary without dropping text.
+    if (cut < 0) {
+      cut = windowText.lastIndexOf(" ");
+      if (cut < 80) cut = maxChunkChars;
+    }
+
+    const part = remaining.slice(0, cut).trim();
+    if (part) chunks.push(part);
     remaining = remaining.slice(cut).trim();
   }
   if (!chunks.length) throw new Error("Enter text before converting.");
