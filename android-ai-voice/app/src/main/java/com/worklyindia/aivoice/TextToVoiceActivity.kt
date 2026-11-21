@@ -136,13 +136,19 @@ class TextToVoiceActivity : Activity() {
         setContentView(page)
         // Keep the status bar visible and move the header below its clock/icons.
         window.decorView.setOnApplyWindowInsetsListener { _, insets ->
-            val bars = if (android.os.Build.VERSION.SDK_INT >= 30) {
-                insets.getInsets(android.view.WindowInsets.Type.systemBars())
+            val topInset: Int
+            val bottomInset: Int
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
+                topInset = bars.top
+                bottomInset = bars.bottom
             } else {
                 @Suppress("DEPRECATION")
-                android.graphics.Insets.of(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
+                topInset = insets.systemWindowInsetTop
+                @Suppress("DEPRECATION")
+                bottomInset = insets.systemWindowInsetBottom
             }
-            page.setPadding(0, bars.top, 0, bars.bottom)
+            page.setPadding(0, topInset, 0, bottomInset)
             insets
         }
         window.decorView.requestApplyInsets()
