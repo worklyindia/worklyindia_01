@@ -137,7 +137,7 @@ class TextToVoiceActivity : Activity() {
     }
 
     private fun buildUi() {
-        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(background) }
+        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(this@TextToVoiceActivity.background) }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(18),dp(8),dp(18),dp(8)); setBackgroundColor(surface) }
         header.addView(Button(this).apply { text = "‹"; textSize=28f; isAllCaps=false; setTextColor(primary); setBackgroundColor(surface); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(48),dp(52)))
         header.addView(TextView(this).apply { text="Text To Voice"; textSize=20f; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(52),1f))

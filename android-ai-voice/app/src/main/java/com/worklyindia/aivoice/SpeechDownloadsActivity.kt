@@ -208,34 +208,34 @@ class SpeechDownloadsActivity : Activity() {
     private val kokoroLanguages by lazy {
         listOf(
             KokoroLanguage("English (US)", "en-US", "Hello! This is a Kokoro offline voice test on my Android phone.", listOf(
-                "af_heart" to "Heart · Female", "af_alloy" to "Alloy · Female", "af_aoede" to "Aoede · Female", "af_bella" to "Bella · Female", "af_jessica" to "Jessica · Female", "af_kore" to "Kore · Female", "af_nicole" to "Nicole · Female", "af_nova" to "Nova · Female", "af_river" to "River · Female", "af_sarah" to "Sarah · Female", "af_sky" to "Sky · Female",
-                "am_adam" to "Adam · Male", "am_echo" to "Echo · Male", "am_eric" to "Eric · Male", "am_fenrir" to "Fenrir · Male", "am_liam" to "Liam · Male", "am_michael" to "Michael · Male", "am_onyx" to "Onyx · Male", "am_puck" to "Puck · Male", "am_santa" to "Santa · Male"
+                KokoroVoice("af_heart", "Heart · Female"), KokoroVoice("af_alloy", "Alloy · Female"), KokoroVoice("af_aoede", "Aoede · Female"), KokoroVoice("af_bella", "Bella · Female"), KokoroVoice("af_jessica", "Jessica · Female"), KokoroVoice("af_kore", "Kore · Female"), KokoroVoice("af_nicole", "Nicole · Female"), KokoroVoice("af_nova", "Nova · Female"), KokoroVoice("af_river", "River · Female"), KokoroVoice("af_sarah", "Sarah · Female"), KokoroVoice("af_sky", "Sky · Female"),
+                KokoroVoice("am_adam", "Adam · Male"), KokoroVoice("am_echo", "Echo · Male"), KokoroVoice("am_eric", "Eric · Male"), KokoroVoice("am_fenrir", "Fenrir · Male"), KokoroVoice("am_liam", "Liam · Male"), KokoroVoice("am_michael", "Michael · Male"), KokoroVoice("am_onyx", "Onyx · Male"), KokoroVoice("am_puck", "Puck · Male"), KokoroVoice("am_santa", "Santa · Male")
             )),
             KokoroLanguage("English (UK)", "en-GB", "Hello! This is a British English Kokoro voice test.", listOf(
-                "bf_alice" to "Alice · Female", "bf_emma" to "Emma · Female", "bf_isabella" to "Isabella · Female", "bf_lily" to "Lily · Female", "bm_daniel" to "Daniel · Male", "bm_fable" to "Fable · Male", "bm_george" to "George · Male", "bm_lewis" to "Lewis · Male"
+                KokoroVoice("bf_alice", "Alice · Female"), KokoroVoice("bf_emma", "Emma · Female"), KokoroVoice("bf_isabella", "Isabella · Female"), KokoroVoice("bf_lily", "Lily · Female"), KokoroVoice("bm_daniel", "Daniel · Male"), KokoroVoice("bm_fable", "Fable · Male"), KokoroVoice("bm_george", "George · Male"), KokoroVoice("bm_lewis", "Lewis · Male")
             )),
             KokoroLanguage("Hindi", "hi", "नमस्ते! यह कोकोरो हिंदी आवाज़ का परीक्षण है।", listOf(
-                "hf_alpha" to "Alpha · Female", "hf_beta" to "Beta · Female", "hm_omega" to "Omega · Male", "hm_psi" to "Psi · Male"
+                KokoroVoice("hf_alpha", "Alpha · Female"), KokoroVoice("hf_beta", "Beta · Female"), KokoroVoice("hm_omega", "Omega · Male"), KokoroVoice("hm_psi", "Psi · Male")
             )),
             KokoroLanguage("Spanish", "es", "¡Hola! Esta es una prueba de voz sin conexión de Kokoro.", listOf(
-                "ef_dora" to "Dora · Female", "em_alex" to "Alex · Male", "em_santa" to "Santa · Male"
+                KokoroVoice("ef_dora", "Dora · Female"), KokoroVoice("em_alex", "Alex · Male"), KokoroVoice("em_santa", "Santa · Male")
             )),
             KokoroLanguage("French", "fr-FR", "Bonjour ! Ceci est un test vocal hors ligne de Kokoro.", listOf(
-                "ff_siwis" to "Siwis · Female"
+                KokoroVoice("ff_siwis", "Siwis · Female")
             )),
             KokoroLanguage("Italian", "it", "Ciao! Questo è un test vocale offline di Kokoro.", listOf(
-                "if_sara" to "Sara · Female", "im_nicola" to "Nicola · Male"
+                KokoroVoice("if_sara", "Sara · Female"), KokoroVoice("im_nicola", "Nicola · Male")
             )),
             KokoroLanguage("Portuguese (Brazil)", "pt-BR", "Olá! Este é um teste de voz offline do Kokoro.", listOf(
-                "pf_dora" to "Dora · Female", "pm_alex" to "Alex · Male", "pm_santa" to "Santa · Male"
+                KokoroVoice("pf_dora", "Dora · Female"), KokoroVoice("pm_alex", "Alex · Male"), KokoroVoice("pm_santa", "Santa · Male")
             )),
             KokoroLanguage("Chinese (Mandarin)", "zh-CN", "你好！这是 Kokoro 离线语音测试。", listOf(
-                "zf_xiaobei" to "Xiaobei · Female", "zf_xiaoni" to "Xiaoni · Female", "zf_xiaoxiao" to "Xiaoxiao · Female", "zf_xiaoyi" to "Xiaoyi · Female", "zm_yunjian" to "Yunjian · Male", "zm_yunxi" to "Yunxi · Male", "zm_yunxia" to "Yunxia · Male", "zm_yunyang" to "Yunyang · Male"
+                KokoroVoice("zf_xiaobei", "Xiaobei · Female"), KokoroVoice("zf_xiaoni", "Xiaoni · Female"), KokoroVoice("zf_xiaoxiao", "Xiaoxiao · Female"), KokoroVoice("zf_xiaoyi", "Xiaoyi · Female"), KokoroVoice("zm_yunjian", "Yunjian · Male"), KokoroVoice("zm_yunxi", "Yunxi · Male"), KokoroVoice("zm_yunxia", "Yunxia · Male"), KokoroVoice("zm_yunyang", "Yunyang · Male")
             )),
             KokoroLanguage("Japanese", "ja", "こんにちは！これは Kokoro のオフライン音声テストです。", listOf(
-                "jf_alpha" to "Alpha · Female", "jf_gongitsune" to "Gongitsune · Female", "jf_nezumi" to "Nezumi · Female", "jf_tebukuro" to "Tebukuro · Female", "jm_kumo" to "Kumo · Male"
+                KokoroVoice("jf_alpha", "Alpha · Female"), KokoroVoice("jf_gongitsune", "Gongitsune · Female"), KokoroVoice("jf_nezumi", "Nezumi · Female"), KokoroVoice("jf_tebukuro", "Tebukuro · Female"), KokoroVoice("jm_kumo", "Kumo · Male")
             ))
-        ).map { language -> language.copy(voices = language.voices.map { KokoroVoice(it.first, it.second) }) }
+        )
     }
 
     private fun showKokoroTest(pack: SpeechModelCatalog.Pack) {
