@@ -15,6 +15,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -321,11 +322,15 @@ class VoiceToTextActivity : Activity() {
     }
 
     private fun transcribeUri(uri: Uri) {
+        val languageCode = selectedLanguage.code
         setBusy(true, "Reading audio file…")
         worker.execute {
             try {
                 val samples = decodeAudio(uri)
-                transcribeSamples(samples)
+                require(samples.size >= OfflineSpeechRecognizer.SAMPLE_RATE / 2) {
+                    "Audio is too short or contains no speech. Please choose a longer recording."
+                }
+                transcribeSamples(samples, languageCode)
             } catch (error: Throwable) {
                 showError(error.message ?: "Could not read this audio file.")
             }
@@ -364,7 +369,11 @@ class VoiceToTextActivity : Activity() {
             var inputDone = false
             var outputDone = false
             var format = inputFormat
+            val decodeStartedAt = SystemClock.elapsedRealtime()
             while (!outputDone) {
+                check(SystemClock.elapsedRealtime() - decodeStartedAt < 180_000L) {
+                    "Audio decoding took too long. Please try a shorter WAV, MP3 or M4A file."
+                }
                 if (!inputDone) {
                     val inputIndex = codec.dequeueInputBuffer(10_000)
                     if (inputIndex >= 0) {
@@ -390,8 +399,9 @@ class VoiceToTextActivity : Activity() {
                             val chunk = ByteArray(info.size)
                             outputBuffer.get(chunk)
                             pcm.write(chunk)
+                            check(pcm.size() <= 64 * 1024 * 1024) { "Audio file is too large to process. Please use a shorter audio clip." }
                         }
-                        outputDone = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                        outputDone = (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
                         codec.releaseOutputBuffer(outputIndex, false)
                     }
                     outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
@@ -478,6 +488,7 @@ class VoiceToTextActivity : Activity() {
     }
 
     private fun startRecording() {
+        val languageCode = selectedLanguage.code
         recording = true
         recordButton.text = "■  Stop & Convert"
         recordButton.isEnabled = true
@@ -515,7 +526,7 @@ class VoiceToTextActivity : Activity() {
                 val shortBuffer = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
                 val samples = FloatArray(shortBuffer.remaining()) { shortBuffer.get() / 32768f }
                 if (samples.isEmpty()) throw IllegalStateException("No speech was recorded.")
-                transcribeSamples(samples)
+                transcribeSamples(samples, languageCode)
             } catch (error: Throwable) {
                 recording = false
                 showError(error.message ?: "Microphone recording failed.")
@@ -530,10 +541,10 @@ class VoiceToTextActivity : Activity() {
         }.apply { name = "VoiceToTextRecorder"; start() }
     }
 
-    private fun transcribeSamples(samples: FloatArray) {
-        runOnUiThread { setBusy(true, "Converting speech to text offline…") }
+    private fun transcribeSamples(samples: FloatArray, languageCode: String = selectedLanguage.code) {
+        runOnUiThread { setBusy(true, "Loading speech model…") }
         try {
-            val text = OfflineSpeechEngineFactory.openIndicConformer(this, selectedLanguage.code).use { engine ->
+            val text = OfflineSpeechEngineFactory.openIndicConformer(this, languageCode).use { engine ->
                 engine.transcribe(samples)
             }
             runOnUiThread {
