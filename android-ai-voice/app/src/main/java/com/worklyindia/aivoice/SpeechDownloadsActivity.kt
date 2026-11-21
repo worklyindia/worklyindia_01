@@ -73,11 +73,8 @@ class SpeechDownloadsActivity : Activity() {
             addSpeechPack(list,"IndicConformer · $language","AI4Bharat IndicConformer INT8 · $language offline speech-to-text",SpeechModelCatalog.indicConformer(code))
         }
         list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
-        addSpeechPack(list,"Indic Tiny TTS Hindi","Indic Tiny TTS · Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
-        addSpeechPack(list,"Indic Tiny TTS Gujarati","Indic Tiny TTS · Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
-        addSpeechPack(list,"Indic Tiny TTS English","Indic Tiny TTS · English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
-        addSpeechPack(list,"Qwen3-TTS 0.6B CustomVoice · Q4_K_M","Preset speaker model · language controls are limited by this GGUF build · approximately 860 MB · arm64 / Android 12+",SpeechModelCatalog.qwen3Tts())
-        addSpeechPack(list,"Kokoro-82M · Multilingual","9 locales · 54 selectable female and male voices · approximately 295 MB · offline LiteRT",SpeechModelCatalog.kokoro82m())
+        addSpeechPack(list,"Indic Tiny TTS · Gujarati","Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
+        addSpeechPack(list,"Kokoro-82M · Hindi & English","Hindi and English · selectable female and male voices · approximately 295 MB · offline LiteRT",SpeechModelCatalog.kokoro82m())
         list.addView(label("Native Download/Test/Delete controls are provided for supported local model packs. Each model still requires a successful build and phone inference test before being marked verified.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
@@ -156,13 +153,12 @@ class SpeechDownloadsActivity : Activity() {
         val isTts = pack.id.startsWith("indic-tiny-tts-")
         val isKokoro = pack.id == "kokoro-82m"
         val isMoss = pack.id == "moss-tts-nano"
-        val isQwen = pack.id == "qwen3-tts-06b-q4"
         val isQvacChatterbox = pack.id == "qvac-chatterbox-multilingual"
         val isQvacCosyVoice = pack.id == "qvac-cosyvoice3"
         val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
         val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
         card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
-        test.setOnClickListener { when { isKokoro -> showKokoroTest(pack); isMoss -> showMossTest(pack); isQwen -> showQwenTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); else -> showTtsTest(pack) } }
+        test.setOnClickListener { when { isKokoro -> showKokoroTest(pack); isMoss -> showMossTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); else -> showTtsTest(pack) } }
         delete.setOnClickListener {
             AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                 .setMessage("This removes this model's downloaded files from ChatWork storage.")
@@ -190,7 +186,7 @@ class SpeechDownloadsActivity : Activity() {
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
             action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
             action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-            test.visibility=if((isTts || isKokoro || isMoss || isQwen || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
+            test.visibility=if((isTts || isKokoro || isMoss || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
             delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
@@ -517,114 +513,6 @@ class SpeechDownloadsActivity : Activity() {
                 }
             }
             .show()
-    }
-
-
-    private fun showQwenTest(pack: SpeechModelCatalog.Pack) {
-        if (android.os.Build.VERSION.SDK_INT < 31) {
-            Toast.makeText(this, "Qwen3-TTS requires Android 12 or newer.", Toast.LENGTH_LONG).show()
-            return
-        }
-        statusToast("Loading Qwen3 model and reading available speakers…")
-        ttsExecutor.execute {
-            val engine = Qwen3TtsEngine(speechManager.modelDirectory(pack), 2)
-            try {
-                engine.load()
-                val speakers = engine.availableSpeakers().ifEmpty { listOf("Ryan") }
-                runOnUiThread {
-                    val layout = LinearLayout(this).apply {
-                        orientation = LinearLayout.VERTICAL
-                        setPadding(dp(16), dp(8), dp(16), dp(4))
-                    }
-                    layout.addView(label("LANGUAGE", 12, secondary, true))
-                    layout.addView(label("English · current GGUF test path", 14, primary, false))
-                    layout.addView(label("VOICE · " + speakers.size + " AVAILABLE", 12, secondary, true))
-                    val voiceSpinner = Spinner(this)
-                    voiceSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, speakers).also {
-                        it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                    }
-                    layout.addView(voiceSpinner)
-                    layout.addView(label("TEST TEXT", 12, secondary, true))
-                    val input = EditText(this).apply {
-                        setText("Hello! This is Qwen three text to speech running locally on Android.")
-                        minLines = 3
-                        maxLines = 6
-                        setPadding(dp(12), dp(10), dp(12), dp(10))
-                    }
-                    layout.addView(input)
-                    val dialog = AlertDialog.Builder(this)
-                        .setTitle("Test Qwen3-TTS · " + speakers.size + " Voices")
-                        .setMessage("Select an available speaker and enter English text. This model build is currently configured for the English test path.")
-                        .setView(layout)
-                        .setNegativeButton("Cancel") { _, _ -> engine.close() }
-                        .setPositiveButton("Generate & Play", null)
-                        .create()
-                    dialog.setOnCancelListener { engine.close() }
-                    dialog.setOnShowListener {
-                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                            val text = input.text.toString().trim()
-                            val speaker = speakers[voiceSpinner.selectedItemPosition]
-                            if (text.isBlank()) {
-                                Toast.makeText(this, "Enter text to test.", Toast.LENGTH_SHORT).show()
-                                return@setOnClickListener
-                            }
-                            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
-                            statusToast("Generating English · " + speaker + " offline…")
-                            ttsExecutor.execute {
-                                try {
-                                    val output = engine.synthesizeToWav(text, java.io.File(cacheDir, "qwen3_tts_test.wav"), speaker)
-                                    engine.close()
-                                    runOnUiThread {
-                                        dialog.dismiss()
-                                        try {
-                                            activeMossPlayer?.release()
-                                            activeMossPlayer = MediaPlayer().apply {
-                                                setDataSource(output.absolutePath)
-                                                setOnCompletionListener { player ->
-                                                    player.release()
-                                                    if (activeMossPlayer === player) activeMossPlayer = null
-                                                }
-                                                setOnErrorListener { player, _, _ ->
-                                                    player.release()
-                                                    if (activeMossPlayer === player) activeMossPlayer = null
-                                                    Toast.makeText(this@SpeechDownloadsActivity, "Qwen3 audio playback failed.", Toast.LENGTH_LONG).show()
-                                                    true
-                                                }
-                                                setOnPreparedListener { it.start() }
-                                                prepareAsync()
-                                            }
-                                            Toast.makeText(this, "Qwen3 voice generated successfully.", Toast.LENGTH_LONG).show()
-                                        } catch (error: Throwable) {
-                                            Toast.makeText(this, error.message ?: "Could not play Qwen3 audio.", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                } catch (error: Throwable) {
-                                    engine.close()
-                                    runOnUiThread {
-                                        dialog.dismiss()
-                                        AlertDialog.Builder(this)
-                                            .setTitle("Qwen3 voice test failed")
-                                            .setMessage(error.message ?: "Could not run the native Qwen3 model.")
-                                            .setPositiveButton("OK", null)
-                                            .show()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    dialog.show()
-                }
-            } catch (error: Throwable) {
-                engine.close()
-                runOnUiThread {
-                    AlertDialog.Builder(this)
-                        .setTitle("Qwen3 model loading failed")
-                        .setMessage(error.message ?: "Could not load the native Qwen3 model.")
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
-            }
-        }
     }
 
 
