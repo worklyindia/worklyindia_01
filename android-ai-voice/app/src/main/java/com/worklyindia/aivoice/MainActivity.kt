@@ -2,7 +2,10 @@ package com.worklyindia.aivoice
 
 import android.app.Activity
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -134,6 +137,12 @@ class MainActivity : Activity() {
 
         setContentView(root)
         signalAnimation.playAnimation()
+        // Ask for notifications at first launch on Android 13+.
+        // Microphone permission is requested only when the user taps Start Speaking.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+        }
     }
 
     override fun onResume() {
@@ -151,6 +160,8 @@ class MainActivity : Activity() {
         signalAnimationView = null
         super.onDestroy()
     }
+
+    companion object { private const val REQUEST_NOTIFICATIONS = 2101 }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
