@@ -11,6 +11,8 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
+import android.util.Log
 import java.util.Locale
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -21,9 +23,11 @@ class VoiceRelayService : Service() {
     @Volatile private var activeJobId: String? = null
     @Volatile private var activeAudioFile: File? = null
     private val speechManager by lazy { SpeechPackDownloadManager(this) }
-    // Keep the 295 MB Kokoro runtime alive between website jobs. Recreating it
-    // for every request forces the model to reload and makes Hindi/English slow.
+    // Keep both approved offline TTS model families resident while this service lives.
+    // Kokoro serves Hindi + English; Indic Tiny serves Gujarati.
     @Volatile private var kokoroTtsEngine: KokoroTtsEngine? = null
+    @Volatile private var indicTinyTtsEngine: IndicTinyTtsEngine? = null
+    @Volatile private var modelWarmThread: Thread? = null
     private var pollThread: Thread? = null
     private var activeToken: String? = null
     private var relayWakeLock: PowerManager.WakeLock? = null
@@ -47,15 +51,64 @@ class VoiceRelayService : Service() {
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         relayWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:WorklyVoiceRelay").apply {
             setReferenceCounted(false)
-            acquire()
+            if (!isHeld) acquire()
         }
         if (running.compareAndSet(false, true)) {
+            startModelWarmup()
             pollThread = Thread { pollLoop(token) }.apply {
                 name = "WorklyVoiceRelay"
                 start()
             }
         }
         return START_STICKY
+    }
+
+    private fun startModelWarmup() {
+        if (modelWarmThread?.isAlive == true) return
+        modelWarmThread = Thread {
+            var kokoroReady = false
+            var gujaratiReady = false
+            try {
+                val kokoroPack = SpeechModelCatalog.kokoro82m()
+                if (speechManager.snapshot(kokoroPack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                    val defaultVoice = "hf_alpha"
+                    val engine = getKokoroEngine()
+                    engine.warm(kokoroPack, speechManager.modelDirectory(kokoroPack), defaultVoice)
+                    // Validate the English voice too; Hindi and English share this same runtime.
+                    engine.warm(kokoroPack, speechManager.modelDirectory(kokoroPack), "af_heart")
+                    kokoroReady = true
+                }
+            } catch (error: Exception) {
+                setStatus("Hindi/English voice model warm-up failed: ${error.message ?: "model error"}")
+            }
+            try {
+                val gujaratiPack = SpeechModelCatalog.indicTinyTts("gu")
+                if (speechManager.snapshot(gujaratiPack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                    getIndicTinyEngine()
+                    gujaratiReady = true
+                }
+            } catch (error: Exception) {
+                setStatus("Gujarati voice model warm-up failed: ${error.message ?: "model error"}")
+            }
+            if (kokoroReady && gujaratiReady) {
+                setStatus("Gujarati, Hindi and English offline voice models are loaded and ready.")
+            } else if (kokoroReady || gujaratiReady) {
+                setStatus("Downloaded offline voice model is warm. Download the other language model to enable all three voices.")
+            }
+        }.apply {
+            name = "WorklyTtsModelWarmup"
+            start()
+        }
+    }
+
+    @Synchronized
+    private fun getKokoroEngine(): KokoroTtsEngine {
+        return kokoroTtsEngine ?: KokoroTtsEngine(this).also { kokoroTtsEngine = it }
+    }
+
+    @Synchronized
+    private fun getIndicTinyEngine(): IndicTinyTtsEngine {
+        return indicTinyTtsEngine ?: IndicTinyTtsEngine.create(this, "gu").also { indicTinyTtsEngine = it }
     }
 
     private fun hasValidatedInternet(): Boolean {
@@ -180,6 +233,7 @@ class VoiceRelayService : Service() {
         }
         activeJobId = jobId
         Thread {
+            val jobStartedAt = SystemClock.elapsedRealtime()
             val outputFile = File(cacheDir, "workly-voice-$jobId.wav")
             activeAudioFile = outputFile
             try {
@@ -189,6 +243,7 @@ class VoiceRelayService : Service() {
                 val language = Locale.forLanguageTag(languageTag).language
                 val voiceId = payload.optString("voice").trim()
                 outputFile.delete()
+                val synthesisStartedAt = SystemClock.elapsedRealtime()
                 when (language) {
                     "gu" -> {
                         val pack = SpeechModelCatalog.indicTinyTts("gu")
@@ -199,9 +254,7 @@ class VoiceRelayService : Service() {
                         check(selectedVoice == "female" || selectedVoice == "male") {
                             "Selected Gujarati voice is not available in Indic Tiny TTS."
                         }
-                        IndicTinyTtsEngine.create(this, "gu").use { engine ->
-                            engine.synthesizeToWav(text, outputFile, selectedVoice)
-                        }
+                        getIndicTinyEngine().synthesizeToWav(text, outputFile, selectedVoice)
                     }
                     "hi", "en" -> {
                         val pack = SpeechModelCatalog.kokoro82m()
@@ -210,10 +263,7 @@ class VoiceRelayService : Service() {
                         }
                         val defaultVoice = if (language == "hi") "hf_alpha" else "af_heart"
                         val selectedVoice = voiceId.ifBlank { defaultVoice }
-                        val engine = kokoroTtsEngine ?: synchronized(this@VoiceRelayService) {
-                            kokoroTtsEngine ?: KokoroTtsEngine(this@VoiceRelayService).also { kokoroTtsEngine = it }
-                        }
-                        engine.synthesizeToWav(
+                        getKokoroEngine().synthesizeToWav(
                             pack = pack,
                             modelDirectory = speechManager.modelDirectory(pack),
                             text = text,
@@ -224,7 +274,12 @@ class VoiceRelayService : Service() {
                     else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
                 }
                 check(outputFile.isFile && outputFile.length() > 44L) { "The selected offline model returned empty audio." }
+                val synthesisMs = SystemClock.elapsedRealtime() - synthesisStartedAt
+                Log.i(TAG, "TTS synthesis ready job=$jobId language=$language chars=${text.length} audioBytes=${outputFile.length()} synthesisMs=$synthesisMs")
+                val uploadStartedAt = SystemClock.elapsedRealtime()
                 VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
+                val uploadMs = SystemClock.elapsedRealtime() - uploadStartedAt
+                Log.i(TAG, "TTS upload complete job=$jobId uploadMs=$uploadMs totalMs=${SystemClock.elapsedRealtime() - jobStartedAt}")
                 setStatus("Offline model voice audio delivered to website. Waiting for next request…")
             } catch (error: Exception) {
                 runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Offline TTS synthesis failed.") }
@@ -246,13 +301,31 @@ class VoiceRelayService : Service() {
         stopSelf(startId)
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && activeJobId == null && modelWarmThread?.isAlive != true) {
+            synchronized(this) {
+                indicTinyTtsEngine?.close()
+                indicTinyTtsEngine = null
+                kokoroTtsEngine?.close()
+                kokoroTtsEngine = null
+            }
+            setStatus("Android requested memory. Offline voice models were released and will reload on the next request.")
+        }
+    }
+
     override fun onDestroy() {
         running.set(false)
         pollThread?.interrupt()
+        modelWarmThread?.interrupt()
         if (relayWakeLock?.isHeld == true) relayWakeLock?.release()
         relayWakeLock = null
-        kokoroTtsEngine?.close()
-        kokoroTtsEngine = null
+        synchronized(this) {
+            indicTinyTtsEngine?.close()
+            indicTinyTtsEngine = null
+            kokoroTtsEngine?.close()
+            kokoroTtsEngine = null
+        }
         getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, "Phone server stopped.").apply()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
         else stopForeground(true)
@@ -327,6 +400,7 @@ class VoiceRelayService : Service() {
     }
 
     companion object {
+        private const val TAG = "WorklyVoiceRelay"
         const val CHANNEL_ID = "workly_ai_voice_server"
         const val NOTIFICATION_ID = 6401
         const val STATUS_PREFS = "workly_ai_voice_status"
