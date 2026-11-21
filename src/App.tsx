@@ -62,6 +62,7 @@ const Index = lazyRetry(() => import("./pages/Index"));
 const Jobs = lazyRetry(() => import("./pages/Jobs"));
 const Activity = lazyRetry(() => import("./pages/Activity"));
 const More = lazyRetry(() => import("./pages/More"));
+const TextToVoice = lazyRetry(() => import("./pages/TextToVoice"));
 const AICareerAssistant = lazyRetry(() => import("./pages/AICareerAssistant"));
 const AIVoiceCall = lazyRetry(() => import("./pages/AIVoiceCall"));
 const AIVoiceModels = lazyRetry(() => import("./pages/AIVoiceModels"));
@@ -1225,6 +1226,7 @@ const AppContent = () => {
         } />
         <Route path="/settings/account/:field" element={<ProtectedRoute requireCompleteProfile><AccountChangePage /></ProtectedRoute>} />
         <Route path="/more" element={<More />} />
+         <Route path="/text-to-voice" element={<TextToVoice />} />
         <Route path="/ai-voice-call" element={
           <Suspense fallback={<AppLoadingSpinner />}>
             <AIVoiceCall />
