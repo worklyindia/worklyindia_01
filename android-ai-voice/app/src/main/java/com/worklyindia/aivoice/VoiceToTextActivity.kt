@@ -67,6 +67,9 @@ class VoiceToTextActivity : Activity() {
     @Volatile private var recording = false
     private var recordThread: Thread? = null
     private var pendingMicStart = false
+    // Keep the native ASR session warm between conversions; model initialization is expensive.
+    private var cachedRecognizer: OfflineSpeechRecognizer? = null
+    private var cachedRecognizerLanguage: String? = null
 
     private val poll = object : Runnable {
         override fun run() {
@@ -544,9 +547,16 @@ class VoiceToTextActivity : Activity() {
     private fun transcribeSamples(samples: FloatArray, languageCode: String = selectedLanguage.code) {
         runOnUiThread { setBusy(true, "Loading speech model…") }
         try {
-            val text = OfflineSpeechEngineFactory.openIndicConformer(this, languageCode).use { engine ->
-                engine.transcribe(samples)
+            val engine = if (cachedRecognizerLanguage == languageCode && cachedRecognizer != null) {
+                cachedRecognizer!!
+            } else {
+                cachedRecognizer?.close()
+                OfflineSpeechEngineFactory.openIndicConformer(this, languageCode).also {
+                    cachedRecognizer = it
+                    cachedRecognizerLanguage = languageCode
+                }
             }
+            val text = engine.transcribe(samples)
             runOnUiThread {
                 output.setText(text)
                 setBusy(false, if (text.isBlank()) "No speech detected. Try a clearer recording." else "Transcription complete · Offline")
@@ -588,6 +598,9 @@ class VoiceToTextActivity : Activity() {
         recording = false
         handler.removeCallbacksAndMessages(null)
         worker.shutdownNow()
+        runCatching { cachedRecognizer?.close() }
+        cachedRecognizer = null
+        cachedRecognizerLanguage = null
         super.onDestroy()
     }
 
