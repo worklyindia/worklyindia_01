@@ -57,6 +57,10 @@ jobs:
               sort -u -o /tmp/functions-to-deploy /tmp/functions-to-deploy
             fi
           fi
+          # This directory is an imported module, not a standalone Edge Function.
+          # It is bundled into unified-voice; deploying it separately wastes a project function slot.
+          grep -vxF 'workly-ai-voice-relay' /tmp/functions-to-deploy > /tmp/functions-to-deploy.filtered || true
+          mv /tmp/functions-to-deploy.filtered /tmp/functions-to-deploy
           while IFS= read -r function_name; do
             function_name="$(echo "$function_name" | xargs)"
             [ -z "$function_name" ] && continue
