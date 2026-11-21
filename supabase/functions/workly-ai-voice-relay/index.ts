@@ -50,18 +50,46 @@ async function deviceFor(req: Request) {
   return error ? null : data;
 }
 
+function historyPayload(payload: any, jobType: string) {
+  const text = typeof payload?.text === "string" ? payload.text : "";
+  return {
+    ...(typeof payload?.languageTag === "string" ? { languageTag: payload.languageTag } : {}),
+    ...(typeof payload?.language === "string" ? { language: payload.language } : {}),
+    ...(typeof payload?.voice === "string" ? { voice: payload.voice } : {}),
+    ...(text ? { text_length: text.length } : {}),
+    ...(jobType === "stt" && typeof payload?.content_type === "string" ? { content_type: payload.content_type } : {}),
+  };
+}
+
 async function cleanupExpiredJobs(db: any, now: string) {
-  const { data: expiredJobs } = await db.from("workly_ai_voice_jobs")
-    .select("result,payload")
+  const { data: expiredJobs, error } = await db.from("workly_ai_voice_jobs")
+    .select("id,status,job_type,result,payload")
     .lt("expires_at", now)
     .limit(100);
-  const expiredAudioPaths = (expiredJobs ?? [])
-    .flatMap((row: any) => [row.result?.audio_path, row.payload?.audio_path])
-    .filter((path: unknown) => typeof path === "string");
-  if (expiredAudioPaths.length) {
-    await db.storage.from("workly-ai-voice-audio").remove(expiredAudioPaths);
+  if (error) throw error;
+
+  for (const row of expiredJobs ?? []) {
+    const paths = [row.result?.audio_path, row.payload?.audio_path]
+      .filter((value: unknown): value is string => typeof value === "string");
+    if (paths.length) {
+      const { error: removeError } = await db.storage.from("workly-ai-voice-audio").remove(paths);
+      if (removeError) throw removeError;
+    }
+    const result = row.result && typeof row.result === "object" ? { ...row.result } : {};
+    delete result.audio_path;
+    const update: Record<string, unknown> = {
+      payload: historyPayload(row.payload, row.job_type),
+      result,
+    };
+    if (row.status === "pending" || row.status === "running") update.status = "expired";
+    const { error: updateError } = await db.from("workly_ai_voice_jobs").update(update).eq("id", row.id);
+    if (updateError) throw updateError;
   }
-  await db.from("workly_ai_voice_jobs").delete().lt("expires_at", now);
+
+  // Keep lightweight diagnostics for 30 days; remove only older history rows.
+  const retentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { error: retentionError } = await db.from("workly_ai_voice_jobs").delete().lt("created_at", retentionCutoff);
+  if (retentionError) throw retentionError;
 }
 
 export async function handleWorklyVoiceRelay(req: Request) {
@@ -284,7 +312,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .upload(path, bytes, { contentType: "audio/wav", upsert: true });
       if (uploadError) throw uploadError;
       const { data, error } = await db.from("workly_ai_voice_jobs")
-        .update({ status: "completed", result: { audio_path: path, content_type: "audio/wav" }, completed_at: new Date().toISOString() })
+        .update({ status: "completed", result: { audio_path: path, content_type: "audio/wav", audio_bytes: bytes.byteLength }, completed_at: new Date().toISOString() })
         .eq("id", jobId)
         .eq("device_id", device.id)
         .eq("status", "running")
@@ -327,7 +355,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!path || path.length > 512 || path.includes("..")) return json({ error: "Invalid audio reference" }, 400);
       // Delete only the exact completed audio object belonging to the signed-in user.
       const { data: match, error: jobsError } = await db.from("workly_ai_voice_jobs")
-        .select("id,result")
+        .select("id,result,payload,job_type")
         .eq("user_id", user.id)
         .eq("status", "completed")
         .filter("result->>audio_path", "eq", path)
@@ -336,10 +364,14 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!match) return json({ cleaned: true });
       const { error: removeError } = await db.storage.from("workly-ai-voice-audio").remove([path]);
       if (removeError) throw removeError;
-      const { error: deleteError } = await db.from("workly_ai_voice_jobs").delete()
-        .eq("id", match.id).eq("user_id", user.id);
-      if (deleteError) throw deleteError;
-      return json({ cleaned: true });
+      const result = match.result && typeof match.result === "object" ? { ...match.result } : {};
+      delete result.audio_path;
+      const { error: historyError } = await db.from("workly_ai_voice_jobs").update({
+        payload: historyPayload(match.payload, match.job_type),
+        result,
+      }).eq("id", match.id).eq("user_id", user.id);
+      if (historyError) throw historyError;
+      return json({ cleaned: true, history_retained: true });
     }
 
     if (action === "list_devices") {
