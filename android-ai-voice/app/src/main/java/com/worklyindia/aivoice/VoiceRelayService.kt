@@ -243,6 +243,7 @@ class VoiceRelayService : Service() {
                 val language = Locale.forLanguageTag(languageTag).language
                 val voiceId = payload.optString("voice").trim()
                 outputFile.delete()
+                val synthesisStartedAt = SystemClock.elapsedRealtime()
                 when (language) {
                     "gu" -> {
                         val pack = SpeechModelCatalog.indicTinyTts("gu")
@@ -273,7 +274,7 @@ class VoiceRelayService : Service() {
                     else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
                 }
                 check(outputFile.isFile && outputFile.length() > 44L) { "The selected offline model returned empty audio." }
-                val synthesisMs = SystemClock.elapsedRealtime() - jobStartedAt
+                val synthesisMs = SystemClock.elapsedRealtime() - synthesisStartedAt
                 Log.i(TAG, "TTS synthesis ready job=$jobId language=$language chars=${text.length} audioBytes=${outputFile.length()} synthesisMs=$synthesisMs")
                 val uploadStartedAt = SystemClock.elapsedRealtime()
                 VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
