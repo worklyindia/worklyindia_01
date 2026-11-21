@@ -11,7 +11,6 @@ object VoiceRelayApi {
     private const val TIMEOUT_MS = 60_000
     private const val AUDIO_UPLOAD_TIMEOUT_MS = 60_000
     private val endpoint = "${BuildConfig.SUPABASE_URL}/functions/v1/unified-voice"
-    private val diagnosticsEndpoint = "${BuildConfig.SUPABASE_URL}/functions/v1/chatwork-diagnostics"
 
     data class ApiResult(val body: JSONObject, val statusCode: Int)
 
@@ -103,27 +102,9 @@ object VoiceRelayApi {
     }
 
     fun recordDiagnostic(token: String, event: JSONObject) {
-        val connection = (URL(diagnosticsEndpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = 10_000
-            readTimeout = 10_000
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-            setRequestProperty("Authorization", "Bearer ${BuildConfig.SUPABASE_PUBLISHABLE_KEY}")
-            setRequestProperty("x-device-token", token)
-        }
-        try {
-            connection.outputStream.use { it.write(event.toString().toByteArray(Charsets.UTF_8)) }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val raw = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) {
-                val response = try { JSONObject(raw) } catch (_: Exception) { JSONObject() }
-                throw RelayApiException(code, response.optString("error", "Could not upload diagnostic event"))
-            }
-        } finally {
-            connection.disconnect()
+        val result = post("record_diagnostic", event, deviceToken = token)
+        if (result.statusCode !in 200..299) {
+            throw RelayApiException(result.statusCode, result.body.optString("error", "Could not upload diagnostic event"))
         }
     }
 
