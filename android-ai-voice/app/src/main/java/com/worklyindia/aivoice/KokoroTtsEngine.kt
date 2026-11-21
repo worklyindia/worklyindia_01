@@ -180,7 +180,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
 
     private fun splitText(text: String, maxChars: Int = 500): List<String> {
         val result = ArrayList<String>()
-        val sentences = text.trim().split(Regex("(?<=[.!?।؟])\\\\s+"))
+        val sentences = text.trim().split(Regex("(?<=[.!?।؟])\\s+"))
         for (value in sentences) {
             var remaining = value.trim()
             while (remaining.length > maxChars) {
