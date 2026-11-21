@@ -11,6 +11,8 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
+import android.util.Log
 import java.util.Locale
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
@@ -231,6 +233,7 @@ class VoiceRelayService : Service() {
         }
         activeJobId = jobId
         Thread {
+            val jobStartedAt = SystemClock.elapsedRealtime()
             val outputFile = File(cacheDir, "workly-voice-$jobId.wav")
             activeAudioFile = outputFile
             try {
@@ -270,7 +273,12 @@ class VoiceRelayService : Service() {
                     else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
                 }
                 check(outputFile.isFile && outputFile.length() > 44L) { "The selected offline model returned empty audio." }
+                val synthesisMs = SystemClock.elapsedRealtime() - jobStartedAt
+                Log.i(TAG, "TTS synthesis ready job=$jobId language=$language chars=${text.length} audioBytes=${outputFile.length()} synthesisMs=$synthesisMs")
+                val uploadStartedAt = SystemClock.elapsedRealtime()
                 VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
+                val uploadMs = SystemClock.elapsedRealtime() - uploadStartedAt
+                Log.i(TAG, "TTS upload complete job=$jobId uploadMs=$uploadMs totalMs=${SystemClock.elapsedRealtime() - jobStartedAt}")
                 setStatus("Offline model voice audio delivered to website. Waiting for next request…")
             } catch (error: Exception) {
                 runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Offline TTS synthesis failed.") }
@@ -391,6 +399,7 @@ class VoiceRelayService : Service() {
     }
 
     companion object {
+        private const val TAG = "WorklyVoiceRelay"
         const val CHANNEL_ID = "workly_ai_voice_server"
         const val NOTIFICATION_ID = 6401
         const val STATUS_PREFS = "workly_ai_voice_status"
