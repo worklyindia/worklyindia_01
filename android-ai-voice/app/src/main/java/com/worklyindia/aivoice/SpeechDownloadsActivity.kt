@@ -268,7 +268,7 @@ class SpeechDownloadsActivity : Activity() {
         updateLanguage(0)
 
         AlertDialog.Builder(this)
-            .setTitle("Test Kokoro-82M · 54 Voices")
+            .setTitle("Test Kokoro-82M · Hindi & English Voices")
             .setMessage("Choose a language and voice, then generate speech. All 54 voices run offline on this phone. Gujarati is not supported by this model.")
             .setView(layout)
             .setNegativeButton("Cancel", null)
