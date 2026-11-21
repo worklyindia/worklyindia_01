@@ -88,11 +88,7 @@ class TextToVoiceActivity : Activity() {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(this@TextToVoiceActivity.background)
-            // Keep system bars visible and lay out app content inside their safe area.
-            setOnApplyWindowInsetsListener { view, insets ->
-                view.setPadding(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
-                insets
-            }
+            // Insets are applied once by the decor view below.
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(18),dp(8),dp(18),dp(8)); setBackgroundColor(surface) }
         header.addView(Button(this).apply { text = "‹"; textSize=28f; isAllCaps=false; setTextColor(primary); setBackgroundColor(surface); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(48),dp(52)))
@@ -138,7 +134,18 @@ class TextToVoiceActivity : Activity() {
         modelSpinner.onItemSelectedListener=selectionListener { updateModel() }
         languageSpinner.onItemSelectedListener=selectionListener { updateLanguage() }
         setContentView(page)
-        page.requestApplyInsets()
+        // Keep the status bar visible and move the header below its clock/icons.
+        window.decorView.setOnApplyWindowInsetsListener { _, insets ->
+            val bars = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                insets.getInsets(android.view.WindowInsets.Type.systemBars())
+            } else {
+                @Suppress("DEPRECATION")
+                android.graphics.Insets.of(0, insets.systemWindowInsetTop, 0, insets.systemWindowInsetBottom)
+            }
+            page.setPadding(0, bars.top, 0, bars.bottom)
+            insets
+        }
+        window.decorView.requestApplyInsets()
     }
 
     private lateinit var resultActions: LinearLayout
