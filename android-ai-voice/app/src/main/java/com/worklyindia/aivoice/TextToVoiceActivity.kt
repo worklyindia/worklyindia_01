@@ -91,8 +91,8 @@ class TextToVoiceActivity : Activity() {
             // Insets are applied once by the decor view below.
         }
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(18),dp(8),dp(18),dp(8)); setBackgroundColor(surface) }
-        header.addView(Button(this).apply { text = "‹"; textSize=28f; isAllCaps=false; setTextColor(primary); setBackgroundColor(surface); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(48),dp(52)))
-        header.addView(TextView(this).apply { text="Text To Voice"; textSize=20f; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(52),1f))
+        header.addView(Button(this).apply { text = "‹"; textSize=28f; isAllCaps=false; minWidth=0; minimumWidth=0; setTextColor(primary); setBackgroundColor(surface); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(44),dp(52)))
+        header.addView(TextView(this).apply { text="Text To Voice"; textSize=20f; gravity=Gravity.CENTER_VERTICAL or Gravity.START; singleLine=true; includeFontPadding=false; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(52),1f))
         page.addView(header)
         page.addView(View(this).apply { setBackgroundColor(if(dark) 0x334A5B70 else 0x2234475E) }, LinearLayout.LayoutParams(-1,dp(1)))
         val scroll=ScrollView(this)
