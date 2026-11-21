@@ -7,6 +7,8 @@
 package com.worklyindia.aivoice
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import com.google.mediapipe.tasks.audio.texttospeech.SynthesisOptions
 import com.google.mediapipe.tasks.audio.texttospeech.TextToSpeech
 import com.google.mediapipe.tasks.audio.texttospeech.TextToSpeechOptions
@@ -19,24 +21,18 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     private val app = context.applicationContext
     private var engine: TextToSpeech? = null
 
-    fun synthesizeToWav(
-        pack: SpeechModelCatalog.Pack,
-        modelDirectory: File,
-        text: String,
-        voiceId: String,
-        outputFile: File,
-        onProgress: (Int, Int) -> Unit = { _, _ -> }
-    ): File {
+    private fun checkedModelFile(pack: SpeechModelCatalog.Pack, modelDirectory: File): File {
         require(pack.id == "kokoro-82m") { "This is not a Kokoro model pack." }
-        require(text.isNotBlank()) { "Enter text to speak." }
-
         val modelFile = File(modelDirectory, "kokoro_int8_fp16.litertlm")
         check(modelFile.isFile && modelFile.length() == 294_783_298L) {
             "Kokoro model is incomplete or failed its size check. Delete it and download again."
         }
+        return modelFile
+    }
 
-        // Reuse the MediaPipe runtime after the first request; model initialization is costly.
-        val tts = engine ?: TextToSpeech.create(
+    @Synchronized
+    private fun getRuntime(modelFile: File): TextToSpeech {
+        return engine ?: TextToSpeech.create(
             TextToSpeechOptions(
                 baseOptions = BaseOptions.builder()
                     .setModelAssetPath(modelFile.absolutePath)
@@ -45,7 +41,33 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
                 cacheDirectory = app.cacheDir.absolutePath
             )
         ).also { engine = it }
+    }
 
+    /** Initialize and retain the offline model before a website request arrives. */
+    @Synchronized
+    fun warm(pack: SpeechModelCatalog.Pack, modelDirectory: File, voiceId: String) {
+        val tts = getRuntime(checkedModelFile(pack, modelDirectory))
+        check(tts.listVoices().any { it.voiceId == voiceId }) {
+            "Selected voice is not available in this Kokoro model: $voiceId"
+        }
+        // Run a tiny inference during warm-up so first-request setup is paid in background.
+        val warmupText = if (voiceId == "hf_alpha") "नमस्ते।" else "Hello."
+        val startedAt = SystemClock.elapsedRealtime()
+        val warmupAudio = tts.synthesize(warmupText, SynthesisOptions(voiceId = voiceId))
+        check(warmupAudio.samples.isNotEmpty()) { "Kokoro warm-up returned empty audio for $voiceId." }
+        Log.i(TAG, "Kokoro warm-up voice=$voiceId durationMs=" + (SystemClock.elapsedRealtime() - startedAt))
+    }
+
+    fun synthesizeToWav(
+        pack: SpeechModelCatalog.Pack,
+        modelDirectory: File,
+        text: String,
+        voiceId: String,
+        outputFile: File,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
+    ): File {
+        require(text.isNotBlank()) { "Enter text to speak." }
+        val tts = getRuntime(checkedModelFile(pack, modelDirectory))
         val voices = tts.listVoices()
         check(voices.any { it.voiceId == voiceId }) {
             "Selected voice is not available in this Kokoro model: $voiceId"
@@ -57,11 +79,14 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         outputFile.parentFile?.mkdirs()
         var dataBytes = 0L
         var sampleRate = 0
+        val synthesisStartedAt = SystemClock.elapsedRealtime()
         java.io.RandomAccessFile(outputFile, "rw").use { wav ->
             wav.setLength(0L)
             writeWavHeader(wav, 0, 24_000)
             for ((chunkIndex, chunk) in chunks.withIndex()) {
+                val chunkStartedAt = SystemClock.elapsedRealtime()
                 val audio = tts.synthesize(chunk, SynthesisOptions(voiceId = voiceId))
+                Log.i(TAG, "Kokoro inference voice=${voiceId} chunk=${chunkIndex + 1}/${chunks.size} chars=${chunk.length} durationMs=" + (SystemClock.elapsedRealtime() - chunkStartedAt))
                 check(audio.samples.isNotEmpty()) { "Kokoro returned empty audio for a text segment." }
                 if (sampleRate == 0) sampleRate = audio.sampleRateHz
                 check(audio.sampleRateHz == sampleRate) { "Kokoro changed sample rate between text segments." }
@@ -90,6 +115,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         check(outputFile.isFile && outputFile.length() > 44L) {
             "Kokoro could not write the generated WAV audio."
         }
+        Log.i(TAG, "Kokoro synthesis complete chars=${text.length} chunks=${chunks.size} durationMs=" + (SystemClock.elapsedRealtime() - synthesisStartedAt) + " wavBytes=${outputFile.length()}")
         return outputFile
     }
 
@@ -123,6 +149,11 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         ascii("data"); leInt(dataBytes)
     }
 
+    companion object {
+        private const val TAG = "WorklyKokoroTTS"
+    }
+
+    @Synchronized
     override fun close() {
         val current = engine
         engine = null
