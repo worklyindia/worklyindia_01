@@ -30,6 +30,9 @@
             android:name=".VoiceRelayService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <receiver
+            android:name=".VoiceRelayNotificationRestoreReceiver"
+            android:exported="false" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
         <activity android:name=".TextToVoiceActivity" android:exported="false" />
