@@ -80,7 +80,7 @@ class SherpaVitsTtsEngine private constructor(
                     while (true) {
                         val entry = tar.nextEntry ?: break
                         if (!tar.canReadEntryData(entry)) continue
-                        val normalized = entry.name.replace('\\\\', '/')
+                        val normalized = entry.name.replace('\\', '/')
                         val slash = normalized.indexOf('/')
                         val relative = if (slash >= 0 && slash < normalized.lastIndex) normalized.substring(slash + 1) else ""
                         if (relative.isBlank() || excludePrefixes.any { relative.startsWith(it) }) continue
