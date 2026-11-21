@@ -1,7 +1,7 @@
 /*
  * Kokoro-82M Android inference adapter.
  * MediaPipe Tasks Audio / LiteRT executes the model locally; no network inference.
- * The CPU/GPU-compatible bundle can use the GPU vocoder with a safe CPU fallback.
+ * Selects the faster supported delegate on-device and retains CPU fallback.
  */
 package com.worklyindia.aivoice
 
@@ -21,6 +21,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     private var engine: TextToSpeech? = null
     private var activeDelegate: Delegate? = null
     private var forceCpu = false
+    private var delegateBenchmarked = false
 
     private fun checkedModelFile(pack: SpeechModelCatalog.Pack, modelDirectory: File): File {
         require(pack.id == "kokoro-82m") { "This is not a Kokoro model pack." }
@@ -49,18 +50,74 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
     }
 
     @Synchronized
+    private fun closeRuntime() {
+        engine?.runCatching { close() }
+        engine = null
+        activeDelegate = null
+    }
+
+    /**
+     * GPU availability does not mean GPU is faster on every phone. Warm each
+     * delegate once, time a second short inference, then retain the faster one.
+     * This runs in the service warm-up thread before user jobs are synthesized.
+     */
+    @Synchronized
+    private fun benchmarkAndSelectDelegate(modelFile: File, voiceId: String) {
+        val sampleText = if (voiceId == "hf_alpha") "नमस्ते।" else "Hello."
+        fun measure(delegate: Delegate): Long? {
+            var candidate: TextToSpeech? = null
+            return try {
+                candidate = createRuntime(modelFile, delegate)
+                val warmAudio = candidate.synthesize(sampleText, SynthesisOptions(voiceId = voiceId))
+                check(warmAudio.samples.isNotEmpty()) { "$delegate warm-up returned empty audio." }
+                val startedAt = SystemClock.elapsedRealtime()
+                val measuredAudio = candidate.synthesize(sampleText, SynthesisOptions(voiceId = voiceId))
+                check(measuredAudio.samples.isNotEmpty()) { "$delegate benchmark returned empty audio." }
+                (SystemClock.elapsedRealtime() - startedAt).also {
+                    Log.i(TAG, "Kokoro delegate benchmark delegate=$delegate durationMs=$it")
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "Kokoro delegate benchmark failed delegate=$delegate", error)
+                null
+            } finally {
+                candidate?.runCatching { close() }
+                if (engine === candidate) {
+                    engine = null
+                    activeDelegate = null
+                }
+            }
+        }
+
+        val gpuMs = measure(Delegate.GPU)
+        val cpuMs = measure(Delegate.CPU)
+        val selected = when {
+            gpuMs != null && (cpuMs == null || gpuMs <= cpuMs) -> Delegate.GPU
+            cpuMs != null -> Delegate.CPU
+            else -> throw IllegalStateException("Kokoro failed to initialize on both GPU and CPU.")
+        }
+        forceCpu = selected == Delegate.CPU
+        try {
+            createRuntime(modelFile, selected)
+        } catch (error: Exception) {
+            if (selected != Delegate.GPU) throw error
+            Log.w(TAG, "Selected GPU could not be restored; using CPU", error)
+            forceCpu = true
+            closeRuntime()
+            createRuntime(modelFile, Delegate.CPU)
+        }
+        delegateBenchmarked = true
+        Log.i(TAG, "Kokoro delegate selected=$activeDelegate gpuBenchmarkMs=$gpuMs cpuBenchmarkMs=$cpuMs")
+    }
+
+    @Synchronized
     private fun getRuntime(modelFile: File): TextToSpeech {
         engine?.let { return it }
         if (!forceCpu) {
             try {
-                // The existing kokoro_int8_fp16 bundle supports GPU execution.
-                // MediaPipe runs the acoustic stage on CPU and the vocoder on GPU.
                 return createRuntime(modelFile, Delegate.GPU)
             } catch (error: Exception) {
                 Log.w(TAG, "Kokoro GPU delegate unavailable; falling back to CPU", error)
-                engine?.runCatching { close() }
-                engine = null
-                activeDelegate = null
+                closeRuntime()
             }
         }
         return createRuntime(modelFile, Delegate.CPU)
@@ -68,18 +125,17 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
 
     @Synchronized
     private fun switchToCpu(modelFile: File): TextToSpeech {
-        engine?.runCatching { close() }
-        engine = null
-        activeDelegate = null
+        closeRuntime()
         forceCpu = true
         Log.w(TAG, "Kokoro switching to CPU fallback")
         return createRuntime(modelFile, Delegate.CPU)
     }
 
-    /** Initialize and retain the offline model before a website request arrives. */
+    /** Initialize, benchmark and retain the faster offline runtime before requests arrive. */
     @Synchronized
     fun warm(pack: SpeechModelCatalog.Pack, modelDirectory: File, voiceId: String) {
         val modelFile = checkedModelFile(pack, modelDirectory)
+        if (!delegateBenchmarked) benchmarkAndSelectDelegate(modelFile, voiceId)
         var tts = getRuntime(modelFile)
         check(tts.listVoices().any { it.voiceId == voiceId }) {
             "Selected voice is not available in this Kokoro model: $voiceId"
@@ -212,9 +268,8 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
 
     @Synchronized
     override fun close() {
-        val current = engine
-        engine = null
-        activeDelegate = null
-        current?.close()
+        closeRuntime()
+        delegateBenchmarked = false
+        forceCpu = false
     }
 }
