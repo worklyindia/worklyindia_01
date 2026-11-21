@@ -7,6 +7,8 @@
 package com.worklyindia.aivoice
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import com.google.mediapipe.tasks.audio.texttospeech.SynthesisOptions
 import com.google.mediapipe.tasks.audio.texttospeech.TextToSpeech
 import com.google.mediapipe.tasks.audio.texttospeech.TextToSpeechOptions
@@ -48,6 +50,12 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         check(tts.listVoices().any { it.voiceId == voiceId }) {
             "Selected voice is not available in this Kokoro model: $voiceId"
         }
+        // Run a tiny inference during warm-up so first-request setup is paid in background.
+        val warmupText = if (voiceId == "hf_alpha") "નમસ્તે" else "Hello."
+        val startedAt = SystemClock.elapsedRealtime()
+        val warmupAudio = tts.synthesize(warmupText, SynthesisOptions(voiceId = voiceId))
+        check(warmupAudio.samples.isNotEmpty()) { "Kokoro warm-up returned empty audio for $voiceId." }
+        Log.i(TAG, "Kokoro warm-up voice=$voiceId durationMs=" + (SystemClock.elapsedRealtime() - startedAt))
     }
 
     fun synthesizeToWav(
@@ -71,11 +79,14 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         outputFile.parentFile?.mkdirs()
         var dataBytes = 0L
         var sampleRate = 0
+        val synthesisStartedAt = SystemClock.elapsedRealtime()
         java.io.RandomAccessFile(outputFile, "rw").use { wav ->
             wav.setLength(0L)
             writeWavHeader(wav, 0, 24_000)
             for ((chunkIndex, chunk) in chunks.withIndex()) {
+                val chunkStartedAt = SystemClock.elapsedRealtime()
                 val audio = tts.synthesize(chunk, SynthesisOptions(voiceId = voiceId))
+                Log.i(TAG, "Kokoro inference voice=${voiceId} chunk=${chunkIndex + 1}/${chunks.size} chars=${chunk.length} durationMs=" + (SystemClock.elapsedRealtime() - chunkStartedAt))
                 check(audio.samples.isNotEmpty()) { "Kokoro returned empty audio for a text segment." }
                 if (sampleRate == 0) sampleRate = audio.sampleRateHz
                 check(audio.sampleRateHz == sampleRate) { "Kokoro changed sample rate between text segments." }
@@ -104,6 +115,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         check(outputFile.isFile && outputFile.length() > 44L) {
             "Kokoro could not write the generated WAV audio."
         }
+        Log.i(TAG, "Kokoro synthesis complete chars=${text.length} chunks=${chunks.size} durationMs=" + (SystemClock.elapsedRealtime() - synthesisStartedAt) + " wavBytes=${outputFile.length()}")
         return outputFile
     }
 
@@ -135,6 +147,10 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
         ascii("RIFF"); leInt(36 + dataBytes); ascii("WAVE"); ascii("fmt "); leInt(16)
         leShort(1); leShort(1); leInt(sampleRate); leInt(sampleRate * 2); leShort(2); leShort(16)
         ascii("data"); leInt(dataBytes)
+    }
+
+    companion object {
+        private const val TAG = "WorklyKokoroTTS"
     }
 
     @Synchronized
