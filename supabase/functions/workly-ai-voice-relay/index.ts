@@ -175,7 +175,12 @@ export async function handleWorklyVoiceRelay(req: Request) {
         app_version: redact(body?.app_version, 40) || null,
         android_version: redact(body?.android_version, 40) || null,
         device_model: redact(body?.device_model, 100) || null,
-        metadata: {}
+        metadata: {
+          delegate: redact(body?.metadata?.delegate, 16) || null,
+          delegate_benchmarked: body?.metadata?.delegate_benchmarked === true,
+          gpu_benchmark_ms: numeric(body?.metadata?.gpu_benchmark_ms, 3600000),
+          cpu_benchmark_ms: numeric(body?.metadata?.cpu_benchmark_ms, 3600000),
+        }
       });
       if (error) throw error;
       return json({ recorded: true });
