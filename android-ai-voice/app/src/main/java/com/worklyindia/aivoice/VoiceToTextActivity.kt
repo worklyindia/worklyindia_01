@@ -102,26 +102,41 @@ class VoiceToTextActivity : Activity() {
     private fun buildUi() {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(8), dp(16), dp(18))
             setBackgroundColor(bg)
         }
-        page.addView(Button(this).apply {
-            text = "‹  Back"
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(18), dp(4), dp(18), dp(4))
+            setBackgroundColor(surface)
+        }
+        header.addView(Button(this).apply {
+            text = "‹"
+            textSize = 28f
             isAllCaps = false
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
             setTextColor(primary)
-            setBackgroundColor(bg)
+            setBackgroundColor(surface)
             setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+        }, LinearLayout.LayoutParams(dp(48), dp(52)))
+        header.addView(TextView(this).apply {
+            text = "Voice To Text"
+            textSize = 20f
+            setTextColor(primary)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }, LinearLayout.LayoutParams(0, dp(52), 1f))
+        page.addView(header)
+        page.addView(View(this).apply {
+            setBackgroundColor(if (dark) 0x334A5B70 else 0x2234475E)
+        }, LinearLayout.LayoutParams(-1, dp(1)))
 
         val scroll = ScrollView(this)
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(18))
+        }
         scroll.addView(content)
         page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        content.addView(label("Voice To Text", 23, primary, true).apply {
-            setPadding(0, dp(4), 0, dp(12))
-        })
         content.addView(label("SELECT MODEL", 12, secondary, true))
         modelSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(
