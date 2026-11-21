@@ -318,7 +318,9 @@ class VoiceRelayService : Service() {
                 VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
                 val uploadMs = SystemClock.elapsedRealtime() - uploadStartedAt
                 Log.i(TAG, "TTS upload complete job=$jobId uploadMs=$uploadMs totalMs=${SystemClock.elapsedRealtime() - jobStartedAt}")
-                reportDiagnostic(token, "tts_upload_complete", jobId, language, uploadMs, outputFile.length())
+                // Repeat the final delegate snapshot with the upload event so
+                // the persisted diagnostic also contains the completed benchmark.
+                reportDiagnostic(token, "tts_upload_complete", jobId, language, uploadMs, outputFile.length(), metadata = kokoroMetadata)
                 setStatus("Offline model voice audio delivered to website. Waiting for next request…")
             } catch (error: Exception) {
                 reportDiagnostic(token, "tts_failed", jobId, diagnosticLanguage, SystemClock.elapsedRealtime() - jobStartedAt, outputFile.length().coerceAtLeast(0L), error)
