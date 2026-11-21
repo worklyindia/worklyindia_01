@@ -38,6 +38,8 @@ class TextToVoiceActivity : Activity() {
     // Reuse the loaded Indic Tiny ONNX sessions for repeat conversions in this screen.
     private var cachedTinyEngine: IndicTinyTtsEngine? = null
     private var cachedTinyLanguage: String? = null
+    private var cachedKokoroEngine: KokoroTtsEngine? = null
+    private var cachedKokoroModelPath: String? = null
     private lateinit var modelSpinner: Spinner
     private lateinit var languageSpinner: Spinner
     private lateinit var voiceSpinner: Spinner
@@ -292,8 +294,19 @@ class TextToVoiceActivity : Activity() {
                         engine.synthesizeToWav(text, output, if (voice.startsWith("Male")) "male" else "female")
                     }
                     "kokoro" -> {
-                        val id=voice.substringBefore(" ·")
-                        KokoroTtsEngine(this).use { it.synthesizeToWav(pack,manager.modelDirectory(pack),text,id,output) }
+                        val id = voice.substringBefore(" ·")
+                        val modelDirectory = manager.modelDirectory(pack)
+                        val modelPath = File(modelDirectory, "kokoro_int8_fp16.litertlm").absolutePath
+                        val engine = if (cachedKokoroModelPath == modelPath && cachedKokoroEngine != null) {
+                            cachedKokoroEngine!!
+                        } else {
+                            cachedKokoroEngine?.close()
+                            KokoroTtsEngine(this).also {
+                                cachedKokoroEngine = it
+                                cachedKokoroModelPath = modelPath
+                            }
+                        }
+                        engine.synthesizeToWav(pack, modelDirectory, text, id, output)
                     }
                 }
                 check(output.isFile && output.length()>44L) { "Audio file was not generated." }
@@ -355,5 +368,5 @@ class TextToVoiceActivity : Activity() {
         override fun onNothingSelected(parent:android.widget.AdapterView<*>?)=Unit
         override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:View?,position:Int,id:Long) { action() }
     }
-    override fun onDestroy() { player?.release(); player=null; executor.shutdownNow(); runCatching { cachedTinyEngine?.close() }; cachedTinyEngine=null; cachedTinyLanguage=null; super.onDestroy() }
+    override fun onDestroy() { player?.release(); player=null; executor.shutdownNow(); runCatching { cachedTinyEngine?.close() }; cachedTinyEngine=null; cachedTinyLanguage=null; runCatching { cachedKokoroEngine?.close() }; cachedKokoroEngine=null; cachedKokoroModelPath=null; super.onDestroy() }
 }
