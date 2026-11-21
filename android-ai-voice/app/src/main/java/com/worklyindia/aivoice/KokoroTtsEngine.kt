@@ -51,7 +51,7 @@ class KokoroTtsEngine(context: Context) : AutoCloseable {
             "Selected voice is not available in this Kokoro model: $voiceId"
         }
         // Run a tiny inference during warm-up so first-request setup is paid in background.
-        val warmupText = if (voiceId == "hf_alpha") "નમસ્તે" else "Hello."
+        val warmupText = if (voiceId == "hf_alpha") "नमस्ते।" else "Hello."
         val startedAt = SystemClock.elapsedRealtime()
         val warmupAudio = tts.synthesize(warmupText, SynthesisOptions(voiceId = voiceId))
         check(warmupAudio.samples.isNotEmpty()) { "Kokoro warm-up returned empty audio for $voiceId." }
