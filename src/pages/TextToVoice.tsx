@@ -92,8 +92,6 @@ const FALLBACK_PREVIEW_TEXTS: PreviewCatalog = {
 };
 
 const R2_PREVIEW_CATALOG_URL = "https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/voice-preview-catalog.json";
-const MODEL_LABELS: Record<string, string> = { kokoro: "Kokoro-82M", indic: "Indic Tiny TTS" };
-
 export default function TextToVoice() {
   const navigate = useNavigate();
   const [text, setText] = useState("");
