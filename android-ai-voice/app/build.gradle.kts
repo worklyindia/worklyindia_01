@@ -19,12 +19,23 @@ val releaseSigningReady = listOf(releaseStoreFile, releaseStorePassword, release
 android {
     // Keep the Kotlin/manifest namespace stable; only the installed app identity changes.
     namespace = "com.worklyindia.aivoice"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.2.12479018"
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("playStore") { dimension = "distribution" }
+        create("direct") { dimension = "distribution" }
+    }
+
     defaultConfig {
         applicationId = "com.worklyindia.chatwork"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
+        ndk {
+            // Qwen/QVAC/Wan native runtimes are built and verified for ARM64 only.
+            // Do not ship unused x86/32-bit native libraries in the Play bundle.
+            abiFilters += "arm64-v8a"
+        }
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
         buildConfigField("String", "SUPABASE_URL", "\"https://jubwzelupbntbetpajqb.supabase.co\"")
@@ -75,6 +86,9 @@ android {
             // Sherpa and the ORT 1.28.2 AAR carry the same runtime version.
             pickFirsts += setOf("**/libonnxruntime.so")
         }
+    }
+    bundle {
+        abi { enableSplit = true }
     }
     buildFeatures { buildConfig = true }
     kotlinOptions { jvmTarget = "17" }
