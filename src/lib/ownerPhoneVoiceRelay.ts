@@ -7,6 +7,9 @@ type RelayJob = {
 };
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+// Poll job state less aggressively while the phone is doing long local inference.
+// 1.2s keeps the UI responsive while cutting repeated Supabase reads by about 70% vs 350ms.
+const JOB_STATUS_POLL_INTERVAL_MS = 1_200;
 
 export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000, voice = '', model = ''): Promise<string> {
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
@@ -27,7 +30,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await wait(350);
+    await wait(JOB_STATUS_POLL_INTERVAL_MS);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
@@ -63,7 +66,7 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
   // Android online AI requests may take up to 60 seconds; allow time for the phone to finish.
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
-    await wait(350);
+    await wait(JOB_STATUS_POLL_INTERVAL_MS);
     const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
@@ -93,7 +96,7 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
   window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: 'queued' } }));
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    await wait(350);
+    await wait(JOB_STATUS_POLL_INTERVAL_MS);
     const { data, error } = await supabase.functions.invoke('unified-voice', { body: { action: 'get_job', job_id: jobId } });
     if (error) throw error;
     const job = data?.job as RelayJob | undefined;
