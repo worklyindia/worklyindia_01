@@ -102,6 +102,8 @@ class WorklyAccountActivity : Activity() {
                 SecureDeviceTokenStore.save(this, deviceToken)
                 val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
                 VoiceRelayApi.setWorkerState(deviceToken, workerOptIn.isChecked, capabilities)
+                getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, workerOptIn.isChecked).apply()
                 runOnUiThread {
                     val relayIntent = Intent(this, VoiceRelayService::class.java)
                     if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(relayIntent) else startService(relayIntent)
@@ -143,6 +145,8 @@ class WorklyAccountActivity : Activity() {
                 SecureDeviceTokenStore.save(this, deviceToken)
                 val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
                 VoiceRelayApi.setWorkerState(deviceToken, workerOptIn.isChecked, capabilities)
+                getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE).edit()
+                    .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, workerOptIn.isChecked).apply()
                 runOnUiThread {
                     val relayIntent = Intent(this, VoiceRelayService::class.java)
                     if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(relayIntent) else startService(relayIntent)
