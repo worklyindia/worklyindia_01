@@ -202,12 +202,17 @@ export async function handleWorklyVoiceRelay(req: Request) {
       let device: any = null;
       let selectedModel = requestedModel;
       let activeJobs = Number.MAX_SAFE_INTEGER;
+      let onlineModelReady = false;
+      let onlineModelLanguageReady = false;
       for (const candidate of candidates ?? []) {
-        const matchedCapability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
-          cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
-          typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages) &&
-          supportsRequestedLanguage(cap.languages)
-        );
+        const readyCapabilities = Array.isArray(candidate.model_capabilities)
+          ? candidate.model_capabilities.filter((cap: any) =>
+              cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
+              typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages))
+          : [];
+        if (readyCapabilities.length) onlineModelReady = true;
+        const matchedCapability = readyCapabilities.find((cap: any) => supportsRequestedLanguage(cap.languages));
+        if (matchedCapability) onlineModelLanguageReady = true;
         if (!matchedCapability) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
           .select("id", { count: "exact", head: true })
@@ -223,7 +228,19 @@ export async function handleWorklyVoiceRelay(req: Request) {
         }
         if (load === 0) break;
       }
-      if (!device) return json({ error: "No available opted-in phone has this model and language ready, or all compatible queues are full." }, 429);
+      if (!device) {
+        if (!onlineModelReady) {
+          return json({
+            error: requestedModel
+              ? `The ${requestedModel} voice model is not installed and ready on an online Workly phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.`
+              : "No online Workly phone has a ready model for this voice task."
+          }, 409);
+        }
+        if (!onlineModelLanguageReady) {
+          return json({ error: `The selected voice model is ready, but not for ${requestedLanguage}. Download its language pack in ChatWork or choose a supported language.` }, 409);
+        }
+        return json({ error: "All compatible Workly Voice queues are full. Please wait a moment and try again." }, 429);
+      }
 
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
