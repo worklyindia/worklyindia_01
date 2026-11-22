@@ -16,9 +16,10 @@ CREATE INDEX IF NOT EXISTS chatwork_app_releases_public_version_idx
   ON public.chatwork_app_releases (is_published, version_code DESC);
 
 ALTER TABLE public.chatwork_app_releases ENABLE ROW LEVEL SECURITY;
-GRANT SELECT ON public.chatwork_app_releases TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON public.chatwork_app_releases TO authenticated;
-GRANT ALL ON public.chatwork_app_releases TO service_role;
+REVOKE ALL ON TABLE public.chatwork_app_releases FROM anon, authenticated, service_role;
+GRANT SELECT ON TABLE public.chatwork_app_releases TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON TABLE public.chatwork_app_releases TO authenticated;
+GRANT ALL ON TABLE public.chatwork_app_releases TO service_role;
 
 CREATE POLICY "Public can read published ChatWork releases"
   ON public.chatwork_app_releases FOR SELECT TO anon, authenticated
