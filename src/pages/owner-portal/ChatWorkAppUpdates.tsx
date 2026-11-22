@@ -243,7 +243,7 @@ export default function ChatWorkAppUpdates() {
           <Button variant="ghost" size="icon" className="h-10 w-10 shrink-0" aria-label="Back to Owner Portal" onClick={() => navigate("/owner-portal")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="min-w-0 flex-1 truncate text-base font-bold sm:text-xl">Android Release Management</h1>
+          <h1 className="min-w-0 flex-1 truncate text-base font-bold sm:text-xl">ChatWork Release Management</h1>
           <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" aria-label="Refresh releases" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           </Button>
@@ -268,7 +268,7 @@ export default function ChatWorkAppUpdates() {
                 <div className="min-w-0 rounded-lg border p-3 sm:col-span-2">
                   <p className="text-xs font-medium">Release availability</p>
                   <p className="mt-1 text-sm text-muted-foreground">{latest.is_published
-                    ? "This verified APK is public. Android update checks can now offer it to users."
+                    ? "This verified APK is public. ChatWork update checks can now offer it to users."
                     : "This APK is uploaded and verified, but it is still an unpublished draft. Users will not receive this update until you select Make Public."}</p>
                   {isExternalReleaseUrl(latest.apk_path) && <a className="mt-2 inline-flex break-all text-sm font-medium text-primary underline underline-offset-4" href={latest.apk_path} target="_blank" rel="noopener noreferrer">Download latest APK directly</a>}
                 </div>
@@ -279,7 +279,7 @@ export default function ChatWorkAppUpdates() {
         <Card className="w-full min-w-0 overflow-hidden">
           <CardHeader className="p-4 sm:p-6">
             <CardTitle className="flex items-center gap-2 text-lg"><Activity className="h-5 w-5" /> Automatic cleanup status</CardTitle>
-            <CardDescription>Android Workflow successful APK upload ke baad current Public release se purane versions clean karta hai. Owner Page par naya release Public karne ke baad Supabase turant usse purane versions clean karta hai. Dono cases mein active Public APK aur future drafts safe rehte hain.</CardDescription>
+            <CardDescription>ChatWork build workflow successful APK upload ke baad current Public release se purane ChatWork versions clean karta hai. Owner Page par naya ChatWork release Public karne ke baad Supabase purane ChatWork versions clean karta hai. Workly India releases is process se alag aur safe rehte hain.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 p-4 pt-0 sm:p-6 sm:pt-0">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -289,7 +289,7 @@ export default function ChatWorkAppUpdates() {
             </div>
             {workflowLoading ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading latest workflow steps...</div>
               : workflowError ? <p className="text-sm text-destructive">{workflowError}</p>
-              : !workflowRun ? <p className="text-sm text-muted-foreground">No Android workflow run found yet.</p>
+              : !workflowRun ? <p className="text-sm text-muted-foreground">No ChatWork workflow run found yet.</p>
               : <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
                   <div className="min-w-0"><p className="font-semibold">Run #{workflowRun.run_number} · {workflowRun.display_title || workflowRun.name}</p><p className="text-xs text-muted-foreground">Started: {workflowRun.created_at ? new Date(workflowRun.created_at).toLocaleString() : "—"} · Attempt {workflowRun.run_attempt}</p><p className="text-xs text-muted-foreground">Overall: {workflowRun.status === "completed" ? workflowRun.conclusion : workflowRun.status}</p></div>
@@ -313,8 +313,8 @@ export default function ChatWorkAppUpdates() {
 
         <section className="space-y-3">
           <div>
-            <h2 className="text-lg font-semibold">Android app releases</h2>
-            <p className="text-sm text-muted-foreground">Publish or unpublish the latest Cloudflare-hosted APK. Only one release can be public at a time.</p>
+            <h2 className="text-lg font-semibold">ChatWork app releases</h2>
+            <p className="text-sm text-muted-foreground">Publish or unpublish the latest ChatWork APK. Only one ChatWork release can be public at a time.</p>
           </div>
           {loading ? null : releases.length === 0 ? <p className="rounded-lg border p-5 text-center text-sm text-muted-foreground">No app releases found.</p>
             : releases.map((release) => {
