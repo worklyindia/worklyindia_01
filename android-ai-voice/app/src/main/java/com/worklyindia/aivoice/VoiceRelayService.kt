@@ -71,6 +71,7 @@ class VoiceRelayService : Service() {
         setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
         var wasWaitingForData = !hasValidatedInternet()
         var lastCapabilityRefresh = 0L
+        var lastSessionHeartbeat = System.currentTimeMillis()
         while (running.get()) {
             if (!hasValidatedInternet()) {
                 if (!wasWaitingForData) ChatWorkTelemetryApp.onNetworkLost(this)
@@ -82,7 +83,13 @@ class VoiceRelayService : Service() {
             if (wasWaitingForData) {
                 wasWaitingForData = false
                 ChatWorkTelemetryApp.onNetworkRestored(this)
+                lastSessionHeartbeat = System.currentTimeMillis()
                 setStatus("Shared phone server is online")
+            }
+            val heartbeatNow = System.currentTimeMillis()
+            if (heartbeatNow - lastSessionHeartbeat >= SESSION_HEARTBEAT_INTERVAL_MS) {
+                ChatWorkTelemetryApp.onHeartbeat(this)
+                lastSessionHeartbeat = heartbeatNow
             }
             try {
                 val workerPrefs = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
@@ -471,6 +478,7 @@ class VoiceRelayService : Service() {
         const val EVENTS_KEY = "recent_activity_events"
         const val POLL_INTERVAL_MS = 1_000L
         const val WORKER_CAPABILITY_REFRESH_MS = 5 * 60 * 1_000L
+        const val SESSION_HEARTBEAT_INTERVAL_MS = 15 * 60 * 1_000L
         const val ACTION_RESTORE_NOTIFICATION = "com.worklyindia.aivoice.RESTORE_SERVER_NOTIFICATION"
         const val ONLINE_NOTIFICATION_TEXT = "Shared phone server is online."
         const val WAITING_NOTIFICATION_TEXT = "Waiting for Data on..."
