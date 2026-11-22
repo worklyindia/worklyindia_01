@@ -10,7 +10,6 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const ownerUserId = Deno.env.get("WORKLY_AI_VOICE_OWNER_USER_ID") ?? "";
 const supabase = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -105,14 +104,6 @@ export async function handleWorklyVoiceRelay(req: Request) {
     if (action === "register_device") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Please sign in with your Workly India account in the app." }, 401);
-      if (user.id !== ownerUserId) return json({ error: "Only the owner can register the shared voice phone." }, 403);
-
-      // One active phone per account: replace older active registrations safely.
-      await db.from("workly_ai_voice_devices")
-        .update({ revoked_at: now })
-        .eq("user_id", ownerUserId)
-        .is("revoked_at", null);
-
       const deviceToken = randomHex(32);
       const { data: device, error } = await db.from("workly_ai_voice_devices")
         .insert({
