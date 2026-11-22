@@ -192,13 +192,6 @@ class WorklyAccountActivity : Activity() {
         }
         card.addView(status, LinearLayout.LayoutParams(-1, -2))
 
-        content.addView(TextView(this).apply {
-            text = "Your account is protected by Supabase authentication."
-            textSize = 12f
-            setTextColor(muted)
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
-
         setContentView(scroll)
     }
 
@@ -466,13 +459,26 @@ class WorklyAccountActivity : Activity() {
         SecureDeviceTokenStore.saveAuthSession(this, accessToken, refreshToken)
         val deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
         SecureDeviceTokenStore.save(this, deviceToken)
-        val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
-        VoiceRelayApi.setWorkerState(deviceToken, workerEnabled, capabilities)
+        var workerSetupFailed = false
+        if (workerEnabled) {
+            try {
+                val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                VoiceRelayApi.setWorkerState(deviceToken, true, capabilities)
+            } catch (_: Exception) {
+                // Community worker mode is optional. A relay preference failure must
+                // never block a valid Workly account sign-in.
+                workerEnabled = false
+                workerSetupFailed = true
+            }
+        }
         getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE).edit()
             .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, workerEnabled).apply()
         runOnUiThread {
             val relayIntent = Intent(this, VoiceRelayService::class.java)
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(relayIntent) else startService(relayIntent)
+            if (workerSetupFailed) {
+                android.widget.Toast.makeText(this, "Signed in. Optional worker mode could not be enabled.", android.widget.Toast.LENGTH_LONG).show()
+            }
             startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             finish()
         }
