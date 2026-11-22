@@ -124,7 +124,11 @@ class MainActivity : Activity() {
         setContentView(root)
         signalAnimation.playAnimation()
         // Check the separately published ChatWork APK release after the home screen is ready.
-        appUpdater = ChatWorkAppUpdater(this).also { it.checkForUpdate() }
+        // Google Play handles updates for the Play Store flavor. The private APK
+        // updater is enabled only for the separately distributed direct flavor.
+        if (BuildConfig.FLAVOR == "direct") {
+            appUpdater = ChatWorkAppUpdater(this).also { it.checkForUpdate() }
+        }
         // Ask for notifications at first launch on Android 13+.
         // Microphone permission is requested only when the user taps Start Speaking.
         if (Build.VERSION.SDK_INT >= 33 &&
