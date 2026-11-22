@@ -10,10 +10,10 @@ import { toast } from "@/hooks/use-toast";
 type VoiceOption = { value: string; label: string };
 type PreviewCatalog = Record<string, Record<string, string>>;
 
-const MODELS = [
+const MODELS: { value: string; label: string; languages: string[] }[] = [
   { value: "kokoro", label: "Kokoro-82M", languages: ["hi-IN", "en-IN"] },
   { value: "indic", label: "Indic Tiny TTS", languages: ["gu-IN"] },
-] as const;
+];
 
 const LANGUAGES = [
   { value: "hi-IN", label: "Hindi" },
@@ -147,9 +147,15 @@ export default function TextToVoice() {
     return () => window.removeEventListener("workly-voice-status", onStatus);
   }, []);
 
-  useEffect(() => () => {
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    previewCache.current.forEach((url) => URL.revokeObjectURL(url));
+  useEffect(() => {
+    return () => {
+      previewCache.current.forEach((url) => URL.revokeObjectURL(url));
+      previewCache.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => { if (audioUrl) URL.revokeObjectURL(audioUrl); };
   }, [audioUrl]);
 
   useEffect(() => {
@@ -175,10 +181,10 @@ export default function TextToVoice() {
   const convert = async () => {
     const clean = text.trim();
     if (!clean) { toast({ title: "Enter text first", description: "Add text to convert into voice." }); return; }
+    clearAudio();
     setBusy(true);
     setStatus("Connecting to your Workly Android app…");
     setProgress(1);
-    clearAudio();
     try {
       const blob = await requestOwnerPhoneLongVoiceAudioBlob(clean, language, voice, model);
       const url = URL.createObjectURL(blob);
