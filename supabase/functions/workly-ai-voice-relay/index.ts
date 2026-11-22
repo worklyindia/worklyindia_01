@@ -75,7 +75,7 @@ async function previewCacheObject(body: any) {
   }
   const bucket = "workly-ai-models";
   const client = new AwsClient({ accessKeyId, secretAccessKey, service: "s3", region: "auto" });
-  const publicBase = (publicUrlSecret || "https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev").replace(/\\/+$/, "");
+  const publicBase = (publicUrlSecret || "https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev").replace(/\/+$/, "");
   const objectUrl = `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${key}`;
   return { client, key, objectUrl, publicUrl: `${publicBase}/${key}` };
 }
