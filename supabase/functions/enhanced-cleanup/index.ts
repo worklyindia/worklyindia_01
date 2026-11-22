@@ -228,6 +228,75 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
     }
 
+    if (action === 'cleanup_chatwork_releases') {
+      if (!publicReleaseId) throw new Error('public_release_id is required');
+      const { data: active, error: activeError } = await supabaseClient
+        .from('chatwork_app_releases')
+        .select('id,version_code,is_published,apk_path')
+        .eq('id', publicReleaseId)
+        .maybeSingle();
+      if (activeError) throw new Error('Could not verify the newly published ChatWork release: ' + activeError.message);
+      if (!active || active.is_published !== true) throw new Error('Cleanup refused: target release is not verified as Public');
+
+      const { data: oldRows, error: rowsError } = await supabaseClient
+        .from('chatwork_app_releases')
+        .select('id,version_code,apk_path')
+        .lt('version_code', active.version_code);
+      if (rowsError) throw new Error('Could not list older ChatWork releases: ' + rowsError.message);
+
+      const accountId = await getOwnerSecret('R2_ACCOUNT_ID');
+      const accessKeyId = await getOwnerSecret('R2_ACCESS_KEY_ID');
+      const secretAccessKey = await getOwnerSecret('R2_SECRET_ACCESS_KEY');
+      if (!accountId || !accessKeyId || !secretAccessKey) {
+        throw new Error('R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must be configured in Owner Secrets');
+      }
+      const r2 = new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' });
+      const bucket = 'workly-android-releases';
+      const deletedObjects: string[] = [];
+      for (const row of oldRows ?? []) {
+        const url = new URL(row.apk_path);
+        const expectedKey = 'chatwork/releases/chatwork-v' + row.version_code + '/ChatWork.apk';
+        const expectedPath = '/' + bucket + '/' + expectedKey;
+        if (url.hostname !== 'pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev' || url.pathname !== '/' + expectedKey) {
+          // GitHub archival URLs or legacy Supabase paths have no R2 object to delete.
+          continue;
+        }
+        const objectUrl = 'https://' + accountId + '.r2.cloudflarestorage.com' + expectedPath;
+        const response = await r2.fetch(new Request(objectUrl, { method: 'DELETE' }));
+        if (!response.ok && response.status !== 404) {
+          throw new Error('R2 deletion failed for version ' + row.version_code + ' [' + response.status + ']');
+        }
+        deletedObjects.push(expectedKey);
+      }
+
+      const ids = (oldRows ?? []).map((row: any) => row.id);
+      let deletedRows: any[] = [];
+      if (ids.length) {
+        const { data, error } = await supabaseClient.from('chatwork_app_releases')
+          .delete().in('id', ids).select('id');
+        if (error) throw new Error('Old ChatWork release records could not be deleted: ' + error.message);
+        deletedRows = data ?? [];
+      }
+      const { data: verifyActive, error: verifyError } = await supabaseClient
+        .from('chatwork_app_releases').select('id,is_published').eq('id', publicReleaseId).maybeSingle();
+      if (verifyError || !verifyActive || verifyActive.is_published !== true) {
+        throw new Error('Post-cleanup verification failed: active Public release is missing');
+      }
+      const { data: remaining, error: remainingError } = await supabaseClient
+        .from('chatwork_app_releases').select('id,version_code').lt('version_code', active.version_code);
+      if (remainingError || (remaining?.length ?? 0) > 0) {
+        throw new Error('Post-cleanup verification failed: older release records remain');
+      }
+      return new Response(JSON.stringify({
+        success: true,
+        action,
+        active_release_id: publicReleaseId,
+        deleted_database_rows: deletedRows.length,
+        deleted_r2_apks: deletedObjects.length,
+        deleted_r2_keys: deletedObjects,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
     // Get custom retention periods if set
     const { data: settingsData } = await supabaseClient
       .from('cleanup_schedule_settings')
