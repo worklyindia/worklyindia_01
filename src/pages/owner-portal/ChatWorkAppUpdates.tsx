@@ -25,6 +25,8 @@ const isR2ReleaseUrl = (value: string) => {
     const url = new URL(value);
     return url.protocol === "https:"
       && ["pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev", "downloads.devs.surf"].includes(url.hostname)
+      && url.pathname.startsWith("/chatwork/releases/chatwork-v")
+      && url.pathname.endsWith("/ChatWork.apk")
       && !url.username && !url.password;
   } catch {
     return false;
@@ -88,37 +90,8 @@ export default function ChatWorkAppUpdates() {
       }
     }
 
-    // The database size can be stale or accidentally contain the AAB size.
-    // Read the actual APK object so the Owner Portal matches the APK artifact
-    // reported by the native Android workflow.
-    const sizeCheckIds = new Set(
-      rows.filter((release, index) => (index === 0 || release.is_published) && !isExternalReleaseUrl(release.apk_path)).map((release) => release.id)
-    );
-    rows = await Promise.all(rows.map(async (release) => {
-      if (!sizeCheckIds.has(release.id)) return release;
-      try {
-        const { data: apkBlob, error: apkError } = await supabase.storage
-          .from("android-app-releases")
-          .download(release.apk_path);
-        if (apkError || !apkBlob) {
-          console.warn("Could not verify stored APK size:", release.apk_path, apkError);
-          return release;
-        }
-        const actualApkBytes = apkBlob.size;
-        if (actualApkBytes !== release.apk_size_bytes) {
-          const { error: sizeUpdateError } = await (supabase as any)
-            .from("chatwork_app_releases")
-            .update({ apk_size_bytes: actualApkBytes })
-            .eq("id", release.id);
-          if (sizeUpdateError) console.warn("Could not save verified APK size:", sizeUpdateError);
-        }
-        return { ...release, apk_size_bytes: actualApkBytes };
-      } catch (sizeError) {
-        console.warn("APK size verification failed:", release.apk_path, sizeError);
-        return release;
-      }
-    }));
-
+    // ChatWork release APKs are always stored in Cloudflare R2. The workflow has
+    // already verified the exact object size before writing this release row.
     // Older unpublished releases are removed automatically after a successful new APK upload.
     setReleases(rows);
     setLoading(false);
@@ -239,19 +212,7 @@ export default function ChatWorkAppUpdates() {
         else toast.success("Opening ChatWork v" + target.version_name + " APK download.");
         return;
       }
-      const filename = "Workly-India-" + target.version_name + "-" + target.version_code + ".apk";
-      const { data, error } = await supabase.storage.from("android-app-releases").download(target.apk_path);
-      if (error) throw error;
-      if (!data) throw new Error("APK file was not returned by storage.");
-      const objectUrl = URL.createObjectURL(data);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      toast.success("Downloading ChatWork v" + target.version_name + " APK.");
+      throw new Error("This ChatWork release does not have a verified public download URL.");
     } catch (error) {
       console.error("ChatWork APK download failed:", error);
       toast.error(error instanceof Error ? error.message : "The APK could not be downloaded.");
@@ -264,12 +225,7 @@ export default function ChatWorkAppUpdates() {
     try {
       const target = getPreferredDownloadRelease(release);
       let downloadUrl = target.apk_path;
-      if (!isExternalReleaseUrl(downloadUrl)) {
-        const { data, error } = await supabase.storage.from("android-app-releases").createSignedUrl(downloadUrl, 60 * 60 * 24 * 365);
-        if (error) throw error;
-        if (!data?.signedUrl) throw new Error("A download link could not be created.");
-        downloadUrl = data.signedUrl;
-      }
+      if (!isExternalReleaseUrl(downloadUrl)) throw new Error("This ChatWork release does not have a verified public download URL.");
       await navigator.clipboard.writeText(downloadUrl);
       if (target.id !== release.id) toast.warning("Older APK is unavailable. Latest uploaded APK v" + target.version_name + " link copied instead.");
       else toast.success("APK download link copied.");
