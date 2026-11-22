@@ -196,12 +196,6 @@ class DataCollectionActivity : Activity() {
         rowTwo.addView(statCard("Recent errors", summary.optString("recent_errors_in_loaded_records", "0"), red), LinearLayout.LayoutParams(0, dp(92), 1f))
         parent.addView(rowTwo, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
 
-        parent.addView(sectionTitle("Worker status"))
-        addTable(parent, arrayOf("Device", "Worker", "Online", "Last seen", "Ready models"), "devices",
-            arrayOf("device_name", "worker_enabled", "online", "last_seen_at", "model_capabilities"), 8)
-        parent.addView(sectionTitle("Recent jobs"))
-        addTable(parent, arrayOf("Job ID", "Type", "Status", "Model", "Language", "Created"), "jobs",
-            arrayOf("id", "job_type", "status", "payload.model", "payload.language", "created_at"), 8)
     }
 
     private fun addTabs(parent: LinearLayout) {
@@ -269,8 +263,8 @@ class DataCollectionActivity : Activity() {
             }
             "Devices" -> {
                 parent.addView(sectionTitle("Registered ChatWork devices"))
-                addTable(parent, arrayOf("Device", "Worker", "Online", "Last seen", "Ready models", "Created", "Revoked"), "devices",
-                    arrayOf("device_name", "worker_enabled", "online", "last_seen_at", "model_capabilities", "created_at", "revoked_at"))
+                addTable(parent, arrayOf("Device", "Worker", "Online", "Last seen", "Worker updated", "Ready models", "Created", "Revoked"), "devices",
+                    arrayOf("device_name", "worker_enabled", "online", "last_seen_at", "worker_updated_at", "model_capabilities", "created_at", "revoked_at"))
             }
             "Jobs" -> {
                 parent.addView(sectionTitle("Voice / AI jobs"))
