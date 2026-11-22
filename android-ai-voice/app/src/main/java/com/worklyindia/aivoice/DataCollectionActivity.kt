@@ -201,7 +201,7 @@ class DataCollectionActivity : Activity() {
     private fun addTabs(parent: LinearLayout) {
         val tabs = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (tab in listOf("Overview", "Devices", "Jobs", "Diagnostics", "Releases")) {
+        for (tab in listOf("Overview", "Devices", "Jobs", "Diagnostics")) {
             val active = selectedTab == tab
             val item = TextView(this).apply {
                 text = tab
