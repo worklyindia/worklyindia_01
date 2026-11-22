@@ -128,7 +128,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const capabilities = Array.isArray(body?.capabilities) ? body.capabilities.slice(0, 40) : [];
       if (enabled && capabilities.length === 0) return json({ error: "Download and validate at least one worker model before enabling worker mode." }, 400);
       for (const capability of capabilities) {
-        if (!capability || !["tts", "stt"].includes(capability.task) ||
+        if (!capability || !["ai", "stt", "tts", "translate", "image", "video"].includes(capability.task) ||
           typeof capability.model !== "string" || capability.model.length > 100 ||
           !Array.isArray(capability.languages) || capability.languages.length > 30 ||
           capability.languages.some((language: unknown) => typeof language !== "string" || language.length > 12)) {
@@ -165,7 +165,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!user) return json({ error: "Authentication required" }, 401);
       await cleanupExpiredJobs(db, now);
       const jobType = body?.job_type;
-      if (jobType !== "tts" && jobType !== "stt") return json({ error: "job_type must be tts or stt" }, 400);
+      if (!["ai", "tts", "translate", "image", "video"].includes(jobType)) return json({ error: "job_type must be ai, tts, translate, image or video; use create_stt_job for audio transcription." }, 400);
       const payload = body?.payload;
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
@@ -181,7 +181,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .order("last_seen_at", { ascending: false })
         .limit(100);
       if (deviceError) throw deviceError;
-      const requiredTask = jobType === "tts" ? "tts" : "stt";
+      const requiredTask = jobType;
       let device: any = null;
       let activeJobs = Number.MAX_SAFE_INTEGER;
       for (const candidate of candidates ?? []) {
