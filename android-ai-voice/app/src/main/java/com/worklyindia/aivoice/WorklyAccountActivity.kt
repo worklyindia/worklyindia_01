@@ -410,7 +410,7 @@ class WorklyAccountActivity : Activity() {
         val secret = newPasswordValue
         if (secret.length < 6) { render("Use a new password with at least 6 characters."); return }
         runRequest("Updating password…") {
-            authRequest("PATCH", "/auth/v1/user", JSONObject().put("password", secret), recoveryAccessToken)
+            authRequest("PUT", "/auth/v1/user", JSONObject().put("password", secret), recoveryAccessToken)
             recoveryAccessToken = ""
             passwordValue = ""
             newPasswordValue = ""
