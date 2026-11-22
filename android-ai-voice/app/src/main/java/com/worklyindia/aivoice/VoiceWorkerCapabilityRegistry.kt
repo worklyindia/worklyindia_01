@@ -1,5 +1,9 @@
 package com.worklyindia.aivoice
 
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+
 /**
  * Single source of truth for local model task types and relay eligibility.
  *
@@ -38,6 +42,30 @@ object VoiceWorkerCapabilityRegistry {
     fun forPack(packId: String): Capability? =
         capabilities.firstOrNull { it.packId == packId }
             ?: capabilities.firstOrNull { it.packId.endsWith("*") && packId.startsWith(it.packId.removeSuffix("*")) }
+
+    /** Returns only fully downloaded, relay-wired models. Never advertises test-only packs. */
+    fun downloadedRelayCapabilities(context: Context): JSONArray {
+        val manager = SpeechPackDownloadManager(context)
+        val result = JSONArray()
+        val ttsPacks = listOf(
+            SpeechModelCatalog.indicTinyTts("gu") to "indic",
+            SpeechModelCatalog.indicTinyTts("hi") to "indic",
+            SpeechModelCatalog.indicTinyTts("en") to "indic",
+            SpeechModelCatalog.kokoro82m() to "kokoro"
+        )
+        for ((pack, relayModel) in ttsPacks) {
+            if (manager.snapshot(pack).state != SpeechPackDownloadManager.State.COMPLETE) continue
+            val language = if (pack.id.startsWith("indic-tiny-tts-")) pack.id.substringAfterLast("-") else listOf("hi", "en")
+            val languages = if (language is String) listOf(language) else language
+            result.put(JSONObject()
+                .put("task", "tts")
+                .put("model", relayModel)
+                .put("pack_id", pack.id)
+                .put("languages", JSONArray(languages))
+                .put("ready", true))
+        }
+        return result
+    }
 
     fun workerReady(packId: String): Boolean = forPack(packId)?.relayReady == true
 
