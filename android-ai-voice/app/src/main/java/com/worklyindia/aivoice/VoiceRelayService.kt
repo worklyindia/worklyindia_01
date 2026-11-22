@@ -41,6 +41,11 @@ class VoiceRelayService : Service() {
             return START_NOT_STICKY
         }
         activeToken = token
+        // Community worker mode is automatic for every paired ChatWork install.
+        // The relay loop immediately publishes only models that are fully downloaded
+        // and have a working local inference adapter.
+        getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
+            .edit().putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, true).apply()
         val initialStatus = currentConnectionNotificationText()
         startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
         if (initialStatus == "Waiting for Data on…") setStatus(initialStatus)
