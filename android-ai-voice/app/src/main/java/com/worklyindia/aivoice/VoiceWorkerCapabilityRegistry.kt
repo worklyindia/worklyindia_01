@@ -1,5 +1,6 @@
 package com.worklyindia.aivoice
 
+import android.app.ActivityManager
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,7 +13,7 @@ import org.json.JSONObject
  * Extend this registry only alongside a tested relay adapter.
  */
 object VoiceWorkerCapabilityRegistry {
-    enum class Task { TEXT_TO_SPEECH, SPEECH_TO_TEXT, OFFLINE_CHAT }
+    enum class Task { TEXT_TO_SPEECH, SPEECH_TO_TEXT, OFFLINE_CHAT, TRANSLATION, IMAGE_GENERATION, VIDEO_GENERATION }
     enum class Adapter { INDIC_TINY_TTS, KOKORO, SHERPA_VITS, QVAC, MOSS, INDIC_CONFORMER, QWEN }
 
     data class Capability(
@@ -61,6 +62,36 @@ object VoiceWorkerCapabilityRegistry {
                 .put("model", relayModel)
                 .put("pack_id", pack.id)
                 .put("languages", JSONArray(languages))
+                .put("ready", true))
+        }
+
+        // Advertise IndicConformer only when every file for that language is present.
+        val speechLanguages = listOf("as","bn","brx","doi","gu","hi","kn","kok","ks","mai","ml","mni","mr","ne","or","pa","sa","sat","sd","ta","te","ur","en")
+        for (language in speechLanguages) {
+            val pack = SpeechModelCatalog.indicConformer(language)
+            if (!OfflineSpeechEngineFactory.isReady(context, pack)) continue
+            result.put(JSONObject()
+                .put("task", "stt")
+                .put("model", "indicconformer-" + language)
+                .put("pack_id", pack.id)
+                .put("languages", JSONArray(listOf(language)))
+                .put("ready", true))
+        }
+
+        // Qwen is advertised only when the GGUF is valid and current free RAM
+        // meets the model's safety threshold. Never advertise a model that is
+        // merely present but unsafe to load on this device.
+        val memoryInfo = ActivityManager.MemoryInfo()
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memoryInfo)
+        val qwenManager = QwenModelManager(context)
+        for (model in qwenManager.models) {
+            if (qwenManager.snapshot(model).state != QwenModelManager.State.READY) continue
+            if (!qwenManager.isSupported(model, memoryInfo.availMem)) continue
+            result.put(JSONObject()
+                .put("task", "ai")
+                .put("model", "qwen-" + model.id)
+                .put("pack_id", "qwen-" + model.id)
+                .put("languages", JSONArray(listOf("multilingual")))
                 .put("ready", true))
         }
         return result
