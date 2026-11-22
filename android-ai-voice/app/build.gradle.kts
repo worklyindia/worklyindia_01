@@ -136,6 +136,8 @@ dependencies {
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.firebase:firebase-messaging:24.1.2")
     // Keep the ORT Java API for Indic Tiny and Moss; Sherpa supplies the matching native ORT runtime.
+    // Official Sherpa Android text frontend; embeds its own espeak-ng data.
+    implementation("com.github.csukuangfj.piper-phonemize:piper-phonemize:v1.6.1")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
     }
