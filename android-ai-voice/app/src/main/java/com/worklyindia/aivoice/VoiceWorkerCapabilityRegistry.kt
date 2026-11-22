@@ -13,6 +13,8 @@ import org.json.JSONObject
  * Extend this registry only alongside a tested relay adapter.
  */
 object VoiceWorkerCapabilityRegistry {
+    const val WORKER_PREFS = "chatwork_community_worker"
+    const val WORKER_ENABLED_KEY = "worker_enabled"
     enum class Task { TEXT_TO_SPEECH, SPEECH_TO_TEXT, OFFLINE_CHAT, TRANSLATION, IMAGE_GENERATION, VIDEO_GENERATION }
     enum class Adapter { INDIC_TINY_TTS, KOKORO, SHERPA_VITS, QVAC, MOSS, INDIC_CONFORMER, QWEN }
 
