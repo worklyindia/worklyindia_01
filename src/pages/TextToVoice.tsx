@@ -12,7 +12,8 @@ type PreviewCatalog = Record<string, Record<string, string>>;
 
 const MODELS: { value: string; label: string; languages: string[] }[] = [
   { value: "kokoro", label: "Kokoro-82M", languages: ["hi-IN", "en-IN"] },
-  { value: "indic", label: "Indic Tiny TTS", languages: ["gu-IN"] },
+  { value: "indic", label: "Indic Tiny TTS", languages: ["gu-IN", "hi-IN", "en-IN"] },
+  { value: "itantra", label: "iTantra VITS · Sherpa-ONNX", languages: ["gu-IN", "hi-IN", "en-IN"] },
 ];
 
 const LANGUAGES = [
@@ -62,6 +63,9 @@ const FALLBACK_PREVIEW_TEXTS: PreviewCatalog = {
     hf_beta: "आपका स्वागत है। मैं आपकी सहायता करने के लिए यहाँ हूँ।",
     hm_omega: "आज हम एक नई शुरुआत करेंगे और अपने लक्ष्य की ओर आगे बढ़ेंगे।",
     hm_psi: "सही अवसर और मेहनत मिलकर सफलता का रास्ता बनाते हैं।",
+    female: "नमस्ते! वर्कली इंडिया में आपका स्वागत है। आपका दिन शुभ और सफल रहे।",
+    male: "अच्छे विचार और लगातार मेहनत से सफलता का नया रास्ता बनता है।",
+    default: "नमस्ते! यह iTantra हिंदी आवाज़ का नमूना है।",
   },
   "en-IN": {
     af_heart: "Hello! Welcome to Workly India. Let’s make today a great day.",
@@ -84,10 +88,14 @@ const FALLBACK_PREVIEW_TEXTS: PreviewCatalog = {
     am_onyx: "Success is built one thoughtful decision at a time.",
     am_puck: "Every conversation is a chance to learn something useful.",
     am_santa: "Warm wishes to you and your family. Have a wonderful day.",
+    female: "Hello! Welcome to Workly India. Wishing you a bright and successful day.",
+    male: "Clear ideas and steady effort can open the door to new opportunities.",
+    default: "Hello! This is an iTantra English voice sample.",
   },
   "gu-IN": {
     female: "નમસ્તે! વર્કલી ઇન્ડિયામાં આપનું હાર્દિક સ્વાગત છે. તમારો દિવસ શુભ રહે.",
     male: "સારા વિચારો અને સતત મહેનતથી સફળતાનો નવો રસ્તો બને છે.",
+    default: "નમસ્તે! આ iTantra ગુજરાતી અવાજની કસોટી છે.",
   },
 };
 
@@ -112,7 +120,11 @@ export default function TextToVoice() {
     () => LANGUAGES.filter((item) => MODELS.find((entry) => entry.value === model)?.languages.includes(item.value)),
     [model],
   );
-  const availableVoices = VOICES_BY_LANGUAGE[language] ?? [];
+  const availableVoices = model === "indic"
+    ? [{ value: "female", label: "Female" }, { value: "male", label: "Male" }]
+    : model === "itantra"
+      ? [{ value: "default", label: "Default voice" }]
+      : (VOICES_BY_LANGUAGE[language] ?? []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -160,13 +172,13 @@ export default function TextToVoice() {
     if (!availableLanguages.some((item) => item.value === language)) {
       const nextLanguage = availableLanguages[0]?.value ?? "en-IN";
       setLanguage(nextLanguage);
-      setVoice(VOICES_BY_LANGUAGE[nextLanguage]?.[0]?.value ?? "");
+      setVoice(model === "indic" ? "female" : model === "itantra" ? "default" : (VOICES_BY_LANGUAGE[nextLanguage]?.[0]?.value ?? ""));
     }
   }, [availableLanguages, language]);
 
   useEffect(() => {
     setVoice(availableVoices[0]?.value ?? "");
-  }, [language]);
+  }, [language, model]);
 
   const clearAudio = () => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
