@@ -58,7 +58,9 @@ class TextToVoiceActivity : Activity() {
     )
     private val languages = mapOf(
         "indic" to listOf(
-            Language("Gujarati", "gu", "નમસ્તે! આ ગુજરાતી ટેક્સ્ટ ટુ વૉઇસ પરીક્ષણ છે.")
+            Language("Gujarati", "gu", "નમસ્તે! આ ગુજરાતી ટેક્સ્ટ ટુ વૉઇસ પરીક્ષણ છે."),
+            Language("Hindi", "hi", "नमस्ते! यह इंडिक टाइनी हिंदी आवाज़ का परीक्षण है।"),
+            Language("English", "en", "Hello! This is an Indic Tiny English voice test.")
         ),
         "kokoro" to listOf(
             Language("English", "en-US", "Hello! This is a Kokoro English voice test."),
@@ -98,9 +100,10 @@ class TextToVoiceActivity : Activity() {
             setBackgroundColor(this@TextToVoiceActivity.background)
             // Insets are applied once by the decor view below.
         }
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(18),dp(8),dp(18),dp(8)); setBackgroundColor(surface) }
-        header.addView(Button(this).apply { text = "‹"; textSize=28f; isAllCaps=false; minWidth=0; minimumWidth=0; setTextColor(primary); setBackgroundColor(surface); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(44),dp(52)))
-        header.addView(TextView(this).apply { text="Text To Voice"; textSize=20f; gravity=Gravity.CENTER_VERTICAL or Gravity.START; setSingleLine(true); includeFontPadding=false; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(52),1f))
+        // Compact single-row toolbar: back arrow and page title share one baseline.
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(2),dp(16),dp(2)); setBackgroundColor(surface) }
+        header.addView(Button(this).apply { text = "‹"; textSize=25f; isAllCaps=false; minWidth=0; minimumWidth=0; setPadding(0,0,0,0); setTextColor(primary); setBackgroundColor(surface); contentDescription="Back"; setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(40),dp(42)))
+        header.addView(TextView(this).apply { text="Text To Voice"; textSize=18f; gravity=Gravity.CENTER_VERTICAL or Gravity.START; setSingleLine(true); includeFontPadding=false; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(42),1f))
         page.addView(header)
         page.addView(View(this).apply { setBackgroundColor(if(dark) 0x334A5B70 else 0x2234475E) }, LinearLayout.LayoutParams(-1,dp(1)))
         val scroll=ScrollView(this)
