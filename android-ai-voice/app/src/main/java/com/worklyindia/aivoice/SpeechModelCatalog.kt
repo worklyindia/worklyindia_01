@@ -188,4 +188,52 @@ object SpeechModelCatalog {
         )
     )
 
+
+    private const val SHERPA_TTS_BASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models"
+
+    /**
+     * iTantra-compatible Sherpa-ONNX VITS packs. Voice archives are official
+     * sherpa-onnx release assets; the Gujarati voice is Mimic3/CMU-Indic.
+     * Sherpa-ONNX 2.x requires pre-phonemized input. The app uses the official
+     * Piper phonemizer Android library, which bundles its own espeak-ng data.
+     */
+    fun itantraVits(language: String): Pack {
+        val code = language.lowercase()
+        val voice: String
+        val size: Long
+        val sha: String?
+        val title: String
+        when (code) {
+            "hi" -> {
+                voice = "vits-piper-hi_IN-pratham-medium-int8.tar.bz2"
+                size = 20_987_965L
+                sha = "20f568c56207c13b9a0d9478aec8b7d1449122e618aeebc7211f6abc942b58b7"
+                title = "Hindi · Pratham"
+            }
+            "gu" -> {
+                voice = "vits-mimic3-gu_IN-cmu-indic_low.tar.bz2"
+                size = 79_992_004L
+                sha = null
+                title = "Gujarati · Mimic3"
+            }
+            "en" -> {
+                voice = "vits-piper-en_US-lessac-low-int8.tar.bz2"
+                size = 21_070_568L
+                sha = "af63fbe60d8bdcfccdee61ba057304a11dfc077145da383d4d351ec3c594d5e2"
+                title = "English · Lessac"
+            }
+            else -> throw IllegalArgumentException("iTantra VITS supports Hindi, Gujarati and English.")
+        }
+        return Pack(
+            id = "itantra-vits-$code",
+            title = "iTantra VITS · $title",
+            languageCode = code,
+            license = if (code == "gu") "Mimic3/CMU-Indic model; see upstream model card and sherpa-onnx notices" else "Piper voice model; see upstream model card and sherpa-onnx notices",
+            repository = "k2-fsa/sherpa-onnx · tts-models release",
+            files = listOf(
+                ModelFile("archives/voice.tar.bz2", "$SHERPA_TTS_BASE/$voice", size, sha)
+            )
+        )
+    }
+
 }
