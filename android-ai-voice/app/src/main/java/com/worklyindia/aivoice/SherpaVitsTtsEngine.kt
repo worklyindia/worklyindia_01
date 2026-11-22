@@ -66,7 +66,7 @@ class SherpaVitsTtsEngine private constructor(
                         tokens = tokens!!.absolutePath,
                         dataDir = dataDir.absolutePath
                     ),
-                    numThreads = 2,
+                    numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
                     debug = false,
                     provider = "cpu"
                 )
