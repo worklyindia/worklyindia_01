@@ -94,6 +94,7 @@ export default function TextToVoice() {
   const [previewReadyUrl, setPreviewReadyUrl] = useState("");
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState(0);
+  const [progressDetail, setProgressDetail] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [catalog, setCatalog] = useState<PreviewCatalog>(FALLBACK_PREVIEW_TEXTS);
@@ -123,12 +124,24 @@ export default function TextToVoice() {
   useEffect(() => {
     const onStatus = (event: Event) => {
       const detail = (event as CustomEvent).detail ?? {};
-      if (detail.status === "queued") { setStatus("Waiting for your Workly Android app…"); setProgress((value) => Math.max(value, 2)); }
+      if (detail.status === "queued") {
+        setStatus("Waiting for your Workly Android app…");
+        setProgressDetail("");
+        setProgress((value) => Math.max(value, 2));
+      }
       if (detail.status === "generating") {
-        const completed = detail.completed ? detail.part : (detail.part ? detail.part - 1 : 0);
-        const next = detail.total ? Math.min(98, Math.max(3, Math.round(5 + (completed / detail.total) * 90))) : 5;
-        setProgress((value) => Math.max(value, next));
-        setStatus(detail.total > 1 ? `Generating audio · ${detail.part} of ${detail.total} parts` : "Generating audio on your phone…");
+        setStatus("Generating Audio...");
+        if (Number.isFinite(detail.total) && detail.total > 0 && Number.isFinite(detail.part)) {
+          const total = Number(detail.total);
+          const part = Number(detail.part);
+          const completed = detail.completed ? part : part - 1;
+          const next = Math.min(99, Math.max(3, Math.round((completed / total) * 100)));
+          setProgress((value) => Math.max(value, next));
+          setProgressDetail(`Processing part ${part} of ${total}`);
+        } else {
+          setProgressDetail("Working on your audio…");
+          setProgress((value) => Math.max(value, 5));
+        }
       }
     };
     window.addEventListener("workly-voice-status", onStatus);
@@ -153,6 +166,7 @@ export default function TextToVoice() {
     setAudioBlob(null);
     setStatus("");
     setProgress(0);
+    setProgressDetail("");
   };
 
   const convert = async () => {
@@ -162,6 +176,7 @@ export default function TextToVoice() {
     setBusy(true);
     setStatus("Connecting to your Workly Android app…");
     setProgress(1);
+    setProgressDetail("Preparing your request…");
     try {
       const blob = await requestOwnerPhoneLongVoiceAudioBlob(clean, language, voice, model);
       const url = URL.createObjectURL(blob);
@@ -169,11 +184,13 @@ export default function TextToVoice() {
       setAudioUrl(url);
       setStatus("Audio ready");
       setProgress(100);
+      setProgressDetail("Completed");
       toast({ title: "Voice ready", description: "Your audio is ready to play or download." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Voice conversion failed.";
       setStatus(message);
       setProgress(0);
+      setProgressDetail("");
       toast({ title: "Conversion failed", description: message, variant: "destructive" });
     } finally { setBusy(false); }
   };
@@ -284,8 +301,14 @@ export default function TextToVoice() {
           {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Converting…</> : <><Volume2 className="mr-2 h-4 w-4" />Convert To Voice</>}
         </Button>
         {(busy || status) && <div className="space-y-2" role="status" aria-live="polite">
-          <div className="flex items-center justify-between gap-3 text-sm"><span className="min-w-0 truncate text-muted-foreground">{status}</span>{busy && <span className="shrink-0 font-semibold tabular-nums">{progress}%</span>}</div>
-          {busy && <div className="h-2 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} /></div>}
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate text-muted-foreground">{busy ? "Generating Audio..." : status}</span>
+            {busy && <span className="shrink-0 font-semibold tabular-nums">{progress}%</span>}
+          </div>
+          {busy && <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Audio generation progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <div className="h-full rounded-full bg-primary transition-[width] duration-500 ease-out" style={{ width: `${progress}%` }} />
+          </div>}
+          {busy && progressDetail && <p className="text-xs text-muted-foreground">{progressDetail}</p>}
         </div>}
       </section>
       {audioUrl && audioBlob && <section className="w-full space-y-3 border-t pt-5">
