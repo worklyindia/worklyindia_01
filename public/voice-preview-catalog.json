@@ -3,7 +3,10 @@
     "hf_alpha": "नमस्ते! आपका दिन खुशियों और नई उम्मीदों से भरा रहे।",
     "hf_beta": "आपका स्वागत है। मैं आपकी सहायता करने के लिए यहाँ हूँ।",
     "hm_omega": "आज हम एक नई शुरुआत करेंगे और अपने लक्ष्य की ओर आगे बढ़ेंगे।",
-    "hm_psi": "सही अवसर और मेहनत मिलकर सफलता का रास्ता बनाते हैं।"
+    "hm_psi": "सही अवसर और मेहनत मिलकर सफलता का रास्ता बनाते हैं।",
+    "female": "नमस्ते! वर्कली इंडिया में आपका स्वागत है। आपका दिन शुभ और सफल रहे।",
+    "male": "अच्छे विचार और लगातार मेहनत से सफलता का नया रास्ता बनता है।",
+    "default": "नमस्ते! यह iTantra हिंदी आवाज़ का नमूना है।"
   },
   "en-IN": {
     "af_heart": "Hello! Welcome to Workly India. Let’s make today a great day.",
@@ -25,10 +28,14 @@
     "am_michael": "Your experience matters. Let’s put your skills to work.",
     "am_onyx": "Success is built one thoughtful decision at a time.",
     "am_puck": "Every conversation is a chance to learn something useful.",
-    "am_santa": "Warm wishes to you and your family. Have a wonderful day."
+    "am_santa": "Warm wishes to you and your family. Have a wonderful day.",
+    "female": "Hello! Welcome to Workly India. Wishing you a bright and successful day.",
+    "male": "Clear ideas and steady effort can open the door to new opportunities.",
+    "default": "Hello! This is an iTantra English voice sample."
   },
   "gu-IN": {
     "female": "નમસ્તે! વર્કલી ઇન્ડિયામાં આપનું હાર્દિક સ્વાગત છે. તમારો દિવસ શુભ રહે.",
-    "male": "સારા વિચારો અને સતત મહેનતથી સફળતાનો નવો રસ્તો બને છે."
+    "male": "સારા વિચારો અને સતત મહેનતથી સફળતાનો નવો રસ્તો બને છે.",
+    "default": "નમસ્તે! આ iTantra ગુજરાતી અવાજની કસોટી છે."
   }
 }
