@@ -2,6 +2,9 @@ package com.worklyindia.aivoice
 
 import android.app.ActivityManager
 import android.content.Context
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.common.model.RemoteModelManager
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -95,6 +98,28 @@ object VoiceWorkerCapabilityRegistry {
                 .put("pack_id", "qwen-" + model.id)
                 .put("languages", JSONArray(listOf("multilingual")))
                 .put("ready", true))
+        }
+
+        // Translation is advertised only for language pairs whose two ML Kit
+        // language packs are already installed. The relay never downloads packs
+        // on behalf of a community job.
+        runCatching {
+            val downloaded = Tasks.await(
+                RemoteModelManager.getInstance().getDownloadedModels(TranslateRemoteModel::class.java)
+            )
+            val installedLanguages = downloaded.map { it.language }.toSet()
+            val pairs = ArrayList<String>()
+            for (source in installedLanguages) for (target in installedLanguages) {
+                if (source != target) pairs.add(source + "-" + target)
+            }
+            if (pairs.isNotEmpty()) {
+                result.put(JSONObject()
+                    .put("task", "translate")
+                    .put("model", "mlkit-translation")
+                    .put("pack_id", "mlkit-translation")
+                    .put("languages", JSONArray(pairs.take(30)))
+                    .put("ready", true))
+            }
         }
         return result
     }
