@@ -289,6 +289,7 @@ const StorageManager = lazyRetry(() => import("./pages/owner-portal/StorageManag
 const AndroidAppUpdates = lazyRetry(() => import("./pages/owner-portal/AndroidAppUpdates"));
 const ChatWorkAppUpdates = lazyRetry(() => import("./pages/owner-portal/ChatWorkAppUpdates"));
 const AppDownloadPage = lazyRetry(() => import("./pages/AppDownloadPage"));
+const ChatWorkDownloadPage = lazyRetry(() => import("./pages/ChatWorkDownloadPage"));
 const SecretsManager = lazyRetry(() => import("./pages/owner-portal/SecretsManager"));
 
 const GoogleIntegrations = lazyRetry(() => import("./pages/owner-portal/GoogleIntegrations"));
@@ -892,6 +893,7 @@ const AppContent = () => {
         <OnboardingGuard>
         <Routes>
           <Route path="/download" element={<AppDownloadPage />} />
+        <Route path="/chatwork-download" element={<ChatWorkDownloadPage />} />
         <Route path="/" element={<Index />} />
         <Route path="/index" element={<Navigate to="/" replace />} />
         <Route path="/ai-assistant" element={<AICareerAssistant />} />
