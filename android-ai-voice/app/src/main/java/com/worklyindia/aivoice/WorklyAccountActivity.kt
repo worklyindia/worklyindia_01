@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -19,6 +20,7 @@ class WorklyAccountActivity : Activity() {
     private lateinit var identity: EditText
     private lateinit var password: EditText
     private lateinit var status: TextView
+    private lateinit var workerOptIn: CheckBox
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +49,13 @@ class WorklyAccountActivity : Activity() {
             text = "Create a new account"; isAllCaps = false
             setOnClickListener { signUp() }
         }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
+        workerOptIn = CheckBox(this).apply {
+            text = "Enable this phone as a community AI worker (optional). It may use battery, data and processing power. You can turn it off any time."
+            isChecked = false
+            textSize = 13f
+            setTextColor(ink)
+        }
+        root.addView(workerOptIn, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         status = TextView(this).apply { textSize = 13f; setTextColor(muted); setPadding(0, dp(12), 0, 0) }
         root.addView(status)
         setContentView(root)
@@ -91,6 +100,8 @@ class WorklyAccountActivity : Activity() {
                 SecureDeviceTokenStore.saveAuthSession(this, accessToken, refreshToken)
                 val deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
                 SecureDeviceTokenStore.save(this, deviceToken)
+                val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                VoiceRelayApi.setWorkerState(deviceToken, workerOptIn.isChecked, capabilities)
                 runOnUiThread {
                     val relayIntent = Intent(this, VoiceRelayService::class.java)
                     if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(relayIntent) else startService(relayIntent)
@@ -130,6 +141,8 @@ class WorklyAccountActivity : Activity() {
                 SecureDeviceTokenStore.saveAuthSession(this, accessToken, refreshToken)
                 val deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
                 SecureDeviceTokenStore.save(this, deviceToken)
+                val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                VoiceRelayApi.setWorkerState(deviceToken, workerOptIn.isChecked, capabilities)
                 runOnUiThread {
                     val relayIntent = Intent(this, VoiceRelayService::class.java)
                     if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(relayIntent) else startService(relayIntent)
