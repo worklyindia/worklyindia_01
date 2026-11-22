@@ -270,7 +270,7 @@ export default function TextToVoice() {
             <SelectTrigger id="tts-voice" className="h-12"><SelectValue placeholder="Select voice" /></SelectTrigger>
             <SelectContent>{availableVoices.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
           </Select>
-          <div className="divide-y rounded-lg border">
+          <div className="divide-y">
             {availableVoices.map((item) => (
               <div key={item.value} className={`flex items-center justify-between gap-3 px-3 py-2.5 ${voice === item.value ? "bg-primary/5" : ""}`}>
                 <button type="button" className="min-w-0 flex-1 text-left text-sm" onClick={() => setVoice(item.value)} disabled={busy || !!previewingVoice}>
