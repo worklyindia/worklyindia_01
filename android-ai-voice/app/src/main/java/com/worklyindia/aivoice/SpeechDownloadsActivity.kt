@@ -219,7 +219,39 @@ class SpeechDownloadsActivity : Activity() {
             AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                 .setMessage("This removes this model's downloaded files from ChatWork storage.")
                 .setNegativeButton("Cancel",null)
-                .setPositiveButton("Delete") { _,_ -> speechManager.delete(pack); refreshAll() }
+                .setPositiveButton("Delete") { _,_ ->
+                    // Remove the local pack first, then immediately publish the
+                    // recalculated capability list so deleted models disappear
+                    // from the device's Supabase worker record.
+                    speechManager.delete(pack)
+                    refreshAll()
+                    val workerEnabled = getSharedPreferences(
+                        VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE
+                    ).getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
+                    val deviceToken = SecureDeviceTokenStore.read(this)
+                    if (workerEnabled && !deviceToken.isNullOrBlank()) {
+                        ttsExecutor.execute {
+                            try {
+                                val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                                VoiceRelayApi.setWorkerState(deviceToken, true, capabilities)
+                                runOnUiThread {
+                                    if (!isFinishing) Toast.makeText(
+                                        this, "Model deleted · worker capabilities synced.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } catch (error: Exception) {
+                                runOnUiThread {
+                                    if (!isFinishing) Toast.makeText(
+                                        this,
+                                        "Model deleted. Worker sync will retry when the relay reconnects.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                        }
+                    }
+                }
                 .show()
         }
         var lastBytes = 0L
