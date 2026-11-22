@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { requestOwnerPhoneLongVoiceAudioBlob, requestOwnerPhoneVoiceAudioBlob } from "@/lib/ownerPhoneVoiceRelay";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 type VoiceOption = { value: string; label: string };
 type PreviewCatalog = Record<string, Record<string, string>>;
@@ -98,6 +99,16 @@ const FALLBACK_PREVIEW_TEXTS: PreviewCatalog = {
     default: "નમસ્તે! આ iTantra ગુજરાતી અવાજની કસોટી છે.",
   },
 };
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  return btoa(binary);
+}
 
 const R2_PREVIEW_CATALOG_URL = "https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/voice-preview-catalog.json";
 export default function TextToVoice() {
@@ -220,11 +231,8 @@ export default function TextToVoice() {
     const cachedUrl = previewCache.current.get(cacheKey);
     if (cachedUrl) {
       const player = new Audio(cachedUrl);
-      try {
-        await player.play();
-      } catch {
-        toast({ title: "Preview ready", description: "Tap the play icon again to listen." });
-      }
+      try { await player.play(); }
+      catch { toast({ title: "Preview ready", description: "Tap the play icon again to listen." }); }
       return;
     }
     const sampleText = previewCatalog[language]?.[voiceId] ?? FALLBACK_PREVIEW_TEXTS[language]?.[voiceId];
@@ -234,7 +242,30 @@ export default function TextToVoice() {
     }
     setPreviewingVoice(voiceId);
     try {
-      const blob = await requestOwnerPhoneVoiceAudioBlob(sampleText, language, 180_000, voiceId, model);
+      const identity = { model, language, voice: voiceId, sample_text: sampleText };
+      const { data: cacheLookup, error: cacheLookupError } = await supabase.functions.invoke("unified-voice", {
+        body: { action: "get_preview_audio", ...identity },
+      });
+      if (cacheLookupError) throw cacheLookupError;
+      let blob: Blob;
+      if (cacheLookup?.cached && typeof cacheLookup.audio_url === "string") {
+        const response = await fetch(cacheLookup.audio_url);
+        if (!response.ok) throw new Error("Could not load the shared Cloudflare voice preview.");
+        blob = await response.blob();
+      } else {
+        blob = await requestOwnerPhoneVoiceAudioBlob(sampleText, language, 180_000, voiceId, model);
+        const audioBase64 = await blobToBase64(blob);
+        const { data: saved, error: saveError } = await supabase.functions.invoke("unified-voice", {
+          body: { action: "put_preview_audio", ...identity, audio_base64: audioBase64 },
+        });
+        if (saveError || !saved?.saved) {
+          const reason = saved?.error || saveError?.message || "Cloudflare did not confirm the preview upload.";
+          toast({ title: "Preview ready · cache not saved", description: reason, variant: "destructive" });
+        } else {
+          toast({ title: "Preview saved to Cloudflare", description: "Other users can now play this voice sample without regenerating it." });
+        }
+      }
+      if (!blob.size) throw new Error("The voice preview audio is empty.");
       const url = URL.createObjectURL(blob);
       previewCache.current.set(cacheKey, url);
       toast({ title: "Preview ready", description: "Tap the play icon again to listen." });
