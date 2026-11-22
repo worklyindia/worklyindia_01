@@ -172,7 +172,6 @@ export async function handleWorklyVoiceRelay(req: Request) {
 
       const requestedModel = typeof payload?.model === "string" ? payload.model : "";
       const requestedLanguage = typeof payload?.language === "string" ? payload.language.split("-")[0].toLowerCase() : "";
-      if (!requestedModel) return json({ error: "A specific model is required for worker routing." }, 400);
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id,model_capabilities")
         .eq("worker_enabled", true)
@@ -183,14 +182,15 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (deviceError) throw deviceError;
       const requiredTask = jobType;
       let device: any = null;
+      let selectedModel = requestedModel;
       let activeJobs = Number.MAX_SAFE_INTEGER;
       for (const candidate of candidates ?? []) {
-        const compatible = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.some((cap: any) =>
-          cap && cap.task === requiredTask && cap.model === requestedModel &&
-          cap.ready === true && Array.isArray(cap.languages) &&
-          (!requestedLanguage || cap.languages.includes(requestedLanguage))
+        const matchedCapability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
+          cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
+          typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages) &&
+          (!requestedLanguage || cap.languages.includes(requestedLanguage) || cap.languages.includes("multilingual"))
         );
-        if (!compatible) continue;
+        if (!matchedCapability) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
           .select("id", { count: "exact", head: true })
           .eq("device_id", candidate.id)
@@ -200,6 +200,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         const load = count ?? 0;
         if (load < activeJobs && load < 20) {
           device = candidate;
+          selectedModel = matchedCapability.model;
           activeJobs = load;
         }
         if (load === 0) break;
@@ -208,7 +209,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
 
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
-        .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: payload ?? {} })
+        .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: { ...(payload ?? {}), model: selectedModel } })
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
@@ -227,12 +228,28 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
         .order("last_seen_at", { ascending: false }).limit(100);
       if (deviceError) throw deviceError;
-      const device = (candidates ?? []).find((candidate: any) =>
-        Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.some((cap: any) =>
-          cap && cap.task === "stt" && cap.ready === true && Array.isArray(cap.languages) &&
-          (!requestedLanguage || cap.languages.includes(requestedLanguage))
-        )
-      );
+      let device: any = null;
+      let selectedSttModel = "";
+      let lightestQueue = Number.MAX_SAFE_INTEGER;
+      for (const candidate of candidates ?? []) {
+        const capability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
+          cap && cap.task === "stt" && typeof cap.model === "string" && cap.ready === true &&
+          Array.isArray(cap.languages) && (!requestedLanguage || cap.languages.includes(requestedLanguage))
+        );
+        if (!capability) continue;
+        const { count, error: countError } = await db.from("workly_ai_voice_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("device_id", candidate.id)
+          .in("status", ["pending", "running"])
+          .gt("expires_at", new Date().toISOString());
+        if (countError) throw countError;
+        const load = count ?? 0;
+        if (load < lightestQueue && load < 20) {
+          device = candidate;
+          selectedSttModel = capability.model;
+          lightestQueue = load;
+        }
+      }
       if (!device) return json({ error: "No online, opted-in phone has a ready speech-recognition model for this language." }, 404);
       let bytes: Uint8Array;
       try { const binary = atob(audioBase64); bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0)); }
@@ -244,7 +261,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .upload(path, bytes, { contentType: "audio/wav", upsert: false });
       if (uploadError) throw uploadError;
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
-        .insert({ id: jobId, user_id: user.id, device_id: device.id, job_type: "stt", payload: { audio_path: path, content_type: "audio/wav" } })
+        .insert({ id: jobId, user_id: user.id, device_id: device.id, job_type: "stt", payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, language: requestedLanguage || "auto" } })
         .select("id,status,expires_at").single();
       if (error) { await db.storage.from("workly-ai-voice-audio").remove([path]); throw error; }
       return json({ job });
