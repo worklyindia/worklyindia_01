@@ -230,14 +230,20 @@ export default function TextToVoice() {
       if (!sampleText) throw new Error("This voice does not have a sample text yet.");
       const blob = await requestOwnerPhoneVoiceAudioBlob(sampleText, language, 180_000, voice, model);
       if (blob.size < 44) throw new Error("The phone returned an empty voice preview.");
-      setStatus("Saving voice preview to Cloudflare…");
-      const savedUrl = await saveVoicePreviewToR2(model, language, voice, blob);
       const playbackBlob = await blob.slice(0, blob.size, "audio/wav").arrayBuffer();
       const readyUrl = URL.createObjectURL(new Blob([playbackBlob], { type: "audio/wav" }));
       setPreviewReadyUrl(readyUrl);
-      setStatus("Preview saved to Cloudflare. Tap the play icon again to listen.");
-      toast({ title: "Voice preview saved", description: "Next users can play it from Cloudflare without generating it again." });
-      void savedUrl;
+      setStatus("Preview ready. Tap the play icon again to listen.");
+      try {
+        setStatus("Preview ready. Saving a copy to Cloudflare…");
+        await saveVoicePreviewToR2(model, language, voice, blob);
+        setStatus("Preview saved to Cloudflare. Tap the play icon again to listen.");
+        toast({ title: "Voice preview saved", description: "Next users can play it from Cloudflare without generating it again." });
+      } catch (saveError) {
+        const detail = saveError instanceof Error ? saveError.message : "Cloudflare cache is temporarily unavailable.";
+        setStatus("Preview ready on this device, but Cloudflare could not save it.");
+        toast({ title: "Preview ready · Cloudflare save failed", description: detail });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Voice preview failed.";
       setStatus(message);
