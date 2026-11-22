@@ -246,9 +246,11 @@ export default function TextToVoice() {
       const { data: cacheLookup, error: cacheLookupError } = await supabase.functions.invoke("unified-voice", {
         body: { action: "get_preview_audio", ...identity },
       });
-      if (cacheLookupError) throw cacheLookupError;
+      if (cacheLookupError) {
+        toast({ title: "Shared cache unavailable", description: "Generating this preview on your Workly phone; Cloudflare save will be retried." });
+      }
       let blob: Blob;
-      if (cacheLookup?.cached && typeof cacheLookup.audio_url === "string") {
+      if (!cacheLookupError && cacheLookup?.cached && typeof cacheLookup.audio_url === "string") {
         const response = await fetch(cacheLookup.audio_url);
         if (!response.ok) throw new Error("Could not load the shared Cloudflare voice preview.");
         blob = await response.blob();
