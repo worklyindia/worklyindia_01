@@ -101,7 +101,7 @@ class TextToVoiceActivity : Activity() {
             // Insets are applied once by the decor view below.
         }
         // Compact single-row toolbar: back arrow and page title share one baseline.
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12),dp(2),dp(16),dp(2)); setBackgroundColor(surface) }
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10),0,dp(16),0); setBackgroundColor(surface) }
         header.addView(Button(this).apply { text = "‹"; textSize=25f; isAllCaps=false; minWidth=0; minimumWidth=0; setPadding(0,0,0,0); setTextColor(primary); setBackgroundColor(surface); contentDescription="Back"; setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(40),dp(42)))
         header.addView(TextView(this).apply { text="Text To Voice"; textSize=18f; gravity=Gravity.CENTER_VERTICAL or Gravity.START; setSingleLine(true); includeFontPadding=false; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(42),1f))
         page.addView(header)
