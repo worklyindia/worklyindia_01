@@ -138,7 +138,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!user) return json({ error: "Authentication required" }, 401);
       const cache = await previewCacheObject(body);
       const head = await cache.client.fetch(new Request(cache.objectUrl, { method: "HEAD" }));
-      if (head.ok) return json({ cached: true, audio_url: cache.publicUrl, content_type: "audio/wav" });
+      if (head.ok) return action === "put_preview_audio"
+        ? json({ cached: true, saved: true, audio_url: cache.publicUrl, content_type: "audio/wav" })
+        : json({ cached: true, audio_url: cache.publicUrl, content_type: "audio/wav" });
       if (head.status !== 404) return json({ error: `Cloudflare R2 lookup failed [${head.status}]` }, 502);
       if (action === "get_preview_audio") return json({ cached: false });
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
