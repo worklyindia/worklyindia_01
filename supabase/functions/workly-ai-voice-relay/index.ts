@@ -171,10 +171,25 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
       const requestedModel = typeof payload?.model === "string" ? payload.model : "";
+      // Keep the full locale (for example en-IN / gu-IN). Android advertises
+      // regional language tags; stripping the region here incorrectly rejected
+      // an otherwise-ready worker and returned 429 for valid preview requests.
       const requestedLanguage = jobType === "translate" &&
         typeof payload?.source_language === "string" && typeof payload?.target_language === "string"
         ? payload.source_language.toLowerCase() + "-" + payload.target_language.toLowerCase()
-        : typeof payload?.language === "string" ? payload.language.split("-")[0].toLowerCase() : "";
+        : typeof payload?.language === "string" ? payload.language.trim().toLowerCase() : "";
+      const supportsRequestedLanguage = (languages: unknown): boolean => {
+        if (!requestedLanguage) return true;
+        if (!Array.isArray(languages)) return false;
+        return languages.some((value: unknown) => {
+          if (typeof value !== "string") return false;
+          const advertised = value.trim().toLowerCase();
+          if (advertised === "multilingual" || advertised === requestedLanguage) return true;
+          // Accept a base language only when the worker advertises that base
+          // explicitly, while matching en-IN with en and vice versa.
+          return advertised.split("-")[0] === requestedLanguage.split("-")[0];
+        });
+      };
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id,model_capabilities")
         .eq("worker_enabled", true)
@@ -191,7 +206,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         const matchedCapability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
           cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
           typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages) &&
-          (!requestedLanguage || cap.languages.includes(requestedLanguage) || cap.languages.includes("multilingual"))
+          supportsRequestedLanguage(cap.languages)
         );
         if (!matchedCapability) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
