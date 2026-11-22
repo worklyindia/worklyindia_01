@@ -15,9 +15,11 @@ on:
       - ".github/workflows/chatwork-android.yml"
   workflow_dispatch:
 
+# Do not cancel a valid Android build when another commit is pushed.
+# Each commit gets its own group so release APK/AAB artifacts can finish.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -188,7 +190,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: workly-android-releases
           R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
-          APK_FILE: android-ai-voice/app/build/outputs/apk/release/ChatWork-v1.0.${{ github.run_number }}.apk
+          APK_FILE: android-ai-voice/app/build/outputs/apk/direct/release/ChatWork-v1.0.${{ github.run_number }}.apk
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: 1.0.${{ github.run_number }}
           RELEASE_NOTES: ${{ github.event.head_commit.message }}
