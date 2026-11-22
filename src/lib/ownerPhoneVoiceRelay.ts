@@ -82,10 +82,10 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
 }
 
 
-export async function requestOwnerPhoneTranscription(audioBase64: string): Promise<{ text: string; languageTag: string }> {
+export async function requestOwnerPhoneTranscription(audioBase64: string, language = 'en-IN'): Promise<{ text: string; languageTag: string }> {
   if (!audioBase64 || audioBase64.length > 1_800_000) throw new Error('Caller audio is empty or exceeds the upload limit.');
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
-    body: { action: 'create_stt_job', audio_base64: audioBase64 },
+    body: { action: 'create_stt_job', audio_base64: audioBase64, language },
   });
   if (createError) throw createError;
   const jobId = created?.job?.id;
