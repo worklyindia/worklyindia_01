@@ -287,6 +287,7 @@ const InterviewAnalytics = lazyRetry(() => import("./pages/owner-portal/Intervie
 const SupabaseUsageMonitor = lazyRetry(() => import("./pages/owner-portal/SupabaseUsageMonitor"));
 const StorageManager = lazyRetry(() => import("./pages/owner-portal/StorageManager"));
 const AndroidAppUpdates = lazyRetry(() => import("./pages/owner-portal/AndroidAppUpdates"));
+const ChatWorkAppUpdates = lazyRetry(() => import("./pages/owner-portal/ChatWorkAppUpdates"));
 const AppDownloadPage = lazyRetry(() => import("./pages/AppDownloadPage"));
 const SecretsManager = lazyRetry(() => import("./pages/owner-portal/SecretsManager"));
 
@@ -1473,6 +1474,11 @@ const AppContent = () => {
         <Route path="/owner-portal/android-app-updates" element={
           <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
             <AndroidAppUpdates />
+          </ProtectedPermissionRoute>
+        } />
+        <Route path="/owner-portal/chatwork-app-updates" element={
+          <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
+            <ChatWorkAppUpdates />
           </ProtectedPermissionRoute>
         } />
 
