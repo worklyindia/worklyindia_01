@@ -71,10 +71,8 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', {
-      body: { action: 'get_job', job_id: jobId },
-    });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw await readableRelayError(error, 'Could not check the voice request.');
     const job = data?.job as RelayJob | undefined;
     if (!job) throw new Error('Shared voice request could not be found.');
@@ -107,10 +105,8 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
   // Android online AI requests may take up to 60 seconds; allow time for the phone to finish.
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', {
-      body: { action: 'get_job', job_id: jobId },
-    });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw error;
     const job = data?.job as RelayJob | undefined;
     if (!job) throw new Error('Shared AI request could not be found.');
@@ -137,8 +133,8 @@ export async function requestOwnerPhoneTranscription(audioBase64: string, langua
   window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: 'queued' } }));
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', { body: { action: 'get_job', job_id: jobId } });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw error;
     const job = data?.job as RelayJob | undefined;
     if (!job) throw new Error('Workly Voice transcription job could not be found.');
@@ -178,10 +174,8 @@ export async function requestCommunityTranslation(
   if (typeof jobId !== 'string') throw new Error(created?.error || 'No opted-in translation worker is currently available.');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', {
-      body: { action: 'get_job', job_id: jobId },
-    });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw error;
     const job = data?.job as RelayJob | undefined;
     if (!job) throw new Error('Translation job could not be found.');
