@@ -104,6 +104,7 @@ class VoiceRelayService : Service() {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "stt" -> handleSttJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
+                        "translate" -> handleTranslationJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
                     }
                 } else {
@@ -244,6 +245,51 @@ class VoiceRelayService : Service() {
                 setStatus("Local AI request failed: " + (error.message ?: "model error"))
             } finally {
                 runCatching { engine.unload() }
+                activeJobId = null
+            }
+        }.start()
+    }
+
+    /** Offline ML Kit translation worker; only already-downloaded language pairs are accepted. */
+    private fun handleTranslationJob(token: String, jobId: String, payload: JSONObject) {
+        if (activeJobId != null) {
+            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
+            return
+        }
+        activeJobId = jobId
+        Thread {
+            var translator: com.google.mlkit.nl.translate.Translator? = null
+            try {
+                val text = payload.optString("text").trim()
+                require(text.isNotBlank() && text.length <= 4000) { "Translation text must contain 1–4,000 characters." }
+                require(payload.optString("model") == "mlkit-translation") { "This phone was not assigned the ML Kit translation adapter." }
+                val sourceTag = payload.optString("source_language").trim()
+                val targetTag = payload.optString("target_language").trim()
+                val source = com.google.mlkit.nl.translate.TranslateLanguage.fromLanguageTag(sourceTag)
+                    ?: throw IllegalArgumentException("Unsupported source language: " + sourceTag)
+                val target = com.google.mlkit.nl.translate.TranslateLanguage.fromLanguageTag(targetTag)
+                    ?: throw IllegalArgumentException("Unsupported target language: " + targetTag)
+                require(source != target) { "Choose two different languages to translate." }
+                setStatus("Translating locally with downloaded ML Kit language packs…")
+                translator = com.google.mlkit.nl.translate.Translation.getClient(
+                    com.google.mlkit.nl.translate.TranslatorOptions.Builder()
+                        .setSourceLanguage(source)
+                        .setTargetLanguage(target)
+                        .build()
+                )
+                val translated = com.google.android.gms.tasks.Tasks.await(translator.translate(text)).trim()
+                if (translated.isBlank()) throw IllegalStateException("The offline translation model returned an empty result.")
+                VoiceRelayApi.complete(token, jobId, JSONObject()
+                    .put("translated_text", translated.take(8000))
+                    .put("source_language", sourceTag)
+                    .put("target_language", targetTag)
+                    .put("provider", "local-mlkit"))
+                setStatus("Text translated locally. Waiting for next request…")
+            } catch (error: Exception) {
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Offline translation failed.") }
+                setStatus("Translation failed: " + (error.message ?: "model or language error"))
+            } finally {
+                runCatching { translator?.close() }
                 activeJobId = null
             }
         }.start()
