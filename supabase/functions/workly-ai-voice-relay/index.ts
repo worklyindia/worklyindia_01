@@ -182,28 +182,37 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .limit(100);
       if (deviceError) throw deviceError;
       const requiredTask = jobType === "tts" ? "tts" : "stt";
-      const device = (candidates ?? []).find((candidate: any) =>
-        Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.some((cap: any) =>
+      let device: any = null;
+      let activeJobs = Number.MAX_SAFE_INTEGER;
+      for (const candidate of candidates ?? []) {
+        const compatible = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.some((cap: any) =>
           cap && cap.task === requiredTask && cap.model === requestedModel &&
           cap.ready === true && Array.isArray(cap.languages) &&
           (!requestedLanguage || cap.languages.includes(requestedLanguage))
-        )
-      );
-      if (!device) return json({ error: "No online, opted-in phone has this exact model and language ready." }, 404);
-      const { count: activeJobs, error: countError } = await db.from("workly_ai_voice_jobs")
-        .select("id", { count: "exact", head: true })
-        .eq("device_id", device.id)
-        .in("status", ["pending", "running"])
-        .gt("expires_at", new Date().toISOString());
-      if (countError) throw countError;
-      if ((activeJobs ?? 0) >= 20) return json({ error: "Shared voice queue is full. Try again shortly." }, 429);
+        );
+        if (!compatible) continue;
+        const { count, error: countError } = await db.from("workly_ai_voice_jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("device_id", candidate.id)
+          .in("status", ["pending", "running"])
+          .gt("expires_at", new Date().toISOString());
+        if (countError) throw countError;
+        const load = count ?? 0;
+        if (load < activeJobs && load < 20) {
+          device = candidate;
+          activeJobs = load;
+        }
+        if (load === 0) break;
+      }
+      if (!device) return json({ error: "No available opted-in phone has this model and language ready, or all compatible queues are full." }, 429);
+
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
         .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: payload ?? {} })
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
-      return json({ job, queue_position: (activeJobs ?? 0) + 1 });
+      return json({ job, queue_position: activeJobs + 1 });
     }
 
     if (action === "create_stt_job") {
