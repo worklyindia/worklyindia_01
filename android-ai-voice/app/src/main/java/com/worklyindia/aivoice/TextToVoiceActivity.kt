@@ -367,11 +367,20 @@ class TextToVoiceActivity : Activity() {
                     resultActions.visibility=View.VISIBLE
                 }
             } catch(error:Throwable) {
+                android.util.Log.e("ChatWorkTTS", "Voice conversion failed for model=$model language=${language.code}", error)
+                val details = generateSequence(error as Throwable?) { it.cause }
+                    .map { "${it.javaClass.simpleName}: ${it.message ?: "No error message"}" }
+                    .take(5)
+                    .joinToString("\nCaused by: ")
                 runOnUiThread {
                     convertButton.isEnabled=true
                     convertButton.text="Convert To Voice"
-                    modelStatus.text=error.message ?: "Voice conversion failed."
-                    Toast.makeText(this,"Audio generation failed.",Toast.LENGTH_LONG).show()
+                    modelStatus.text="Conversion failed · see error details"
+                    AlertDialog.Builder(this)
+                        .setTitle("Audio generation failed")
+                        .setMessage(details)
+                        .setPositiveButton("OK", null)
+                        .show()
                 }
             }
         }
