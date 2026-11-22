@@ -68,7 +68,7 @@ class WorklyAccountActivity : Activity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
-            addView(root, ScrollView.LayoutParams(-1, -2))
+            addView(root, android.widget.FrameLayout.LayoutParams(-1, -2))
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -253,7 +253,7 @@ class WorklyAccountActivity : Activity() {
             setText(value)
             inputType = type
             textSize = 15f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(14), 0, dp(14), 0)
