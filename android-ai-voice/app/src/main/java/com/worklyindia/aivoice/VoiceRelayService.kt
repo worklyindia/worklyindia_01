@@ -322,41 +322,63 @@ class VoiceRelayService : Service() {
                 outputFile.delete()
                 when (language) {
                     "gu" -> {
-                        require(requestedModel == "indic") {
-                            "Gujarati is currently available through Indic Tiny TTS. Select Indic Tiny TTS for Gujarati."
-                        }
-                        val pack = SpeechModelCatalog.indicTinyTts("gu")
-                        check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
-                            "Indic Tiny TTS Gujarati is not downloaded. Download it from ChatWork → Model Downloads."
-                        }
-                        val selectedVoice = voiceId.ifBlank { "female" }
-                        check(selectedVoice == "female" || selectedVoice == "male") {
-                            "Selected Gujarati voice is not available in Indic Tiny TTS."
-                        }
-                        IndicTinyTtsEngine.create(this, "gu").use { engine ->
-                            engine.synthesizeToWav(text, outputFile, selectedVoice)
+                        when (requestedModel) {
+                            "indic" -> {
+                                val pack = SpeechModelCatalog.indicTinyTts("gu")
+                                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                                    "Indic Tiny TTS Gujarati is not downloaded. Download it from ChatWork → Model Downloads."
+                                }
+                                val selectedVoice = voiceId.ifBlank { "female" }
+                                check(selectedVoice == "female" || selectedVoice == "male") {
+                                    "Selected Gujarati voice is not available in Indic Tiny TTS."
+                                }
+                                IndicTinyTtsEngine.create(this, "gu").use { engine ->
+                                    engine.synthesizeToWav(text, outputFile, selectedVoice)
+                                }
+                            }
+                            "itantra" -> {
+                                val pack = SpeechModelCatalog.itantraVits("gu")
+                                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                                    "iTantra VITS model files are not fully downloaded. Check ChatWork → Model Downloads."
+                                }
+                                SherpaVitsTtsEngine.create(this, pack).use { engine ->
+                                    engine.synthesizeToWav(text, outputFile)
+                                }
+                            }
+                            else -> throw IllegalArgumentException("Select Indic Tiny TTS or iTantra VITS for Gujarati.")
                         }
                     }
                     "hi", "en" -> {
-                        require(requestedModel == "kokoro") {
-                            "Hindi and English are currently available through Kokoro-82M. Select Kokoro-82M for these languages."
+                        when (requestedModel) {
+                            "kokoro" -> {
+                                val pack = SpeechModelCatalog.kokoro82m()
+                                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                                    "Kokoro-82M is not downloaded. Download it from ChatWork → Model Downloads."
+                                }
+                                val defaultVoice = if (language == "hi") "hf_alpha" else "af_heart"
+                                val selectedVoice = voiceId.ifBlank { defaultVoice }
+                                val engine = kokoroTtsEngine ?: synchronized(this@VoiceRelayService) {
+                                    kokoroTtsEngine ?: KokoroTtsEngine(this@VoiceRelayService).also { kokoroTtsEngine = it }
+                                }
+                                engine.synthesizeToWav(
+                                    pack = pack,
+                                    modelDirectory = speechManager.modelDirectory(pack),
+                                    text = text,
+                                    voiceId = selectedVoice,
+                                    outputFile = outputFile
+                                )
+                            }
+                            "itantra" -> {
+                                val pack = SpeechModelCatalog.itantraVits(language)
+                                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                                    "iTantra VITS model files are not fully downloaded. Check ChatWork → Model Downloads."
+                                }
+                                SherpaVitsTtsEngine.create(this@VoiceRelayService, pack).use { engine ->
+                                    engine.synthesizeToWav(text, outputFile)
+                                }
+                            }
+                            else -> throw IllegalArgumentException("Select Kokoro-82M or iTantra VITS for Hindi and English.")
                         }
-                        val pack = SpeechModelCatalog.kokoro82m()
-                        check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
-                            "Kokoro-82M is not downloaded. Download it from ChatWork → Model Downloads."
-                        }
-                        val defaultVoice = if (language == "hi") "hf_alpha" else "af_heart"
-                        val selectedVoice = voiceId.ifBlank { defaultVoice }
-                        val engine = kokoroTtsEngine ?: synchronized(this@VoiceRelayService) {
-                            kokoroTtsEngine ?: KokoroTtsEngine(this@VoiceRelayService).also { kokoroTtsEngine = it }
-                        }
-                        engine.synthesizeToWav(
-                            pack = pack,
-                            modelDirectory = speechManager.modelDirectory(pack),
-                            text = text,
-                            voiceId = selectedVoice,
-                            outputFile = outputFile
-                        )
                     }
                     else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
                 }
