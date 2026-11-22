@@ -53,31 +53,8 @@ class SpeechDownloadsActivity : Activity() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(true)
         window.statusBarColor = bg; window.navigationBarColor = bg
         if (android.os.Build.VERSION.SDK_INT >= 23) { @Suppress("DEPRECATION") window.decorView.systemUiVisibility = if (dark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR }
-        removeUnsupportedTtsModels()
         buildUi()
         refreshAll()
-    }
-
-    /**
-     * Keep only the approved TTS model families. Remove old optional TTS packs
-     * from earlier app versions (including any tracked DownloadManager transfers).
-     */
-    private fun removeUnsupportedTtsModels() {
-        val obsoletePacks = listOf(
-            SpeechModelCatalog.indicTinyTts("hi"),
-            SpeechModelCatalog.indicTinyTts("en"),
-            SpeechModelCatalog.mossTtsNano(),
-            SpeechModelCatalog.chatterboxMultilingual(),
-            SpeechModelCatalog.cosyVoice3()
-        )
-        obsoletePacks.forEach { pack ->
-            runCatching { speechManager.delete(pack) }
-        }
-        val root = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "workly-voice-models")
-        listOf(
-            "indic-tiny-tts-hi", "indic-tiny-tts-en", "moss-tts-nano",
-            "qvac-chatterbox-multilingual", "qvac-cosyvoice3"
-        ).forEach { File(root, it).deleteRecursively() }
     }
 
     private fun buildUi() {
@@ -100,6 +77,8 @@ class SpeechDownloadsActivity : Activity() {
         }
         list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
         addSpeechPack(list,"Indic Tiny TTS · Gujarati","Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
+        addSpeechPack(list,"Indic Tiny TTS · Hindi","Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
+        addSpeechPack(list,"Indic Tiny TTS · English","English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
         addSpeechPack(list,"iTantra VITS · Gujarati","Sherpa-ONNX · Mimic3/CMU-Indic · offline voice",SpeechModelCatalog.itantraVits("gu"))
         addSpeechPack(list,"iTantra VITS · Hindi","Sherpa-ONNX · Piper Pratham · offline voice",SpeechModelCatalog.itantraVits("hi"))
         addSpeechPack(list,"iTantra VITS · English","Sherpa-ONNX · Piper Lessac · offline voice",SpeechModelCatalog.itantraVits("en"))
