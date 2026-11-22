@@ -120,11 +120,14 @@ export default function TextToVoice() {
     () => LANGUAGES.filter((item) => MODELS.find((entry) => entry.value === model)?.languages.includes(item.value)),
     [model],
   );
-  const availableVoices = model === "indic"
-    ? [{ value: "female", label: "Female" }, { value: "male", label: "Male" }]
-    : model === "itantra"
-      ? [{ value: "default", label: "Default voice" }]
-      : (VOICES_BY_LANGUAGE[language] ?? []);
+  const availableVoices = useMemo(
+    () => model === "indic"
+      ? [{ value: "female", label: "Female" }, { value: "male", label: "Male" }]
+      : model === "itantra"
+        ? [{ value: "default", label: "Default voice" }]
+        : (VOICES_BY_LANGUAGE[language] ?? []),
+    [model, language],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -158,9 +161,10 @@ export default function TextToVoice() {
   }, []);
 
   useEffect(() => {
+    const cache = previewCache.current;
     return () => {
-      previewCache.current.forEach((url) => URL.revokeObjectURL(url));
-      previewCache.current.clear();
+      cache.forEach((url) => URL.revokeObjectURL(url));
+      cache.clear();
     };
   }, []);
 
@@ -174,11 +178,11 @@ export default function TextToVoice() {
       setLanguage(nextLanguage);
       setVoice(model === "indic" ? "female" : model === "itantra" ? "default" : (VOICES_BY_LANGUAGE[nextLanguage]?.[0]?.value ?? ""));
     }
-  }, [availableLanguages, language]);
+  }, [availableLanguages, language, model]);
 
   useEffect(() => {
     setVoice(availableVoices[0]?.value ?? "");
-  }, [language, model]);
+  }, [availableVoices]);
 
   const clearAudio = () => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
