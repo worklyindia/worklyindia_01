@@ -20,7 +20,6 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
-import android.widget.Switch
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import java.util.Locale
@@ -61,50 +60,15 @@ class SpeechDownloadsActivity : Activity() {
     private fun buildUi() {
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(12),dp(18),dp(20)); setBackgroundColor(bg) }
         page.addView(Button(this).apply { text="‹  Back to ChatWork"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
-        val workerSwitch = Switch(this).apply {
-            text = "Share this phone as a community worker"
-            textSize = 15f
-            setTextColor(primary)
-            isChecked = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
-                .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
-            setPadding(dp(4), dp(10), dp(4), dp(4))
+        ensureCommunityWorkerEnabled()
+        val scroll=ScrollView(this).apply {
+            isFillViewport = false
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
-        page.addView(workerSwitch, LinearLayout.LayoutParams(-1, -2))
-        page.addView(label("Optional · Off by default. When enabled, this phone may process other users’ jobs using models already downloaded here. It can use battery, data and processing power.", 12, secondary, false))
-        var restoringWorkerSwitch = false
-        workerSwitch.setOnCheckedChangeListener { button, enabled ->
-            if (restoringWorkerSwitch) return@setOnCheckedChangeListener
-            val deviceToken = SecureDeviceTokenStore.read(this)
-            if (deviceToken.isNullOrBlank()) {
-                restoringWorkerSwitch = true
-                button.isChecked = false
-                restoringWorkerSwitch = false
-                Toast.makeText(this, "Connect your Workly India account first.", Toast.LENGTH_LONG).show()
-                return@setOnCheckedChangeListener
-            }
-            button.isEnabled = false
-            ttsExecutor.execute {
-                try {
-                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
-                    VoiceRelayApi.setWorkerState(deviceToken, enabled, capabilities)
-                    getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE).edit()
-                        .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, enabled).apply()
-                    runOnUiThread {
-                        button.isEnabled = true
-                        Toast.makeText(this, if (enabled) "Community worker enabled." else "Community worker turned off.", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (error: Exception) {
-                    runOnUiThread {
-                        restoringWorkerSwitch = true
-                        button.isChecked = !enabled
-                        restoringWorkerSwitch = false
-                        button.isEnabled = true
-                        Toast.makeText(this, error.message ?: "Could not update worker availability.", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
-        val scroll=ScrollView(this); val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(list); page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
+        val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        scroll.addView(list)
+        page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
         qwenManager.models.forEach { addQwenCard(list,it) }
         list.addView(label("VOICE RECOGNITION · OFFLINE SPEECH TO TEXT",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
@@ -138,6 +102,34 @@ class SpeechDownloadsActivity : Activity() {
         list.addView(label("Model files are downloaded from their listed repositories. Supported speech inference runs on-device; these native engines do not send text to a remote AI inference server.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         setContentView(page)
     }
+    /**
+     * Automatically enables the relay for a signed-in, paired installation.
+     * If the encrypted device token is missing but the saved Supabase session
+     * remains available, pair the device again before publishing capabilities.
+     */
+    private fun ensureCommunityWorkerEnabled() {
+        getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE).edit()
+            .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, true).apply()
+        ttsExecutor.execute {
+            try {
+                var deviceToken = SecureDeviceTokenStore.read(this)
+                if (deviceToken.isNullOrBlank()) {
+                    val accessToken = SecureDeviceTokenStore.readAccessToken(this)
+                    if (accessToken.isNullOrBlank()) {
+                        android.util.Log.w("ChatWorkWorker", "No saved account session; worker pairing will retry after sign-in.")
+                        return@execute
+                    }
+                    deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
+                    SecureDeviceTokenStore.save(this, deviceToken)
+                }
+                val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                VoiceRelayApi.setWorkerState(deviceToken, true, capabilities)
+            } catch (error: Exception) {
+                android.util.Log.w("ChatWorkWorker", "Automatic community-worker setup will retry.", error)
+            }
+        }
+    }
+
     private fun addLocalOnlyCard(parent:LinearLayout,title:String,reason:String) {
         val c=card(parent,title,reason)
         c.addView(label("On-device · Not available",12,secondary,true))

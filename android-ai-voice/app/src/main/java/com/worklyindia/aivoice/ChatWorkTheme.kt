@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.res.Configuration
 import android.graphics.Color
 import android.view.View
+import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -53,6 +54,13 @@ internal object ChatWorkTheme {
      */
     fun applyContentInsets(activity: Activity) {
         val content = activity.findViewById<View>(android.R.id.content) ?: return
+        fun hideHorizontalScrollbars(view: View) {
+            view.isHorizontalScrollBarEnabled = false
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) hideHorizontalScrollbars(view.getChildAt(index))
+            }
+        }
+        hideHorizontalScrollbars(content)
         if (!basePadding.containsKey(content)) {
             basePadding[content] = intArrayOf(
                 content.paddingLeft, content.paddingTop,

