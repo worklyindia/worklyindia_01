@@ -171,7 +171,10 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
       const requestedModel = typeof payload?.model === "string" ? payload.model : "";
-      const requestedLanguage = typeof payload?.language === "string" ? payload.language.split("-")[0].toLowerCase() : "";
+      const requestedLanguage = jobType === "translate" &&
+        typeof payload?.source_language === "string" && typeof payload?.target_language === "string"
+        ? payload.source_language.toLowerCase() + "-" + payload.target_language.toLowerCase()
+        : typeof payload?.language === "string" ? payload.language.split("-")[0].toLowerCase() : "";
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id,model_capabilities")
         .eq("worker_enabled", true)
