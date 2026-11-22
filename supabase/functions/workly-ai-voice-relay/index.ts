@@ -147,6 +147,32 @@ export async function handleWorklyVoiceRelay(req: Request) {
       return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0 });
     }
 
+    if (action === "report_diagnostic") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const eventType = typeof body?.event_type === "string" ? body.event_type.trim().slice(0, 80) : "";
+      if (!eventType) return json({ error: "event_type is required" }, 400);
+      const metadata = body?.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata) ? body.metadata : {};
+      if (JSON.stringify(metadata).length > 4_000) return json({ error: "Diagnostic metadata exceeds 4 KB" }, 413);
+      const errorType = typeof body?.error_type === "string" ? body.error_type.slice(0, 80) : null;
+      const errorMessage = typeof body?.error_message === "string" ? body.error_message.slice(0, 500) : null;
+      const { data, error } = await db.from("workly_ai_voice_diagnostics").insert({
+        device_id: device.id,
+        event_type: eventType,
+        language: typeof body?.language === "string" ? body.language.slice(0, 20) : null,
+        duration_ms: Number.isFinite(body?.duration_ms) ? Math.max(0, Math.min(86_400_000, body.duration_ms)) : null,
+        audio_bytes: Number.isFinite(body?.audio_bytes) ? Math.max(0, Math.min(50_000_000, body.audio_bytes)) : null,
+        error_type: errorType,
+        error_message: errorMessage,
+        app_version: typeof body?.app_version === "string" ? body.app_version.slice(0, 40) : null,
+        android_version: typeof body?.android_version === "string" ? body.android_version.slice(0, 40) : null,
+        device_model: typeof body?.device_model === "string" ? body.device_model.slice(0, 100) : null,
+        metadata
+      }).select("id,created_at").single();
+      if (error) throw error;
+      return json({ saved: true, diagnostic: data }, 201);
+    }
+
     if (action === "owner_data_dashboard") {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
