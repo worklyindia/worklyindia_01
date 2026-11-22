@@ -8,8 +8,6 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
-import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.firebase.messaging.FirebaseMessaging
@@ -20,7 +18,6 @@ import com.airbnb.lottie.LottieDrawable
 class MainActivity : Activity() {
     private var dark = false
     private var signalAnimationView: LottieAnimationView? = null
-    private var appUpdater: ChatWorkAppUpdater? = null
     private val bg get() = if (dark) 0xFF0B1220.toInt() else 0xFFF4F7FF.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,17 +47,7 @@ class MainActivity : Activity() {
         }
 
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(true)
-        window.statusBarColor = bg
-        window.navigationBarColor = bg
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-            window.isNavigationBarContrastEnforced = false
-            window.isStatusBarContrastEnforced = false
-        }
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = if (dark) 0 else
-            View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        ChatWorkTheme.applyWindow(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -123,11 +110,10 @@ class MainActivity : Activity() {
 
         setContentView(root)
         signalAnimation.playAnimation()
-        // Check the separately published ChatWork APK release after the home screen is ready.
-        // Google Play handles updates for the Play Store flavor. The private APK
-        // updater is enabled only for the separately distributed direct flavor.
+        // Direct-channel update notices open the official download in the browser.
+        // The app never requests permission to silently install another APK.
         if (BuildConfig.FLAVOR == "direct") {
-            appUpdater = ChatWorkAppUpdater(this).also { it.checkForUpdate() }
+            ChatWorkAppUpdater(this).checkForUpdate()
         }
         // Ask for notifications at first launch on Android 13+.
         // Microphone permission is requested only when the user taps Start Speaking.
@@ -140,7 +126,6 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         signalAnimationView?.resumeAnimation()
-        appUpdater?.onResume()
     }
 
     override fun onPause() {
@@ -149,8 +134,6 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        appUpdater?.close()
-        appUpdater = null
         signalAnimationView?.cancelAnimation()
         signalAnimationView = null
         super.onDestroy()

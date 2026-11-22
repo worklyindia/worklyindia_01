@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Google Play distribution must not request the restricted sideload-install permission.
-         Updates are delivered by Google Play; direct APK distribution retains its own updater. -->
+    <!-- Defence in depth: no ChatWork distribution variant requests sideload-install permission. -->
     <uses-permission
         android:name="android.permission.REQUEST_INSTALL_PACKAGES"
         tools:node="remove" />

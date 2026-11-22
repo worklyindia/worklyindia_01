@@ -6,6 +6,23 @@ type RelayJob = {
   result?: { audio_url?: string; content_type?: string; error?: string; reply?: string; text?: string; translated_text?: string; languageTag?: string } | null;
 };
 
+async function readableRelayError(error: unknown, fallback: string): Promise<Error> {
+  const context = error && typeof error === "object" && "context" in error
+    ? (error as { context?: unknown }).context
+    : undefined;
+  if (context instanceof Response) {
+    try {
+      const payload = await context.clone().json() as { error?: unknown; message?: unknown; details?: unknown };
+      const detail = [payload?.error, payload?.message, payload?.details]
+        .find((value) => typeof value === "string" && value.trim()) as string | undefined;
+      if (detail) return new Error(detail);
+    } catch {
+      // Preserve the original SDK error if the response is not JSON.
+    }
+  }
+  return error instanceof Error && error.message ? new Error(error.message) : new Error(fallback);
+}
+
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000, voice = '', model = ''): Promise<string> {
@@ -17,7 +34,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
       payload: { text: text.slice(0, 1000), language: language || 'hi-IN', ...(voice ? { voice } : {}), ...(model ? { model } : {}) },
     },
   });
-  if (createError) throw createError;
+  if (createError) throw await readableRelayError(createError, 'Could not create the voice request.');
   const jobId = created?.job?.id;
   if (typeof jobId !== 'string') throw new Error(created?.error || 'Shared Workly Voice phone is unavailable.');
 
@@ -31,7 +48,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
     const { data, error } = await supabase.functions.invoke('unified-voice', {
       body: { action: 'get_job', job_id: jobId },
     });
-    if (error) throw error;
+    if (error) throw await readableRelayError(error, 'Could not check the voice request.');
     const job = data?.job as RelayJob | undefined;
     if (!job) throw new Error('Shared voice request could not be found.');
     if (job.status === 'failed' || job.status === 'expired') {

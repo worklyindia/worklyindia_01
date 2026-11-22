@@ -2,11 +2,18 @@ package com.worklyindia.aivoice
 
 import android.app.Activity
 import android.content.res.Configuration
-import android.os.Build
+import android.graphics.Color
 import android.view.View
+import android.view.ViewGroup
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import java.util.WeakHashMap
 
-/** Shared light/dark palette for every native ChatWork screen. */
+/** Shared palette and edge-to-edge window handling for every native ChatWork screen. */
 internal object ChatWorkTheme {
+    private val basePadding = WeakHashMap<View, IntArray>()
+
     fun isDark(activity: Activity): Boolean =
         (activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
@@ -22,18 +29,57 @@ internal object ChatWorkTheme {
     }
 
     fun applyWindow(activity: Activity) {
-        activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) activity.window.setDecorFitsSystemWindows(true)
         val dark = isDark(activity)
         val bar = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
-        activity.window.statusBarColor = bar
-        activity.window.navigationBarColor = bar
-        if (Build.VERSION.SDK_INT >= 29) {
+        WindowCompat.setDecorFitsSystemWindows(activity.window, false)
+        activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        activity.window.statusBarColor = Color.TRANSPARENT
+        activity.window.navigationBarColor = Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
             activity.window.isNavigationBarContrastEnforced = false
             activity.window.isStatusBarContrastEnforced = false
         }
-        @Suppress("DEPRECATION")
-        activity.window.decorView.systemUiVisibility = if (dark) 0 else
-            View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+        activity.window.decorView.setBackgroundColor(bar)
+    }
+
+    /**
+     * Android 15+ enforces edge-to-edge for targetSdk 35+. Apply safe insets to
+     * the Activity content host after setContentView, not before onCreate.
+     * This keeps headers, text fields and buttons below system bars on every
+     * current and future Activity while preserving the full-screen background.
+     */
+    fun applyContentInsets(activity: Activity) {
+        val content = activity.findViewById<View>(android.R.id.content) ?: return
+        fun hideHorizontalScrollbars(view: View) {
+            view.isHorizontalScrollBarEnabled = false
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) hideHorizontalScrollbars(view.getChildAt(index))
+            }
+        }
+        hideHorizontalScrollbars(content)
+        if (!basePadding.containsKey(content)) {
+            basePadding[content] = intArrayOf(
+                content.paddingLeft, content.paddingTop,
+                content.paddingRight, content.paddingBottom
+            )
+        }
+        val initial = basePadding[content] ?: return
+        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            view.setPadding(
+                initial[0] + bars.left,
+                initial[1] + bars.top,
+                initial[2] + bars.right,
+                initial[3] + bars.bottom
+            )
+            insets
+        }
+        ViewCompat.requestApplyInsets(content)
     }
 }
