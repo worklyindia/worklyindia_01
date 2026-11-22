@@ -126,7 +126,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!device) return json({ error: "Device authentication failed" }, 401);
       const enabled = body?.enabled === true;
       const capabilities = Array.isArray(body?.capabilities) ? body.capabilities.slice(0, 40) : [];
-      if (enabled && capabilities.length === 0) return json({ error: "Download and validate at least one worker model before enabling worker mode." }, 400);
+      // Opt-in may be enabled before models are downloaded; an empty capability list receives no jobs.
       for (const capability of capabilities) {
         if (!capability || !["ai", "stt", "tts", "translate", "image", "video"].includes(capability.task) ||
           typeof capability.model !== "string" || capability.model.length > 100 ||
