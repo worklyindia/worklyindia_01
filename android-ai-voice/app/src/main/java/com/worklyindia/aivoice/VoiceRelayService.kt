@@ -69,6 +69,7 @@ class VoiceRelayService : Service() {
     private fun pollLoop(token: String) {
         setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
         var wasWaitingForData = !hasValidatedInternet()
+        var lastCapabilityRefresh = 0L
         while (running.get()) {
             if (!hasValidatedInternet()) {
                 wasWaitingForData = true
@@ -81,6 +82,14 @@ class VoiceRelayService : Service() {
                 setStatus("Shared phone server is online")
             }
             try {
+                val workerPrefs = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
+                val workerEnabled = workerPrefs.getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
+                val refreshNow = System.currentTimeMillis()
+                if (workerEnabled && refreshNow - lastCapabilityRefresh >= WORKER_CAPABILITY_REFRESH_MS) {
+                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                    VoiceRelayApi.setWorkerState(token, true, capabilities)
+                    lastCapabilityRefresh = refreshNow
+                }
                 if (activeJobId != null) {
                     Thread.sleep(500)
                     continue
@@ -95,6 +104,7 @@ class VoiceRelayService : Service() {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "stt" -> handleSttJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
+                        "translate" -> handleTranslationJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
                     }
                 } else {
@@ -121,25 +131,80 @@ class VoiceRelayService : Service() {
         }
         activeJobId = jobId
         Thread {
+            var recognizer: OfflineSpeechRecognizer? = null
             try {
                 val audioUrl = payload.optString("audio_url")
                 if (audioUrl.isBlank()) throw IllegalStateException("Caller audio URL is missing.")
-                setStatus("Transcribing caller audio on ChatWork…")
+                val requestedModel = payload.optString("model")
+                val language = payload.optString("language").lowercase().substringBefore("-")
+                    .takeIf { it.isNotBlank() && it != "auto" }
+                    ?: requestedModel.removePrefix("indicconformer-")
+                require(requestedModel == "indicconformer-" + language) {
+                    "This phone was not assigned a compatible IndicConformer model."
+                }
+                val pack = SpeechModelCatalog.indicConformer(language)
+                check(OfflineSpeechEngineFactory.isReady(this, pack)) {
+                    "The assigned IndicConformer model is no longer available on this phone."
+                }
+                setStatus("Transcribing audio locally with IndicConformer " + language.uppercase(Locale.ROOT) + "…")
                 val audio = VoiceRelayApi.downloadAudio(audioUrl)
-                val result = VoiceRelayApi.transcribe(token, audio)
-                val transcript = result.optString("text").trim()
+                val samples = decodePcm16MonoWav(audio)
+                recognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
+                val transcript = recognizer.transcribe(samples).trim()
                 if (transcript.isBlank()) throw IllegalStateException("No speech was detected in the caller audio.")
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("text", transcript.take(4000))
-                    .put("languageTag", result.optString("detected_language", "auto")))
-                setStatus("Caller speech transcribed by ChatWork. Waiting for next request…")
+                    .put("languageTag", language + "-IN")
+                    .put("provider", "local-indicconformer"))
+                setStatus("Speech transcribed locally by IndicConformer. Waiting for next request…")
             } catch (error: Exception) {
-                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Caller speech transcription failed.") }
-                setStatus("Speech recognition failed: " + (error.message ?: "network error"))
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Local speech transcription failed.") }
+                setStatus("Speech recognition failed: " + (error.message ?: "model or audio error"))
             } finally {
+                runCatching { recognizer?.close() }
                 activeJobId = null
             }
         }.start()
+    }
+
+    /** Accepts only standard PCM16, mono, 16 kHz WAV to avoid silently mis-decoding audio. */
+    private fun decodePcm16MonoWav(bytes: ByteArray): FloatArray {
+        require(bytes.size >= 44) { "Recorded audio is too short to be a WAV file." }
+        val buffer = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        fun fourCc(offset: Int) = String(bytes, offset, 4, Charsets.US_ASCII)
+        require(fourCc(0) == "RIFF" && fourCc(8) == "WAVE") { "Audio must be a standard WAV file." }
+        var offset = 12
+        var channels = 0
+        var sampleRate = 0
+        var bitsPerSample = 0
+        var audioFormat = 0
+        var dataOffset = -1
+        var dataLength = 0
+        while (offset + 8 <= bytes.size) {
+            val chunkId = fourCc(offset)
+            val chunkSize = buffer.getInt(offset + 4).toLong() and 0xffffffffL
+            val start = offset + 8
+            val end = start.toLong() + chunkSize
+            if (end > bytes.size || chunkSize > Int.MAX_VALUE) break
+            when (chunkId) {
+                "fmt " -> if (chunkSize >= 16) {
+                    audioFormat = buffer.getShort(start).toInt() and 0xffff
+                    channels = buffer.getShort(start + 2).toInt() and 0xffff
+                    sampleRate = buffer.getInt(start + 4)
+                    bitsPerSample = buffer.getShort(start + 14).toInt() and 0xffff
+                }
+                "data" -> { dataOffset = start; dataLength = chunkSize.toInt(); break }
+            }
+            offset = (end.toInt() + (chunkSize.toInt() and 1))
+        }
+        require(audioFormat == 1 && channels == 1 && sampleRate == 16000 && bitsPerSample == 16) {
+            "This worker accepts PCM16 mono 16 kHz WAV audio only."
+        }
+        require(dataOffset >= 0 && dataLength >= 2 && dataLength % 2 == 0) { "WAV audio data chunk is missing or invalid." }
+        val count = dataLength / 2
+        return FloatArray(count) { index ->
+            (buffer.getShort(dataOffset + index * 2).toInt() / 32768.0f).coerceIn(-1.0f, 1.0f)
+        }
     }
 
     private fun handleAiJob(token: String, jobId: String, payload: JSONObject) {
@@ -149,24 +214,82 @@ class VoiceRelayService : Service() {
         }
         activeJobId = jobId
         Thread {
+            val engine = OfflineAiEngine()
             try {
-                val request = JSONObject()
-                    .put("text", payload.optString("text").take(4000))
-                    .put("languageTag", payload.optString("languageTag", "auto"))
-                val response = VoiceRelayApi.post("ai-voice-chat", request, deviceToken = token)
-                if (response.statusCode !in 200..299) {
-                    throw RelayApiException(response.statusCode, response.body.optString("error", "Online AI request failed."))
+                val requestedModel = payload.optString("model")
+                val model = QwenModelManager(this).models.firstOrNull { "qwen-" + it.id == requestedModel }
+                    ?: throw IllegalStateException("The assigned Qwen model is not supported by this app version.")
+                val modelManager = QwenModelManager(this)
+                check(modelManager.snapshot(model).state == QwenModelManager.State.READY) {
+                    "The assigned Qwen model is no longer downloaded on this phone."
                 }
-                val reply = response.body.optString("reply").trim()
-                if (reply.isEmpty()) throw IllegalStateException("Online AI returned an empty reply.")
+                val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memoryInfo)
+                check(modelManager.isSupported(model, memoryInfo.availMem)) {
+                    "There is not enough free memory to safely run the assigned Qwen model."
+                }
+                check(engine.loadModel(modelManager.file(model))) { "Qwen could not load the downloaded model." }
+                val userText = payload.optString("text").trim().take(4000)
+                require(userText.isNotBlank()) { "AI request text is empty." }
+                setStatus("Generating AI reply locally with " + model.title + "…")
+                val prompt = "You are Workly AI, a helpful assistant. Answer the user's latest message directly, accurately and concisely. Reply in the same language and script as the user. Do not invent facts.\nUser: " + userText + "\nAssistant:"
+                val reply = engine.generate(prompt).trim()
+                if (reply.isBlank()) throw IllegalStateException("Qwen returned an empty reply.")
                 VoiceRelayApi.complete(token, jobId, JSONObject()
-                    .put("reply", reply)
-                    .put("languageTag", response.body.optString("languageTag", "auto")))
-                setStatus("AI reply delivered to website. Waiting for next request…")
+                    .put("reply", reply.take(6000))
+                    .put("languageTag", payload.optString("languageTag", "auto"))
+                    .put("provider", "local-qwen"))
+                setStatus("AI reply generated locally by Qwen. Waiting for next request…")
             } catch (error: Exception) {
-                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Online AI request failed.") }
-                setStatus("AI request failed: " + (error.message ?: "network error"))
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Local Qwen inference failed.") }
+                setStatus("Local AI request failed: " + (error.message ?: "model error"))
             } finally {
+                runCatching { engine.unload() }
+                activeJobId = null
+            }
+        }.start()
+    }
+
+    /** Offline ML Kit translation worker; only already-downloaded language pairs are accepted. */
+    private fun handleTranslationJob(token: String, jobId: String, payload: JSONObject) {
+        if (activeJobId != null) {
+            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
+            return
+        }
+        activeJobId = jobId
+        Thread {
+            var translator: com.google.mlkit.nl.translate.Translator? = null
+            try {
+                val text = payload.optString("text").trim()
+                require(text.isNotBlank() && text.length <= 4000) { "Translation text must contain 1–4,000 characters." }
+                require(payload.optString("model") == "mlkit-translation") { "This phone was not assigned the ML Kit translation adapter." }
+                val sourceTag = payload.optString("source_language").trim()
+                val targetTag = payload.optString("target_language").trim()
+                val source = com.google.mlkit.nl.translate.TranslateLanguage.fromLanguageTag(sourceTag)
+                    ?: throw IllegalArgumentException("Unsupported source language: " + sourceTag)
+                val target = com.google.mlkit.nl.translate.TranslateLanguage.fromLanguageTag(targetTag)
+                    ?: throw IllegalArgumentException("Unsupported target language: " + targetTag)
+                require(source != target) { "Choose two different languages to translate." }
+                setStatus("Translating locally with downloaded ML Kit language packs…")
+                translator = com.google.mlkit.nl.translate.Translation.getClient(
+                    com.google.mlkit.nl.translate.TranslatorOptions.Builder()
+                        .setSourceLanguage(source)
+                        .setTargetLanguage(target)
+                        .build()
+                )
+                val translated = com.google.android.gms.tasks.Tasks.await(translator.translate(text)).trim()
+                if (translated.isBlank()) throw IllegalStateException("The offline translation model returned an empty result.")
+                VoiceRelayApi.complete(token, jobId, JSONObject()
+                    .put("translated_text", translated.take(8000))
+                    .put("source_language", sourceTag)
+                    .put("target_language", targetTag)
+                    .put("provider", "local-mlkit"))
+                setStatus("Text translated locally. Waiting for next request…")
+            } catch (error: Exception) {
+                runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Offline translation failed.") }
+                setStatus("Translation failed: " + (error.message ?: "model or language error"))
+            } finally {
+                runCatching { translator?.close() }
                 activeJobId = null
             }
         }.start()
@@ -343,6 +466,7 @@ class VoiceRelayService : Service() {
         const val LAST_POLL_KEY = "last_successful_relay_poll"
         const val EVENTS_KEY = "recent_activity_events"
         const val POLL_INTERVAL_MS = 1_000L
+        const val WORKER_CAPABILITY_REFRESH_MS = 5 * 60 * 1_000L
         const val ACTION_RESTORE_NOTIFICATION = "com.worklyindia.aivoice.RESTORE_SERVER_NOTIFICATION"
         const val ONLINE_NOTIFICATION_TEXT = "Shared phone server is online."
         const val WAITING_NOTIFICATION_TEXT = "Waiting for Data on..."

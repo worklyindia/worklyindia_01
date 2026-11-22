@@ -46,6 +46,18 @@ object VoiceRelayApi {
         return result.body.getString("device_token")
     }
 
+
+    fun setWorkerState(deviceToken: String, enabled: Boolean, capabilities: org.json.JSONArray) {
+        val response = post(
+            "set_worker_state",
+            JSONObject().put("enabled", enabled).put("capabilities", if (enabled) capabilities else org.json.JSONArray()),
+            deviceToken = deviceToken
+        )
+        if (response.statusCode !in 200..299) {
+            throw RelayApiException(response.statusCode, response.body.optString("error", "Could not update worker availability"))
+        }
+    }
+
     fun registerFcmToken(deviceToken: String, fcmToken: String) {
         val result = post(
             "register_fcm_token",

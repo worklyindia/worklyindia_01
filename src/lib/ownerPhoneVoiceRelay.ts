@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 type RelayJob = {
   id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'expired';
-  result?: { audio_url?: string; content_type?: string; error?: string; reply?: string; text?: string; languageTag?: string } | null;
+  result?: { audio_url?: string; content_type?: string; error?: string; reply?: string; text?: string; translated_text?: string; languageTag?: string } | null;
 };
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -82,10 +82,10 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
 }
 
 
-export async function requestOwnerPhoneTranscription(audioBase64: string): Promise<{ text: string; languageTag: string }> {
+export async function requestOwnerPhoneTranscription(audioBase64: string, language = 'en-IN'): Promise<{ text: string; languageTag: string }> {
   if (!audioBase64 || audioBase64.length > 1_800_000) throw new Error('Caller audio is empty or exceeds the upload limit.');
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
-    body: { action: 'create_stt_job', audio_base64: audioBase64 },
+    body: { action: 'create_stt_job', audio_base64: audioBase64, language },
   });
   if (createError) throw createError;
   const jobId = created?.job?.id;
@@ -109,6 +109,47 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
   throw new Error('Workly Voice speech recognition timed out.');
 }
 
+
+/** Routes an offline translation request to an opted-in phone with both language packs installed. */
+export async function requestCommunityTranslation(
+  text: string,
+  sourceLanguage: string,
+  targetLanguage: string,
+  timeoutMs = 90_000,
+): Promise<string> {
+  const input = text.trim();
+  if (!input || input.length > 4000) throw new Error('Translation text must contain 1–4,000 characters.');
+  if (!sourceLanguage || !targetLanguage || sourceLanguage === targetLanguage) {
+    throw new Error('Choose two different supported languages.');
+  }
+  const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
+    body: {
+      action: 'create_job',
+      job_type: 'translate',
+      payload: { text: input, source_language: sourceLanguage, target_language: targetLanguage },
+    },
+  });
+  if (createError) throw createError;
+  const jobId = created?.job?.id;
+  if (typeof jobId !== 'string') throw new Error(created?.error || 'No opted-in translation worker is currently available.');
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await wait(350);
+    const { data, error } = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'get_job', job_id: jobId },
+    });
+    if (error) throw error;
+    const job = data?.job as RelayJob | undefined;
+    if (!job) throw new Error('Translation job could not be found.');
+    if (job.status === 'failed' || job.status === 'expired') throw new Error(job.result?.error || 'Translation worker failed.');
+    if (job.status === 'completed') {
+      const translated = typeof job.result?.translated_text === 'string' ? job.result.translated_text.trim() : '';
+      if (!translated) throw new Error('Translation worker returned an empty result.');
+      return translated;
+    }
+  }
+  throw new Error('Translation worker timed out. Please try again.');
+}
 
 /** Fetches generated audio into browser memory, then removes its temporary relay object and job row. */
 export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: string, timeoutMs = 180_000, voice = '', model = ''): Promise<Blob> {

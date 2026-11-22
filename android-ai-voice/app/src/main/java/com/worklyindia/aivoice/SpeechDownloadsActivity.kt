@@ -20,6 +20,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import java.util.Locale
@@ -60,6 +61,49 @@ class SpeechDownloadsActivity : Activity() {
     private fun buildUi() {
         val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(12),dp(18),dp(20)); setBackgroundColor(bg) }
         page.addView(Button(this).apply { text="‹  Back to ChatWork"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
+        val workerSwitch = Switch(this).apply {
+            text = "Share this phone as a community worker"
+            textSize = 15f
+            setTextColor(primary)
+            isChecked = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
+                .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
+            setPadding(dp(4), dp(10), dp(4), dp(4))
+        }
+        page.addView(workerSwitch, LinearLayout.LayoutParams(-1, -2))
+        page.addView(label("Optional · Off by default. When enabled, this phone may process other users’ jobs using models already downloaded here. It can use battery, data and processing power.", 12, secondary, false))
+        var restoringWorkerSwitch = false
+        workerSwitch.setOnCheckedChangeListener { button, enabled ->
+            if (restoringWorkerSwitch) return@setOnCheckedChangeListener
+            val deviceToken = SecureDeviceTokenStore.read(this)
+            if (deviceToken.isNullOrBlank()) {
+                restoringWorkerSwitch = true
+                button.isChecked = false
+                restoringWorkerSwitch = false
+                Toast.makeText(this, "Connect your Workly India account first.", Toast.LENGTH_LONG).show()
+                return@setOnCheckedChangeListener
+            }
+            button.isEnabled = false
+            ttsExecutor.execute {
+                try {
+                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                    VoiceRelayApi.setWorkerState(deviceToken, enabled, capabilities)
+                    getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, enabled).apply()
+                    runOnUiThread {
+                        button.isEnabled = true
+                        Toast.makeText(this, if (enabled) "Community worker enabled." else "Community worker turned off.", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (error: Exception) {
+                    runOnUiThread {
+                        restoringWorkerSwitch = true
+                        button.isChecked = !enabled
+                        restoringWorkerSwitch = false
+                        button.isEnabled = true
+                        Toast.makeText(this, error.message ?: "Could not update worker availability.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
         val scroll=ScrollView(this); val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }; scroll.addView(list); page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
         qwenManager.models.forEach { addQwenCard(list,it) }
@@ -83,7 +127,10 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"iTantra VITS · Hindi","Sherpa-ONNX · Piper Pratham · offline voice",SpeechModelCatalog.itantraVits("hi"))
         addSpeechPack(list,"iTantra VITS · English","Sherpa-ONNX · Piper Lessac · offline voice",SpeechModelCatalog.itantraVits("en"))
         addSpeechPack(list,"Kokoro-82M · Hindi & English","Hindi and English · selectable female and male voices · approximately 295 MB · offline LiteRT",SpeechModelCatalog.kokoro82m())
-        list.addView(label("Native Download/Test/Delete controls are provided for supported local model packs. Each model still requires a successful build and phone inference test before being marked verified.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
+        addSpeechPack(list,"MOSS-TTS-Nano · English / Chinese","Large offline model · approximately 712 MB · verify device RAM before use",SpeechModelCatalog.mossTtsNano())
+        addSpeechPack(list,"Chatterbox Multilingual","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.chatterboxMultilingual())
+        addSpeechPack(list,"CosyVoice 3","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.cosyVoice3())
+        list.addView(label("Every model has its own task and engine. Downloaded does not automatically mean relay-worker compatible; worker eligibility is shown on each model card.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
         addLocalOnlyCard(list,"Wan 2.1 Text-to-Video 1.3B","Not supported on this phone: Wan needs a multi-gigabyte model pack and substantially more RAM. Download is disabled to prevent storage and memory failures.")
@@ -133,7 +180,7 @@ class SpeechDownloadsActivity : Activity() {
             val transferred="%.1f / %.1f MB".format(Locale.US,snap.downloaded/1e6,snap.total/1e6)
             val speedText=if(snap.state==QwenModelManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
             status.text=when(snap.state) {
-                QwenModelManager.State.READY -> "Downloaded · Ready · " + transferred
+                QwenModelManager.State.READY -> "Downloaded · Ready · " + transferred + " · " + VoiceWorkerCapabilityRegistry.status("qwen-" + model.id, true)
                 QwenModelManager.State.RUNNING -> "Downloading · " + snap.progressPercent + "% · " + transferred + speedText
                 QwenModelManager.State.PENDING -> "Waiting for network · " + transferred
                 QwenModelManager.State.PAUSED -> "Paused · " + transferred
@@ -184,12 +231,12 @@ class SpeechDownloadsActivity : Activity() {
             lastAt=now; lastBytes=s.downloadedBytes
             val speedText=if(s.state==SpeechPackDownloadManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
             status.text=when(s.state) {
-                SpeechPackDownloadManager.State.COMPLETE -> "Ready · installed"
+                SpeechPackDownloadManager.State.COMPLETE -> "Ready · installed · " + VoiceWorkerCapabilityRegistry.status(pack.id, true)
                 SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB" + speedText
                 SpeechPackDownloadManager.State.PENDING -> "Waiting for network…"
                 SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
                 SpeechPackDownloadManager.State.FAILED -> "Download failed · tap Retry"
-                else -> "Not downloaded · ${s.totalBytes/1_000_000} MB"
+                else -> "Not downloaded · ${s.totalBytes/1_000_000} MB · " + VoiceWorkerCapabilityRegistry.status(pack.id, false)
             }
             progress.progress=s.percent; progress.visibility=if(s.state==SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
