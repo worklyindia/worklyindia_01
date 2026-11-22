@@ -88,6 +88,7 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
                 if (rows.length() == 0) return@execute
                 val release = rows.getJSONObject(0)
                 val targetCode = release.optLong("version_code", 0L)
+                val minSupportedCode = release.optLong("min_supported_version_code", 1L)
                 val currentCode = if (Build.VERSION.SDK_INT >= 28) {
                     activity.packageManager.getPackageInfo(activity.packageName, 0).longVersionCode
                 } else {
@@ -100,17 +101,20 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
                     if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                     val version = release.optString("version_name", targetCode.toString())
                     val notes = release.optString("release_notes", "").trim()
+                    val required = currentCode < minSupportedCode
                     val message = buildString {
                         append("A new ChatWork version is available (v").append(version).append(").")
                         if (notes.isNotEmpty()) append("\n\n").append(notes)
-                        append("\n\nDownload and install the update now?")
+                        append(if (required) "\n\nThis update is required to continue using ChatWork." else "\n\nDownload and install the update now?")
                     }
-                    AlertDialog.Builder(activity)
-                        .setTitle("ChatWork update available")
+                    val dialog = AlertDialog.Builder(activity)
+                        .setTitle(if (required) "Required ChatWork update" else "ChatWork update available")
                         .setMessage(message)
                         .setPositiveButton("Download update") { _, _ -> downloadUpdate(apkUrl, version) }
-                        .setNegativeButton("Later", null)
-                        .show()
+                        .create()
+                    dialog.setCancelable(!required)
+                    if (!required) dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "Later") { _, _ -> }
+                    dialog.show()
                 }
             } catch (error: Exception) {
                 android.util.Log.w("ChatWorkUpdater", "Update check failed", error)
