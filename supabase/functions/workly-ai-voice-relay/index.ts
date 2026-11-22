@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
+import { getOwnerSecret } from "../_shared/ownerSecrets.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "https://worklyindia.devs.surf",
@@ -48,6 +50,34 @@ async function deviceFor(req: Request) {
     .is("revoked_at", null)
     .maybeSingle();
   return error ? null : data;
+}
+
+
+
+async function previewCacheObject(body: any) {
+  const model = typeof body?.model === "string" ? body.model.slice(0, 40) : "";
+  const language = typeof body?.language === "string" ? body.language.slice(0, 24) : "";
+  const voice = typeof body?.voice === "string" ? body.voice.slice(0, 80) : "";
+  const sampleText = typeof body?.sample_text === "string" ? body.sample_text.trim() : "";
+  if (!model || !language || !voice || !sampleText || sampleText.length > 1200) {
+    throw Object.assign(new Error("Invalid voice preview cache identity."), { status: 400 });
+  }
+  const identity = JSON.stringify(["v1", model, language, voice, sampleText]);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity));
+  const hash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  const key = `voice-previews/v1/${hash}.wav`;
+  const [accountId, accessKeyId, secretAccessKey, publicUrlSecret] = await Promise.all([
+    getOwnerSecret("R2_ACCOUNT_ID"), getOwnerSecret("R2_ACCESS_KEY_ID"),
+    getOwnerSecret("R2_SECRET_ACCESS_KEY"), getOwnerSecret("R2_PUBLIC_URL"),
+  ]);
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw Object.assign(new Error("Cloudflare R2 credentials are not configured in Owner Secrets."), { status: 503 });
+  }
+  const bucket = "workly-ai-models";
+  const client = new AwsClient({ accessKeyId, secretAccessKey, service: "s3", region: "auto" });
+  const publicBase = (publicUrlSecret || "https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev").replace(/\\/+$/, "");
+  const objectUrl = `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${key}`;
+  return { client, key, objectUrl, publicUrl: `${publicBase}/${key}` };
 }
 
 function historyPayload(payload: any, jobType: string) {
@@ -102,6 +132,38 @@ export async function handleWorklyVoiceRelay(req: Request) {
     const action = typeof body?.action === "string" ? body.action : "";
     const db = supabase;
     const now = new Date().toISOString();
+
+    if (action === "get_preview_audio" || action === "put_preview_audio") {
+      const user = await authenticatedUser(req);
+      if (!user) return json({ error: "Authentication required" }, 401);
+      const cache = await previewCacheObject(body);
+      const head = await cache.client.fetch(new Request(cache.objectUrl, { method: "HEAD" }));
+      if (head.ok) return json({ cached: true, audio_url: cache.publicUrl, content_type: "audio/wav" });
+      if (head.status !== 404) return json({ error: `Cloudflare R2 lookup failed [${head.status}]` }, 502);
+      if (action === "get_preview_audio") return json({ cached: false });
+      const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
+      if (!audioBase64 || audioBase64.length > 7_000_000) return json({ error: "Preview audio is empty or too large." }, 413);
+      let bytes: Uint8Array;
+      try {
+        const binary = atob(audioBase64);
+        bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+      } catch {
+        return json({ error: "Invalid preview audio encoding." }, 400);
+      }
+      if (bytes.length < 44 || bytes.length > 5_000_000 ||
+          String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF" ||
+          String.fromCharCode(...bytes.slice(8, 12)) !== "WAVE") {
+        return json({ error: "Preview must be a valid WAV audio file under 5 MB." }, 400);
+      }
+      const uploaded = await cache.client.fetch(new Request(cache.objectUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "audio/wav", "Cache-Control": "public, max-age=31536000, immutable" },
+        body: bytes,
+      }));
+      if (!uploaded.ok) return json({ error: `Cloudflare R2 upload failed [${uploaded.status}]` }, 502);
+      return json({ cached: false, saved: true, audio_url: cache.publicUrl, content_type: "audio/wav" });
+    }
+
     if (action === "register_device") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Please sign in with your Workly India account in the app." }, 401);
