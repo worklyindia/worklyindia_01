@@ -1,0 +1,78 @@
+name: Publish TTS voice preview catalog to Cloudflare R2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "public/voice-preview-catalog.json"
+      - ".github/workflows/publish-voice-preview-catalog-r2.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workly-voice-preview-catalog-r2
+  cancel-in-progress: false
+
+jobs:
+  publish-catalog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Validate catalog and R2 credentials
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          test -s public/voice-preview-catalog.json
+          test -n "$R2_ACCESS_KEY_ID" || { echo "::error::Missing R2_ACCESS_KEY_ID"; exit 1; }
+          test -n "$R2_SECRET_ACCESS_KEY" || { echo "::error::Missing R2_SECRET_ACCESS_KEY"; exit 1; }
+          python -m json.tool public/voice-preview-catalog.json >/dev/null
+
+      - name: Upload and verify Cloudflare R2 catalog
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: "07937ccf8d5c6398c657c170018f8f80"
+          R2_BUCKET: workly-ai-models
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet boto3
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          import boto3
+
+          path = Path("public/voice-preview-catalog.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          voice_count = sum(len(voices) for voices in data.values())
+          if voice_count < 20:
+              raise SystemExit(f"Expected at least 20 voice samples, found {voice_count}")
+          endpoint = f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+          client = boto3.client(
+              "s3", endpoint_url=endpoint,
+              aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+              aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+              region_name="auto",
+          )
+          key = "voice-preview-catalog.json"
+          client.upload_file(str(path), os.environ["R2_BUCKET"], key, ExtraArgs={
+              "ContentType": "application/json; charset=utf-8",
+              "CacheControl": "public, max-age=300",
+          })
+          head = client.head_object(Bucket=os.environ["R2_BUCKET"], Key=key)
+          expected = path.stat().st_size
+          if head["ContentLength"] != expected:
+              raise SystemExit("R2 voice preview catalog size verification failed")
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("## Cloudflare R2 voice preview catalog published\n\n")
+              summary.write(f"- Voices: {voice_count}\n- Size: {expected} bytes\n- SHA-256: `{digest}`\n")
+          print(f"Verified {voice_count} voice sample texts in R2.")
+          PY

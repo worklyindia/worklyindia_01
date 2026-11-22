@@ -8,12 +8,13 @@ type RelayJob = {
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000, voice = ''): Promise<string> {
+export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000, voice = '', model = ''): Promise<string> {
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
     body: {
       action: 'create_job',
       job_type: 'tts',
-      payload: { text: text.slice(0, 1000), language: language || 'hi-IN', ...(voice ? { voice } : {}) },
+      // Keep model, language and voice explicit so the Android relay can reject unsupported combinations.
+      payload: { text: text.slice(0, 1000), language: language || 'hi-IN', ...(voice ? { voice } : {}), ...(model ? { model } : {}) },
     },
   });
   if (createError) throw createError;
@@ -110,8 +111,8 @@ export async function requestOwnerPhoneTranscription(audioBase64: string): Promi
 
 
 /** Fetches generated audio into browser memory, then removes its temporary relay object and job row. */
-export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: string, timeoutMs = 180_000, voice = ''): Promise<Blob> {
-  const audioUrl = await requestOwnerPhoneVoiceAudio(text, language, timeoutMs, voice);
+export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: string, timeoutMs = 180_000, voice = '', model = ''): Promise<Blob> {
+  const audioUrl = await requestOwnerPhoneVoiceAudio(text, language, timeoutMs, voice, model);
   try {
     const response = await fetch(audioUrl);
     if (!response.ok) throw new Error("Could not download generated voice audio from the phone relay.");
@@ -134,7 +135,7 @@ export async function requestOwnerPhoneVoiceAudioBlob(text: string, language: st
 
 
 /** Splits long text into short phone-sized requests to keep each WAV below the relay upload limit. */
-export async function requestOwnerPhoneLongVoiceAudioBlob(text: string, language: string, voice = ''): Promise<Blob> {
+export async function requestOwnerPhoneLongVoiceAudioBlob(text: string, language: string, voice = '', model = ''): Promise<Blob> {
   const chunks: string[] = [];
   let remaining = text.trim();
   // Send substantially larger sentence-aware batches. Each 180-char batch created
@@ -171,8 +172,11 @@ export async function requestOwnerPhoneLongVoiceAudioBlob(text: string, language
     window.dispatchEvent(new CustomEvent("workly-voice-status", {
       detail: { status: "generating", part: index + 1, total: chunks.length },
     }));
-    const blob = await requestOwnerPhoneVoiceAudioBlob(chunks[index], language, 180_000, voice);
+    const blob = await requestOwnerPhoneVoiceAudioBlob(chunks[index], language, 180_000, voice, model);
     const bytes = new Uint8Array(await blob.arrayBuffer());
+    window.dispatchEvent(new CustomEvent('workly-voice-status', {
+      detail: { status: 'generating', part: index + 1, total: chunks.length, completed: true },
+    }));
     if (bytes.length < 44 || String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF") {
       throw new Error("The phone returned an unsupported WAV audio file.");
     }

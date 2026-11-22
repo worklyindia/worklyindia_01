@@ -172,7 +172,7 @@ class VoiceRelayService : Service() {
         }.start()
     }
 
-    /** Website Text To Voice dispatches strictly to the model selected by the user. */
+    /** Website Text To Voice uses only the two approved offline model families. */
     private fun handleTtsJob(token: String, jobId: String, payload: JSONObject) {
         if (activeJobId != null) {
             VoiceRelayApi.fail(token, jobId, "Phone is already processing another voice request.")
@@ -187,41 +187,31 @@ class VoiceRelayService : Service() {
                 require(text.isNotEmpty()) { "TTS request has no text." }
                 val languageTag = payload.optString("language", "hi-IN")
                 val language = Locale.forLanguageTag(languageTag).language
-                val modelId = payload.optString("model").trim().lowercase(Locale.ROOT)
                 val voiceId = payload.optString("voice").trim()
+                val requestedModel = payload.optString("model").trim().ifBlank {
+                    if (language == "gu") "indic" else "kokoro"
+                }
                 outputFile.delete()
-
-                // Backward compatibility for old website clients that did not send a model id.
-                val selectedModel = modelId.ifBlank { if (language == "gu") "indic" else "kokoro" }
-                when (selectedModel) {
-                    "indic" -> {
-                        val pack = SpeechModelCatalog.indicTinyTts(language)
-                        check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
-                            "Indic Tiny TTS ${pack.languageCode} is not downloaded. Download it from ChatWork → Model Downloads."
+                when (language) {
+                    "gu" -> {
+                        require(requestedModel == "indic") {
+                            "Gujarati is currently available through Indic Tiny TTS. Select Indic Tiny TTS for Gujarati."
                         }
-                        val selectedVoice = voiceId.lowercase(Locale.ROOT).ifBlank { "female" }
+                        val pack = SpeechModelCatalog.indicTinyTts("gu")
+                        check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                            "Indic Tiny TTS Gujarati is not downloaded. Download it from ChatWork → Model Downloads."
+                        }
+                        val selectedVoice = voiceId.ifBlank { "female" }
                         check(selectedVoice == "female" || selectedVoice == "male") {
-                            "Select Female or Male for Indic Tiny TTS."
+                            "Selected Gujarati voice is not available in Indic Tiny TTS."
                         }
-                        val engine = IndicTinyTtsEngine.create(this, language)
-                        try {
+                        IndicTinyTtsEngine.create(this, "gu").use { engine ->
                             engine.synthesizeToWav(text, outputFile, selectedVoice)
-                        } finally {
-                            engine.close()
                         }
                     }
-                    "itantra" -> {
-                        val pack = SpeechModelCatalog.itantraVits(language)
-                        check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
-                            "iTantra VITS ${pack.languageCode} is not downloaded. Download it from ChatWork → Model Downloads."
-                        }
-                        SherpaVitsTtsEngine.create(this, pack).use { engine ->
-                            engine.synthesizeToWav(text, outputFile)
-                        }
-                    }
-                    "kokoro" -> {
-                        require(language == "hi" || language == "en") {
-                            "Kokoro-82M supports Hindi and English. Choose another model for Gujarati."
+                    "hi", "en" -> {
+                        require(requestedModel == "kokoro") {
+                            "Hindi and English are currently available through Kokoro-82M. Select Kokoro-82M for these languages."
                         }
                         val pack = SpeechModelCatalog.kokoro82m()
                         check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
@@ -240,7 +230,7 @@ class VoiceRelayService : Service() {
                             outputFile = outputFile
                         )
                     }
-                    else -> throw IllegalArgumentException("Unsupported Text To Voice model: $selectedModel")
+                    else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
                 }
                 check(outputFile.isFile && outputFile.length() > 44L) { "The selected offline model returned empty audio." }
                 VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
