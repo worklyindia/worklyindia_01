@@ -446,10 +446,23 @@ async function handleSaveVoicePreview(supabase: any, params: any, req: Request) 
   const voice = typeof params.voice === 'string' ? params.voice : '';
   const dataUrl = typeof params.audio === 'string' ? params.audio : '';
   if (!['kokoro', 'indic', 'itantra'].includes(model) || !['hi-IN', 'en-IN', 'gu-IN'].includes(language) || !/^[a-z0-9_-]{1,40}$/i.test(voice)) return new Response(JSON.stringify({ error: 'Invalid voice preview selection.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  const match = dataUrl.match(/^data:audio\/wav;base64,([A-Za-z0-9+/]+={0,2})$/);
-  if (!match) return new Response(JSON.stringify({ error: 'Preview must be a WAV audio file.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-  const binary = atob(match[1]);
-  if (binary.length < 44 || binary.length > 5 * 1024 * 1024 || binary.slice(0, 4) !== 'RIFF' || binary.slice(8, 12) !== 'WAVE') return new Response(JSON.stringify({ error: 'Invalid WAV audio data or file size.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  // WebView may label a valid WAV as audio/x-wav, application/octet-stream,
+  // or another MIME type. Validate the actual RIFF/WAVE bytes, not the label.
+  const encoded = dataUrl.replace(/^data:[^,]*;base64,/i, '').trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+    return new Response(JSON.stringify({ error: 'Preview upload did not contain valid base64 audio data.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  let binary: string;
+  try { binary = atob(encoded); } catch {
+    return new Response(JSON.stringify({ error: 'Preview audio could not be decoded. Please test the voice again.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  // R2 allows up to 5 GiB for a single PUT. The 5 MiB cap here is only
+  // the current base64-over-Edge-Function transport safeguard.
+  if (binary.length < 44 || binary.length > 5 * 1024 * 1024 || binary.slice(0, 4) !== 'RIFF' || binary.slice(8, 12) !== 'WAVE') {
+    return new Response(JSON.stringify({ error: binary.length > 5 * 1024 * 1024
+      ? 'Voice preview exceeds the current 5 MiB upload transport limit.'
+      : 'Invalid WAV audio data. A valid RIFF/WAVE header is required.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   const [accountId, accessKeyId, secretAccessKey] = await Promise.all([readVoicePreviewSecret('R2_ACCOUNT_ID'), readVoicePreviewSecret('R2_ACCESS_KEY_ID'), readVoicePreviewSecret('R2_SECRET_ACCESS_KEY')]);
@@ -457,11 +470,23 @@ async function handleSaveVoicePreview(supabase: any, params: any, req: Request) 
   const bucket = 'workly-ai-models';
   const key = 'voice-previews/' + model + '/' + language + '/' + voice + '.wav';
   const objectUrl = 'https://' + accountId + '.r2.cloudflarestorage.com/' + bucket + '/' + key;
-  const upload = await client.fetch(new Request(objectUrl, { method: 'PUT', body: bytes, headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'public, max-age=31536000, immutable' } }));
-  if (!upload.ok) throw new Error('Cloudflare R2 upload failed (' + upload.status + '): ' + (await upload.text()).slice(0, 300));
+  // R2 can return 429 when the same key is written more than once per second.
+  // Retry rate limits and transient server errors with backoff.
+  let upload: Response | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    upload = await client.fetch(new Request(objectUrl, { method: 'PUT', body: bytes, headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'public, max-age=31536000, immutable' } }));
+    if (upload.ok) break;
+    const status = upload.status;
+    const details = (await upload.text()).slice(0, 300);
+    if (status !== 429 && status < 500) throw new Error('Cloudflare R2 upload rejected (' + status + '): ' + details);
+    if (attempt === 4) throw new Error('Cloudflare R2 upload failed after 5 attempts (' + status + '): ' + details);
+    await new Promise((resolve) => setTimeout(resolve, 1100 * (attempt + 1)));
+  }
   const verify = await client.fetch(new Request(objectUrl, { method: 'HEAD' }));
   const savedBytes = Number(verify.headers.get('content-length') ?? '0');
-  if (!verify.ok || savedBytes !== bytes.byteLength) throw new Error('Cloudflare R2 upload could not be verified; preview was not marked saved.');
+  if (!verify.ok || savedBytes !== bytes.byteLength) {
+    throw new Error('Cloudflare R2 upload verification failed (HTTP ' + verify.status + '; expected ' + bytes.byteLength + ' bytes, found ' + savedBytes + ').');
+  }
   const url = 'https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/' + key;
   return new Response(JSON.stringify({ ok: true, key, url, bytes: savedBytes, verified: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
