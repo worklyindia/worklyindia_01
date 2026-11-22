@@ -2,64 +2,22 @@ package com.worklyindia.aivoice
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.Settings
 import android.widget.Toast
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Checks the independently published ChatWork release channel and offers a safe APK update. */
+/**
+ * Checks the published ChatWork release channel. Updates are opened in the
+ * browser/system package installer; ChatWork never requests install-packages
+ * permission or installs downloaded APKs itself.
+ */
 internal class ChatWorkAppUpdater(private val activity: Activity) {
     private val executor = Executors.newSingleThreadExecutor()
     private val checking = AtomicBoolean(false)
-    private var downloadId = -1L
-    private var pendingInstallUri: Uri? = null
-    private var waitingForInstallPermission = false
-    private var receiverRegistered = false
-
-    private val downloadReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
-            val completed = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-            if (completed != downloadId) return
-            val manager = activity.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            manager.query(DownloadManager.Query().setFilterById(completed)).use { cursor ->
-                if (!cursor.moveToFirst()) return
-                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                    pendingInstallUri = manager.getUriForDownloadedFile(completed)
-                    if (pendingInstallUri != null) activity.runOnUiThread { installDownloadedUpdate() }
-                    else activity.runOnUiThread { Toast.makeText(activity, "Downloaded update could not be opened.", Toast.LENGTH_LONG).show() }
-                } else {
-                    val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    activity.runOnUiThread {
-                        Toast.makeText(activity, "ChatWork update download failed ($reason). Please try again.", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        }
-    }
-
-    init {
-        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        if (Build.VERSION.SDK_INT >= 33) {
-            activity.registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            activity.registerReceiver(downloadReceiver, filter)
-        }
-        receiverRegistered = true
-    }
 
     fun checkForUpdate() {
         if (!checking.compareAndSet(false, true)) return
@@ -67,7 +25,7 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
             try {
                 val base = BuildConfig.SUPABASE_URL.trimEnd('/')
                 val endpoint = base + "/rest/v1/chatwork_app_releases" +
-                    "?select=version_code,version_name,apk_path,apk_size_bytes,release_notes,min_supported_version_code" +
+                    "?select=version_code,version_name,apk_path,release_notes,min_supported_version_code" +
                     "&is_published=eq.true&order=version_code.desc&limit=1"
                 val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
@@ -87,7 +45,7 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
                 val release = rows.getJSONObject(0)
                 val targetCode = release.optLong("version_code", 0L)
                 val minSupportedCode = release.optLong("min_supported_version_code", 1L)
-                val currentCode = if (Build.VERSION.SDK_INT >= 28) {
+                val currentCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
                     activity.packageManager.getPackageInfo(activity.packageName, 0).longVersionCode
                 } else {
                     @Suppress("DEPRECATION")
@@ -103,12 +61,12 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
                     val message = buildString {
                         append("A new ChatWork version is available (v").append(version).append(").")
                         if (notes.isNotEmpty()) append("\n\n").append(notes)
-                        append(if (required) "\n\nThis update is required to continue using ChatWork." else "\n\nDownload and install the update now?")
+                        append(if (required) "\n\nThis update is required. Download it to continue." else "\n\nOpen the official download page?")
                     }
                     val dialog = AlertDialog.Builder(activity)
                         .setTitle(if (required) "Required ChatWork update" else "ChatWork update available")
                         .setMessage(message)
-                        .setPositiveButton("Download update") { _, _ -> downloadUpdate(apkUrl, version) }
+                        .setPositiveButton("Open download") { _, _ -> openDownload(apkUrl) }
                         .create()
                     dialog.setCancelable(!required)
                     if (!required) dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "Later") { _, _ -> }
@@ -122,51 +80,11 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
         }
     }
 
-    fun onResume() {
-        if (waitingForInstallPermission && Build.VERSION.SDK_INT >= 26 &&
-            activity.packageManager.canRequestPackageInstalls()) {
-            waitingForInstallPermission = false
-            installDownloadedUpdate()
-        }
-    }
-
-    private fun downloadUpdate(apkUrl: String, version: String) {
+    private fun openDownload(apkUrl: String) {
         try {
-            val request = DownloadManager.Request(Uri.parse(apkUrl))
-                .setTitle("ChatWork v$version")
-                .setDescription("Downloading ChatWork update")
-                .setMimeType("application/vnd.android.package-archive")
-                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                .setAllowedOverMetered(true)
-                .setAllowedOverRoaming(false)
-                .setDestinationInExternalFilesDir(activity, Environment.DIRECTORY_DOWNLOADS, "ChatWork-v$version.apk")
-            val manager = activity.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            downloadId = manager.enqueue(request)
-            Toast.makeText(activity, "ChatWork update download started.", Toast.LENGTH_LONG).show()
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl)))
         } catch (error: Exception) {
-            Toast.makeText(activity, error.message ?: "Could not start the update download.", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun installDownloadedUpdate() {
-        val uri = pendingInstallUri ?: return
-        if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
-            waitingForInstallPermission = true
-            val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.packageName))
-            activity.startActivity(settingsIntent)
-            Toast.makeText(activity, "Allow ChatWork to install updates, then return here.", Toast.LENGTH_LONG).show()
-            return
-        }
-        try {
-            val install = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            activity.startActivity(install)
-            pendingInstallUri = null
-        } catch (error: Exception) {
-            Toast.makeText(activity, error.message ?: "Could not open the Android installer.", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, error.message ?: "Could not open the official ChatWork download.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -179,10 +97,6 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
     }.getOrDefault(false)
 
     fun close() {
-        if (receiverRegistered) {
-            runCatching { activity.unregisterReceiver(downloadReceiver) }
-            receiverRegistered = false
-        }
         executor.shutdownNow()
     }
 }
