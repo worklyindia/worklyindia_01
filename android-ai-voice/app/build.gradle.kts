@@ -72,8 +72,7 @@ android {
             // Wan is launched as a child process from nativeLibraryDir, so Android
             // must extract the executable instead of loading it only from the APK.
             useLegacyPackaging = true
-            // Both Sherpa and the ORT Java API AAR contain libonnxruntime.so.
-            // Keep Sherpa's 1.28.2 runtime first; ORT Java JNI remains available for Indic Tiny/Moss.
+            // Sherpa and the ORT 1.28.2 AAR carry the same runtime version.
             pickFirsts += setOf("**/libonnxruntime.so")
         }
     }
@@ -81,6 +80,56 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 
+// Sherpa-ONNX 2.0.1 is built against ONNX Runtime 1.28.2. Fetch the exact
+// Android AAR bundle (Java classes + matching JNI/native libraries) from the
+// sherpa-onnx maintainer release repository and verify its published SHA-256.
+val onnxRuntimeAar = layout.projectDirectory.file("libs/onnxruntime-android-1.28.2.aar")
+val downloadOnnxRuntimeAar by tasks.registering {
+    outputs.file(onnxRuntimeAar)
+    doLast {
+        val target = onnxRuntimeAar.asFile
+        val expectedBytes = 33_765_715L
+        val expectedSha256 = "01518867f78241138b6aa25925802e843a4fa9085af8d303d49e35bbb52aff4d"
+        fun digest(file: File): String {
+            val md = MessageDigest.getInstance("SHA-256")
+            file.inputStream().buffered(1024 * 1024).use { input ->
+                val buffer = ByteArray(1024 * 1024)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    md.update(buffer, 0, count)
+                }
+            }
+            return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        }
+        if (target.isFile && target.length() == expectedBytes && digest(target) == expectedSha256) {
+            logger.lifecycle("Verified cached ONNX Runtime 1.28.2 Android AAR.")
+            return@doLast
+        }
+        target.parentFile.mkdirs()
+        val partial = File(target.parentFile, target.name + ".part")
+        partial.delete()
+        val connection = URL("https://github.com/csukuangfj/onnxruntime-libs/releases/download/v1.28.2/onnxruntime-android-1.28.2.zip").openConnection().apply {
+            connectTimeout = 30_000
+            readTimeout = 180_000
+        }
+        try {
+            connection.getInputStream().buffered(1024 * 1024).use { input ->
+                partial.outputStream().buffered(1024 * 1024).use { output -> input.copyTo(output) }
+            }
+        } finally {
+            (connection as? HttpURLConnection)?.disconnect()
+        }
+        check(partial.length() == expectedBytes) { "ONNX Runtime 1.28.2 download has an unexpected size: " + partial.length() }
+        check(digest(partial) == expectedSha256) { "ONNX Runtime 1.28.2 failed SHA-256 verification." }
+        if (target.exists()) target.delete()
+        check(partial.renameTo(target)) { "Could not install the verified ONNX Runtime AAR." }
+        logger.lifecycle("Downloaded and verified ONNX Runtime 1.28.2 Android AAR.")
+    }
+}
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(downloadOnnxRuntimeAar)
+}
 dependencies {
     implementation("com.google.mediapipe:tasks-audio:1.2.2")
     implementation("com.airbnb.android:lottie:6.7.1")
@@ -90,7 +139,7 @@ dependencies {
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
     }
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
+    implementation(files("libs/onnxruntime-android-1.28.2.aar"))
     implementation("org.apache.commons:commons-compress:1.27.1")
 }
 
