@@ -71,10 +71,14 @@ class SpeechDownloadsActivity : Activity() {
         }
         page.addView(workerSwitch, LinearLayout.LayoutParams(-1, -2))
         page.addView(label("Optional · Off by default. When enabled, this phone may process other users’ jobs using models already downloaded here. It can use battery, data and processing power.", 12, secondary, false))
+        var restoringWorkerSwitch = false
         workerSwitch.setOnCheckedChangeListener { button, enabled ->
+            if (restoringWorkerSwitch) return@setOnCheckedChangeListener
             val deviceToken = SecureDeviceTokenStore.read(this)
             if (deviceToken.isNullOrBlank()) {
+                restoringWorkerSwitch = true
                 button.isChecked = false
+                restoringWorkerSwitch = false
                 Toast.makeText(this, "Connect your Workly India account first.", Toast.LENGTH_LONG).show()
                 return@setOnCheckedChangeListener
             }
@@ -91,7 +95,9 @@ class SpeechDownloadsActivity : Activity() {
                     }
                 } catch (error: Exception) {
                     runOnUiThread {
+                        restoringWorkerSwitch = true
                         button.isChecked = !enabled
+                        restoringWorkerSwitch = false
                         button.isEnabled = true
                         Toast.makeText(this, error.message ?: "Could not update worker availability.", Toast.LENGTH_LONG).show()
                     }
