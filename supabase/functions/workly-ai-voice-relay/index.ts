@@ -144,7 +144,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (head.status !== 404) return json({ error: `Cloudflare R2 lookup failed [${head.status}]` }, 502);
       if (action === "get_preview_audio") return json({ cached: false });
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
-      if (!audioBase64 || audioBase64.length > 7_000_000) return json({ error: "Preview audio is empty or too large." }, 413);
+      if (!audioBase64 || audioBase64.length > 4_800_000) return json({ error: "Preview audio is empty or too large." }, 413);
       let bytes: Uint8Array;
       try {
         const binary = atob(audioBase64);
@@ -152,7 +152,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       } catch {
         return json({ error: "Invalid preview audio encoding." }, 400);
       }
-      if (bytes.length < 44 || bytes.length > 5_000_000 ||
+      if (bytes.length < 44 || bytes.length > 3_600_000 ||
           String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF" ||
           String.fromCharCode(...bytes.slice(8, 12)) !== "WAVE") {
         return json({ error: "Preview must be a valid WAV audio file under 5 MB." }, 400);
@@ -160,7 +160,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const uploaded = await cache.client.fetch(new Request(cache.objectUrl, {
         method: "PUT",
         headers: { "Content-Type": "audio/wav", "Cache-Control": "public, max-age=31536000, immutable" },
-        body: bytes,
+        body: new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "audio/wav" }),
       }));
       if (!uploaded.ok) return json({ error: `Cloudflare R2 upload failed [${uploaded.status}]` }, 502);
       return json({ cached: false, saved: true, audio_url: cache.publicUrl, content_type: "audio/wav" });
