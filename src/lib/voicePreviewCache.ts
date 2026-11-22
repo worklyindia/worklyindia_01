@@ -7,7 +7,7 @@ export function voicePreviewUrl(model: string, language: string, voice: string) 
 }
 
 export async function saveVoicePreviewToR2(model: string, language: string, voice: string, audio: Blob) {
-  if (audio.type !== "audio/wav" && audio.size < 44) throw new Error("Invalid voice preview audio.");
+  if (audio.type !== "audio/wav" || audio.size < 44) throw new Error("Invalid voice preview audio. Expected a WAV file of at least 44 bytes.");
   const base64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not prepare voice preview upload."));
