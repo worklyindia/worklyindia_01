@@ -450,5 +450,5 @@ jobs:
               if item: lines.append(f'| {label} — {item[0]} | {item[1]:,} | {item[2]:.2f} MB | {item[3]:.2f} MiB | `{item[4]}` |')
               else: lines.append(f'| {label} | Not produced | — | — | — |')
           lines += ['', '## ChatWork — Gradle build diagnostics', '', '| Field | Result |', '|---|---|', '| Root project | WorklyIndia / ChatWork Android |', '| Gradle version | 9.5.1 |', '| Requested tasks | `assembleDirectRelease`, `bundlePlayStoreRelease` (unsigned PR preview: `assembleDirectDebug`) |', f"| Gradle setup | {status('GRADLE_SETUP_STATUS')} |", f"| Signed APK build | {status('APK_BUILD_STATUS')} |", f"| Preview APK build | {status('PREVIEW_BUILD_STATUS')} |", f"| Google Play AAB build | {status('AAB_BUILD_STATUS')} |", f"| AAB signature/archive verification | {status('AAB_VERIFY_STATUS')} |", f"| APK artifact upload | {status('APK_UPLOAD_STATUS')} |", f"| AAB artifact upload | {status('AAB_UPLOAD_STATUS')} |", '']
-          with out.open('a', encoding='utf-8') as f: f.write('\\n'.join(lines))
+          with out.open('a', encoding='utf-8') as f: f.write('\n'.join(lines))
           PY
