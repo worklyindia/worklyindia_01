@@ -76,7 +76,6 @@ internal class ChatWorkAppUpdater(private val activity: Activity) {
                     connectTimeout = 15000
                     readTimeout = 20000
                     setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-                    setRequestProperty("Authorization", "Bearer " + BuildConfig.SUPABASE_PUBLISHABLE_KEY)
                     setRequestProperty("Accept", "application/json")
                 }
                 val payload = try {
