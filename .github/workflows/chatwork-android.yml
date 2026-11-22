@@ -49,7 +49,7 @@ jobs:
       - name: Install Android SDK, NDK, CMake and host tokenizer tools
         id: install-native-tools
         run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           sudo apt-get update
           sudo apt-get install -y flatbuffers-compiler unzip curl
           # SentencePiece's pinned protobuf runtime is v36.2. APT on Ubuntu
@@ -69,7 +69,6 @@ jobs:
           gradle-version: "9.5.1"
 
       - name: Check release signing configuration
-        id: signing
         id: signing
         shell: bash
         env:
@@ -112,21 +111,42 @@ jobs:
         id: build-release
         if: steps.signing.outputs.enabled == 'true'
         working-directory: android-ai-voice
-        run: gradle --no-daemon assembleRelease
+        run: gradle --no-daemon assembleDirectRelease
 
       - name: Build preview APK (not update-compatible)
         id: build-preview
         if: steps.signing.outputs.enabled == 'false'
         working-directory: android-ai-voice
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon assembleDirectDebug
+
+      - name: Build signed Google Play App Bundle
+        id: build-playstore-bundle
+        if: steps.signing.outputs.enabled == 'true'
+        working-directory: android-ai-voice
+        run: gradle --no-daemon bundlePlayStoreRelease
+
+      - name: Verify and rename Google Play App Bundle
+        id: verify-playstore-bundle
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="$(find android-ai-voice/app/build/outputs/bundle -type f -name '*.aab' -print -quit)"
+          test -n "$AAB" && test -s "$AAB"
+          unzip -t "$AAB" >/dev/null
+          jarsigner -verify "$AAB" >/dev/null
+          TARGET="$(dirname "$AAB")/ChatWork-PlayStore-v1.0.$GITHUB_RUN_NUMBER.aab"
+          mv "$AAB" "$TARGET"
+          echo "PLAYSTORE_AAB_PATH=$TARGET" >> "$GITHUB_ENV"
+          echo "Verified signed Play Store AAB: $TARGET ($(stat -c%s "$TARGET") bytes)"
 
       - name: Verify native TTS runtime dependencies
         id: verify-native-runtime
         shell: bash
         run: |
           set -euo pipefail
-          APK="android-ai-voice/app/build/outputs/apk/release/app-release.apk"
-          if [ ! -f "$APK" ]; then APK="android-ai-voice/app/build/outputs/apk/debug/app-debug.apk"; fi
+          APK="android-ai-voice/app/build/outputs/apk/direct/release/app-direct-release.apk"
+          if [ ! -f "$APK" ]; then APK="android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"; fi
           test -f "$APK"
           NDK_READelf="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           test -x "$NDK_READelf"
@@ -149,12 +169,12 @@ jobs:
         id: rename-apk
         shell: bash
         run: |
-          if [ -f android-ai-voice/app/build/outputs/apk/release/app-release.apk ]; then
-            cp android-ai-voice/app/build/outputs/apk/release/app-release.apk "android-ai-voice/app/build/outputs/apk/release/ChatWork-v1.0.$GITHUB_RUN_NUMBER.apk"
-            echo "APK_PATH=android-ai-voice/app/build/outputs/apk/release/ChatWork-v1.0.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_ENV"
+          if [ -f android-ai-voice/app/build/outputs/apk/direct/release/app-direct-release.apk ]; then
+            cp android-ai-voice/app/build/outputs/apk/direct/release/app-direct-release.apk "android-ai-voice/app/build/outputs/apk/direct/release/ChatWork-v1.0.$GITHUB_RUN_NUMBER.apk"
+            echo "APK_PATH=android-ai-voice/app/build/outputs/apk/direct/release/ChatWork-v1.0.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_ENV"
           else
-            cp android-ai-voice/app/build/outputs/apk/debug/app-debug.apk "android-ai-voice/app/build/outputs/apk/debug/ChatWork-preview-v1.0.$GITHUB_RUN_NUMBER.apk"
-            echo "APK_PATH=android-ai-voice/app/build/outputs/apk/debug/ChatWork-preview-v1.0.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_ENV"
+            cp android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk "android-ai-voice/app/build/outputs/apk/direct/debug/ChatWork-preview-v1.0.$GITHUB_RUN_NUMBER.apk"
+            echo "APK_PATH=android-ai-voice/app/build/outputs/apk/direct/debug/ChatWork-preview-v1.0.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_ENV"
           fi
 
       - name: Upload signed ChatWork APK to Cloudflare R2 and save Owner draft
@@ -264,6 +284,16 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload Google Play App Bundle
+        id: upload-playstore-aab
+        if: success() && steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ChatWork-PlayStore-v1.0.${{ github.run_number }}
+          path: ${{ env.PLAYSTORE_AAB_PATH }}
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Publish complete ChatWork workflow summary
         if: always()
         shell: bash
@@ -278,6 +308,10 @@ jobs:
           SIGNING_ENABLED: ${{ steps.signing.outputs.enabled }}
           ARTIFACT_URL: ${{ steps.upload-chatwork-apk.outputs.artifact-url }}
           ARTIFACT_ID: ${{ steps.upload-chatwork-apk.outputs.artifact-id }}
+          PLAYSTORE_BUNDLE_STATUS: ${{ steps.build-playstore-bundle.outcome }}
+          PLAYSTORE_VERIFY_STATUS: ${{ steps.verify-playstore-bundle.outcome }}
+          PLAYSTORE_ARTIFACT_STATUS: ${{ steps.upload-playstore-aab.outcome }}
+          PLAYSTORE_ARTIFACT_URL: ${{ steps.upload-playstore-aab.outputs.artifact-url }}
           CHECKOUT_STATUS: ${{ steps.checkout.outcome }}
           JAVA_STATUS: ${{ steps.setup-java.outcome }}
           ANDROID_STATUS: ${{ steps.setup-android.outcome }}
@@ -325,6 +359,9 @@ jobs:
               ("Rename APK", "RENAME_STATUS"),
               ("Cloudflare R2 + Supabase publishing", "PUBLISH_STATUS"),
               ("GitHub APK artifact upload", "ARTIFACT_STATUS"),
+              ("Google Play AAB build", "PLAYSTORE_BUNDLE_STATUS"),
+              ("Google Play AAB signature / archive verification", "PLAYSTORE_VERIFY_STATUS"),
+              ("Google Play AAB artifact upload", "PLAYSTORE_ARTIFACT_STATUS"),
           ]
           failed = [(name, val(key)) for name, key in steps if val(key) == "failure"]
           skipped = [(name, val(key)) for name, key in steps if val(key) == "skipped"]
@@ -345,6 +382,7 @@ jobs:
               f"| Signing | {'Stable release key — update-compatible with installs signed by the same key' if signed else 'Debug key — preview only; cannot update a release-signed install'} |",
               f"| APK artifact | {'Uploaded — [Download artifact](' + e['ARTIFACT_URL'] + ')' if e.get('ARTIFACT_URL') else pretty(val('ARTIFACT_STATUS'))} |",
               f"| Artifact ID | {val('ARTIFACT_ID')} |",
+              f"| Play Store AAB | {'Uploaded — [Download signed AAB](' + e['PLAYSTORE_ARTIFACT_URL'] + ')' if e.get('PLAYSTORE_ARTIFACT_URL') else pretty(val('PLAYSTORE_ARTIFACT_STATUS'))} |",
               f"| Cloudflare R2 + Supabase | {pretty(val('PUBLISH_STATUS')) if production and signed else 'Skipped — requires a signed build on main'} |",
               f"| Commit | {e['COMMIT_SHA']} |",
               "",
@@ -364,7 +402,8 @@ jobs:
           if skipped:
               lines += [f"- **{name}:** skipped by workflow conditions or because an earlier step failed." for name, _ in skipped]
           if not signed:
-              lines.append("- **Release APK / production upload:** signing secrets are not configured; the workflow builds a debug preview APK only.")
+              lines.append("- **Signed APK / Play Store AAB:** signing secrets are not configured; only a debug preview APK is built.")
+              lines.append("- **Play Store AAB:** skipped because Google Play requires a signed release bundle.")
           if not production:
               lines.append("- **Cloudflare R2 + Supabase production publishing:** intentionally runs only for signed builds on the main branch.")
           if not skipped and signed and production:
