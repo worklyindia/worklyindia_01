@@ -146,6 +146,102 @@ jobs:
             echo "APK_PATH=android-ai-voice/app/build/outputs/apk/debug/ChatWork-preview-v1.0.$GITHUB_RUN_NUMBER.apk" >> "$GITHUB_ENV"
           fi
 
+      - name: Upload signed ChatWork APK to Cloudflare R2 and save Owner draft
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.signing.outputs.enabled == 'true'
+        env:
+          SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          R2_ACCOUNT_ID: "07937ccf8d5c6398c657c170018f8f80"
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: workly-android-releases
+          R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
+          APK_FILE: ${{ env.APK_PATH }}
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+          RELEASE_NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet requests boto3
+          python - <<'PY'
+          import os, pathlib, requests, boto3
+          from botocore.exceptions import ClientError
+
+          base = os.environ["SUPABASE_URL"].rstrip("/")
+          service = os.environ["SUPABASE_SERVICE_ROLE_KEY"].strip()
+          account = os.environ["R2_ACCOUNT_ID"]
+          access = os.environ["R2_ACCESS_KEY_ID"]
+          secret = os.environ["R2_SECRET_ACCESS_KEY"]
+          bucket = os.environ["R2_BUCKET"]
+          public_base = os.environ["R2_PUBLIC_BASE_URL"].rstrip("/")
+          apk = pathlib.Path(os.environ["APK_FILE"])
+          code = int(os.environ["VERSION_CODE"])
+          name = os.environ["VERSION_NAME"]
+          notes = os.environ.get("RELEASE_NOTES", "")
+          missing = [k for k,v in {"SUPABASE_SERVICE_ROLE_KEY":service,"R2_ACCESS_KEY_ID":access,"R2_SECRET_ACCESS_KEY":secret}.items() if not v]
+          if missing: raise SystemExit("Missing required release secret(s): " + ", ".join(missing))
+          if not apk.is_file() or apk.stat().st_size <= 0: raise SystemExit("Signed ChatWork APK missing; refusing to publish.")
+          s3 = boto3.client("s3", endpoint_url=f"https://{account}.r2.cloudflarestorage.com", aws_access_key_id=access, aws_secret_access_key=secret, region_name="auto")
+          key = f"chatwork/releases/chatwork-v{code}/ChatWork.apk"
+          with apk.open("rb") as stream:
+              s3.put_object(Bucket=bucket, Key=key, Body=stream, ContentLength=apk.stat().st_size, ContentType="application/vnd.android.package-archive", CacheControl="public, max-age=31536000, immutable", Metadata={"version-code":str(code),"version-name":name})
+          head = s3.head_object(Bucket=bucket, Key=key)
+          if int(head.get("ContentLength",-1)) != apk.stat().st_size: raise SystemExit("R2 upload size verification failed.")
+          url = f"{public_base}/{key}"
+          probe = requests.head(url, allow_redirects=True, timeout=45)
+          if probe.status_code != 200: raise SystemExit(f"Public APK URL check failed: HTTP {probe.status_code}")
+          headers = {"apikey":service,"Authorization":f"Bearer {service}"}
+          row = {"version_code":code,"version_name":name,"apk_path":url,"apk_size_bytes":apk.stat().st_size,"release_notes":notes,"min_supported_version_code":1,"is_published":False,"published_at":None}
+          lookup = requests.get(f"{base}/rest/v1/chatwork_app_releases",headers=headers,params={"select":"id","version_code":f"eq.{code}","limit":"1"},timeout=30)
+          lookup.raise_for_status()
+          existing = lookup.json()
+          if existing:
+              saved = requests.patch(f"{base}/rest/v1/chatwork_app_releases",headers={**headers,"Content-Type":"application/json"},params={"id":f"eq.{existing[0]['id']}"},json=row,timeout=30)
+          else:
+              saved = requests.post(f"{base}/rest/v1/chatwork_app_releases",headers={**headers,"Content-Type":"application/json","Prefer":"return=representation"},json=row,timeout=30)
+          if saved.status_code not in (200,201,204): raise SystemExit(f"Supabase ChatWork draft save failed: {saved.status_code} {saved.text[:500]}")
+          check = requests.get(f"{base}/rest/v1/chatwork_app_releases",headers=headers,params={"select":"id,version_code,version_name,apk_path,apk_size_bytes,is_published","version_code":f"eq.{code}","limit":"1"},timeout=30)
+          check.raise_for_status()
+          drafts = check.json()
+          if len(drafts)!=1 or int(drafts[0]["version_code"])!=code or drafts[0]["apk_path"]!=url or int(drafts[0]["apk_size_bytes"])!=apk.stat().st_size or drafts[0]["is_published"]:
+              raise SystemExit("ChatWork draft read-back verification failed; retention is blocked.")
+          public_response = requests.get(f"{base}/rest/v1/chatwork_app_releases",headers=headers,params={"select":"id,version_code,version_name,apk_path,is_published","is_published":"eq.true","order":"version_code.desc","limit":"1"},timeout=30)
+          public_response.raise_for_status()
+          active_rows = public_response.json()
+          active = active_rows[0] if active_rows else None
+          keep = {code}
+          if active:
+              active_code = int(active["version_code"]); keep.add(active_code)
+              active_key = f"chatwork/releases/chatwork-v{active_code}/ChatWork.apk"
+              active_head = s3.head_object(Bucket=bucket,Key=active_key)
+              active_probe = requests.head(active["apk_path"],allow_redirects=True,timeout=45)
+              if active_probe.status_code!=200 or int(active_head.get("ContentLength",0))<=0:
+                  raise SystemExit("Current Public ChatWork APK is not downloadable; refusing cleanup.")
+          old_keys=[]
+          paginator=s3.get_paginator("list_objects_v2")
+          for page in paginator.paginate(Bucket=bucket,Prefix="chatwork/releases/"):
+              for obj in page.get("Contents",[]):
+                  parts=obj["Key"].split("/")
+                  if len(parts)!=4 or parts[0]!="chatwork" or parts[1]!="releases" or parts[3]!="ChatWork.apk" or not parts[2].startswith("chatwork-v"): continue
+                  try: old_code=int(parts[2"][len("chatwork-v"):])
+                  except (ValueError,IndexError): continue
+                  if 0 < old_code < code and old_code not in keep: old_keys.append(obj["Key"])
+          if old_keys:
+              deleted=s3.delete_objects(Bucket=bucket,Delete={"Objects":[{"Key":k} for k in old_keys],"Quiet":False})
+              if deleted.get("Errors"): raise SystemExit("Cloudflare ChatWork APK cleanup failed: "+str(deleted["Errors"][0]))
+          params={"version_code":f"lt.{code}","select":"id,version_code"}
+          if active: params["id"]=f"neq.{active['id']}"
+          old_resp=requests.get(f"{base}/rest/v1/chatwork_app_releases",headers=headers,params=params,timeout=30)
+          old_resp.raise_for_status()
+          old_rows=old_resp.json()
+          if old_rows:
+              delete_params={"version_code":f"lt.{code}"}
+              if active: delete_params["id"]=f"neq.{active['id']}"
+              deleted_rows=requests.delete(f"{base}/rest/v1/chatwork_app_releases",headers={**headers,"Prefer":"return=representation"},params=delete_params,timeout=30)
+              if deleted_rows.status_code not in (200,204): raise SystemExit("Supabase ChatWork retention cleanup failed: "+deleted_rows.text[:500])
+          print(f"Verified ChatWork v{name} draft in Supabase; Cloudflare R2 object {key}; removed {len(old_keys)} older APK object(s).")
+          PY
+
       - name: Publish build summary
         shell: bash
         run: |
