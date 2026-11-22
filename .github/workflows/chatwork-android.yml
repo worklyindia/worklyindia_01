@@ -156,7 +156,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: workly-android-releases
           R2_PUBLIC_BASE_URL: https://pub-e8cec40741a24d08bc49bd0c7070f8f3.r2.dev
-          APK_FILE: ${{ env.APK_PATH }}
+          APK_FILE: android-ai-voice/app/build/outputs/apk/release/ChatWork-v1.0.${{ github.run_number }}.apk
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: 1.0.${{ github.run_number }}
           RELEASE_NOTES: ${{ github.event.head_commit.message }}
@@ -223,7 +223,7 @@ jobs:
               for obj in page.get("Contents",[]):
                   parts=obj["Key"].split("/")
                   if len(parts)!=4 or parts[0]!="chatwork" or parts[1]!="releases" or parts[3]!="ChatWork.apk" or not parts[2].startswith("chatwork-v"): continue
-                  try: old_code=int(parts[2"][len("chatwork-v"):])
+                  try: old_code=int(parts[2][len("chatwork-v"):])
                   except (ValueError,IndexError): continue
                   if 0 < old_code < code and old_code not in keep: old_keys.append(obj["Key"])
           if old_keys:
