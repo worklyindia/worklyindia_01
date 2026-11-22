@@ -50,7 +50,7 @@ class WorklyAccountActivity : Activity() {
             setOnClickListener { signUp() }
         }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
         workerOptIn = CheckBox(this).apply {
-            text = "Enable this phone as a community AI worker (optional). It may use battery, data and processing power. You can turn it off any time."
+            text = "Allow this phone to process other users’ text or audio using downloaded models. This is optional and may use battery, data and processing power."
             isChecked = false
             textSize = 13f
             setTextColor(ink)
