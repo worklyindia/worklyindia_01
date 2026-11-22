@@ -91,6 +91,8 @@ export default function TextToVoice() {
   const [voice, setVoice] = useState("af_heart");
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchStatus, setBatchStatus] = useState("");
   const [previewReadyUrl, setPreviewReadyUrl] = useState("");
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState(0);
@@ -245,6 +247,52 @@ export default function TextToVoice() {
     } finally { setPreviewing(false); }
   };
 
+  const prepareAllVoicePreviews = async () => {
+    if (batchBusy || busy || previewing) return;
+    const tasks: Array<{ model: string; language: string; voice: string }> = [];
+    for (const item of MODELS) {
+      for (const lang of item.languages) {
+        const voices = item.value === "kokoro"
+          ? (VOICES_BY_LANGUAGE[lang] ?? [])
+          : item.value === "indic"
+            ? [{ value: "female", label: "Female" }, { value: "male", label: "Male" }]
+            : [{ value: "default", label: "Default voice" }];
+        for (const v of voices) tasks.push({ model: item.value, language: lang, voice: v.value });
+      }
+    }
+    setBatchBusy(true);
+    let ready = 0;
+    let skipped = 0;
+    const failed: string[] = [];
+    setBatchStatus(`Preparing 0 of ${tasks.length} voice previews. Keep this page open and keep your Workly Android app online.`);
+    try {
+      for (let index = 0; index < tasks.length; index++) {
+        const task = tasks[index];
+        const label = `${task.model} · ${task.language} · ${task.voice}`;
+        setBatchStatus(`Checking ${index + 1}/${tasks.length}: ${label}`);
+        try {
+          const cached = await fetch(voicePreviewUrl(task.model, task.language, task.voice), { method: "HEAD", cache: "no-store" });
+          if (cached.ok) { skipped++; continue; }
+          const sample = catalog[task.language]?.[task.voice] ?? FALLBACK_PREVIEW_TEXTS[task.language]?.[task.voice] ?? FALLBACK_PREVIEW_TEXTS[task.language]?.default;
+          if (!sample) throw new Error("No sample text is configured for this voice.");
+          setBatchStatus(`Generating ${index + 1}/${tasks.length}: ${label}`);
+          const blob = await requestOwnerPhoneVoiceAudioBlob(sample, task.language, 180_000, task.voice, task.model);
+          if (blob.size < 44) throw new Error("Phone returned empty audio.");
+          setBatchStatus(`Saving ${index + 1}/${tasks.length}: ${label}`);
+          await saveVoicePreviewToR2(task.model, task.language, task.voice, blob);
+          ready++;
+        } catch (error) {
+          failed.push(`${label}: ${error instanceof Error ? error.message : "Failed"}`);
+        }
+      }
+      const summary = `Completed. Newly saved: ${ready}; already cached: ${skipped}; failed: ${failed.length}.`;
+      setBatchStatus(failed.length ? `${summary} First error: ${failed[0]}` : summary);
+      toast({ title: "Voice preview preparation finished", description: summary, variant: failed.length ? "destructive" : "default" });
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const download = () => {
     if (!audioBlob || !audioUrl) return;
     const link = document.createElement("a");
@@ -265,6 +313,13 @@ export default function TextToVoice() {
         <div className="rounded-xl bg-primary/10 p-3 text-primary"><Volume2 className="h-6 w-6" /></div>
         <div><h2 className="font-semibold">Convert text using your phone</h2><p className="text-sm text-muted-foreground">Choose a model and preview its voices before converting.</p></div>
       </div>
+      <section className="space-y-2 rounded-xl border p-3">
+        <Button type="button" variant="outline" className="h-11 w-full" onClick={() => void prepareAllVoicePreviews()} disabled={batchBusy || busy || previewing}>
+          {batchBusy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Preparing all voice previews…</> : <><RefreshCw className="mr-2 h-4 w-4" />Prepare all voice previews</>}
+        </Button>
+        <p className="text-xs text-muted-foreground">Generates every listed model/language/voice sample one at a time through the paired Workly Android app and saves successful WAV files to Cloudflare R2. Keep this page open and the app online.</p>
+        {batchStatus && <p className="text-xs" role="status" aria-live="polite">{batchStatus}</p>}
+      </section>
       <section className="w-full space-y-5">
         <div className="space-y-2">
           <label className="text-sm font-medium" htmlFor="tts-model">Model</label>
