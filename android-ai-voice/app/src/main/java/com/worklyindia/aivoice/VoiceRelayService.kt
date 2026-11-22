@@ -69,6 +69,7 @@ class VoiceRelayService : Service() {
     private fun pollLoop(token: String) {
         setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
         var wasWaitingForData = !hasValidatedInternet()
+        var lastCapabilityRefresh = 0L
         while (running.get()) {
             if (!hasValidatedInternet()) {
                 wasWaitingForData = true
@@ -81,6 +82,14 @@ class VoiceRelayService : Service() {
                 setStatus("Shared phone server is online")
             }
             try {
+                val workerPrefs = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
+                val workerEnabled = workerPrefs.getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
+                val refreshNow = System.currentTimeMillis()
+                if (workerEnabled && refreshNow - lastCapabilityRefresh >= WORKER_CAPABILITY_REFRESH_MS) {
+                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                    VoiceRelayApi.setWorkerState(token, true, capabilities)
+                    lastCapabilityRefresh = refreshNow
+                }
                 if (activeJobId != null) {
                     Thread.sleep(500)
                     continue
@@ -411,6 +420,7 @@ class VoiceRelayService : Service() {
         const val LAST_POLL_KEY = "last_successful_relay_poll"
         const val EVENTS_KEY = "recent_activity_events"
         const val POLL_INTERVAL_MS = 1_000L
+        const val WORKER_CAPABILITY_REFRESH_MS = 5 * 60 * 1_000L
         const val ACTION_RESTORE_NOTIFICATION = "com.worklyindia.aivoice.RESTORE_SERVER_NOTIFICATION"
         const val ONLINE_NOTIFICATION_TEXT = "Shared phone server is online."
         const val WAITING_NOTIFICATION_TEXT = "Waiting for Data on..."
