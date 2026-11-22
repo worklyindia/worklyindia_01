@@ -25,6 +25,33 @@ async function readableRelayError(error: unknown, fallback: string): Promise<Err
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+function relayHttpStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object" || !("context" in error)) return null;
+  const context = (error as { context?: unknown }).context;
+  return context instanceof Response ? context.status : null;
+}
+
+function isTransientPollError(error: unknown): boolean {
+  const status = relayHttpStatus(error);
+  return status === 429 || (status !== null && status >= 500);
+}
+
+async function pollRelayJob(jobId: string): Promise<{ data: any; error: any }> {
+  // The old 350 ms interval caused a burst of Edge Function requests and repeated 429s.
+  // Poll at a safe interval and back off on transient gateway/rate-limit responses.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const result = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'get_job', job_id: jobId },
+    });
+    if (!result.error || !isTransientPollError(result.error)) return result;
+    await wait(Math.min(1500 * (attempt + 1), 6000));
+  }
+  return {
+    data: null,
+    error: new Error("Voice server is temporarily rate-limited. Please wait a moment and try again."),
+  };
+}
+
 export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000, voice = '', model = ''): Promise<string> {
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
     body: {
