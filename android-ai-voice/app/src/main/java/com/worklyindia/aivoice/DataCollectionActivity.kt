@@ -151,7 +151,7 @@ class DataCollectionActivity : Activity() {
             orientation = LinearLayout.VERTICAL
         }
         content = body
-        scroll.addView(body, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(body, android.widget.FrameLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         body.addView(TextView(this).apply {
@@ -226,7 +226,7 @@ class DataCollectionActivity : Activity() {
         val input = EditText(this).apply {
             hint = "Search records…"
             textSize = 14f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(14), 0, dp(14), 0)
