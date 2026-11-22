@@ -149,9 +149,9 @@ export default function TextToVoice() {
           const completed = detail.completed ? detail.part : detail.part - 1;
           const next = Math.min(98, Math.max(3, Math.round(5 + (completed / detail.total) * 90)));
           setProgress((current) => Math.max(current, next));
-          setStatus(detail.total > 1 ? `Generating audio · ${detail.part} of ${detail.total} parts` : "Generating audio on your phone…");
+          setStatus(detail.total > 1 ? `Generating audio · ${detail.part} of ${detail.total} parts` : "Generating audio...");
         } else {
-          setStatus("Generating audio on your phone…");
+          setStatus("Generating audio...");
           setProgress((current) => Math.max(current, 5));
         }
       }
@@ -220,7 +220,11 @@ export default function TextToVoice() {
     const cachedUrl = previewCache.current.get(cacheKey);
     if (cachedUrl) {
       const player = new Audio(cachedUrl);
-      await player.play();
+      try {
+        await player.play();
+      } catch {
+        toast({ title: "Preview ready", description: "Tap the play icon again to listen." });
+      }
       return;
     }
     const sampleText = previewCatalog[language]?.[voiceId] ?? FALLBACK_PREVIEW_TEXTS[language]?.[voiceId];
@@ -233,8 +237,7 @@ export default function TextToVoice() {
       const blob = await requestOwnerPhoneVoiceAudioBlob(sampleText, language, 180_000, voiceId, model);
       const url = URL.createObjectURL(blob);
       previewCache.current.set(cacheKey, url);
-      const player = new Audio(url);
-      await player.play();
+      toast({ title: "Preview ready", description: "Tap the play icon again to listen." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Voice preview failed.";
       toast({ title: "Preview unavailable", description: message, variant: "destructive" });
@@ -286,7 +289,7 @@ export default function TextToVoice() {
             <SelectTrigger id="tts-voice" className="h-12"><SelectValue placeholder="Select voice" /></SelectTrigger>
             <SelectContent>{availableVoices.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
           </Select>
-          <div className="divide-y">
+          <div className="divide-y-0">
             {availableVoices.map((item) => (
               <div key={item.value} className={`flex items-center justify-between gap-3 px-3 py-2.5 ${voice === item.value ? "bg-primary/5" : ""}`}>
                 <button type="button" className="min-w-0 flex-1 text-left text-sm" onClick={() => setVoice(item.value)} disabled={busy || !!previewingVoice}>
