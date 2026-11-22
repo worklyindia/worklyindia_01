@@ -101,6 +101,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   '/owner-portal/supabase-usage': 'analytics.view',
   '/owner-portal/storage': 'settings.edit',
   '/owner-portal/android-app-updates': 'settings.edit',
+  '/owner-portal/chatwork-app-updates': 'settings.edit',
   '/owner-portal/cloudflare-storage': 'settings.edit',
 
   
