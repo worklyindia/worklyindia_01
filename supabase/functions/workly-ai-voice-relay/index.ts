@@ -173,28 +173,34 @@ export async function handleWorklyVoiceRelay(req: Request) {
       return json({ saved: true, diagnostic: data }, 201);
     }
 
-    if (action === "owner_data_dashboard") {
+    if (action === "user_data_dashboard") {
+      // Every signed-in app user sees only records belonging to their own account.
+      // Device auth resolves the user_id server-side; never accept a client-supplied user ID.
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
-      const ownerUserId = Deno.env.get("WORKLY_AI_VOICE_OWNER_USER_ID") ?? "";
-      if (!ownerUserId) return json({ error: "Owner dashboard is not configured on the server." }, 503);
-      if (device.user_id !== ownerUserId) return json({ error: "ChatWork Data Collection is available only to the owner account." }, 403);
+      const userId = device.user_id;
+      if (!userId) return json({ error: "User account could not be resolved for this device." }, 403);
 
-      const [devicesResult, jobsResult, diagnosticsResult, releasesResult] = await Promise.all([
-        db.from("workly_ai_voice_devices")
-          .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,revoked_at", { count: "exact" })
-          .order("created_at", { ascending: false }).limit(100),
+      const devicesResult = await db.from("workly_ai_voice_devices")
+        .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,revoked_at", { count: "exact" })
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }).limit(100);
+      if (devicesResult.error) throw devicesResult.error;
+      const deviceIds = (devicesResult.data ?? []).map((row: any) => row.id);
+
+      const [jobsResult, diagnosticsResult] = await Promise.all([
         db.from("workly_ai_voice_jobs")
           .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,payload,result", { count: "exact" })
+          .eq("user_id", userId)
           .order("created_at", { ascending: false }).limit(150),
-        db.from("workly_ai_voice_diagnostics")
-          .select("id,device_id,job_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
-          .order("created_at", { ascending: false }).limit(150),
-        db.from("chatwork_app_releases")
-          .select("id,version_code,version_name,apk_size_bytes,release_notes,min_supported_version_code,published_at,is_published,created_at", { count: "exact" })
-          .order("created_at", { ascending: false }).limit(20)
+        deviceIds.length
+          ? db.from("workly_ai_voice_diagnostics")
+              .select("id,device_id,job_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
+              .in("device_id", deviceIds)
+              .order("created_at", { ascending: false }).limit(150)
+          : Promise.resolve({ data: [], error: null, count: 0 })
       ]);
-      for (const result of [devicesResult, jobsResult, diagnosticsResult, releasesResult]) {
+      for (const result of [jobsResult, diagnosticsResult]) {
         if (result.error) throw result.error;
       }
 
@@ -248,12 +254,12 @@ export async function handleWorklyVoiceRelay(req: Request) {
           failed_jobs_in_loaded_records: failedJobs,
           diagnostics_total: diagnosticsResult.count ?? diagnostics.length,
           recent_errors_in_loaded_records: recentErrors,
-          releases_total: releasesResult.count ?? (releasesResult.data ?? []).length
+          releases_total: 0
         },
         devices,
         jobs,
         diagnostics,
-        releases: releasesResult.data ?? []
+        releases: []
       });
     }
 
