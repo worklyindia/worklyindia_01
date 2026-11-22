@@ -65,6 +65,10 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     switch (action) {
+      case 'create_voice_preview_upload':
+        return await handleCreateVoicePreviewUpload(supabase, params, req);
+      case 'verify_voice_preview_upload':
+        return await handleVerifyVoicePreviewUpload(supabase, params, req);
       case 'save_voice_preview':
         return await handleSaveVoicePreview(supabase, params, req);
 
@@ -420,6 +424,83 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
 
   const replyLanguageTag = detectLanguageTag(reply, detectLanguageTag(text, languageTag));
   return new Response(JSON.stringify({ reply, languageTag: replyLanguageTag }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+}
+
+// Direct-to-R2 voice preview uploads avoid the Supabase Edge Function JSON/base64
+// request-size ceiling. The presigned URL is short-lived and restricted to WAV PUT.
+async function authorizeVoicePreviewOwner(supabase: any, req: Request) {
+  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\\s+/i, '').trim();
+  if (!token) throw new Error('Sign in to upload voice previews.');
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) throw new Error('Your session expired. Please sign in again.');
+  const ownerId = Deno.env.get('WORKLY_AI_VOICE_OWNER_USER_ID') ?? '';
+  if (!ownerId || data.user.id !== ownerId) throw new Error('Only the Workly voice-preview owner can publish shared previews.');
+  return data.user;
+}
+function getVoicePreviewSelection(params: any) {
+  const model = typeof params.model === 'string' ? params.model : '';
+  const language = typeof params.language === 'string' ? params.language : '';
+  const voice = typeof params.voice === 'string' ? params.voice : '';
+  if (!['kokoro', 'indic', 'itantra'].includes(model) || !['hi-IN', 'en-IN', 'gu-IN'].includes(language) || !/^[a-z0-9_-]{1,40}$/i.test(voice)) {
+    throw new Error('Invalid voice preview selection.');
+  }
+  return { model, language, voice, key: 'voice-previews/' + model + '/' + language + '/' + voice + '.wav' };
+}
+async function getVoicePreviewR2Client() {
+  const [accountId, accessKeyId, secretAccessKey] = await Promise.all([
+    readVoicePreviewSecret('R2_ACCOUNT_ID'),
+    readVoicePreviewSecret('R2_ACCESS_KEY_ID'),
+    readVoicePreviewSecret('R2_SECRET_ACCESS_KEY'),
+  ]);
+  return {
+    accountId,
+    client: new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' }),
+  };
+}
+async function handleCreateVoicePreviewUpload(supabase: any, params: any, req: Request) {
+  try {
+    await authorizeVoicePreviewOwner(supabase, req);
+    const { key } = getVoicePreviewSelection(params);
+    const { accountId, client } = await getVoicePreviewR2Client();
+    const objectUrl = 'https://' + accountId + '.r2.cloudflarestorage.com/workly-ai-models/' + key;
+    const signed = await client.sign(new Request(objectUrl + '?X-Amz-Expires=900', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'audio/wav' },
+    }), { aws: { signQuery: true, allHeaders: true } });
+    return new Response(JSON.stringify({
+      ok: true,
+      key,
+      uploadUrl: signed.url.toString(),
+      url: 'https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/' + key,
+      contentType: 'audio/wav',
+      expiresIn: 900,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not prepare the Cloudflare R2 upload.';
+    return new Response(JSON.stringify({ error: message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+}
+async function handleVerifyVoicePreviewUpload(supabase: any, params: any, req: Request) {
+  try {
+    await authorizeVoicePreviewOwner(supabase, req);
+    const { key } = getVoicePreviewSelection(params);
+    const expectedBytes = Number(params.expectedBytes);
+    if (!Number.isSafeInteger(expectedBytes) || expectedBytes < 44 || expectedBytes > 5 * 1024 * 1024 * 1024) {
+      throw new Error('Invalid preview file size. R2 single-upload maximum is 5 GiB.');
+    }
+    const { accountId, client } = await getVoicePreviewR2Client();
+    const objectUrl = 'https://' + accountId + '.r2.cloudflarestorage.com/workly-ai-models/' + key;
+    const verify = await client.fetch(new Request(objectUrl, { method: 'HEAD' }));
+    const savedBytes = Number(verify.headers.get('content-length') ?? '0');
+    if (!verify.ok || savedBytes !== expectedBytes) {
+      throw new Error('Cloudflare R2 upload verification failed (HTTP ' + verify.status + '; expected ' + expectedBytes + ' bytes, found ' + savedBytes + ').');
+    }
+    const url = 'https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/' + key;
+    return new Response(JSON.stringify({ ok: true, key, url, bytes: savedBytes, verified: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Could not verify the Cloudflare R2 upload.';
+    return new Response(JSON.stringify({ error: message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
 }
 
 // AUTHENTICATED OWNER TTS PREVIEW CACHE (Cloudflare R2)
