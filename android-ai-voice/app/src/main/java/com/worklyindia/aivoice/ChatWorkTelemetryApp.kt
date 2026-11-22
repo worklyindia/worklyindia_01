@@ -105,7 +105,18 @@ class ChatWorkTelemetryApp : Application(), Application.ActivityLifecycleCallbac
                         android.util.Log.w(TAG, "Session telemetry rejected ($status): ${detail.take(200)}")
                     }
                 } finally { connection.disconnect() }
-            }.onFailure { android.util.Log.w(TAG, "Session telemetry failed", it) }
+
+                // Refresh the existing model_capabilities JSON through the
+                // current relay action. This records installed/removed relay-ready
+                // models without adding a database table or column.
+                val deviceToken = SecureDeviceTokenStore.read(this)
+                if (!deviceToken.isNullOrBlank()) {
+                    val workerPrefs = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
+                    val enabled = workerPrefs.getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
+                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                    VoiceRelayApi.setWorkerState(deviceToken, enabled, capabilities)
+                }
+            }.onFailure { android.util.Log.w(TAG, "Session/model telemetry failed", it) }
         }
     }
 
