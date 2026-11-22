@@ -14,8 +14,8 @@ export async function saveVoicePreviewToR2(model: string, language: string, voic
     reader.onload = () => resolve(String(reader.result ?? ""));
     reader.readAsDataURL(audio);
   });
-  const { data, error } = await supabase.functions.invoke("voice-preview-cache", {
-    body: { model, language, voice, audio: base64 },
+  const { data, error } = await supabase.functions.invoke("unified-voice", {
+    body: { action: "save_voice_preview", model, language, voice, audio: base64 },
   });
   if (error) throw error;
   if (!data?.ok || typeof data.url !== "string") throw new Error(data?.error || "Could not save preview to Cloudflare R2.");
