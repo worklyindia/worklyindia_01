@@ -188,9 +188,15 @@ class VoiceRelayService : Service() {
                 val languageTag = payload.optString("language", "hi-IN")
                 val language = Locale.forLanguageTag(languageTag).language
                 val voiceId = payload.optString("voice").trim()
+                val requestedModel = payload.optString("model").trim().ifBlank {
+                    if (language == "gu") "indic" else "kokoro"
+                }
                 outputFile.delete()
                 when (language) {
                     "gu" -> {
+                        require(requestedModel == "indic") {
+                            "Gujarati is currently available through Indic Tiny TTS. Select Indic Tiny TTS for Gujarati."
+                        }
                         val pack = SpeechModelCatalog.indicTinyTts("gu")
                         check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
                             "Indic Tiny TTS Gujarati is not downloaded. Download it from ChatWork → Model Downloads."
@@ -204,6 +210,9 @@ class VoiceRelayService : Service() {
                         }
                     }
                     "hi", "en" -> {
+                        require(requestedModel == "kokoro") {
+                            "Hindi and English are currently available through Kokoro-82M. Select Kokoro-82M for these languages."
+                        }
                         val pack = SpeechModelCatalog.kokoro82m()
                         check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
                             "Kokoro-82M is not downloaded. Download it from ChatWork → Model Downloads."
