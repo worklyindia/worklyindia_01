@@ -25,7 +25,7 @@ import java.util.Date
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Owner-only, read-only Google-Sheets-style view of ChatWork records stored in Supabase. */
+/** Per-user, read-only Google-Sheets-style view of this account's ChatWork records stored in Supabase. */
 class DataCollectionActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
@@ -86,7 +86,7 @@ class DataCollectionActivity : Activity() {
         render()
         executor.execute {
             try {
-                val response = VoiceRelayApi.ownerDataDashboard(token)
+                val response = VoiceRelayApi.userDataDashboard(token)
                 runOnUiThread {
                     dashboard = response
                     lastUpdated = response.optString("generated_at").takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Just now"
@@ -133,7 +133,7 @@ class DataCollectionActivity : Activity() {
                 setTextColor(ink)
             })
             addView(TextView(this@DataCollectionActivity).apply {
-                text = "Supabase live dashboard"
+                text = "Your account's Supabase data"
                 textSize = 12f
                 setTextColor(muted)
             })
@@ -173,7 +173,7 @@ class DataCollectionActivity : Activity() {
             addSearch(body)
             addSelectedTable(body)
             body.addView(TextView(this).apply {
-                text = "Read-only view • Sensitive tokens, passwords, audio links and private text are not displayed."
+                text = "Only this signed-in account's devices, jobs and diagnostics • Sensitive tokens, passwords, audio links and private text are hidden."
                 textSize = 11f
                 setTextColor(muted)
                 setPadding(dp(4), dp(14), dp(4), dp(4))
