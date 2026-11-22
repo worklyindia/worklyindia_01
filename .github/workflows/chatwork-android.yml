@@ -28,22 +28,26 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v7
         with:
           submodules: recursive
 
       - name: Set up Java 17
+        id: setup-java
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Android SDK and native build tools
+        id: setup-android
         uses: android-actions/setup-android@v4
         with:
           accept-android-sdk-licenses: true
 
       - name: Install Android SDK, NDK, CMake and host tokenizer tools
+        id: install-native-tools
         run: |
           sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           sudo apt-get update
@@ -59,11 +63,13 @@ jobs:
           "$RUNNER_TEMP/protoc-36.2/bin/protoc" --version | grep -Fx "libprotoc 36.2"
 
       - name: Set up Gradle
+        id: setup-gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "9.5.1"
 
       - name: Check release signing configuration
+        id: signing
         id: signing
         shell: bash
         env:
@@ -82,6 +88,7 @@ jobs:
           fi
 
       - name: Configure stable release signing
+        id: configure-signing
         if: steps.signing.outputs.enabled == 'true'
         shell: bash
         env:
@@ -102,16 +109,19 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Build signed update APK
+        id: build-release
         if: steps.signing.outputs.enabled == 'true'
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleRelease
 
       - name: Build preview APK (not update-compatible)
+        id: build-preview
         if: steps.signing.outputs.enabled == 'false'
         working-directory: android-ai-voice
         run: gradle --no-daemon assembleDebug
 
       - name: Verify native TTS runtime dependencies
+        id: verify-native-runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -136,6 +146,7 @@ jobs:
           echo 'Verified: QVAC has no libomp.so dependency and Qwen has no shared GGML dependency.'
 
       - name: Rename APK
+        id: rename-apk
         shell: bash
         run: |
           if [ -f android-ai-voice/app/build/outputs/apk/release/app-release.apk ]; then
@@ -147,6 +158,7 @@ jobs:
           fi
 
       - name: Upload signed ChatWork APK to Cloudflare R2 and save Owner draft
+        id: publish-chatwork
         if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.signing.outputs.enabled == 'true'
         env:
           SUPABASE_URL: https://jubwzelupbntbetpajqb.supabase.co
@@ -242,22 +254,126 @@ jobs:
           print(f"Verified ChatWork v{name} draft in Supabase; Cloudflare R2 object {key}; removed {len(old_keys)} older APK object(s).")
           PY
 
-      - name: Publish build summary
-        shell: bash
-        run: |
-          echo "# ChatWork APK" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Application ID: com.worklyindia.chatwork" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Version code: $GITHUB_RUN_NUMBER" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ steps.signing.outputs.enabled }}" = "true" ]; then
-            echo "- Signing: stable release key (in-place update compatible with installs signed by this same key)" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- Signing: temporary debug key; this APK cannot safely update a release-signed install." >> "$GITHUB_STEP_SUMMARY"
-          fi
 
       - name: Upload ChatWork APK
+        id: upload-chatwork-apk
         uses: actions/upload-artifact@v7
         with:
           name: ChatWork-v1.0.${{ github.run_number }}
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish complete ChatWork workflow summary
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          SIGNING_ENABLED: ${{ steps.signing.outputs.enabled }}
+          ARTIFACT_URL: ${{ steps.upload-chatwork-apk.outputs.artifact-url }}
+          ARTIFACT_ID: ${{ steps.upload-chatwork-apk.outputs.artifact-id }}
+          CHECKOUT_STATUS: ${{ steps.checkout.outcome }}
+          JAVA_STATUS: ${{ steps.setup-java.outcome }}
+          ANDROID_STATUS: ${{ steps.setup-android.outcome }}
+          NATIVE_TOOLS_STATUS: ${{ steps.install-native-tools.outcome }}
+          GRADLE_STATUS: ${{ steps.setup-gradle.outcome }}
+          SIGNING_STATUS: ${{ steps.signing.outcome }}
+          SIGNING_SETUP_STATUS: ${{ steps.configure-signing.outcome }}
+          RELEASE_BUILD_STATUS: ${{ steps.build-release.outcome }}
+          PREVIEW_BUILD_STATUS: ${{ steps.build-preview.outcome }}
+          RUNTIME_VERIFY_STATUS: ${{ steps.verify-native-runtime.outcome }}
+          RENAME_STATUS: ${{ steps.rename-apk.outcome }}
+          PUBLISH_STATUS: ${{ steps.publish-chatwork.outcome }}
+          ARTIFACT_STATUS: ${{ steps.upload-chatwork-apk.outcome }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          e = os.environ
+          summary = Path(e["GITHUB_STEP_SUMMARY"])
+
+          def val(key):
+              return e.get(key) or "not run"
+
+          def pretty(value):
+              return {
+                  "success": "Success",
+                  "failure": "Failed",
+                  "cancelled": "Cancelled",
+                  "skipped": "Skipped",
+                  "not run": "Not run",
+              }.get(value, value)
+
+          steps = [
+              ("Checkout source", "CHECKOUT_STATUS"),
+              ("Java 17 setup", "JAVA_STATUS"),
+              ("Android SDK setup", "ANDROID_STATUS"),
+              ("NDK / CMake / tokenizer tools", "NATIVE_TOOLS_STATUS"),
+              ("Gradle setup", "GRADLE_STATUS"),
+              ("Release signing configuration", "SIGNING_STATUS"),
+              ("Configure signing key", "SIGNING_SETUP_STATUS"),
+              ("Signed release APK build", "RELEASE_BUILD_STATUS"),
+              ("Debug preview APK build", "PREVIEW_BUILD_STATUS"),
+              ("Native TTS runtime verification", "RUNTIME_VERIFY_STATUS"),
+              ("Rename APK", "RENAME_STATUS"),
+              ("Cloudflare R2 + Supabase publishing", "PUBLISH_STATUS"),
+              ("GitHub APK artifact upload", "ARTIFACT_STATUS"),
+          ]
+          failed = [(name, val(key)) for name, key in steps if val(key) == "failure"]
+          skipped = [(name, val(key)) for name, key in steps if val(key) == "skipped"]
+          production = e["REF_NAME"] == "main" and e["EVENT_NAME"] != "pull_request"
+          signed = val("SIGNING_ENABLED") == "true"
+          build_status = val("RELEASE_BUILD_STATUS") if signed else val("PREVIEW_BUILD_STATUS")
+          lines = [
+              "# ChatWork Android — complete workflow summary",
+              "",
+              "| Field | Result |",
+              "|---|---|",
+              "| App | ChatWork |",
+              "| Application ID | com.worklyindia.chatwork |",
+              f"| Version name | 1.0.{e['RUN_NUMBER']} |",
+              f"| Version code | {e['RUN_NUMBER']} |",
+              f"| Build type | {'Production main build' if production else 'PR / branch verification build'} |",
+              f"| APK build | {pretty(build_status)} |",
+              f"| Signing | {'Stable release key — update-compatible with installs signed by the same key' if signed else 'Debug key — preview only; cannot update a release-signed install'} |",
+              f"| APK artifact | {'Uploaded — [Download artifact](' + e['ARTIFACT_URL'] + ')' if e.get('ARTIFACT_URL') else pretty(val('ARTIFACT_STATUS'))} |",
+              f"| Artifact ID | {val('ARTIFACT_ID')} |",
+              f"| Cloudflare R2 + Supabase | {pretty(val('PUBLISH_STATUS')) if production and signed else 'Skipped — requires a signed build on main'} |",
+              f"| Commit | {e['COMMIT_SHA']} |",
+              "",
+              "## Step-by-step status",
+              "",
+              "| Step | Status |",
+              "|---|---|",
+          ]
+          lines += [f"| {name} | {pretty(val(key))} |" for name, key in steps]
+          lines += ["", "## Error details", ""]
+          if failed:
+              run_url = f"https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}/attempts/{e['RUN_ATTEMPT']}"
+              lines += [f"- **{name}:** failed. [Open this run's logs]({run_url}) and expand the step for its exact error." for name, _ in failed]
+          else:
+              lines.append("- No failed steps were reported by GitHub Actions.")
+          lines += ["", "## Skip details", ""]
+          if skipped:
+              lines += [f"- **{name}:** skipped by workflow conditions or because an earlier step failed." for name, _ in skipped]
+          if not signed:
+              lines.append("- **Release APK / production upload:** signing secrets are not configured; the workflow builds a debug preview APK only.")
+          if not production:
+              lines.append("- **Cloudflare R2 + Supabase production publishing:** intentionally runs only for signed builds on the main branch.")
+          if not skipped and signed and production:
+              lines.append("- No steps were skipped.")
+          lines += [
+              "",
+              f"Workflow run: [#{e['RUN_ID']}](https://github.com/{e['REPOSITORY']}/actions/runs/{e['RUN_ID']}) · Attempt {e['RUN_ATTEMPT']}",
+              "",
+          ]
+          with summary.open("a", encoding="utf-8") as out:
+              out.write("\n".join(lines))
+          PY
