@@ -42,7 +42,7 @@ async function deviceFor(req: Request) {
   const tokenHash = await sha256(token);
   const { data, error } = await supabase
     .from("workly_ai_voice_devices")
-    .select("id,user_id,revoked_at,last_seen_at")
+    .select("id,user_id,revoked_at,last_seen_at,worker_enabled")
     .eq("token_hash", tokenHash)
     .is("revoked_at", null)
     .maybeSingle();
@@ -302,6 +302,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
         await db.from("workly_ai_voice_devices")
           .update({ last_seen_at: new Date().toISOString() })
           .eq("id", device.id);
+      }
+
+      // Every signed-in phone may join the same community pool, but only after
+      // its owner explicitly opts in on that device. Enforce opt-out at poll
+      // time too, so a previously queued job is never delivered after opt-out.
+      if (device.worker_enabled !== true) {
+        return json({ job: null, worker_enabled: false, heartbeat_at: new Date().toISOString() });
       }
 
       const { data: candidate, error: findError } = await db.from("workly_ai_voice_jobs")
