@@ -121,7 +121,7 @@ async function processTranscriptionQueue() {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 3 && active && generation === sessionGeneration; attempt += 1) {
         try {
-          result = await requestOwnerPhoneTranscription(btoa(binary));
+          result = await requestOwnerPhoneTranscription(btoa(binary), navigator.language || 'en-IN');
           break;
         } catch (error) {
           lastError = error;
