@@ -13,6 +13,7 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
     body: {
       action: 'create_job',
       job_type: 'tts',
+      // Keep model, language and voice explicit so the Android relay can reject unsupported combinations.
       payload: { text: text.slice(0, 1000), language: language || 'hi-IN', ...(voice ? { voice } : {}), ...(model ? { model } : {}) },
     },
   });
