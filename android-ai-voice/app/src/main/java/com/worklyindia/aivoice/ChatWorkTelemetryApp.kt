@@ -11,7 +11,7 @@ import java.util.concurrent.Executors
 
 /**
  * Event-driven telemetry for the existing app_sessions/app_installations tables.
- * Network changes are reported by VoiceRelayService; no periodic heartbeat runs here.
+ * Network changes and a 15-minute heartbeat are reported by VoiceRelayService.
  */
 class ChatWorkTelemetryApp : Application() {
     override fun onCreate() {
@@ -53,6 +53,15 @@ class ChatWorkTelemetryApp : Application() {
             } else {
                 prefs.edit().putBoolean(ONLINE_REPORTED, false).apply()
             }
+        }
+
+        @Synchronized
+        fun onHeartbeat(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val sessionId = prefs.getString(SESSION_ID, null) ?: return
+            // This RPC is the real Supabase reachability/write check; the Android
+            // network capability check alone does not prove Supabase is reachable.
+            sendSession(context, sessionId, end = false)
         }
 
         @Synchronized
