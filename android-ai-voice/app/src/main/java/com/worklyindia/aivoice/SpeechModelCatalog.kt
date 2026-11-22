@@ -194,8 +194,8 @@ object SpeechModelCatalog {
     /**
      * iTantra-compatible Sherpa-ONNX VITS packs. Voice archives are official
      * sherpa-onnx release assets; the Gujarati voice is Mimic3/CMU-Indic.
-     * A shared espeak-ng-data archive is included in each language pack so
-     * each pack can be installed and removed independently.
+     * Sherpa-ONNX 2.x requires pre-phonemized input. The app uses the official
+     * Piper phonemizer Android library, which bundles its own espeak-ng data.
      */
     fun itantraVits(language: String): Pack {
         val code = language.lowercase()
@@ -231,8 +231,7 @@ object SpeechModelCatalog {
             license = if (code == "gu") "Mimic3/CMU-Indic model; see upstream model card and sherpa-onnx notices" else "Piper voice model; see upstream model card and sherpa-onnx notices",
             repository = "k2-fsa/sherpa-onnx · tts-models release",
             files = listOf(
-                ModelFile("archives/voice.tar.bz2", "$SHERPA_TTS_BASE/$voice", size, sha),
-                ModelFile("archives/espeak-ng-data.tar.bz2", "$SHERPA_TTS_BASE/espeak-ng-data.tar.bz2", 7_252_012L)
+                ModelFile("archives/voice.tar.bz2", "$SHERPA_TTS_BASE/$voice", size, sha)
             )
         )
     }
