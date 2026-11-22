@@ -44,6 +44,7 @@ class VoiceRelayService : Service() {
         val initialStatus = currentConnectionNotificationText()
         startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
         if (initialStatus == "Waiting for Data on…") setStatus(initialStatus)
+        ChatWorkTelemetryApp.onRelayServiceStarted(this, hasValidatedInternet())
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         relayWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:WorklyVoiceRelay").apply {
             setReferenceCounted(false)
@@ -70,8 +71,10 @@ class VoiceRelayService : Service() {
         setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
         var wasWaitingForData = !hasValidatedInternet()
         var lastCapabilityRefresh = 0L
+        var lastSessionHeartbeat = System.currentTimeMillis()
         while (running.get()) {
             if (!hasValidatedInternet()) {
+                if (!wasWaitingForData) ChatWorkTelemetryApp.onNetworkLost(this)
                 wasWaitingForData = true
                 setStatus("Waiting for Data on…")
                 try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
@@ -79,7 +82,14 @@ class VoiceRelayService : Service() {
             }
             if (wasWaitingForData) {
                 wasWaitingForData = false
+                ChatWorkTelemetryApp.onNetworkRestored(this)
+                lastSessionHeartbeat = System.currentTimeMillis()
                 setStatus("Shared phone server is online")
+            }
+            val heartbeatNow = System.currentTimeMillis()
+            if (heartbeatNow - lastSessionHeartbeat >= SESSION_HEARTBEAT_INTERVAL_MS) {
+                ChatWorkTelemetryApp.onHeartbeat(this)
+                lastSessionHeartbeat = heartbeatNow
             }
             try {
                 val workerPrefs = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
@@ -379,6 +389,7 @@ class VoiceRelayService : Service() {
     }
 
     override fun onDestroy() {
+        ChatWorkTelemetryApp.onRelayServiceStopped(this, hasValidatedInternet())
         running.set(false)
         pollThread?.interrupt()
         if (relayWakeLock?.isHeld == true) relayWakeLock?.release()
@@ -467,6 +478,7 @@ class VoiceRelayService : Service() {
         const val EVENTS_KEY = "recent_activity_events"
         const val POLL_INTERVAL_MS = 1_000L
         const val WORKER_CAPABILITY_REFRESH_MS = 5 * 60 * 1_000L
+        const val SESSION_HEARTBEAT_INTERVAL_MS = 15 * 60 * 1_000L
         const val ACTION_RESTORE_NOTIFICATION = "com.worklyindia.aivoice.RESTORE_SERVER_NOTIFICATION"
         const val ONLINE_NOTIFICATION_TEXT = "Shared phone server is online."
         const val WAITING_NOTIFICATION_TEXT = "Waiting for Data on..."
