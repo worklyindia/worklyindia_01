@@ -230,14 +230,15 @@ export default function TextToVoice() {
       if (!sampleText) throw new Error("This voice does not have a sample text yet.");
       const blob = await requestOwnerPhoneVoiceAudioBlob(sampleText, language, 180_000, voice, model);
       if (blob.size < 44) throw new Error("The phone returned an empty voice preview.");
-      setStatus("Saving voice preview to Cloudflare…");
+      setStatus("Saving and verifying the voice preview in Cloudflare…");
       const savedUrl = await saveVoicePreviewToR2(model, language, voice, blob);
-      const playbackBlob = await blob.slice(0, blob.size, "audio/wav").arrayBuffer();
-      const readyUrl = URL.createObjectURL(new Blob([playbackBlob], { type: "audio/wav" }));
-      setPreviewReadyUrl(readyUrl);
-      setStatus("Preview saved to Cloudflare. Tap the play icon again to listen.");
-      toast({ title: "Voice preview saved", description: "Next users can play it from Cloudflare without generating it again." });
-      void savedUrl;
+      const savedResponse = await fetch(savedUrl, { cache: "no-store" });
+      if (!savedResponse.ok) throw new Error("Cloudflare saved the file, but its public preview URL could not be verified.");
+      const savedBlob = await savedResponse.blob();
+      if (savedBlob.size < 44) throw new Error("Cloudflare returned an empty or incomplete saved voice preview.");
+      setPreviewReadyUrl(URL.createObjectURL(savedBlob));
+      setStatus("Preview saved and verified in Cloudflare. Tap play to listen.");
+      toast({ title: "Voice preview saved", description: "The WAV file is stored in Cloudflare R2 and ready for everyone to play." });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Voice preview failed.";
       setStatus(message);

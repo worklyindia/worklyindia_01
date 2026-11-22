@@ -35,9 +35,9 @@ object VoiceWorkerCapabilityRegistry {
         Capability("indic-tiny-tts-hi", Task.TEXT_TO_SPEECH, Adapter.INDIC_TINY_TTS, setOf("hi"), true, "Hindi offline TTS adapter is connected to the relay."),
         Capability("indic-tiny-tts-en", Task.TEXT_TO_SPEECH, Adapter.INDIC_TINY_TTS, setOf("en"), true, "English offline TTS adapter is connected to the relay."),
         Capability("kokoro-82m", Task.TEXT_TO_SPEECH, Adapter.KOKORO, setOf("hi", "en"), true, "Hindi/English Kokoro adapter is connected to the relay."),
-        Capability("itantra-vits-gu", Task.TEXT_TO_SPEECH, Adapter.SHERPA_VITS, setOf("gu"), false, "Local test adapter exists; relay integration and device validation are pending."),
-        Capability("itantra-vits-hi", Task.TEXT_TO_SPEECH, Adapter.SHERPA_VITS, setOf("hi"), false, "Local test adapter exists; relay integration and device validation are pending."),
-        Capability("itantra-vits-en", Task.TEXT_TO_SPEECH, Adapter.SHERPA_VITS, setOf("en"), false, "Local test adapter exists; relay integration and device validation are pending."),
+        Capability("itantra-vits-gu", Task.TEXT_TO_SPEECH, Adapter.SHERPA_VITS, setOf("gu"), true, "Sherpa-ONNX VITS adapter is connected to the shared voice relay."),
+        Capability("itantra-vits-hi", Task.TEXT_TO_SPEECH, Adapter.SHERPA_VITS, setOf("hi"), true, "Sherpa-ONNX VITS adapter is connected to the shared voice relay."),
+        Capability("itantra-vits-en", Task.TEXT_TO_SPEECH, Adapter.SHERPA_VITS, setOf("en"), true, "Sherpa-ONNX VITS adapter is connected to the shared voice relay."),
         Capability("qvac-chatterbox-multilingual", Task.TEXT_TO_SPEECH, Adapter.QVAC, setOf("multilingual"), false, "Native test path exists; relay integration and device validation are pending."),
         Capability("qvac-cosyvoice3", Task.TEXT_TO_SPEECH, Adapter.QVAC, setOf("multilingual"), false, "Native test path exists; relay integration and device validation are pending."),
         Capability("moss-tts-nano", Task.TEXT_TO_SPEECH, Adapter.MOSS, setOf("en", "zh"), false, "Model test path is not yet a verified relay worker adapter."),
@@ -57,11 +57,14 @@ object VoiceWorkerCapabilityRegistry {
             SpeechModelCatalog.indicTinyTts("gu") to "indic",
             SpeechModelCatalog.indicTinyTts("hi") to "indic",
             SpeechModelCatalog.indicTinyTts("en") to "indic",
-            SpeechModelCatalog.kokoro82m() to "kokoro"
+            SpeechModelCatalog.kokoro82m() to "kokoro",
+            SpeechModelCatalog.itantraVits("gu") to "itantra",
+            SpeechModelCatalog.itantraVits("hi") to "itantra",
+            SpeechModelCatalog.itantraVits("en") to "itantra"
         )
         for ((pack, relayModel) in ttsPacks) {
             if (manager.snapshot(pack).state != SpeechPackDownloadManager.State.COMPLETE) continue
-            val languages: List<String> = if (pack.id.startsWith("indic-tiny-tts-")) listOf(pack.id.substringAfterLast("-")) else listOf("hi", "en")
+            val languages: List<String> = if (pack.id.startsWith("indic-tiny-tts-") || pack.id.startsWith("itantra-vits-")) listOf(pack.id.substringAfterLast("-")) else listOf("hi", "en")
             result.put(JSONObject()
                 .put("task", "tts")
                 .put("model", relayModel)

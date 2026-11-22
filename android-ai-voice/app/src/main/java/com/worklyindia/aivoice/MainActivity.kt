@@ -108,6 +108,21 @@ class MainActivity : Activity() {
             }
         }, LinearLayout.LayoutParams(-1, dp(72)))
 
+        root.addView(TextView(this).apply {
+            text = "ChatWork Data Collection"
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            isClickable = true
+            isFocusable = true
+            background = null
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, DataCollectionActivity::class.java))
+            }
+        }, LinearLayout.LayoutParams(-1, dp(64)))
+
         setContentView(root)
         signalAnimation.playAnimation()
         // Direct-channel update notices open the official download in the browser.

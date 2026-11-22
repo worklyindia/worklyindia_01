@@ -69,6 +69,35 @@ object VoiceRelayApi {
         }
     }
 
+    fun reportDiagnostic(deviceToken: String, eventType: String, message: String, detail: String = "") {
+        val isError = eventType.contains("error", true) ||
+            message.contains("failed", true) || message.contains("error", true) ||
+            message.contains("reconnect", true)
+        val metadata = JSONObject()
+            .put("message", message.take(300))
+            .put("detail", detail.take(300))
+        val values = JSONObject()
+            .put("event_type", eventType.take(80))
+            .put("error_type", if (isError) eventType.take(80) else JSONObject.NULL)
+            .put("error_message", if (isError) message.take(500) else JSONObject.NULL)
+            .put("app_version", BuildConfig.VERSION_NAME)
+            .put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
+            .put("device_model", (android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL).take(100))
+            .put("metadata", metadata)
+        val response = post("report_diagnostic", values, deviceToken = deviceToken)
+        if (response.statusCode !in 200..299) {
+            throw RelayApiException(response.statusCode, response.body.optString("error", "Could not save ChatWork diagnostics"))
+        }
+    }
+
+    fun userDataDashboard(deviceToken: String): JSONObject {
+        val response = post("user_data_dashboard", deviceToken = deviceToken)
+        if (response.statusCode !in 200..299) {
+            throw RelayApiException(response.statusCode, response.body.optString("error", "Could not load ChatWork data"))
+        }
+        return response.body
+    }
+
     fun poll(token: String): JSONObject {
         val result = post("poll", deviceToken = token)
         if (result.statusCode !in 200..299) throw RelayApiException(result.statusCode, result.body.optString("error", "Relay poll failed"))

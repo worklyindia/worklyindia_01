@@ -147,6 +147,125 @@ export async function handleWorklyVoiceRelay(req: Request) {
       return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0 });
     }
 
+    if (action === "report_diagnostic") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const eventType = typeof body?.event_type === "string" ? body.event_type.trim().slice(0, 80) : "";
+      if (!eventType) return json({ error: "event_type is required" }, 400);
+      const metadata = body?.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata) ? body.metadata : {};
+      if (JSON.stringify(metadata).length > 4_000) return json({ error: "Diagnostic metadata exceeds 4 KB" }, 413);
+      const errorType = typeof body?.error_type === "string" ? body.error_type.slice(0, 80) : null;
+      const errorMessage = typeof body?.error_message === "string" ? body.error_message.slice(0, 500) : null;
+      const { data, error } = await db.from("workly_ai_voice_diagnostics").insert({
+        device_id: device.id,
+        event_type: eventType,
+        language: typeof body?.language === "string" ? body.language.slice(0, 20) : null,
+        duration_ms: Number.isFinite(body?.duration_ms) ? Math.max(0, Math.min(86_400_000, body.duration_ms)) : null,
+        audio_bytes: Number.isFinite(body?.audio_bytes) ? Math.max(0, Math.min(50_000_000, body.audio_bytes)) : null,
+        error_type: errorType,
+        error_message: errorMessage,
+        app_version: typeof body?.app_version === "string" ? body.app_version.slice(0, 40) : null,
+        android_version: typeof body?.android_version === "string" ? body.android_version.slice(0, 40) : null,
+        device_model: typeof body?.device_model === "string" ? body.device_model.slice(0, 100) : null,
+        metadata
+      }).select("id,created_at").single();
+      if (error) throw error;
+      return json({ saved: true, diagnostic: data }, 201);
+    }
+
+    if (action === "user_data_dashboard") {
+      // Every signed-in app user sees only records belonging to their own account.
+      // Device auth resolves the user_id server-side; never accept a client-supplied user ID.
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const userId = device.user_id;
+      const deviceId = device.id;
+      if (!userId) return json({ error: "User account could not be resolved for this device." }, 403);
+
+      const devicesResult = await db.from("workly_ai_voice_devices")
+        .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,revoked_at", { count: "exact" })
+        .eq("id", deviceId)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false }).limit(1);
+      if (devicesResult.error) throw devicesResult.error;
+      const deviceIds = (devicesResult.data ?? []).map((row: any) => row.id);
+
+      const [jobsResult, diagnosticsResult] = await Promise.all([
+        db.from("workly_ai_voice_jobs")
+          .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,payload,result", { count: "exact" })
+          .eq("user_id", userId)
+          .eq("device_id", deviceId)
+          .order("created_at", { ascending: false }).limit(150),
+        deviceIds.length
+          ? db.from("workly_ai_voice_diagnostics")
+              .select("id,device_id,job_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
+              .in("device_id", deviceIds)
+              .order("created_at", { ascending: false }).limit(150)
+          : Promise.resolve({ data: [], error: null, count: 0 })
+      ]);
+      for (const result of [jobsResult, diagnosticsResult]) {
+        if (result.error) throw result.error;
+      }
+
+      const devices = (devicesResult.data ?? []).map((row: any) => ({
+        ...row,
+        online: row.worker_enabled === true && !row.revoked_at && !!row.last_seen_at &&
+          Date.now() - Date.parse(row.last_seen_at) <= 60_000
+      }));
+      const jobs = (jobsResult.data ?? []).map((row: any) => {
+        const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+        const result = row.result && typeof row.result === "object" ? row.result : {};
+        return {
+          ...row,
+          payload: {
+            ...historyPayload(payload, row.job_type),
+            ...(typeof payload.model === "string" ? { model: payload.model } : {}),
+            ...(typeof payload.source_language === "string" ? { source_language: payload.source_language } : {}),
+            ...(typeof payload.target_language === "string" ? { target_language: payload.target_language } : {})
+          },
+          result: {
+            ...(typeof result.error === "string" ? { error: result.error.slice(0, 500) } : {}),
+            ...(typeof result.provider === "string" ? { provider: result.provider } : {}),
+            ...(typeof result.languageTag === "string" ? { languageTag: result.languageTag } : {}),
+            ...(typeof result.content_type === "string" ? { content_type: result.content_type } : {}),
+            ...(typeof result.audio_bytes === "number" ? { audio_bytes: result.audio_bytes } : {}),
+            ...(typeof result.text_length === "number" ? { text_length: result.text_length } : {})
+          }
+        };
+      });
+      const diagnostics = (diagnosticsResult.data ?? []).map((row: any) => {
+        const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+        const safeMetadata: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(metadata)) {
+          if (/token|secret|password|authorization|email|phone|audio|transcript|text|url|path/i.test(key)) continue;
+          if (typeof value === "string") safeMetadata[key] = value.slice(0, 300);
+          else if (typeof value === "number" || typeof value === "boolean" || value === null) safeMetadata[key] = value;
+        }
+        return { ...row, metadata: safeMetadata };
+      });
+      const activeJobs = jobs.filter((row: any) => row.status === "pending" || row.status === "running").length;
+      const failedJobs = jobs.filter((row: any) => row.status === "failed" || row.status === "expired").length;
+      const recentErrors = diagnostics.filter((row: any) => !!row.error_type || !!row.error_message).length;
+      return json({
+        generated_at: now,
+        summary: {
+          devices_total: devicesResult.count ?? devices.length,
+          workers_enabled: devices.filter((row: any) => row.worker_enabled && !row.revoked_at).length,
+          workers_online: devices.filter((row: any) => row.online).length,
+          jobs_total: jobsResult.count ?? jobs.length,
+          active_jobs: activeJobs,
+          failed_jobs_in_loaded_records: failedJobs,
+          diagnostics_total: diagnosticsResult.count ?? diagnostics.length,
+          recent_errors_in_loaded_records: recentErrors,
+          releases_total: 0
+        },
+        devices,
+        jobs,
+        diagnostics,
+        releases: []
+      });
+    }
+
     if (action === "register_fcm_token") {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
@@ -171,10 +290,25 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
       const requestedModel = typeof payload?.model === "string" ? payload.model : "";
+      // Keep the full locale (for example en-IN / gu-IN). Android advertises
+      // regional language tags; stripping the region here incorrectly rejected
+      // an otherwise-ready worker and returned 429 for valid preview requests.
       const requestedLanguage = jobType === "translate" &&
         typeof payload?.source_language === "string" && typeof payload?.target_language === "string"
         ? payload.source_language.toLowerCase() + "-" + payload.target_language.toLowerCase()
-        : typeof payload?.language === "string" ? payload.language.split("-")[0].toLowerCase() : "";
+        : typeof payload?.language === "string" ? payload.language.trim().toLowerCase() : "";
+      const supportsRequestedLanguage = (languages: unknown): boolean => {
+        if (!requestedLanguage) return true;
+        if (!Array.isArray(languages)) return false;
+        return languages.some((value: unknown) => {
+          if (typeof value !== "string") return false;
+          const advertised = value.trim().toLowerCase();
+          if (advertised === "multilingual" || advertised === requestedLanguage) return true;
+          // Accept a base language only when the worker advertises that base
+          // explicitly, while matching en-IN with en and vice versa.
+          return advertised.split("-")[0] === requestedLanguage.split("-")[0];
+        });
+      };
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id,model_capabilities")
         .eq("worker_enabled", true)
@@ -187,12 +321,17 @@ export async function handleWorklyVoiceRelay(req: Request) {
       let device: any = null;
       let selectedModel = requestedModel;
       let activeJobs = Number.MAX_SAFE_INTEGER;
+      let onlineModelReady = false;
+      let onlineModelLanguageReady = false;
       for (const candidate of candidates ?? []) {
-        const matchedCapability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
-          cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
-          typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages) &&
-          (!requestedLanguage || cap.languages.includes(requestedLanguage) || cap.languages.includes("multilingual"))
-        );
+        const readyCapabilities = Array.isArray(candidate.model_capabilities)
+          ? candidate.model_capabilities.filter((cap: any) =>
+              cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
+              typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages))
+          : [];
+        if (readyCapabilities.length) onlineModelReady = true;
+        const matchedCapability = readyCapabilities.find((cap: any) => supportsRequestedLanguage(cap.languages));
+        if (matchedCapability) onlineModelLanguageReady = true;
         if (!matchedCapability) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
           .select("id", { count: "exact", head: true })
@@ -208,7 +347,19 @@ export async function handleWorklyVoiceRelay(req: Request) {
         }
         if (load === 0) break;
       }
-      if (!device) return json({ error: "No available opted-in phone has this model and language ready, or all compatible queues are full." }, 429);
+      if (!device) {
+        if (!onlineModelReady) {
+          return json({
+            error: requestedModel
+              ? `The ${requestedModel} voice model is not installed and ready on an online Workly phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.`
+              : "No online Workly phone has a ready model for this voice task."
+          }, 409);
+        }
+        if (!onlineModelLanguageReady) {
+          return json({ error: `The selected voice model is ready, but not for ${requestedLanguage}. Download its language pack in ChatWork or choose a supported language.` }, 409);
+        }
+        return json({ error: "All compatible Workly Voice queues are full. Please wait a moment and try again." }, 429);
+      }
 
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")

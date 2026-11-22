@@ -6,6 +6,9 @@ type RelayJob = {
   result?: { audio_url?: string; content_type?: string; error?: string; reply?: string; text?: string; translated_text?: string; languageTag?: string } | null;
 };
 
+type RelayJobResponse = { job?: RelayJob; error?: string };
+type RelayInvokeResult = { data: unknown; error: unknown };
+
 async function readableRelayError(error: unknown, fallback: string): Promise<Error> {
   const context = error && typeof error === "object" && "context" in error
     ? (error as { context?: unknown }).context
@@ -24,6 +27,35 @@ async function readableRelayError(error: unknown, fallback: string): Promise<Err
 }
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+function relayHttpStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object" || !("context" in error)) return null;
+  const context = (error as { context?: unknown }).context;
+  return context instanceof Response ? context.status : null;
+}
+
+function isTransientPollError(error: unknown): boolean {
+  const status = relayHttpStatus(error);
+  return status === 429 || (status !== null && status >= 500);
+}
+
+async function pollRelayJob(jobId: string): Promise<RelayInvokeResult> {
+  // The old 350 ms interval caused a burst of Edge Function requests and repeated 429s.
+  // Poll at a safe interval and back off on transient gateway/rate-limit responses.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const result = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'get_job', job_id: jobId },
+    });
+    if (!result.error || !isTransientPollError(result.error)) {
+      return { data: result.data as RelayJobResponse | null, error: result.error };
+    }
+    await wait(Math.min(1500 * (attempt + 1), 6000));
+  }
+  return {
+    data: null,
+    error: new Error("Voice server is temporarily rate-limited. Please wait a moment and try again."),
+  };
+}
 
 export async function requestOwnerPhoneVoiceAudio(text: string, language: string, timeoutMs = 180_000, voice = '', model = ''): Promise<string> {
   const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
@@ -44,12 +76,10 @@ export async function requestOwnerPhoneVoiceAudio(text: string, language: string
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', {
-      body: { action: 'get_job', job_id: jobId },
-    });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw await readableRelayError(error, 'Could not check the voice request.');
-    const job = data?.job as RelayJob | undefined;
+    const job = (data as RelayJobResponse | null)?.job;
     if (!job) throw new Error('Shared voice request could not be found.');
     if (job.status === 'failed' || job.status === 'expired') {
       throw new Error(job.result?.error || 'Shared voice request failed.');
@@ -80,12 +110,10 @@ export async function requestOwnerPhoneAIReply(text: string, languageTag = 'auto
   // Android online AI requests may take up to 60 seconds; allow time for the phone to finish.
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', {
-      body: { action: 'get_job', job_id: jobId },
-    });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw error;
-    const job = data?.job as RelayJob | undefined;
+    const job = (data as RelayJobResponse | null)?.job;
     if (!job) throw new Error('Shared AI request could not be found.');
     if (job.status === 'failed' || job.status === 'expired') throw new Error(job.result?.error || 'Shared AI request failed.');
     if (job.status === 'completed') {
@@ -110,10 +138,10 @@ export async function requestOwnerPhoneTranscription(audioBase64: string, langua
   window.dispatchEvent(new CustomEvent('workly-voice-stt-status', { detail: { status: 'queued' } }));
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', { body: { action: 'get_job', job_id: jobId } });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw error;
-    const job = data?.job as RelayJob | undefined;
+    const job = (data as RelayJobResponse | null)?.job;
     if (!job) throw new Error('Workly Voice transcription job could not be found.');
     if (job.status === 'failed' || job.status === 'expired') throw new Error(job.result?.error || 'Workly Voice transcription failed.');
     if (job.status === 'completed') {
@@ -151,12 +179,10 @@ export async function requestCommunityTranslation(
   if (typeof jobId !== 'string') throw new Error(created?.error || 'No opted-in translation worker is currently available.');
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    await wait(350);
-    const { data, error } = await supabase.functions.invoke('unified-voice', {
-      body: { action: 'get_job', job_id: jobId },
-    });
+    await wait(1500);
+    const { data, error } = await pollRelayJob(jobId);
     if (error) throw error;
-    const job = data?.job as RelayJob | undefined;
+    const job = (data as RelayJobResponse | null)?.job;
     if (!job) throw new Error('Translation job could not be found.');
     if (job.status === 'failed' || job.status === 'expired') throw new Error(job.result?.error || 'Translation worker failed.');
     if (job.status === 'completed') {
