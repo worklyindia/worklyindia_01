@@ -61,15 +61,10 @@ class OfflineAiChatActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dark = isSystemDarkMode()
-        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(false)
+        // Match Workly India: persistent system bars stay outside scrollable content.
+        ChatWorkTheme.applyWindow(this)
         window.statusBarColor = bg
         window.navigationBarColor = bg
-        if (android.os.Build.VERSION.SDK_INT >= 23) {
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = if (dark) 0 else
-                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-        }
         buildUi()
         loadModel()
     }
@@ -86,24 +81,6 @@ class OfflineAiChatActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(bg)
             clipToPadding = false
-            setOnApplyWindowInsetsListener { view, insets ->
-                val topInset: Int
-                val bottomInset: Int
-                if (android.os.Build.VERSION.SDK_INT >= 30) {
-                    val bars = insets.getInsets(android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.displayCutout())
-                    val nav = insets.getInsets(android.view.WindowInsets.Type.navigationBars())
-                    val ime = insets.getInsets(android.view.WindowInsets.Type.ime())
-                    topInset = bars.top
-                    bottomInset = maxOf(nav.bottom, ime.bottom)
-                } else {
-                    @Suppress("DEPRECATION")
-                    topInset = insets.systemWindowInsetTop
-                    @Suppress("DEPRECATION")
-                    bottomInset = insets.systemWindowInsetBottom
-                }
-                view.setPadding(dp(14), topInset, dp(14), bottomInset)
-                insets
-            }
         }
 
         val header = LinearLayout(this).apply {

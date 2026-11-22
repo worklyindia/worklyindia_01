@@ -20,6 +20,7 @@ import com.airbnb.lottie.LottieDrawable
 class MainActivity : Activity() {
     private var dark = false
     private var signalAnimationView: LottieAnimationView? = null
+    private var appUpdater: ChatWorkAppUpdater? = null
     private val bg get() = if (dark) 0xFF0B1220.toInt() else 0xFFF4F7FF.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,6 +123,8 @@ class MainActivity : Activity() {
 
         setContentView(root)
         signalAnimation.playAnimation()
+        // Check the separately published ChatWork APK release after the home screen is ready.
+        appUpdater = ChatWorkAppUpdater(this).also { it.checkForUpdate() }
         // Ask for notifications at first launch on Android 13+.
         // Microphone permission is requested only when the user taps Start Speaking.
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -133,6 +136,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         signalAnimationView?.resumeAnimation()
+        appUpdater?.onResume()
     }
 
     override fun onPause() {
@@ -141,6 +145,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        appUpdater?.close()
+        appUpdater = null
         signalAnimationView?.cancelAnimation()
         signalAnimationView = null
         super.onDestroy()

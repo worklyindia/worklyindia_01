@@ -84,12 +84,11 @@ class TextToVoiceActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) window.setDecorFitsSystemWindows(false)
+        // Use the same stable, always-visible system bars as the Workly India app.
+        // The page and its ScrollView are laid out below the status bar, never behind it.
+        ChatWorkTheme.applyWindow(this)
         window.statusBarColor = background
         window.navigationBarColor = background
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = if (dark) 0 else View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         buildUi()
         updateModel()
     }
@@ -145,24 +144,6 @@ class TextToVoiceActivity : Activity() {
         modelSpinner.onItemSelectedListener=selectionListener { updateModel() }
         languageSpinner.onItemSelectedListener=selectionListener { updateLanguage() }
         setContentView(page)
-        // Keep the status bar visible and move the header below its clock/icons.
-        window.decorView.setOnApplyWindowInsetsListener { _, insets ->
-            val topInset: Int
-            val bottomInset: Int
-            if (android.os.Build.VERSION.SDK_INT >= 30) {
-                val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
-                topInset = bars.top
-                bottomInset = bars.bottom
-            } else {
-                @Suppress("DEPRECATION")
-                topInset = insets.systemWindowInsetTop
-                @Suppress("DEPRECATION")
-                bottomInset = insets.systemWindowInsetBottom
-            }
-            page.setPadding(0, topInset, 0, bottomInset)
-            insets
-        }
-        window.decorView.requestApplyInsets()
     }
 
     private lateinit var resultActions: LinearLayout

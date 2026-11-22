@@ -287,7 +287,9 @@ const InterviewAnalytics = lazyRetry(() => import("./pages/owner-portal/Intervie
 const SupabaseUsageMonitor = lazyRetry(() => import("./pages/owner-portal/SupabaseUsageMonitor"));
 const StorageManager = lazyRetry(() => import("./pages/owner-portal/StorageManager"));
 const AndroidAppUpdates = lazyRetry(() => import("./pages/owner-portal/AndroidAppUpdates"));
+const ChatWorkAppUpdates = lazyRetry(() => import("./pages/owner-portal/ChatWorkAppUpdates"));
 const AppDownloadPage = lazyRetry(() => import("./pages/AppDownloadPage"));
+const ChatWorkDownloadPage = lazyRetry(() => import("./pages/ChatWorkDownloadPage"));
 const SecretsManager = lazyRetry(() => import("./pages/owner-portal/SecretsManager"));
 
 const GoogleIntegrations = lazyRetry(() => import("./pages/owner-portal/GoogleIntegrations"));
@@ -891,6 +893,7 @@ const AppContent = () => {
         <OnboardingGuard>
         <Routes>
           <Route path="/download" element={<AppDownloadPage />} />
+        <Route path="/chatwork-download" element={<ChatWorkDownloadPage />} />
         <Route path="/" element={<Index />} />
         <Route path="/index" element={<Navigate to="/" replace />} />
         <Route path="/ai-assistant" element={<AICareerAssistant />} />
@@ -1473,6 +1476,11 @@ const AppContent = () => {
         <Route path="/owner-portal/android-app-updates" element={
           <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
             <AndroidAppUpdates />
+          </ProtectedPermissionRoute>
+        } />
+        <Route path="/owner-portal/chatwork-app-updates" element={
+          <ProtectedPermissionRoute requiredPermission="settings.edit" ownerOnly>
+            <ChatWorkAppUpdates />
           </ProtectedPermissionRoute>
         } />
 

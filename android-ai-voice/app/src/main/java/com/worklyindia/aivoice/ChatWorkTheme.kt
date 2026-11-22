@@ -22,6 +22,8 @@ internal object ChatWorkTheme {
     }
 
     fun applyWindow(activity: Activity) {
+        activity.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) activity.window.setDecorFitsSystemWindows(true)
         val dark = isDark(activity)
         val bar = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
         activity.window.statusBarColor = bar
