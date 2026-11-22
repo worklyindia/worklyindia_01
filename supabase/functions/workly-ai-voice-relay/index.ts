@@ -147,6 +147,90 @@ export async function handleWorklyVoiceRelay(req: Request) {
       return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0 });
     }
 
+    if (action === "owner_data_dashboard") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const ownerUserId = Deno.env.get("WORKLY_AI_VOICE_OWNER_USER_ID") ?? "";
+      if (!ownerUserId) return json({ error: "Owner dashboard is not configured on the server." }, 503);
+      if (device.user_id !== ownerUserId) return json({ error: "ChatWork Data Collection is available only to the owner account." }, 403);
+
+      const [devicesResult, jobsResult, diagnosticsResult, releasesResult] = await Promise.all([
+        db.from("workly_ai_voice_devices")
+          .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,revoked_at", { count: "exact" })
+          .order("created_at", { ascending: false }).limit(100),
+        db.from("workly_ai_voice_jobs")
+          .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,payload,result", { count: "exact" })
+          .order("created_at", { ascending: false }).limit(150),
+        db.from("workly_ai_voice_diagnostics")
+          .select("id,device_id,job_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
+          .order("created_at", { ascending: false }).limit(150),
+        db.from("chatwork_app_releases")
+          .select("id,version_code,version_name,apk_size_bytes,release_notes,min_supported_version_code,published_at,is_published,created_at", { count: "exact" })
+          .order("created_at", { ascending: false }).limit(20)
+      ]);
+      for (const result of [devicesResult, jobsResult, diagnosticsResult, releasesResult]) {
+        if (result.error) throw result.error;
+      }
+
+      const devices = (devicesResult.data ?? []).map((row: any) => ({
+        ...row,
+        online: row.worker_enabled === true && !row.revoked_at && !!row.last_seen_at &&
+          Date.now() - Date.parse(row.last_seen_at) <= 60_000
+      }));
+      const jobs = (jobsResult.data ?? []).map((row: any) => {
+        const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+        const result = row.result && typeof row.result === "object" ? row.result : {};
+        return {
+          ...row,
+          payload: {
+            ...historyPayload(payload, row.job_type),
+            ...(typeof payload.model === "string" ? { model: payload.model } : {}),
+            ...(typeof payload.source_language === "string" ? { source_language: payload.source_language } : {}),
+            ...(typeof payload.target_language === "string" ? { target_language: payload.target_language } : {})
+          },
+          result: {
+            ...(typeof result.error === "string" ? { error: result.error.slice(0, 500) } : {}),
+            ...(typeof result.provider === "string" ? { provider: result.provider } : {}),
+            ...(typeof result.languageTag === "string" ? { languageTag: result.languageTag } : {}),
+            ...(typeof result.content_type === "string" ? { content_type: result.content_type } : {}),
+            ...(typeof result.audio_bytes === "number" ? { audio_bytes: result.audio_bytes } : {}),
+            ...(typeof result.text_length === "number" ? { text_length: result.text_length } : {})
+          }
+        };
+      });
+      const diagnostics = (diagnosticsResult.data ?? []).map((row: any) => {
+        const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata : {};
+        const safeMetadata: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(metadata)) {
+          if (/token|secret|password|authorization|email|phone|audio|transcript|text|url|path/i.test(key)) continue;
+          if (typeof value === "string") safeMetadata[key] = value.slice(0, 300);
+          else if (typeof value === "number" || typeof value === "boolean" || value === null) safeMetadata[key] = value;
+        }
+        return { ...row, metadata: safeMetadata };
+      });
+      const activeJobs = jobs.filter((row: any) => row.status === "pending" || row.status === "running").length;
+      const failedJobs = jobs.filter((row: any) => row.status === "failed" || row.status === "expired").length;
+      const recentErrors = diagnostics.filter((row: any) => !!row.error_type || !!row.error_message).length;
+      return json({
+        generated_at: now,
+        summary: {
+          devices_total: devicesResult.count ?? devices.length,
+          workers_enabled: devices.filter((row: any) => row.worker_enabled && !row.revoked_at).length,
+          workers_online: devices.filter((row: any) => row.online).length,
+          jobs_total: jobsResult.count ?? jobs.length,
+          active_jobs: activeJobs,
+          failed_jobs_in_loaded_records: failedJobs,
+          diagnostics_total: diagnosticsResult.count ?? diagnostics.length,
+          recent_errors_in_loaded_records: recentErrors,
+          releases_total: releasesResult.count ?? (releasesResult.data ?? []).length
+        },
+        devices,
+        jobs,
+        diagnostics,
+        releases: releasesResult.data ?? []
+      });
+    }
+
     if (action === "register_fcm_token") {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
