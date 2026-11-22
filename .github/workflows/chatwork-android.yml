@@ -416,3 +416,39 @@ jobs:
           with summary.open("a", encoding="utf-8") as out:
               out.write("\n".join(lines))
           PY
+
+      - name: Append Workly-style ChatWork artifact and Gradle diagnostics
+        if: always()
+        shell: bash
+        env:
+          APK_PATH: ${{ env.APK_PATH }}
+          AAB_PATH: ${{ env.PLAYSTORE_AAB_PATH }}
+          APK_BUILD_STATUS: ${{ steps.build-release.outcome }}
+          PREVIEW_BUILD_STATUS: ${{ steps.build-preview.outcome }}
+          AAB_BUILD_STATUS: ${{ steps.build-playstore-bundle.outcome }}
+          AAB_VERIFY_STATUS: ${{ steps.verify-playstore-bundle.outcome }}
+          APK_UPLOAD_STATUS: ${{ steps.upload-chatwork-apk.outcome }}
+          AAB_UPLOAD_STATUS: ${{ steps.upload-playstore-aab.outcome }}
+          GRADLE_SETUP_STATUS: ${{ steps.setup-gradle.outcome }}
+        run: |
+          python - <<'PY'
+          import os, hashlib
+          from pathlib import Path
+          from decimal import Decimal
+          out = Path(os.environ['GITHUB_STEP_SUMMARY'])
+          def info(key):
+              raw = os.environ.get(key, '')
+              p = Path(raw) if raw else None
+              if not p or not p.is_file(): return None
+              size = p.stat().st_size
+              digest = hashlib.sha256(p.read_bytes()).hexdigest()
+              return (p.name, size, size / 1_000_000, size / (1024 * 1024), digest)
+          def status(key): return os.environ.get(key) or 'not run'
+          apk, aab = info('APK_PATH'), info('AAB_PATH')
+          lines = ['', '## ChatWork — APK / AAB exact artifact diagnostics', '', '| File | Exact size (bytes) | Decimal MB | Binary MiB | SHA-256 |', '|---|---:|---:|---:|---|']
+          for label, item in [('APK', apk), ('Google Play AAB', aab)]:
+              if item: lines.append(f'| {label} — {item[0]} | {item[1]:,} | {item[2]:.2f} MB | {item[3]:.2f} MiB | `{item[4]}` |')
+              else: lines.append(f'| {label} | Not produced | — | — | — |')
+          lines += ['', '## ChatWork — Gradle build diagnostics', '', '| Field | Result |', '|---|---|', '| Root project | WorklyIndia / ChatWork Android |', '| Gradle version | 9.5.1 |', '| Requested tasks | `assembleDirectRelease`, `bundlePlayStoreRelease` (unsigned PR preview: `assembleDirectDebug`) |', f"| Gradle setup | {status('GRADLE_SETUP_STATUS')} |", f"| Signed APK build | {status('APK_BUILD_STATUS')} |", f"| Preview APK build | {status('PREVIEW_BUILD_STATUS')} |", f"| Google Play AAB build | {status('AAB_BUILD_STATUS')} |", f"| AAB signature/archive verification | {status('AAB_VERIFY_STATUS')} |", f"| APK artifact upload | {status('APK_UPLOAD_STATUS')} |", f"| AAB artifact upload | {status('AAB_UPLOAD_STATUS')} |", '']
+          with out.open('a', encoding='utf-8') as f: f.write('\\n'.join(lines))
+          PY
