@@ -72,7 +72,7 @@ android {
             // Wan is launched as a child process from nativeLibraryDir, so Android
             // must extract the executable instead of loading it only from the APK.
             useLegacyPackaging = true
-            pickFirsts += setOf("**/libonnxruntime.so")
+            // Sherpa-ONNX 2.0.1 is built against ONNX Runtime 1.28.2; keep the ABI aligned.
         }
     }
     buildFeatures { buildConfig = true }
@@ -84,7 +84,7 @@ dependencies {
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.firebase:firebase-messaging:24.1.2")
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.32.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.2")
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.github.k2-fsa:sherpa-onnx:2.0.1") {
         exclude(group = "com.github.k2-fsa.sherpa-onnx", module = "sherpa-onnx-jvm")
