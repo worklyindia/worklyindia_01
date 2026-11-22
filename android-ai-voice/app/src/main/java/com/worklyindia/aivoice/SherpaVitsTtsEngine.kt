@@ -51,23 +51,25 @@ class SherpaVitsTtsEngine private constructor(
             if (!File(espeakDir, "phontab").isFile && !File(espeakDir, "espeak-ng-data/phontab").isFile) {
                 extractTarBz2(espeakArchive, espeakDir)
             }
-            val model = File(voiceDir, "model.onnx")
-            val tokens = File(voiceDir, "tokens.txt")
-            check(model.isFile && tokens.isFile) { "VITS archive is missing model.onnx or tokens.txt." }
+            val model = File(voiceDir, "model.onnx").takeIf { it.isFile }
+                ?: voiceDir.walkTopDown().firstOrNull { it.isFile && it.extension.equals("onnx", ignoreCase = true) }
+            val tokens = File(voiceDir, "tokens.txt").takeIf { it.isFile }
+                ?: voiceDir.walkTopDown().firstOrNull { it.isFile && it.name == "tokens.txt" }
+            check(model?.isFile == true && tokens?.isFile == true) { "VITS archive is missing its ONNX model or tokens.txt." }
             val dataDir = if (File(espeakDir, "phontab").isFile) espeakDir else File(espeakDir, "espeak-ng-data")
             check(File(dataDir, "phontab").isFile) { "The shared espeak-ng-data files were not extracted correctly." }
 
             val config = OfflineTtsConfig(
                 model = OfflineTtsModelConfig(
                     vits = OfflineTtsVitsModelConfig(
-                        model = model.absolutePath,
-                        tokens = tokens.absolutePath,
+                        model = model!!.absolutePath,
+                        tokens = tokens!!.absolutePath,
                         dataDir = dataDir.absolutePath
-                    )
-                ),
-                numThreads = 2,
-                debug = false,
-                provider = "cpu"
+                    ),
+                    numThreads = 2,
+                    debug = false,
+                    provider = "cpu"
+                )
             )
             return SherpaVitsTtsEngine(OfflineTts(assetManager = null, config = config))
         }
