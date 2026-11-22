@@ -64,7 +64,7 @@ object VoiceWorkerCapabilityRegistry {
         )
         for ((pack, relayModel) in ttsPacks) {
             if (manager.snapshot(pack).state != SpeechPackDownloadManager.State.COMPLETE) continue
-            val languages: List<String> = if (pack.id.startsWith("indic-tiny-tts-")) listOf(pack.id.substringAfterLast("-")) else listOf("hi", "en")
+            val languages: List<String> = if (pack.id.startsWith("indic-tiny-tts-") || pack.id.startsWith("itantra-vits-")) listOf(pack.id.substringAfterLast("-")) else listOf("hi", "en")
             result.put(JSONObject()
                 .put("task", "tts")
                 .put("model", relayModel)
