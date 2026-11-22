@@ -44,6 +44,7 @@ class VoiceRelayService : Service() {
         val initialStatus = currentConnectionNotificationText()
         startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
         if (initialStatus == "Waiting for Data on…") setStatus(initialStatus)
+        ChatWorkTelemetryApp.onRelayServiceStarted(this, hasValidatedInternet())
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         relayWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:WorklyVoiceRelay").apply {
             setReferenceCounted(false)
@@ -72,6 +73,7 @@ class VoiceRelayService : Service() {
         var lastCapabilityRefresh = 0L
         while (running.get()) {
             if (!hasValidatedInternet()) {
+                if (!wasWaitingForData) ChatWorkTelemetryApp.onNetworkLost(this)
                 wasWaitingForData = true
                 setStatus("Waiting for Data on…")
                 try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
@@ -79,6 +81,7 @@ class VoiceRelayService : Service() {
             }
             if (wasWaitingForData) {
                 wasWaitingForData = false
+                ChatWorkTelemetryApp.onNetworkRestored(this)
                 setStatus("Shared phone server is online")
             }
             try {
@@ -379,6 +382,7 @@ class VoiceRelayService : Service() {
     }
 
     override fun onDestroy() {
+        ChatWorkTelemetryApp.onRelayServiceStopped(this, hasValidatedInternet())
         running.set(false)
         pollThread?.interrupt()
         if (relayWakeLock?.isHeld == true) relayWakeLock?.release()
