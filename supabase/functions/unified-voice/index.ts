@@ -4,6 +4,7 @@ import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/b
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { runAiChain } from '../_shared/aiChain.ts';
 import { handleWorklyVoiceRelay } from '../workly-ai-voice-relay/index.ts';
+import { AwsClient } from 'https://esm.sh/aws4fetch@1.0.20';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,6 +65,9 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     switch (action) {
+      case 'save_voice_preview':
+        return await handleSaveVoicePreview(supabase, params, req);
+
       case 'text-to-speech':
         return await handleTextToSpeech(supabase, params, req);
       
@@ -416,4 +420,48 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
 
   const replyLanguageTag = detectLanguageTag(reply, detectLanguageTag(text, languageTag));
   return new Response(JSON.stringify({ reply, languageTag: replyLanguageTag }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+}
+
+// AUTHENTICATED OWNER TTS PREVIEW CACHE (Cloudflare R2)
+async function readVoicePreviewSecret(name: string): Promise<string> {
+  const response = await fetch(supabaseUrl + '/rest/v1/owner_secrets?name=eq.' + encodeURIComponent(name) + '&select=value', {
+    headers: { apikey: supabaseServiceKey, Authorization: 'Bearer ' + supabaseServiceKey },
+  });
+  if (!response.ok) throw new Error('Could not read Cloudflare storage setting: ' + name);
+  const rows = await response.json() as Array<{ value?: string | null }>;
+  const value = rows?.[0]?.value?.trim();
+  if (!value) throw new Error('Missing ' + name + ' in Owner Secrets.');
+  return value;
+}
+async function handleSaveVoicePreview(supabase: any, params: any, req: Request) {
+  const auth = req.headers.get('authorization') ?? '';
+  const token = auth.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return new Response(JSON.stringify({ error: 'Sign in to save voice previews.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) return new Response(JSON.stringify({ error: 'Your session expired. Please sign in again.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const ownerId = Deno.env.get('WORKLY_AI_VOICE_OWNER_USER_ID') ?? '';
+  if (!ownerId || userData.user.id !== ownerId) return new Response(JSON.stringify({ error: 'Only the Workly voice-preview owner can publish shared previews.' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const model = typeof params.model === 'string' ? params.model : '';
+  const language = typeof params.language === 'string' ? params.language : '';
+  const voice = typeof params.voice === 'string' ? params.voice : '';
+  const dataUrl = typeof params.audio === 'string' ? params.audio : '';
+  if (!['kokoro', 'indic', 'itantra'].includes(model) || !['hi-IN', 'en-IN', 'gu-IN'].includes(language) || !/^[a-z0-9_-]{1,40}$/i.test(voice)) return new Response(JSON.stringify({ error: 'Invalid voice preview selection.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const match = dataUrl.match(/^data:audio\/wav;base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match) return new Response(JSON.stringify({ error: 'Preview must be a WAV audio file.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const binary = atob(match[1]);
+  if (binary.length < 44 || binary.length > 5 * 1024 * 1024 || binary.slice(0, 4) !== 'RIFF' || binary.slice(8, 12) !== 'WAVE') return new Response(JSON.stringify({ error: 'Invalid WAV audio data or file size.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const [accountId, accessKeyId, secretAccessKey] = await Promise.all([readVoicePreviewSecret('R2_ACCOUNT_ID'), readVoicePreviewSecret('R2_ACCESS_KEY_ID'), readVoicePreviewSecret('R2_SECRET_ACCESS_KEY')]);
+  const client = new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' });
+  const bucket = 'workly-ai-models';
+  const key = 'voice-previews/' + model + '/' + language + '/' + voice + '.wav';
+  const objectUrl = 'https://' + accountId + '.r2.cloudflarestorage.com/' + bucket + '/' + key;
+  const upload = await client.fetch(new Request(objectUrl, { method: 'PUT', body: bytes, headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'public, max-age=31536000, immutable' } }));
+  if (!upload.ok) throw new Error('Cloudflare R2 upload failed (' + upload.status + '): ' + (await upload.text()).slice(0, 300));
+  const verify = await client.fetch(new Request(objectUrl, { method: 'HEAD' }));
+  const savedBytes = Number(verify.headers.get('content-length') ?? '0');
+  if (!verify.ok || savedBytes !== bytes.byteLength) throw new Error('Cloudflare R2 upload could not be verified; preview was not marked saved.');
+  const url = 'https://pub-d7e0943326ee4d9da8045f267a70faac.r2.dev/' + key;
+  return new Response(JSON.stringify({ ok: true, key, url, bytes: savedBytes, verified: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
 }
