@@ -7,7 +7,16 @@ export function voicePreviewUrl(model: string, language: string, voice: string) 
 }
 
 export async function saveVoicePreviewToR2(model: string, language: string, voice: string, audio: Blob) {
-  if (audio.type !== "audio/wav" || audio.size < 44) throw new Error("Invalid voice preview audio. Expected a WAV file of at least 44 bytes.");
+  if (audio.size < 44) throw new Error("Invalid voice preview audio. Expected a WAV file of at least 44 bytes.");
+  // Android WebView / fetch may label a valid WAV as audio/x-wav,
+  // application/octet-stream, or leave the MIME type empty. Validate the
+  // actual RIFF/WAVE signature instead of rejecting a playable WAV by MIME.
+  const signature = new Uint8Array(await audio.slice(0, 12).arrayBuffer());
+  const riff = String.fromCharCode(...signature.slice(0, 4));
+  const wave = String.fromCharCode(...signature.slice(8, 12));
+  if (riff !== "RIFF" || wave !== "WAVE") {
+    throw new Error("The selected voice returned an invalid audio file. Please test the voice again.");
+  }
   const base64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error("Could not prepare voice preview upload."));
