@@ -95,7 +95,7 @@ async function cleanupExpiredJobs(db: any, now: string) {
 export async function handleWorklyVoiceRelay(req: Request) {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
-  if (!supabaseUrl || !serviceKey || !ownerUserId) return json({ error: "Relay owner setup is required" }, 503);
+  if (!supabaseUrl || !serviceKey) return json({ error: "Relay service setup is required" }, 503);
 
   try {
     const body = await req.json();
@@ -116,7 +116,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const deviceToken = randomHex(32);
       const { data: device, error } = await db.from("workly_ai_voice_devices")
         .insert({
-          user_id: ownerUserId,
+          user_id: user.id,
           token_hash: await sha256(deviceToken),
           device_name: String(body?.device_name ?? "Workly Voice Android").slice(0, 80),
         })
@@ -126,7 +126,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       return json({
         device_id: device.id,
         device_token: deviceToken,
-        message: "This phone is securely connected to your Workly India account."
+        message: "This phone is securely registered to your Workly India account. Worker mode remains controlled separately."
       });
     }
 
