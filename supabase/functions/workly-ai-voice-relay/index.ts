@@ -126,8 +126,34 @@ export async function handleWorklyVoiceRelay(req: Request) {
       return json({
         device_id: device.id,
         device_token: deviceToken,
-        message: "This phone is securely registered to your Workly India account. Worker mode remains controlled separately."
+        message: "Phone registered. Community worker mode is OFF until you explicitly enable it."
       });
+    }
+
+    if (action === "set_worker_state") {
+      const device = await deviceFor(req);
+      if (!device) return json({ error: "Device authentication failed" }, 401);
+      const enabled = body?.enabled === true;
+      const capabilities = Array.isArray(body?.capabilities) ? body.capabilities.slice(0, 40) : [];
+      if (enabled && capabilities.length === 0) return json({ error: "Download and validate at least one worker model before enabling worker mode." }, 400);
+      for (const capability of capabilities) {
+        if (!capability || !["tts", "stt"].includes(capability.task) ||
+          typeof capability.model !== "string" || capability.model.length > 100 ||
+          !Array.isArray(capability.languages) || capability.languages.length > 30 ||
+          capability.languages.some((language: unknown) => typeof language !== "string" || language.length > 12)) {
+          return json({ error: "Invalid model capability record." }, 400);
+        }
+      }
+      const { error } = await db.from("workly_ai_voice_devices")
+        .update({
+          worker_enabled: enabled,
+          model_capabilities: enabled ? capabilities : [],
+          worker_updated_at: new Date().toISOString()
+        })
+        .eq("id", device.id)
+        .is("revoked_at", null);
+      if (error) throw error;
+      return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0 });
     }
 
     if (action === "register_fcm_token") {
@@ -153,15 +179,26 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const payloadText = JSON.stringify(payload ?? {});
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
-      const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id")
-        .eq("user_id", ownerUserId)
+      const requestedModel = typeof payload?.model === "string" ? payload.model : "";
+      const requestedLanguage = typeof payload?.language === "string" ? payload.language.split("-")[0].toLowerCase() : "";
+      if (!requestedModel) return json({ error: "A specific model is required for worker routing." }, 400);
+      const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
+        .select("id,model_capabilities")
+        .eq("worker_enabled", true)
         .is("revoked_at", null)
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (deviceError || !device) return json({ error: "The shared Workly Voice phone is offline or not registered." }, 404);
+        .order("last_seen_at", { ascending: false })
+        .limit(100);
+      if (deviceError) throw deviceError;
+      const requiredTask = jobType === "tts" ? "tts" : "stt";
+      const device = (candidates ?? []).find((candidate: any) =>
+        Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.some((cap: any) =>
+          cap && cap.task === requiredTask && cap.model === requestedModel &&
+          cap.ready === true && Array.isArray(cap.languages) &&
+          (!requestedLanguage || cap.languages.includes(requestedLanguage))
+        )
+      );
+      if (!device) return json({ error: "No online, opted-in phone has this exact model and language ready." }, 404);
       const { count: activeJobs, error: countError } = await db.from("workly_ai_voice_jobs")
         .select("id", { count: "exact", head: true })
         .eq("device_id", device.id)
@@ -184,11 +221,19 @@ export async function handleWorklyVoiceRelay(req: Request) {
       await cleanupExpiredJobs(db, now);
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
       if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
-      const { data: device, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id").eq("user_id", ownerUserId).is("revoked_at", null)
+      const requestedLanguage = typeof body?.language === "string" ? body.language.split("-")[0].toLowerCase() : "";
+      const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
+        .select("id,model_capabilities").eq("worker_enabled", true).is("revoked_at", null)
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      if (deviceError || !device) return json({ error: "The shared Workly Voice phone is offline or not registered." }, 404);
+        .order("last_seen_at", { ascending: false }).limit(100);
+      if (deviceError) throw deviceError;
+      const device = (candidates ?? []).find((candidate: any) =>
+        Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.some((cap: any) =>
+          cap && cap.task === "stt" && cap.ready === true && Array.isArray(cap.languages) &&
+          (!requestedLanguage || cap.languages.includes(requestedLanguage))
+        )
+      );
+      if (!device) return json({ error: "No online, opted-in phone has a ready speech-recognition model for this language." }, 404);
       let bytes: Uint8Array;
       try { const binary = atob(audioBase64); bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0)); }
       catch { return json({ error: "Invalid recorded audio." }, 400); }
