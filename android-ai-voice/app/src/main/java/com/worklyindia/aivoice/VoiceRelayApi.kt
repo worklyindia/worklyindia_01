@@ -90,8 +90,8 @@ object VoiceRelayApi {
         }
     }
 
-    fun ownerDataDashboard(deviceToken: String): JSONObject {
-        val response = post("owner_data_dashboard", deviceToken = deviceToken)
+    fun userDataDashboard(deviceToken: String): JSONObject {
+        val response = post("user_data_dashboard", deviceToken = deviceToken)
         if (response.statusCode !in 200..299) {
             throw RelayApiException(response.statusCode, response.body.optString("error", "Could not load ChatWork data"))
         }
