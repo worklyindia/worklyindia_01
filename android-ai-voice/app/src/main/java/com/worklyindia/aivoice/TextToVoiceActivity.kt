@@ -104,7 +104,7 @@ class TextToVoiceActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            setBackgroundColor(background)
+            setBackgroundColor(this@TextToVoiceActivity.background)
         }
         header.addView(TextView(this).apply {
             text = "‹"
