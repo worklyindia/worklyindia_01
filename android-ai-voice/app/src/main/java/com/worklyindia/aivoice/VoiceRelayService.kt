@@ -53,7 +53,7 @@ class VoiceRelayService : Service() {
         val initialStatus = currentConnectionNotificationText()
         startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
         registerNetworkCallback()
-        if (initialStatus == "Waiting for Data on…") setStatus(initialStatus)
+        setStatus(if (hasValidatedInternet()) "Worker service started • online" else initialStatus)
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         relayWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:WorklyVoiceRelay").apply {
             setReferenceCounted(false)
