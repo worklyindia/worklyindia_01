@@ -255,7 +255,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
           created_at: row.created_at,
           source: "VOICE JOB",
           status: row.status ? String(row.status).toUpperCase() : "UNKNOWN",
-          model: row.payload?.pack_id ?? row.payload?.model ?? "",
+          model: [row.payload?.pack_id, row.payload?.model_name, row.payload?.model, row.payload?.model_id]
+            .find((value: unknown) => typeof value === "string" && value.trim().length > 0) ?? "",
           language: row.payload?.language ?? row.payload?.source_language ?? "",
           message: row.result?.error ?? (String(row.job_type || "job").toUpperCase() + " request"),
           error_type: row.status === "failed" || row.status === "expired" ? row.status : ""
@@ -265,7 +266,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
           created_at: row.created_at,
           source: "APP EVENT",
           status: row.error_type || row.error_message ? "ERROR" : "INFO",
-          model: typeof row.metadata?.model === "string" ? row.metadata.model : "",
+          model: [row.metadata?.pack_id, row.metadata?.model_name, row.metadata?.model]
+            .find((value: unknown) => typeof value === "string" && value.trim().length > 0) ?? "",
           language: row.language ?? "",
           message: row.error_message || row.metadata?.message || row.event_type || "App event",
           error_type: row.error_type ?? ""
