@@ -305,7 +305,10 @@ class DataCollectionActivity : Activity() {
                 setBackgroundColor(if (index % 2 == 0) surface else 0xFF0C1625.toInt())
                 setOnClickListener { showRecord(record) }
             }
-            for (key in keys) {\n                val errorRow = record.optString("status").uppercase(java.util.Locale.ROOT) in listOf("ERROR", "FAILED", "FAILURE")\n                row.addView(cell(displayValue(record, key), false, key == "message" && errorRow))\n            }
+            for (key in keys) {
+                val errorRow = record.optString("status").uppercase(java.util.Locale.ROOT) in listOf("ERROR", "FAILED", "FAILURE")
+                row.addView(cell(displayValue(record, key), false, key == "message" && errorRow))
+            }
             table.addView(row)
         }
         horizontal.addView(table)
