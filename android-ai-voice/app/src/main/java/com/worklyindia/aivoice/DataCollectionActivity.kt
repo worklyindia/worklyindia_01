@@ -378,6 +378,8 @@ class DataCollectionActivity : Activity() {
             .show()
             .also { dialog ->
                 dialog.window?.setBackgroundDrawable(rounded(surface, dp(14), line))
+                dialog.findViewById<TextView>(android.R.id.alertTitle)?.setTextColor(ink)
+                dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(ink)
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(blue)
             }
     }
