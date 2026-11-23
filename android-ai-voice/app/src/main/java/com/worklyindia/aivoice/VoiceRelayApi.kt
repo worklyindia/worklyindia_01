@@ -73,9 +73,15 @@ object VoiceRelayApi {
         val isError = eventType.contains("error", true) ||
             message.contains("failed", true) || message.contains("error", true) ||
             message.contains("reconnect", true)
+        val modelPattern = Regex(
+            """(indic-tiny-tts-(gu|hi|en)|itantra-vits-(gu|hi|en)|indicconformer-[a-z]+|qwen-[a-z0-9.]+|kokoro-82m)""",
+            RegexOption.IGNORE_CASE
+        )
+        val reportedModel = modelPattern.find("$message $detail")?.value
         val metadata = JSONObject()
             .put("message", message.take(300))
             .put("detail", detail.take(300))
+            .put("model", reportedModel ?: JSONObject.NULL)
         val values = JSONObject()
             .put("event_type", eventType.take(80))
             .put("error_type", if (isError) eventType.take(80) else JSONObject.NULL)
