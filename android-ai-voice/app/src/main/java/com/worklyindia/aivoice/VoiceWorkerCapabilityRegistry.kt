@@ -68,7 +68,10 @@ object VoiceWorkerCapabilityRegistry {
             result.put(JSONObject()
                 .put("task", "tts")
                 .put("model", relayModel)
+                .put("model_name", pack.title)
                 .put("pack_id", pack.id)
+                .put("size_bytes", pack.totalBytes)
+                .put("installed_at", manager.installedAt(pack) ?: JSONObject.NULL)
                 .put("languages", JSONArray(languages))
                 .put("ready", true))
         }
@@ -81,7 +84,10 @@ object VoiceWorkerCapabilityRegistry {
             result.put(JSONObject()
                 .put("task", "stt")
                 .put("model", "indicconformer-" + language)
+                .put("model_name", pack.title)
                 .put("pack_id", pack.id)
+                .put("size_bytes", pack.totalBytes)
+                .put("installed_at", manager.installedAt(pack) ?: JSONObject.NULL)
                 .put("languages", JSONArray(listOf(language)))
                 .put("ready", true))
         }
