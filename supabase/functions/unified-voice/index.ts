@@ -429,7 +429,7 @@ async function handleAiVoiceChat(supabase: any, params: any, req: Request) {
 // Direct-to-R2 voice preview uploads avoid the Supabase Edge Function JSON/base64
 // request-size ceiling. The presigned URL is short-lived and restricted to WAV PUT.
 async function authorizeVoicePreviewOwner(supabase: any, req: Request) {
-  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\\s+/i, '').trim();
+  const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
   if (!token) throw new Error('Sign in to upload voice previews.');
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data?.user) throw new Error('Your session expired. Please sign in again.');
