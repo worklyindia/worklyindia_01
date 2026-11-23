@@ -108,7 +108,10 @@ class SpeechPackDownloadManager(context: Context) {
             else -> State.NOT_DOWNLOADED
         }
         if (state == State.COMPLETE && !prefs.contains(installedAtKey(pack.id))) {
-            prefs.edit().putString(installedAtKey(pack.id), java.time.Instant.now().toString()).apply()
+            val stamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.format(java.util.Date())
+            prefs.edit().putString(installedAtKey(pack.id), stamp).apply()
         }
         return Snapshot(pack.id, state, downloaded, pack.totalBytes, rows)
     }
