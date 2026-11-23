@@ -263,7 +263,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
           created_at: row.created_at,
           source: "APP EVENT",
           status: row.error_type || row.error_message ? "ERROR" : "INFO",
-          model: "",
+          model: typeof row.metadata?.model === "string" ? row.metadata.model : "",
           language: row.language ?? "",
           message: row.error_message || row.metadata?.message || row.event_type || "App event",
           error_type: row.error_type ?? ""
