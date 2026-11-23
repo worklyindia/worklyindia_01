@@ -174,7 +174,10 @@ class DataCollectionActivity : Activity() {
         table.addView(header)
         for (i in 0 until capabilities.length()) {
             val cap = capabilities.optJSONObject(i) ?: continue
-            val model = cap.optString("model").ifBlank { cap.optString("pack_id", "Unknown model") }
+            val model = listOf("model", "model_name", "pack_id", "model_id", "name", "id")
+                .firstNotNullOfOrNull { key ->
+                    cap.optString(key).takeIf { it.isNotBlank() && it != "null" && it != "Unknown model" }
+                } ?: "Unknown model"
             val sizeValue = when {
                 cap.has("size_bytes") -> cap.optLong("size_bytes")
                 cap.has("model_size_bytes") -> cap.optLong("model_size_bytes")
