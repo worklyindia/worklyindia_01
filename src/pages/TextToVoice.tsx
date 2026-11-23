@@ -220,6 +220,7 @@ export default function TextToVoice() {
       player.src = url;
       player.load();
     }
+    if (player.ended) player.currentTime = 0;
     try {
       await player.play();
       setStatus(`Playing ${selectedVoice} preview · tap Stop to end`);
@@ -266,7 +267,7 @@ export default function TextToVoice() {
       const blob = await requestOwnerPhoneVoiceAudioBlob(sampleText, language, 180_000, voice, model);
       if (blob.size < 44) throw new Error("The phone returned an empty voice preview.");
 
-      setStatus("Uploading voice preview…");
+      setStatus("Finishing voice preview…");
       const savedUrl = await saveVoicePreviewToR2(model, language, voice, blob);
       setPreviewReadyUrl(savedUrl);
       await playPreviewUrl(savedUrl);
