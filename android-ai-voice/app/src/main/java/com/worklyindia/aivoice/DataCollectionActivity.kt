@@ -130,7 +130,7 @@ class DataCollectionActivity : Activity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
-            setPadding(dp(14), dp(14), dp(14), dp(24))
+            setPadding(0, dp(14), 0, dp(24))
         }
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -161,27 +161,81 @@ class DataCollectionActivity : Activity() {
         } ?: "NOT REGISTERED"
         val lastSeen = device?.optString("last_seen_at", "")?.takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Never"
         parent.addView(sectionTitle("Worker status"))
-        parent.addView(infoCard(
-            "Community Worker: " + workerStatus,
-            "Last heartbeat: " + lastSeen
-        ))
+        parent.addView(infoCard("Community Worker: " + workerStatus, "Last heartbeat: " + lastSeen))
         parent.addView(sectionTitle("Installed models and languages"))
         val capabilities = device?.optJSONArray("model_capabilities") ?: JSONArray()
-        val modelLines = ArrayList<String>()
-        for (i in 0 until capabilities.length()) {
-            val capability = capabilities.optJSONObject(i) ?: continue
-            val model = capability.optString("model", "Unknown model")
-            val pack = capability.optString("pack_id").takeIf { it.isNotBlank() }
-            val languages = capability.optJSONArray("languages") ?: JSONArray()
-            val languageNames = (0 until languages.length()).mapNotNull { index ->
-                languages.optString(index).takeIf { it.isNotBlank() }
-            }
-            modelLines.add((pack ?: model) + " • " + (if (languageNames.isEmpty()) "Languages not reported" else languageNames.joinToString(", ")))
+        val headers = arrayOf("Model", "Size", "Date", "Time", "Language")
+        val table = TableLayout(this).apply {
+            isStretchAllColumns = false
+            setPadding(0, dp(2), 0, dp(2))
         }
-        parent.addView(infoCard(
-            "Ready on this phone (" + modelLines.size + ")",
-            modelLines.joinToString("\n").ifBlank { "No fully downloaded and ready models reported by this phone." }
-        ))
+        val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
+        headers.forEach { header.addView(cell(it, true)) }
+        table.addView(header)
+        for (i in 0 until capabilities.length()) {
+            val cap = capabilities.optJSONObject(i) ?: continue
+            val model = cap.optString("model").ifBlank { cap.optString("pack_id", "Unknown model") }
+            val sizeValue = when {
+                cap.has("size_bytes") -> cap.optLong("size_bytes")
+                cap.has("model_size_bytes") -> cap.optLong("model_size_bytes")
+                cap.has("size") -> cap.optLong("size")
+                else -> -1L
+            }
+            val size = if (sizeValue >= 0) formatBytes(sizeValue) else "—"
+            val installedAt = listOf("installed_at", "downloaded_at", "completed_at").firstNotNullOfOrNull { key ->
+                cap.optString(key).takeIf { it.isNotBlank() && it != "null" }
+            }
+            val date = installedAt?.let { formatDate(it).substringBefore(" ") } ?: "—"
+            val time = installedAt?.let { formatDate(it).substringAfter(" ", "—") } ?: "—"
+            val languages = cap.optJSONArray("languages") ?: JSONArray()
+            val languageNames = (0 until languages.length()).mapNotNull { index ->
+                languages.optString(index).takeIf { it.isNotBlank() }?.let { fullLanguageName(it) }
+            }
+            val row = TableRow(this).apply {
+                setBackgroundColor(if (i % 2 == 0) surface else 0xFF0C1625.toInt())
+            }
+            listOf(model, size, date, time, languageNames.joinToString(", ").ifBlank { "—" })
+                .forEach { row.addView(cell(it, false)) }
+            table.addView(row)
+        }
+        val horizontal = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = true
+            clipToPadding = false
+            background = rounded(surface, dp(12), line)
+            addView(table)
+        }
+        parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        if (capabilities.length() == 0) parent.addView(infoCard("No installed models", "No ready model capabilities were reported by this phone."))
+    }
+
+    private fun fullLanguageName(code: String): String {
+        val normalized = code.substringBefore('-').lowercase(java.util.Locale.ROOT)
+        val name = when (normalized) {
+            "en" -> "English"
+            "hi" -> "Hindi"
+            "gu" -> "Gujarati"
+            "ta" -> "Tamil"
+            "te" -> "Telugu"
+            "bn" -> "Bengali"
+            "mr" -> "Marathi"
+            "kn" -> "Kannada"
+            "ml" -> "Malayalam"
+            "pa" -> "Punjabi"
+            "ur" -> "Urdu"
+            "or" -> "Odia"
+            "as" -> "Assamese"
+            else -> java.util.Locale.forLanguageTag(normalized).getDisplayLanguage(java.util.Locale.ENGLISH)
+        }
+        return name.ifBlank { code }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        if (bytes < 1024) return "$bytes B"
+        val units = arrayOf("KB", "MB", "GB", "TB")
+        var value = bytes.toDouble()
+        var unit = -1
+        do { value /= 1024.0; unit++ } while (value >= 1024 && unit < units.lastIndex)
+        return String.format(java.util.Locale.ENGLISH, "%.2f %s", value, units[unit])
     }
 
     private fun addTabs(parent: LinearLayout) {
@@ -248,7 +302,7 @@ class DataCollectionActivity : Activity() {
                 setBackgroundColor(if (index % 2 == 0) surface else 0xFF0C1625.toInt())
                 setOnClickListener { showRecord(record) }
             }
-            for (key in keys) row.addView(cell(displayValue(record, key), false))
+            for (key in keys) {\n                val errorRow = record.optString("status").uppercase(java.util.Locale.ROOT) in listOf("ERROR", "FAILED", "FAILURE")\n                row.addView(cell(displayValue(record, key), false, key == "message" && errorRow))\n            }
             table.addView(row)
         }
         horizontal.addView(table)
@@ -290,11 +344,11 @@ class DataCollectionActivity : Activity() {
         }
     }
 
-    private fun cell(value: String, header: Boolean): TextView = TextView(this).apply {
+    private fun cell(value: String, header: Boolean, error: Boolean = false): TextView = TextView(this).apply {
         text = value
         textSize = if (header) 12f else 11.5f
         typeface = if (header) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        setTextColor(if (header) 0xFFF0F4FA.toInt() else ink)
+        setTextColor(if (error) 0xFFFF5252.toInt() else if (header) 0xFFF0F4FA.toInt() else ink)
         background = GradientDrawable().apply {
             setColor(if (header) 0xFF1A2A40.toInt() else surface)
             setStroke(dp(1), 0xFF33445C.toInt())
@@ -370,7 +424,7 @@ class DataCollectionActivity : Activity() {
 
     private fun formatDate(value: String): String = try {
         val parsed = java.time.Instant.parse(value).toEpochMilli()
-        java.text.SimpleDateFormat("dd/MM/yyyy hh:mm:ss a", java.util.Locale.getDefault()).format(Date(parsed))
+        java.text.SimpleDateFormat("dd/MM/yyyy hh:mm:ss a", java.util.Locale.ENGLISH).format(Date(parsed))
     } catch (_: Exception) { value }
 
     private fun isRecentHeartbeat(value: String): Boolean = try {
