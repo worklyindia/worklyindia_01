@@ -40,11 +40,11 @@ class DataCollectionActivity : Activity() {
     private var content: LinearLayout? = null
     private var searchInput: EditText? = null
 
-    private val ink get() = ChatWorkTheme.color(this, 0xFF142033.toInt())
-    private val muted get() = ChatWorkTheme.color(this, 0xFF65748B.toInt())
-    private val surface get() = ChatWorkTheme.color(this, 0xFFFFFFFF.toInt())
-    private val canvas get() = ChatWorkTheme.color(this, 0xFFF4F7FB.toInt())
-    private val line get() = ChatWorkTheme.color(this, 0xFFE2E8F0.toInt())
+    private val ink = 0xFFF0F4FA.toInt()
+    private val muted = 0xFFAAB7C8.toInt()
+    private val surface = 0xFF101B2B.toInt()
+    private val canvas = 0xFF070D18.toInt()
+    private val line = 0xFF29384D.toInt()
     private val blue = 0xFF2878D0.toInt()
     private val green = 0xFF16845B.toInt()
     private val red = 0xFFCB4141.toInt()
@@ -60,6 +60,12 @@ class DataCollectionActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ChatWorkTheme.applyWindow(this)
+        window.statusBarColor = canvas
+        window.navigationBarColor = canvas
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
         render()
         refreshData()
     }
@@ -89,7 +95,7 @@ class DataCollectionActivity : Activity() {
             try {
                 val response = VoiceRelayApi.userDataDashboard(token)
                 runOnUiThread {
-                    dashboard = response
+                    dashboard = normalizeDashboard(response)
                     lastUpdated = response.optString("generated_at").takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Just now"
                     statusText = "Connected • Live data from Supabase"
                     loading.set(false)
@@ -116,30 +122,22 @@ class DataCollectionActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(10), dp(14), dp(10))
-            setBackgroundColor(surface)
+            setBackgroundColor(canvas)
         }
         toolbar.addView(TextView(this).apply {
             text = "‹"
-            textSize = 34f
+            textSize = 36f
             gravity = Gravity.CENTER
             setTextColor(ink)
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(48)))
-        toolbar.addView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(TextView(this@DataCollectionActivity).apply {
-                text = "ChatWork Data Collection"
-                textSize = 18f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(ink)
-            })
-            addView(TextView(this@DataCollectionActivity).apply {
-                text = "Your account's Supabase data"
-                textSize = 12f
-                setTextColor(muted)
-            })
+        toolbar.addView(TextView(this).apply {
+            text = "ChatWork Data Collection"
+            textSize = 18f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(ink)
+            gravity = Gravity.CENTER_VERTICAL
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        toolbar.addView(actionText("Refresh", blue) { refreshData() }, LinearLayout.LayoutParams(-2, dp(42)))
         root.addView(toolbar)
         root.addView(View(this).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(-1, dp(1)))
 
@@ -170,14 +168,7 @@ class DataCollectionActivity : Activity() {
             body.addView(infoCard("Supabase connection", statusText))
         } else {
             addTabs(body)
-            addSearch(body)
             addSelectedTable(body)
-            body.addView(TextView(this).apply {
-                text = "Only this account's worker status, installed models and activity logs. Sensitive tokens, passwords, audio links and private text are hidden."
-                textSize = 11f
-                setTextColor(muted)
-                setPadding(dp(4), dp(14), dp(4), dp(4))
-            })
         }
         setContentView(root)
         ChatWorkTheme.applyContentInsets(this)
@@ -186,7 +177,14 @@ class DataCollectionActivity : Activity() {
     private fun addOverview(parent: LinearLayout) {
         val devices = dashboard.optJSONArray("devices") ?: JSONArray()
         val device = devices.optJSONObject(0)
-        val workerStatus = device?.optString("worker_status", "UNKNOWN") ?: "UNKNOWN"
+        val workerStatus = device?.let { row ->
+            when {
+                !row.isNull("revoked_at") -> "REVOKED"
+                row.optBoolean("worker_enabled", false) && isRecentHeartbeat(row.optString("last_seen_at")) -> "ACTIVE"
+                row.optBoolean("worker_enabled", false) -> "OFFLINE"
+                else -> "OFF"
+            }
+        } ?: "NOT REGISTERED"
         val lastSeen = device?.optString("last_seen_at", "")?.takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Never"
         parent.addView(sectionTitle("Worker status"))
         parent.addView(infoCard(
@@ -215,7 +213,7 @@ class DataCollectionActivity : Activity() {
     private fun addTabs(parent: LinearLayout) {
         val tabs = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (tab in listOf("Overview", "Devices", "Logs")) {
+        for (tab in listOf("Overview", "Logs")) {
             val active = selectedTab == tab
             val item = TextView(this).apply {
                 text = tab
@@ -230,53 +228,19 @@ class DataCollectionActivity : Activity() {
                     render()
                 }
             }
-            strip.addView(item, LinearLayout.LayoutParams(-2, dp(42)).apply { rightMargin = dp(7) })
-        }
-        tabs.addView(strip)
-        parent.addView(tabs, LinearLayout.LayoutParams(-1, dp(48)).apply { bottomMargin = dp(12) })
-    }
-
-    private fun addSearch(parent: LinearLayout) {
-        val input = EditText(this).apply {
-            hint = "Search records…"
-            textSize = 14f
-            isSingleLine = true
-            setTextColor(ink)
-            setHintTextColor(muted)
-            setPadding(dp(14), 0, dp(14), 0)
-            background = rounded(surface, dp(12), line)
-            setText(searchQuery)
-            addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    searchQuery = s?.toString().orEmpty()
-                    val current = content ?: return
-                    val index = current.indexOfChild(this@DataCollectionActivity.searchInput)
-                    if (index >= 0) {
-                        current.removeViews(index + 1, current.childCount - index - 1)
-                        addSelectedTable(current)
-                    }
-                }
-                override fun afterTextChanged(s: Editable?) = Unit
+            strip.addView(item, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                leftMargin = dp(3); rightMargin = dp(3)
             })
         }
-        searchInput = input
-        parent.addView(input, LinearLayout.LayoutParams(-1, dp(50)).apply { bottomMargin = dp(12) })
+        tabs.addView(strip)
+        parent.addView(tabs, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(12) })
     }
 
     private fun addSelectedTable(parent: LinearLayout) {
         when (selectedTab) {
             "Overview" -> addOverview(parent)
-            "Devices" -> {
-                parent.addView(sectionTitle("Worker and installed model details"))
-                addTable(parent, arrayOf("Device", "Worker status", "Online", "Installed models and languages", "Last seen"),
-                    "devices", arrayOf("device_name", "worker_status", "online", "model_capabilities", "last_seen_at"))
-            }
-            "Logs" -> {
-                parent.addView(sectionTitle("Supabase activity logs"))
-                addTable(parent, arrayOf("Time", "Source", "Status", "Model", "Language", "Message"),
-                    "logs", arrayOf("created_at", "source", "status", "model", "language", "message"))
-            }
+            "Logs" -> addTable(parent, arrayOf("Time", "Source", "Status", "Model", "Language", "Message"),
+                "logs", arrayOf("created_at", "source", "status", "model", "language", "message"))
         }
     }
 
@@ -302,12 +266,12 @@ class DataCollectionActivity : Activity() {
             isStretchAllColumns = false
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        val header = TableRow(this).apply { setBackgroundColor(ChatWorkTheme.color(this@DataCollectionActivity, 0xFFEAF1FA.toInt())) }
+        val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
         for (label in headers) header.addView(cell(label, true))
         table.addView(header)
         for ((index, record) in shown.withIndex()) {
             val row = TableRow(this).apply {
-                setBackgroundColor(if (index % 2 == 0) surface else ChatWorkTheme.color(this@DataCollectionActivity, 0xFFF7F9FC.toInt()))
+                setBackgroundColor(if (index % 2 == 0) surface else 0xFF0C1625.toInt())
                 setOnClickListener { showRecord(record) }
             }
             for (key in keys) row.addView(cell(displayValue(record, key), false))
@@ -315,11 +279,6 @@ class DataCollectionActivity : Activity() {
         }
         horizontal.addView(table)
         parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
-        parent.addView(TextView(this).apply {
-            text = "Showing " + shown.size + " of " + matching.size + " loaded records • Tap a row for details"
-            textSize = 11f
-            setTextColor(muted)
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         if (matching.isEmpty()) parent.addView(infoCard("No matching records", "Try another search or refresh the data."))
     }
 
@@ -361,13 +320,17 @@ class DataCollectionActivity : Activity() {
         text = value
         textSize = if (header) 12f else 11.5f
         typeface = if (header) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        setTextColor(if (header) ink else muted)
-        maxLines = 2
+        setTextColor(if (header) 0xFFF0F4FA.toInt() else ink)
+        background = GradientDrawable().apply {
+            setColor(if (header) 0xFF1A2A40.toInt() else surface)
+            setStroke(dp(1), 0xFF33445C.toInt())
+        }
+        maxLines = 3
         ellipsize = android.text.TextUtils.TruncateAt.END
         gravity = Gravity.CENTER_VERTICAL
         setPadding(dp(10), dp(12), dp(10), dp(12))
         minWidth = dp(112)
-        layoutParams = TableRow.LayoutParams(dp(136), -2)
+        layoutParams = TableRow.LayoutParams(dp(148), -2)
     }
 
     private fun showRecord(record: JSONObject) {
@@ -450,8 +413,48 @@ class DataCollectionActivity : Activity() {
 
     private fun formatDate(value: String): String = try {
         val parsed = java.time.Instant.parse(value).toEpochMilli()
-        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(parsed))
+        java.text.SimpleDateFormat("dd/MM/yyyy hh:mm a", java.util.Locale.getDefault()).format(Date(parsed))
     } catch (_: Exception) { value }
+
+    private fun isRecentHeartbeat(value: String): Boolean = try {
+        val parsed = java.time.Instant.parse(value).toEpochMilli()
+        System.currentTimeMillis() - parsed <= 60_000L
+    } catch (_: Exception) { false }
+
+    private fun normalizeDashboard(source: JSONObject): JSONObject {
+        val result = JSONObject(source.toString())
+        val existing = result.optJSONArray("logs")
+        if (existing != null && existing.length() > 0) return result
+        val logs = JSONArray()
+        val jobs = result.optJSONArray("jobs") ?: JSONArray()
+        for (i in 0 until jobs.length()) {
+            val row = jobs.optJSONObject(i) ?: continue
+            val payload = row.optJSONObject("payload") ?: JSONObject()
+            val output = row.optJSONObject("result") ?: JSONObject()
+            logs.put(JSONObject()
+                .put("id", "job:" + row.optString("id"))
+                .put("created_at", row.optString("created_at"))
+                .put("source", "VOICE JOB")
+                .put("status", row.optString("status", "UNKNOWN").uppercase(java.util.Locale.ROOT))
+                .put("model", payload.optString("model"))
+                .put("language", payload.optString("language", payload.optString("source_language")))
+                .put("message", output.optString("error", row.optString("job_type", "job").uppercase(java.util.Locale.ROOT) + " request")))
+        }
+        val diagnostics = result.optJSONArray("diagnostics") ?: JSONArray()
+        for (i in 0 until diagnostics.length()) {
+            val row = diagnostics.optJSONObject(i) ?: continue
+            logs.put(JSONObject()
+                .put("id", "diagnostic:" + row.optString("id"))
+                .put("created_at", row.optString("created_at"))
+                .put("source", "APP EVENT")
+                .put("status", if (!row.isNull("error_type") || !row.isNull("error_message")) "ERROR" else "INFO")
+                .put("model", "")
+                .put("language", row.optString("language"))
+                .put("message", row.optString("error_message", row.optString("event_type", "App event"))))
+        }
+        result.put("logs", logs)
+        return result
+    }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
