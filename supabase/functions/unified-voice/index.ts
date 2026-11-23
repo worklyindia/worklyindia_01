@@ -8,7 +8,8 @@ import { AwsClient } from 'https://esm.sh/aws4fetch@1.0.20';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-token',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-device-token, x-retry-count, traceparent, tracestate, baggage',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
 };
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
