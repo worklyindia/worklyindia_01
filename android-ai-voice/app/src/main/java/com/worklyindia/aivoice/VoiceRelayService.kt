@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.content.Intent
 import android.os.Build
@@ -29,6 +30,7 @@ class VoiceRelayService : Service() {
     private var pollThread: Thread? = null
     private var activeToken: String? = null
     private var relayWakeLock: PowerManager.WakeLock? = null
+    @Volatile private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -50,6 +52,7 @@ class VoiceRelayService : Service() {
             .edit().putBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, true).apply()
         val initialStatus = currentConnectionNotificationText()
         startForeground(NOTIFICATION_ID, buildNotification(initialStatus))
+        registerNetworkCallback()
         if (initialStatus == "Waiting for Data on…") setStatus(initialStatus)
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         relayWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:WorklyVoiceRelay").apply {
@@ -63,6 +66,50 @@ class VoiceRelayService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return
+        val manager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) { publishNetworkState() }
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { publishNetworkState() }
+            override fun onLost(network: Network) { publishNetworkState() }
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                manager.registerDefaultNetworkCallback(callback)
+            } else {
+                @Suppress("DEPRECATION")
+                manager.registerNetworkCallback(
+                    android.net.NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),
+                    callback
+                )
+            }
+            networkCallback = callback
+        } catch (error: Exception) {
+            recordEvent("Error / connection", "Could not monitor network changes", error.message.orEmpty())
+        }
+    }
+
+    private fun publishNetworkState() {
+        val online = hasValidatedInternet()
+        val message = if (online) ONLINE_NOTIFICATION_TEXT else WAITING_NOTIFICATION_TEXT
+        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(message))
+        setStatus(if (online) "Shared phone server is online. Waiting for website requests…" else WAITING_NOTIFICATION_TEXT)
+        val token = activeToken
+        if (online && !token.isNullOrBlank()) {
+            diagnosticsExecutor.execute {
+                runCatching {
+                    val enabled = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
+                        .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
+                    val capabilities = if (enabled) VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this) else org.json.JSONArray()
+                    VoiceRelayApi.setWorkerState(token, enabled, capabilities)
+                }.onFailure { error ->
+                    setStatus("Relay reconnecting: " + (error.message ?: "network unavailable"))
+                }
+            }
+        }
     }
 
     private fun hasValidatedInternet(): Boolean {
@@ -424,6 +471,10 @@ class VoiceRelayService : Service() {
     override fun onDestroy() {
         running.set(false)
         pollThread?.interrupt()
+        networkCallback?.let { callback ->
+            runCatching { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(callback) }
+        }
+        networkCallback = null
         if (relayWakeLock?.isHeld == true) relayWakeLock?.release()
         relayWakeLock = null
         kokoroTtsEngine?.close()
