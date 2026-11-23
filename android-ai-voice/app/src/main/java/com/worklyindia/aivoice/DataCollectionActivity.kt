@@ -169,12 +169,11 @@ class DataCollectionActivity : Activity() {
         if (dashboard.length() == 0) {
             body.addView(infoCard("Supabase connection", statusText))
         } else {
-            if (selectedTab == "Overview") addOverview(body)
             addTabs(body)
             addSearch(body)
             addSelectedTable(body)
             body.addView(TextView(this).apply {
-                text = "Only this signed-in account's devices, jobs and diagnostics • Sensitive tokens, passwords, audio links and private text are hidden."
+                text = "Only this account's worker status, installed models and activity logs. Sensitive tokens, passwords, audio links and private text are hidden."
                 textSize = 11f
                 setTextColor(muted)
                 setPadding(dp(4), dp(14), dp(4), dp(4))
