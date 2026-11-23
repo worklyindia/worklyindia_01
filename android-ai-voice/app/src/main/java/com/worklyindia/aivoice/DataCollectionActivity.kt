@@ -12,6 +12,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TableLayout
 import android.widget.TableRow
@@ -152,8 +153,20 @@ class DataCollectionActivity : Activity() {
         scroll.addView(body, FrameLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        if (dashboard.length() == 0) {
-            body.addView(infoCard("Supabase connection", statusText))
+        if (dashboard.length() == 0 && loading.get()) {
+            val loadingArea = FrameLayout(this).apply {
+                setBackgroundColor(canvas)
+                addView(ProgressBar(this@DataCollectionActivity), FrameLayout.LayoutParams(dp(42), dp(42), Gravity.CENTER))
+            }
+            body.addView(loadingArea, LinearLayout.LayoutParams(-1, 0, 1f))
+        } else if (dashboard.length() == 0) {
+            body.addView(TextView(this).apply {
+                text = statusText
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(muted)
+                setPadding(dp(24), dp(24), dp(24), dp(24))
+            }, LinearLayout.LayoutParams(-1, 0, 1f))
         } else {
             addTabs(body)
             addSelectedTable(body)
@@ -174,7 +187,6 @@ class DataCollectionActivity : Activity() {
             }
         } ?: "NOT REGISTERED"
         val lastSeen = device?.optString("last_seen_at", "")?.takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Never"
-        parent.addView(sectionTitle("Worker status"))
         parent.addView(infoCard("Community Worker: " + workerStatus, "Last heartbeat: " + lastSeen), LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8) })
         parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5); leftMargin = dp(6); rightMargin = dp(6) })
         val capabilities = device?.optJSONArray("model_capabilities") ?: JSONArray()
