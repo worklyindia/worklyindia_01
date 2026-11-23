@@ -323,14 +323,30 @@ class DataCollectionActivity : Activity() {
     }
 
     private fun showRecord(record: JSONObject) {
+        val details = TextView(this).apply {
+            text = record.toString(2)
+            textSize = 12f
+            setTextColor(ink)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            typeface = Typeface.MONOSPACE
+        }
+        val scroll = ScrollView(this).apply {
+            addView(details)
+            background = rounded(surface, dp(10), line)
+        }
         AlertDialog.Builder(this)
             .setTitle("Record details")
-            .setMessage(record.toString(2))
+            .setView(scroll)
             .setPositiveButton("Close", null)
-            .show()
+            .create()
             .also { dialog ->
-                dialog.window?.setBackgroundDrawable(rounded(surface, dp(14), line))
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(blue)
+                dialog.setOnShowListener {
+                    dialog.window?.setBackgroundDrawable(rounded(surface, dp(14), line))
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(blue)
+                    val titleId = resources.getIdentifier("alertTitle", "id", "android")
+                    dialog.findViewById<TextView>(titleId)?.setTextColor(ink)
+                }
+                dialog.show()
             }
     }
 
