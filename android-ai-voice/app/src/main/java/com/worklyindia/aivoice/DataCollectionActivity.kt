@@ -455,7 +455,7 @@ class DataCollectionActivity : Activity() {
                 .put("status", if (!row.isNull("error_type") || !row.isNull("error_message")) "ERROR" else "INFO")
                 .put("model", "")
                 .put("language", row.optString("language"))
-                .put("message", row.optString("error_message", row.optString("event_type", "App event"))))
+                .put("message", row.optString("error_message", (row.optJSONObject("metadata")?.optString("message") ?: row.optString("event_type", "App event")))))
         }
         result.put("logs", logs)
         return result
