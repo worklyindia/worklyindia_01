@@ -326,7 +326,6 @@ export default function TextToVoice() {
               {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : previewPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">{previewPlaying ? "Playing · tap the stop icon to stop" : previewReadyUrl ? "Saved preview ready · tap play to listen" : "Tap play to load the saved voice preview."}</p>
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between"><label className="text-sm font-medium" htmlFor="tts-text">Your text</label><span className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters</span></div>
