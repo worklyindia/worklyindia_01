@@ -12,6 +12,7 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -151,7 +152,7 @@ class DataCollectionActivity : Activity() {
             orientation = LinearLayout.VERTICAL
         }
         content = body
-        scroll.addView(body, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(body, FrameLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         body.addView(TextView(this).apply {
@@ -226,7 +227,7 @@ class DataCollectionActivity : Activity() {
         val input = EditText(this).apply {
             hint = "Search records…"
             textSize = 14f
-            singleLine = true
+            isSingleLine = true
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(14), 0, dp(14), 0)
