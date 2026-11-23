@@ -153,7 +153,8 @@ class VoiceRelayService : Service() {
                 val job = response.optJSONObject("job")
                 if (job != null) {
                     val jobId = job.optString("id")
-                    recordEvent("Website request", "Received " + job.optString("job_type").uppercase(Locale.ROOT) + " request", "Request ID: " + jobId)
+                    val requestModel = job.optJSONObject("payload")?.optString("model").orEmpty()
+                    recordEvent("Website request", "Received " + job.optString("job_type").uppercase(Locale.ROOT) + " request", "Request ID: " + jobId, requestModel)
                     when (job.optString("job_type")) {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
@@ -497,7 +498,7 @@ class VoiceRelayService : Service() {
         )
     }
 
-    private fun recordEvent(kind: String, message: String, detail: String = "") {
+    private fun recordEvent(kind: String, message: String, detail: String = "", model: String = "") {
         val prefs = getSharedPreferences(STATUS_PREFS, MODE_PRIVATE)
         val events = try { org.json.JSONArray(prefs.getString(EVENTS_KEY, "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
         events.put(org.json.JSONObject().put("at", System.currentTimeMillis()).put("kind", kind).put("message", message).put("detail", detail).put("error", kind.contains("error", true)))
@@ -513,7 +514,7 @@ class VoiceRelayService : Service() {
         val token = activeToken
         if (!token.isNullOrBlank()) {
             diagnosticsExecutor.execute {
-                runCatching { VoiceRelayApi.reportDiagnostic(token, kind, message, detail) }
+                runCatching { VoiceRelayApi.reportDiagnostic(token, kind, message, detail, model) }
             }
         }
     }
