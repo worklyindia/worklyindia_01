@@ -153,7 +153,9 @@ class VoiceRelayService : Service() {
                 val job = response.optJSONObject("job")
                 if (job != null) {
                     val jobId = job.optString("id")
-                    val requestModel = job.optJSONObject("payload")?.optString("model").orEmpty()
+                    val requestPayload = job.optJSONObject("payload")
+                    val requestModel = requestPayload?.optString("pack_id")?.takeIf { it.isNotBlank() }
+                        ?: requestPayload?.optString("model").orEmpty()
                     recordEvent("Website request", "Received " + job.optString("job_type").uppercase(Locale.ROOT) + " request", "Request ID: " + jobId, requestModel)
                     when (job.optString("job_type")) {
                         "tts" -> handleTtsJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
