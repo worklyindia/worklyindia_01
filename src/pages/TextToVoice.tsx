@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Download, Loader2, Play, RefreshCw, Volume2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Pause, Play, RefreshCw, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -91,6 +91,7 @@ export default function TextToVoice() {
   const [voice, setVoice] = useState("af_heart");
   const [busy, setBusy] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
   const [previewReadyUrl, setPreviewReadyUrl] = useState("");
   const [status, setStatus] = useState("");
   const [progress, setProgress] = useState(0);
@@ -148,7 +149,23 @@ export default function TextToVoice() {
     return () => window.removeEventListener("workly-voice-status", onStatus);
   }, []);
 
-  useEffect(() => () => { previewPlayer.current?.pause(); }, []);
+  useEffect(() => {
+    const player = new Audio();
+    previewPlayer.current = player;
+    const onPlay = () => setPreviewPlaying(true);
+    const onPause = () => setPreviewPlaying(false);
+    const onEnded = () => setPreviewPlaying(false);
+    player.addEventListener("play", onPlay);
+    player.addEventListener("pause", onPause);
+    player.addEventListener("ended", onEnded);
+    return () => {
+      player.pause();
+      player.removeEventListener("play", onPlay);
+      player.removeEventListener("pause", onPause);
+      player.removeEventListener("ended", onEnded);
+      previewPlayer.current = null;
+    };
+  }, []);
   useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
 
   useEffect(() => {
@@ -195,55 +212,71 @@ export default function TextToVoice() {
     } finally { setBusy(false); }
   };
 
+  const playPreviewUrl = async (url: string) => {
+    const player = previewPlayer.current;
+    if (!player) return;
+    if (player.src !== new URL(url, window.location.href).href) {
+      player.pause();
+      player.src = url;
+      player.load();
+    }
+    try {
+      await player.play();
+      setStatus(`Playing ${selectedVoice} preview · tap Stop to end`);
+    } catch {
+      setPreviewPlaying(false);
+      toast({ title: "Playback unavailable", description: "The saved preview could not be played. Check your connection and try again.", variant: "destructive" });
+    }
+  };
+
   const previewVoice = async () => {
-    if (previewReadyUrl) {
-      const player = previewPlayer.current ?? new Audio();
-      previewPlayer.current = player;
-      player.src = previewReadyUrl;
-      try {
-        const playPromise = player.play();
-        await playPromise;
-        setStatus(`Playing ${selectedVoice} preview`);
-      } catch {
-        toast({ title: "Tap play to listen", description: "Your browser blocked automatic playback. Tap the play icon again." });
+    if (previewPlaying) {
+      const player = previewPlayer.current;
+      if (player) {
+        player.pause();
+        player.currentTime = 0;
       }
+      setStatus("Preview stopped");
       return;
     }
-    setPreviewing(true);
-    setStatus("Checking Cloudflare voice preview cache…");
-    try {
-      const cachedResponse = await fetch(voicePreviewUrl(model, language, voice), { cache: "force-cache" });
-      if (cachedResponse.ok) {
-        const cachedBlob = await cachedResponse.blob();
-        if (cachedBlob.size > 44) {
-          setPreviewReadyUrl(URL.createObjectURL(cachedBlob));
-          setStatus("Preview is ready. Tap the play icon again to listen.");
-          toast({ title: "Preview ready", description: "Saved voice found in Cloudflare. Tap play again to listen." });
-          return;
-        }
-      }
-    } catch { /* A missing or deleted R2 object is regenerated below. */ }
+    if (previewReadyUrl) {
+      await playPreviewUrl(previewReadyUrl);
+      return;
+    }
 
+    setPreviewing(true);
+    setStatus("Checking saved voice preview…");
     try {
-      setStatus("Creating this voice preview on your Workly Android app…");
+      const cachedUrl = voicePreviewUrl(model, language, voice);
+      let cacheExists = false;
+      try {
+        const cachedResponse = await fetch(cachedUrl, { method: "HEAD", cache: "no-cache" });
+        cacheExists = cachedResponse.ok && Number(cachedResponse.headers.get("content-length") ?? 0) > 44;
+      } catch { /* A missing or unreachable R2 object is generated and uploaded below. */ }
+
+      if (cacheExists) {
+        setPreviewReadyUrl(cachedUrl);
+        await playPreviewUrl(cachedUrl);
+        return;
+      }
+
+      setStatus("Creating voice preview…");
       const sampleText = catalog[language]?.[voice] ?? FALLBACK_PREVIEW_TEXTS[language]?.[voice];
       if (!sampleText) throw new Error("This voice does not have a sample text yet.");
       const blob = await requestOwnerPhoneVoiceAudioBlob(sampleText, language, 180_000, voice, model);
       if (blob.size < 44) throw new Error("The phone returned an empty voice preview.");
-      setStatus("Saving and verifying the voice preview in Cloudflare…");
+
+      setStatus("Uploading voice preview…");
       const savedUrl = await saveVoicePreviewToR2(model, language, voice, blob);
-      const savedResponse = await fetch(savedUrl, { cache: "no-store" });
-      if (!savedResponse.ok) throw new Error("Cloudflare saved the file, but its public preview URL could not be verified.");
-      const savedBlob = await savedResponse.blob();
-      if (savedBlob.size < 44) throw new Error("Cloudflare returned an empty or incomplete saved voice preview.");
-      setPreviewReadyUrl(URL.createObjectURL(savedBlob));
-      setStatus("Preview saved and verified in Cloudflare. Tap play to listen.");
-      toast({ title: "Voice preview saved", description: "The WAV file is stored in Cloudflare R2 and ready for everyone to play." });
+      setPreviewReadyUrl(savedUrl);
+      await playPreviewUrl(savedUrl);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Voice preview failed.";
       setStatus(message);
       toast({ title: "Preview unavailable", description: message, variant: "destructive" });
-    } finally { setPreviewing(false); }
+    } finally {
+      setPreviewing(false);
+    }
   };
 
   const download = () => {
@@ -288,11 +321,11 @@ export default function TextToVoice() {
               <SelectTrigger id="tts-voice" className="h-12 pr-14"><SelectValue placeholder="Select voice">{selectedVoice}</SelectValue></SelectTrigger>
               <SelectContent>{availableVoices.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
-            <Button type="button" size="icon" variant="secondary" className="absolute right-1 top-1 h-10 w-10" aria-label={previewReadyUrl ? `Play ${selectedVoice} preview` : `Prepare ${selectedVoice} preview`} disabled={busy || previewing || !voice} onClick={() => void previewVoice()}>
-              {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            <Button type="button" size="icon" variant="secondary" className="absolute right-1 top-1 h-10 w-10" aria-label={previewPlaying ? `Stop ${selectedVoice} preview` : `Play ${selectedVoice} preview`} disabled={busy || previewing || !voice} onClick={() => void previewVoice()}>
+              {previewing ? <Loader2 className="h-4 w-4 animate-spin" /> : previewPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">{previewReadyUrl ? "Preview ready · tap play to listen" : "Select a voice, then tap the play icon to prepare its preview."}</p>
+          <p className="text-xs text-muted-foreground">{previewPlaying ? "Playing · tap the stop icon to stop" : previewReadyUrl ? "Saved preview ready · tap play to listen" : "Tap play to load the saved voice preview."}</p>
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between"><label className="text-sm font-medium" htmlFor="tts-text">Your text</label><span className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters</span></div>
