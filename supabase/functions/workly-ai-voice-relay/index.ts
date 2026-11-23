@@ -265,7 +265,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
           status: row.error_type || row.error_message ? "ERROR" : "INFO",
           model: "",
           language: row.language ?? "",
-          message: row.error_message || row.event_type || "App event",
+          message: row.error_message || row.metadata?.message || row.event_type || "App event",
           error_type: row.error_type ?? ""
         }))
       ].sort((a: any, b: any) => Date.parse(b.created_at || "") - Date.parse(a.created_at || "")).slice(0, 250);
