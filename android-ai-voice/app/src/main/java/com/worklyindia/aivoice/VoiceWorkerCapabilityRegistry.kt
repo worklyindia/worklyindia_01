@@ -104,7 +104,10 @@ object VoiceWorkerCapabilityRegistry {
             result.put(JSONObject()
                 .put("task", "ai")
                 .put("model", "qwen-" + model.id)
+                .put("model_name", model.title)
                 .put("pack_id", "qwen-" + model.id)
+                .put("size_bytes", model.size)
+                .put("installed_at", qwenManager.installedAt(model) ?: JSONObject.NULL)
                 .put("languages", JSONArray(listOf("multilingual")))
                 .put("ready", true))
         }
