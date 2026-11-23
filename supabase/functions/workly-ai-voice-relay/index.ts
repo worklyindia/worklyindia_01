@@ -220,6 +220,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
           payload: {
             ...historyPayload(payload, row.job_type),
             ...(typeof payload.model === "string" ? { model: payload.model } : {}),
+            ...(typeof payload.pack_id === "string" ? { pack_id: payload.pack_id } : {}),
+            ...(typeof payload.model_name === "string" ? { model_name: payload.model_name } : {}),
             ...(typeof payload.source_language === "string" ? { source_language: payload.source_language } : {}),
             ...(typeof payload.target_language === "string" ? { target_language: payload.target_language } : {})
           },
