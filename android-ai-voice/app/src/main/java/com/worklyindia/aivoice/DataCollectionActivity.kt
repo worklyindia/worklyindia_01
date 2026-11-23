@@ -302,12 +302,12 @@ class DataCollectionActivity : Activity() {
             isStretchAllColumns = false
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        val header = TableRow(this).apply { setBackgroundColor(ChatWorkTheme.color(this, 0xFFEAF1FA.toInt())) }
+        val header = TableRow(this).apply { setBackgroundColor(ChatWorkTheme.color(this@DataCollectionActivity, 0xFFEAF1FA.toInt())) }
         for (label in headers) header.addView(cell(label, true))
         table.addView(header)
         for ((index, record) in shown.withIndex()) {
             val row = TableRow(this).apply {
-                setBackgroundColor(if (index % 2 == 0) surface else ChatWorkTheme.color(this, 0xFFF7F9FC.toInt()))
+                setBackgroundColor(if (index % 2 == 0) surface else ChatWorkTheme.color(this@DataCollectionActivity, 0xFFF7F9FC.toInt()))
                 setOnClickListener { showRecord(record) }
             }
             for (key in keys) row.addView(cell(displayValue(record, key), false))
@@ -378,8 +378,6 @@ class DataCollectionActivity : Activity() {
             .show()
             .also { dialog ->
                 dialog.window?.setBackgroundDrawable(rounded(surface, dp(14), line))
-                dialog.findViewById<TextView>(android.R.id.alertTitle)?.setTextColor(ink)
-                dialog.findViewById<TextView>(android.R.id.message)?.setTextColor(ink)
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(blue)
             }
     }
