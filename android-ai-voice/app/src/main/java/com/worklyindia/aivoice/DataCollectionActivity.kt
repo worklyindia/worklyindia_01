@@ -81,6 +81,19 @@ class DataCollectionActivity : Activity() {
         render()
         executor.execute {
             try {
+                // Refresh the Supabase capability snapshot from this phone before
+                // reading it, so size, full pack id and first-install timestamp are current.
+                runCatching {
+                    val workerEnabled = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
+                        .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
+                    if (workerEnabled) {
+                        VoiceRelayApi.setWorkerState(
+                            token,
+                            true,
+                            VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                        )
+                    }
+                }
                 val response = VoiceRelayApi.userDataDashboard(token)
                 runOnUiThread {
                     dashboard = normalizeDashboard(response)
@@ -114,7 +127,7 @@ class DataCollectionActivity : Activity() {
             text = "‹"
             textSize = 36f
             gravity = Gravity.CENTER
-            translationY = -dp(1).toFloat()
+            translationY = -dp(2).toFloat()
             setTextColor(ink)
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(48)))
@@ -124,7 +137,7 @@ class DataCollectionActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
             gravity = Gravity.CENTER_VERTICAL
-            translationY = -dp(1).toFloat()
+            translationY = -dp(2).toFloat()
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(toolbar)
         root.addView(View(this).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(-1, dp(1)))
@@ -201,7 +214,9 @@ class DataCollectionActivity : Activity() {
                 setBackgroundColor(if (i % 2 == 0) surface else 0xFF0C1625.toInt())
             }
             listOf(model, size, date, time, languageNames.joinToString(", ").ifBlank { "—" })
-                .forEach { row.addView(cell(it, false)) }
+                .forEachIndexed { index, value ->
+                    row.addView(if (index == 0) modelCell(value) else cell(value, false))
+                }
             table.addView(row)
         }
         val horizontal = HorizontalScrollView(this).apply {
@@ -312,7 +327,11 @@ class DataCollectionActivity : Activity() {
             }
             for (key in keys) {
                 val errorRow = record.optString("status").uppercase(java.util.Locale.ROOT) in listOf("ERROR", "FAILED", "FAILURE")
-                row.addView(cell(displayValue(record, key), false, key == "message" && errorRow))
+                val value = displayValue(record, key)
+                row.addView(when {
+                    key == "model" -> modelCell(value)
+                    else -> cell(value, false, key == "message" && errorRow)
+                })
             }
             table.addView(row)
         }
@@ -355,6 +374,13 @@ class DataCollectionActivity : Activity() {
                 if (path.endsWith("_at") && text.contains("T")) formatDate(text) else text
             }
         }
+    }
+
+    private fun modelCell(value: String): TextView = cell(value, false).apply {
+        minWidth = dp(190)
+        maxLines = 4
+        ellipsize = null
+        layoutParams = TableRow.LayoutParams(dp(210), -2)
     }
 
     private fun cell(value: String, header: Boolean, error: Boolean = false): TextView = TextView(this).apply {
