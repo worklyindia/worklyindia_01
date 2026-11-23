@@ -353,6 +353,19 @@ class VoiceRelayService : Service() {
                     }
                     "hi", "en" -> {
                         when (requestedModel) {
+                            "indic" -> {
+                                val pack = SpeechModelCatalog.indicTinyTts(language)
+                                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+                                    "Indic Tiny TTS ${language.uppercase()} is not downloaded. Download it from ChatWork → Model Downloads."
+                                }
+                                val selectedVoice = voiceId.ifBlank { "female" }.lowercase()
+                                check(selectedVoice == "female" || selectedVoice == "male") {
+                                    "Select Female or Male for Indic Tiny TTS."
+                                }
+                                IndicTinyTtsEngine.create(this@VoiceRelayService, language).use { engine ->
+                                    engine.synthesizeToWav(text, outputFile, selectedVoice)
+                                }
+                            }
                             "kokoro" -> {
                                 val pack = SpeechModelCatalog.kokoro82m()
                                 check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
@@ -380,7 +393,7 @@ class VoiceRelayService : Service() {
                                     engine.synthesizeToWav(text, outputFile)
                                 }
                             }
-                            else -> throw IllegalArgumentException("Select Kokoro-82M or iTantra VITS for Hindi and English.")
+                            else -> throw IllegalArgumentException("Select Kokoro-82M, Indic Tiny TTS or iTantra VITS for Hindi and English.")
                         }
                     }
                     else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
