@@ -253,7 +253,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
           created_at: row.created_at,
           source: "VOICE JOB",
           status: row.status ? String(row.status).toUpperCase() : "UNKNOWN",
-          model: row.payload?.model ?? "",
+          model: row.payload?.pack_id ?? row.payload?.model ?? "",
           language: row.payload?.language ?? row.payload?.source_language ?? "",
           message: row.result?.error ?? (String(row.job_type || "job").toUpperCase() + " request"),
           error_type: row.status === "failed" || row.status === "expired" ? row.status : ""
@@ -335,6 +335,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const requiredTask = jobType;
       let device: any = null;
       let selectedModel = requestedModel;
+      let selectedPackId = "";
+      let selectedModelName = "";
       let activeJobs = Number.MAX_SAFE_INTEGER;
       let onlineModelReady = false;
       let onlineModelLanguageReady = false;
@@ -358,6 +360,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
         if (load < activeJobs && load < 20) {
           device = candidate;
           selectedModel = matchedCapability.model;
+          selectedPackId = typeof matchedCapability.pack_id === "string" ? matchedCapability.pack_id : matchedCapability.model;
+          selectedModelName = typeof matchedCapability.model_name === "string" ? matchedCapability.model_name : selectedPackId;
           activeJobs = load;
         }
         if (load === 0) break;
@@ -378,7 +382,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
 
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
-        .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: { ...(payload ?? {}), model: selectedModel } })
+        .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: { ...(payload ?? {}), model: selectedModel, pack_id: selectedPackId, model_name: selectedModelName } })
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
