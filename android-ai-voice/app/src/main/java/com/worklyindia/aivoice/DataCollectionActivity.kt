@@ -114,6 +114,7 @@ class DataCollectionActivity : Activity() {
             text = "‹"
             textSize = 36f
             gravity = Gravity.CENTER
+            translationY = -dp(1).toFloat()
             setTextColor(ink)
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(48)))
@@ -123,6 +124,7 @@ class DataCollectionActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
             gravity = Gravity.CENTER_VERTICAL
+            translationY = -dp(1).toFloat()
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(toolbar)
         root.addView(View(this).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(-1, dp(1)))
@@ -174,7 +176,8 @@ class DataCollectionActivity : Activity() {
         table.addView(header)
         for (i in 0 until capabilities.length()) {
             val cap = capabilities.optJSONObject(i) ?: continue
-            val model = listOf("model", "model_name", "pack_id", "model_id", "name", "id")
+            // Show the exact installed package, not the short relay alias (e.g. "indic").
+            val model = listOf("pack_id", "model_name", "model", "model_id", "name", "id")
                 .firstNotNullOfOrNull { key ->
                     cap.optString(key).takeIf { it.isNotBlank() && it != "null" && it != "Unknown model" }
                 } ?: "Unknown model"
@@ -207,7 +210,9 @@ class DataCollectionActivity : Activity() {
             background = rounded(surface, dp(12), line)
             addView(table)
         }
-        parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(6); rightMargin = dp(6); bottomMargin = dp(12)
+        })
         if (capabilities.length() == 0) parent.addView(infoCard("No installed models", "No ready model capabilities were reported by this phone."))
     }
 
@@ -270,7 +275,7 @@ class DataCollectionActivity : Activity() {
     private fun addSelectedTable(parent: LinearLayout) {
         when (selectedTab) {
             "Overview" -> addOverview(parent)
-            "Logs" -> addTable(parent, arrayOf("Time", "Source", "Status", "Model", "Language", "Message"),
+            "Logs" -> addTable(parent, arrayOf("Date & Time", "Source", "Status", "Model", "Language", "Error"),
                 "logs", arrayOf("created_at", "source", "status", "model", "language", "message"))
         }
     }
@@ -295,7 +300,7 @@ class DataCollectionActivity : Activity() {
         }
         val table = TableLayout(this).apply {
             isStretchAllColumns = false
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(0, 0, 0, 0)
         }
         val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
         for (label in headers) header.addView(cell(label, true))
@@ -312,7 +317,9 @@ class DataCollectionActivity : Activity() {
             table.addView(row)
         }
         horizontal.addView(table)
-        parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(6); rightMargin = dp(6); bottomMargin = dp(12)
+        })
         if (matching.isEmpty()) parent.addView(infoCard("No activity yet", "App and website activity will appear here when recorded."))
     }
 
