@@ -181,28 +181,42 @@ class DataCollectionActivity : Activity() {
             })
         }
         setContentView(root)
+        ChatWorkTheme.applyContentInsets(this)
     }
 
     private fun addOverview(parent: LinearLayout) {
-        val summary = dashboard.optJSONObject("summary") ?: JSONObject()
-        val rowOne = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        rowOne.addView(statCard("Total devices", summary.optString("devices_total", "0"), blue), LinearLayout.LayoutParams(0, dp(92), 1f))
-        rowOne.addView(spaceWidth(10))
-        rowOne.addView(statCard("Workers online", summary.optString("workers_online", "0"), green), LinearLayout.LayoutParams(0, dp(92), 1f))
-        parent.addView(rowOne, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-
-        val rowTwo = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        rowTwo.addView(statCard("Active jobs", summary.optString("active_jobs", "0"), amber), LinearLayout.LayoutParams(0, dp(92), 1f))
-        rowTwo.addView(spaceWidth(10))
-        rowTwo.addView(statCard("Recent errors", summary.optString("recent_errors_in_loaded_records", "0"), red), LinearLayout.LayoutParams(0, dp(92), 1f))
-        parent.addView(rowTwo, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
-
+        val devices = dashboard.optJSONArray("devices") ?: JSONArray()
+        val device = devices.optJSONObject(0)
+        val workerStatus = device?.optString("worker_status", "UNKNOWN") ?: "UNKNOWN"
+        val lastSeen = device?.optString("last_seen_at", "")?.takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Never"
+        parent.addView(sectionTitle("Worker status"))
+        parent.addView(infoCard(
+            "Community Worker: " + workerStatus,
+            "Last heartbeat: " + lastSeen
+        ))
+        parent.addView(sectionTitle("Installed models and languages"))
+        val capabilities = device?.optJSONArray("model_capabilities") ?: JSONArray()
+        val modelLines = ArrayList<String>()
+        for (i in 0 until capabilities.length()) {
+            val capability = capabilities.optJSONObject(i) ?: continue
+            val model = capability.optString("model", "Unknown model")
+            val pack = capability.optString("pack_id").takeIf { it.isNotBlank() }
+            val languages = capability.optJSONArray("languages") ?: JSONArray()
+            val languageNames = (0 until languages.length()).mapNotNull { index ->
+                languages.optString(index).takeIf { it.isNotBlank() }
+            }
+            modelLines.add((pack ?: model) + " • " + (if (languageNames.isEmpty()) "Languages not reported" else languageNames.joinToString(", ")))
+        }
+        parent.addView(infoCard(
+            "Ready on this phone (" + modelLines.size + ")",
+            modelLines.joinToString("\n").ifBlank { "No fully downloaded and ready models reported by this phone." }
+        ))
     }
 
     private fun addTabs(parent: LinearLayout) {
         val tabs = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (tab in listOf("Overview", "Devices", "Jobs", "Diagnostics")) {
+        for (tab in listOf("Overview", "Devices", "Logs")) {
             val active = selectedTab == tab
             val item = TextView(this).apply {
                 text = tab
@@ -253,34 +267,16 @@ class DataCollectionActivity : Activity() {
 
     private fun addSelectedTable(parent: LinearLayout) {
         when (selectedTab) {
-            "Overview" -> {
-                parent.addView(sectionTitle("Data tables"))
-                val summary = dashboard.optJSONObject("summary") ?: JSONObject()
-                parent.addView(infoCard("Supabase records",
-                    "Devices: " + summary.optString("devices_total", "0") +
-                    "   •   Jobs: " + summary.optString("jobs_total", "0") +
-                    "\nDiagnostics: " + summary.optString("diagnostics_total", "0") +
-                    "   •   App releases: " + summary.optString("releases_total", "0")))
-            }
+            "Overview" -> addOverview(parent)
             "Devices" -> {
-                parent.addView(sectionTitle("Registered ChatWork devices"))
-                addTable(parent, arrayOf("Device", "Worker", "Online", "Last seen", "Worker updated", "Ready models", "Created", "Revoked"), "devices",
-                    arrayOf("device_name", "worker_enabled", "online", "last_seen_at", "worker_updated_at", "model_capabilities", "created_at", "revoked_at"))
+                parent.addView(sectionTitle("Worker and installed model details"))
+                addTable(parent, arrayOf("Device", "Worker status", "Online", "Installed models and languages", "Last seen"),
+                    "devices", arrayOf("device_name", "worker_status", "online", "model_capabilities", "last_seen_at"))
             }
-            "Jobs" -> {
-                parent.addView(sectionTitle("Voice / AI jobs"))
-                addTable(parent, arrayOf("Job ID", "Type", "Status", "Model", "Language", "Voice", "Created", "Completed", "Error"), "jobs",
-                    arrayOf("id", "job_type", "status", "payload.model", "payload.language", "payload.voice", "created_at", "completed_at", "result.error"))
-            }
-            "Diagnostics" -> {
-                parent.addView(sectionTitle("App diagnostics and errors"))
-                addTable(parent, arrayOf("Time", "Event", "Device", "Android", "App version", "Language", "Duration", "Error type", "Error"), "diagnostics",
-                    arrayOf("created_at", "event_type", "device_model", "android_version", "app_version", "language", "duration_ms", "error_type", "error_message"))
-            }
-            "Releases" -> {
-                parent.addView(sectionTitle("ChatWork app releases"))
-                addTable(parent, arrayOf("Version", "Code", "APK size", "Published", "Minimum code", "Release notes"), "releases",
-                    arrayOf("version_name", "version_code", "apk_size_bytes", "is_published", "min_supported_version_code", "release_notes"))
+            "Logs" -> {
+                parent.addView(sectionTitle("Supabase activity logs"))
+                addTable(parent, arrayOf("Time", "Source", "Status", "Model", "Language", "Message"),
+                    "logs", arrayOf("created_at", "source", "status", "model", "language", "message"))
             }
         }
     }
@@ -307,12 +303,12 @@ class DataCollectionActivity : Activity() {
             isStretchAllColumns = false
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        val header = TableRow(this).apply { setBackgroundColor(0xFFEAF1FA.toInt()) }
+        val header = TableRow(this).apply { setBackgroundColor(ChatWorkTheme.color(this, 0xFFEAF1FA.toInt())) }
         for (label in headers) header.addView(cell(label, true))
         table.addView(header)
         for ((index, record) in shown.withIndex()) {
             val row = TableRow(this).apply {
-                setBackgroundColor(if (index % 2 == 0) surface else 0xFFF7F9FC.toInt())
+                setBackgroundColor(if (index % 2 == 0) surface else ChatWorkTheme.color(this, 0xFFF7F9FC.toInt()))
                 setOnClickListener { showRecord(record) }
             }
             for (key in keys) row.addView(cell(displayValue(record, key), false))
@@ -344,9 +340,14 @@ class DataCollectionActivity : Activity() {
                     val names = ArrayList<String>()
                     for (i in 0 until value.length()) {
                         val cap = value.optJSONObject(i) ?: continue
-                        names.add(cap.optString("model") + " (" + cap.optString("languages") + ")")
+                        val pack = cap.optString("pack_id").takeIf { it.isNotBlank() } ?: cap.optString("model")
+                        val languages = cap.optJSONArray("languages") ?: JSONArray()
+                        val languageNames = (0 until languages.length()).mapNotNull { index ->
+                            languages.optString(index).takeIf { it.isNotBlank() }
+                        }
+                        names.add(pack + " [" + languageNames.joinToString(", ") + "]")
                     }
-                    names.joinToString(", ").ifBlank { "None" }
+                    names.joinToString("\n").ifBlank { "None" }
                 } else value.toString()
             }
             is Boolean -> if (path == "worker_enabled") if (value) "ON" else "OFF" else if (value) "Yes" else "No"
@@ -376,6 +377,10 @@ class DataCollectionActivity : Activity() {
             .setMessage(record.toString(2))
             .setPositiveButton("Close", null)
             .show()
+            .also { dialog ->
+                dialog.window?.setBackgroundDrawable(rounded(surface, dp(14), line))
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(blue)
+            }
     }
 
     private fun statCard(label: String, value: String, accent: Int): View =
