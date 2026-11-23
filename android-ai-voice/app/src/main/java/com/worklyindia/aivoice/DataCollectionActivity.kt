@@ -153,17 +153,6 @@ class DataCollectionActivity : Activity() {
         scroll.addView(body, FrameLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        body.addView(TextView(this).apply {
-            text = statusText
-            textSize = 12f
-            setTextColor(if (statusText.startsWith("Connected")) green else muted)
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
-        body.addView(TextView(this).apply {
-            text = if (lastUpdated.isBlank()) "Auto refresh every 15 seconds" else "Last updated: " + lastUpdated + "  •  Auto refresh: 15 sec"
-            textSize = 11f
-            setTextColor(muted)
-        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
-
         if (dashboard.length() == 0) {
             body.addView(infoCard("Supabase connection", statusText))
         } else {
@@ -211,29 +200,29 @@ class DataCollectionActivity : Activity() {
     }
 
     private fun addTabs(parent: LinearLayout) {
-        val tabs = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        val strip = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val tabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         for (tab in listOf("Overview", "Logs")) {
             val active = selectedTab == tab
             val item = TextView(this).apply {
                 text = tab
-                textSize = 13f
+                textSize = 14f
                 typeface = if (active) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
                 gravity = Gravity.CENTER
                 setTextColor(if (active) 0xFFFFFFFF.toInt() else muted)
                 background = rounded(if (active) blue else surface, dp(12), if (active) blue else line)
-                setPadding(dp(15), dp(11), dp(15), dp(11))
                 setOnClickListener {
                     selectedTab = tab
                     render()
                 }
             }
-            strip.addView(item, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            tabs.addView(item, LinearLayout.LayoutParams(0, dp(50), 1f).apply {
                 leftMargin = dp(3); rightMargin = dp(3)
             })
         }
-        tabs.addView(strip)
-        parent.addView(tabs, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(12) })
+        parent.addView(tabs, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(12) })
     }
 
     private fun addSelectedTable(parent: LinearLayout) {
@@ -255,7 +244,7 @@ class DataCollectionActivity : Activity() {
         val matching = ArrayList<JSONObject>()
         for (index in 0 until records.length()) {
             val record = records.optJSONObject(index) ?: continue
-            if (searchQuery.isBlank() || record.toString().contains(searchQuery, ignoreCase = true)) matching.add(record)
+            matching.add(record)
         }
         val shown = matching.take(maxRows)
         val horizontal = HorizontalScrollView(this).apply {
@@ -279,7 +268,7 @@ class DataCollectionActivity : Activity() {
         }
         horizontal.addView(table)
         parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
-        if (matching.isEmpty()) parent.addView(infoCard("No matching records", "Try another search or refresh the data."))
+        if (matching.isEmpty()) parent.addView(infoCard("No activity yet", "App and website activity will appear here when recorded."))
     }
 
     private fun displayValue(record: JSONObject, path: String): String {
