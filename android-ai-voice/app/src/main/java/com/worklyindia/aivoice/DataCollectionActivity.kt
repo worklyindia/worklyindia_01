@@ -370,7 +370,7 @@ class DataCollectionActivity : Activity() {
 
     private fun formatDate(value: String): String = try {
         val parsed = java.time.Instant.parse(value).toEpochMilli()
-        java.text.SimpleDateFormat("dd/MM/yyyy hh:mm a", java.util.Locale.getDefault()).format(Date(parsed))
+        java.text.SimpleDateFormat("dd/MM/yyyy hh:mm:ss a", java.util.Locale.getDefault()).format(Date(parsed))
     } catch (_: Exception) { value }
 
     private fun isRecentHeartbeat(value: String): Boolean = try {
