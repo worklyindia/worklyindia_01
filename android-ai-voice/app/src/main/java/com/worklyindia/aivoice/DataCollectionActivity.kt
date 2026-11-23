@@ -55,7 +55,6 @@ class DataCollectionActivity : Activity() {
             isAppearanceLightStatusBars = false
             isAppearanceLightNavigationBars = false
         }
-        render()
         refreshData()
     }
 
@@ -363,6 +362,7 @@ class DataCollectionActivity : Activity() {
         }
         return when (value) {
             null -> "—"
+            is String -> value.ifBlank { "—" }
             is JSONObject -> value.toString()
             is JSONArray -> {
                 if (path == "model_capabilities") {
