@@ -127,7 +127,7 @@ class DataCollectionActivity : Activity() {
             text = "‹"
             textSize = 36f
             gravity = Gravity.CENTER
-            translationY = -dp(2).toFloat()
+            translationY = -dp(4).toFloat()
             setTextColor(ink)
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(48)))
@@ -137,7 +137,6 @@ class DataCollectionActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
             gravity = Gravity.CENTER_VERTICAL
-            translationY = -dp(2).toFloat()
         }, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(toolbar)
         root.addView(View(this).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(-1, dp(1)))
@@ -176,8 +175,8 @@ class DataCollectionActivity : Activity() {
         } ?: "NOT REGISTERED"
         val lastSeen = device?.optString("last_seen_at", "")?.takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Never"
         parent.addView(sectionTitle("Worker status"))
-        parent.addView(infoCard("Community Worker: " + workerStatus, "Last heartbeat: " + lastSeen))
-        parent.addView(sectionTitle("Installed models and languages"))
+        parent.addView(infoCard("Community Worker: " + workerStatus, "Last heartbeat: " + lastSeen), LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8) })
+        parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5); leftMargin = dp(6); rightMargin = dp(6) })
         val capabilities = device?.optJSONArray("model_capabilities") ?: JSONArray()
         val headers = arrayOf("Model", "Size", "Date", "Time", "Language")
         val table = TableLayout(this).apply {
@@ -284,7 +283,7 @@ class DataCollectionActivity : Activity() {
                 leftMargin = dp(3); rightMargin = dp(3)
             })
         }
-        parent.addView(tabs, LinearLayout.LayoutParams(-1, dp(54)).apply { bottomMargin = dp(12) })
+        parent.addView(tabs, LinearLayout.LayoutParams(-1, dp(54)).apply { leftMargin = dp(6); rightMargin = dp(6); bottomMargin = dp(12) })
     }
 
     private fun addSelectedTable(parent: LinearLayout) {
@@ -474,7 +473,24 @@ class DataCollectionActivity : Activity() {
     private fun normalizeDashboard(source: JSONObject): JSONObject {
         val result = JSONObject(source.toString())
         val existing = result.optJSONArray("logs")
-        if (existing != null && existing.length() > 0) return result
+        if (existing != null && existing.length() > 0) {
+            // Promote model identifiers from nested job/diagnostic metadata into the visible column.
+            for (i in 0 until existing.length()) {
+                val row = existing.optJSONObject(i) ?: continue
+                if (row.optString("model").isNotBlank() && row.optString("model") != "null") continue
+                val metadata = row.optJSONObject("metadata") ?: JSONObject()
+                val payload = row.optJSONObject("payload") ?: JSONObject()
+                val candidates = listOf(
+                    row.optString("pack_id"), row.optString("model_name"), row.optString("model_id"),
+                    metadata.optString("pack_id"), metadata.optString("model_name"), metadata.optString("model"),
+                    payload.optString("pack_id"), payload.optString("model_name"), payload.optString("model"),
+                    payload.optString("model_id")
+                )
+                val model = candidates.firstOrNull { it.isNotBlank() && it != "null" }
+                if (model != null) row.put("model", model)
+            }
+            return result
+        }
         val logs = JSONArray()
         val jobs = result.optJSONArray("jobs") ?: JSONArray()
         for (i in 0 until jobs.length()) {
@@ -486,7 +502,7 @@ class DataCollectionActivity : Activity() {
                 .put("created_at", row.optString("created_at"))
                 .put("source", "VOICE JOB")
                 .put("status", row.optString("status", "UNKNOWN").uppercase(java.util.Locale.ROOT))
-                .put("model", payload.optString("model"))
+                .put("model", listOf("pack_id", "model_name", "model", "model_id").firstNotNullOfOrNull { key -> payload.optString(key).takeIf { it.isNotBlank() && it != "null" } } ?: "")
                 .put("language", payload.optString("language", payload.optString("source_language")))
                 .put("message", output.optString("error", row.optString("job_type", "job").uppercase(java.util.Locale.ROOT) + " request")))
         }
@@ -498,7 +514,7 @@ class DataCollectionActivity : Activity() {
                 .put("created_at", row.optString("created_at"))
                 .put("source", "APP EVENT")
                 .put("status", if (!row.isNull("error_type") || !row.isNull("error_message")) "ERROR" else "INFO")
-                .put("model", "")
+                .put("model", listOf(row.optJSONObject("metadata")?.optString("pack_id") ?: "", row.optJSONObject("metadata")?.optString("model_name") ?: "", row.optJSONObject("metadata")?.optString("model") ?: "").firstOrNull { it.isNotBlank() && it != "null" } ?: "")
                 .put("language", row.optString("language"))
                 .put("message", row.optString("error_message", (row.optJSONObject("metadata")?.optString("message") ?: row.optString("event_type", "App event")))))
         }
