@@ -247,7 +247,8 @@ export default function TextToVoice() {
       return;
     }
     if (previewReadyUrl) {
-      await playPreviewUrl(previewReadyUrl);
+      const played = await playPreviewUrl(previewReadyUrl);
+      if (!played) setStatus("Preview is ready. Tap Play again to listen.");
       return;
     }
 
@@ -280,7 +281,12 @@ export default function TextToVoice() {
       const savedUrl = await saveVoicePreviewToR2(model, language, voice, blob);
       setPreviewReadyUrl(savedUrl);
       const played = await playPreviewUrl(savedUrl);
-      if (!played) throw new Error("The new voice preview was generated but this browser could not play its WAV audio.");
+      if (!played) {
+        // Browsers may block playback after the async phone-generation/upload flow
+        // because the original tap's user-activation window has expired.
+        setStatus("Preview is ready. Tap Play again to listen.");
+        toast({ title: "Preview ready", description: "Your voice sample was generated. Tap Play again to start listening." });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Voice preview failed.";
       setStatus(message);
