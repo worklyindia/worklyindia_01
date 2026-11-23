@@ -7,11 +7,8 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -21,7 +18,6 @@ import android.widget.TableRow
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -33,12 +29,7 @@ class DataCollectionActivity : Activity() {
     private val loading = AtomicBoolean(false)
     private var dashboard = JSONObject()
     private var selectedTab = "Overview"
-    private var searchQuery = ""
     private var statusText = "Connecting to Supabase…"
-    private var lastUpdated = ""
-    private var page: LinearLayout? = null
-    private var content: LinearLayout? = null
-    private var searchInput: EditText? = null
 
     private val ink = 0xFFF0F4FA.toInt()
     private val muted = 0xFFAAB7C8.toInt()
@@ -46,9 +37,6 @@ class DataCollectionActivity : Activity() {
     private val canvas = 0xFF070D18.toInt()
     private val line = 0xFF29384D.toInt()
     private val blue = 0xFF2878D0.toInt()
-    private val green = 0xFF16845B.toInt()
-    private val red = 0xFFCB4141.toInt()
-    private val amber = 0xFFB7791F.toInt()
 
     private val refreshRunnable = object : Runnable {
         override fun run() {
@@ -96,7 +84,6 @@ class DataCollectionActivity : Activity() {
                 val response = VoiceRelayApi.userDataDashboard(token)
                 runOnUiThread {
                     dashboard = normalizeDashboard(response)
-                    lastUpdated = response.optString("generated_at").takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Just now"
                     statusText = "Connected • Live data from Supabase"
                     loading.set(false)
                     render()
@@ -116,7 +103,6 @@ class DataCollectionActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(canvas)
         }
-        page = root
 
         val toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -149,7 +135,6 @@ class DataCollectionActivity : Activity() {
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        content = body
         scroll.addView(body, FrameLayout.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
@@ -350,24 +335,6 @@ class DataCollectionActivity : Activity() {
             }
     }
 
-    private fun statCard(label: String, value: String, accent: Int): View =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(13), dp(12), dp(13), dp(12))
-            background = rounded(surface, dp(15), line)
-            addView(TextView(this@DataCollectionActivity).apply {
-                text = label
-                textSize = 11f
-                setTextColor(muted)
-            })
-            addView(TextView(this@DataCollectionActivity).apply {
-                text = value
-                textSize = 25f
-                typeface = Typeface.DEFAULT_BOLD
-                setTextColor(accent)
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
-        }
-
     private fun infoCard(title: String, message: String): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -392,21 +359,6 @@ class DataCollectionActivity : Activity() {
         typeface = Typeface.DEFAULT_BOLD
         setTextColor(ink)
         setPadding(dp(2), dp(8), dp(2), dp(9))
-    }
-
-    private fun actionText(label: String, color: Int, action: () -> Unit) = TextView(this).apply {
-        text = label
-        textSize = 13f
-        typeface = Typeface.DEFAULT_BOLD
-        gravity = Gravity.CENTER
-        setTextColor(color)
-        setPadding(dp(12), dp(8), dp(12), dp(8))
-        background = rounded(canvas, dp(10), line)
-        setOnClickListener { action() }
-    }
-
-    private fun spaceWidth(width: Int) = View(this).apply {
-        layoutParams = LinearLayout.LayoutParams(dp(width), 1)
     }
 
     private fun rounded(fill: Int, radius: Int, stroke: Int? = null) =
