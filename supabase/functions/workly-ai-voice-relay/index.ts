@@ -156,8 +156,23 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (JSON.stringify(metadata).length > 4_000) return json({ error: "Diagnostic metadata exceeds 4 KB" }, 413);
       const errorType = typeof body?.error_type === "string" ? body.error_type.slice(0, 80) : null;
       const errorMessage = typeof body?.error_message === "string" ? body.error_message.slice(0, 500) : null;
+      const jobId = typeof body?.job_id === "string" && /^[0-9a-f-]{36}$/i.test(body.job_id) ? body.job_id : null;
+      const { data: linkedJob, error: linkedJobError } = jobId
+        ? await db.from("workly_ai_voice_jobs")
+            .select("id,model_id,model_name,pack_id,payload")
+            .eq("id", jobId).eq("device_id", device.id).maybeSingle()
+        : { data: null, error: null };
+      if (linkedJobError) throw linkedJobError;
+      const linkedPayload = linkedJob?.payload && typeof linkedJob.payload === "object" ? linkedJob.payload : {};
+      const modelId = typeof body?.model_id === "string" ? body.model_id.slice(0, 160) : linkedJob?.model_id ?? linkedPayload.model_id ?? linkedPayload.model ?? null;
+      const modelName = typeof body?.model_name === "string" ? body.model_name.slice(0, 200) : linkedJob?.model_name ?? linkedPayload.model_name ?? null;
+      const packId = typeof body?.pack_id === "string" ? body.pack_id.slice(0, 160) : linkedJob?.pack_id ?? linkedPayload.pack_id ?? null;
       const { data, error } = await db.from("workly_ai_voice_diagnostics").insert({
         device_id: device.id,
+        job_id: linkedJob?.id ?? null,
+        model_id: modelId,
+        model_name: modelName,
+        pack_id: packId,
         event_type: eventType,
         language: typeof body?.language === "string" ? body.language.slice(0, 20) : null,
         duration_ms: Number.isFinite(body?.duration_ms) ? Math.max(0, Math.min(86_400_000, body.duration_ms)) : null,
@@ -192,13 +207,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
 
       const [jobsResult, diagnosticsResult] = await Promise.all([
         db.from("workly_ai_voice_jobs")
-          .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,payload,result", { count: "exact" })
+          .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,model_id,model_name,pack_id,payload,result", { count: "exact" })
           .eq("user_id", userId)
           .eq("device_id", deviceId)
           .order("created_at", { ascending: false }).limit(150),
         deviceIds.length
           ? db.from("workly_ai_voice_diagnostics")
-              .select("id,device_id,job_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
+              .select("id,device_id,job_id,model_id,model_name,pack_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
               .in("device_id", deviceIds)
               .order("created_at", { ascending: false }).limit(150)
           : Promise.resolve({ data: [], error: null, count: 0 })
@@ -256,7 +271,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
           created_at: row.created_at,
           source: "VOICE JOB",
           status: row.status ? String(row.status).toUpperCase() : "UNKNOWN",
-          model: [row.payload?.pack_id, row.payload?.model_name, row.payload?.model, row.payload?.model_id]
+          model: [row.model_name, row.pack_id, row.model_id, row.payload?.model_name, row.payload?.pack_id, row.payload?.model, row.payload?.model_id]
             .find((value: unknown) => typeof value === "string" && value.trim().length > 0) ?? "",
           language: row.payload?.language ?? row.payload?.source_language ?? "",
           message: row.result?.error ?? (String(row.job_type || "job").toUpperCase() + " request"),
@@ -266,7 +281,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
           const linkedJob: any = row.job_id ? jobsById.get(String(row.job_id)) : null;
           const jobPayload = linkedJob?.payload && typeof linkedJob.payload === "object" ? linkedJob.payload : {};
           const model = [
+            row.model_name, row.pack_id, row.model_id,
             row.metadata?.pack_id, row.metadata?.model_name, row.metadata?.model, row.metadata?.model_id,
+            linkedJob?.model_name, linkedJob?.pack_id, linkedJob?.model_id,
             jobPayload.pack_id, jobPayload.model_name, jobPayload.model, jobPayload.model_id
           ].find((value: unknown) => typeof value === "string" && value.trim().length > 0) ?? "";
           return {
@@ -394,7 +411,11 @@ export async function handleWorklyVoiceRelay(req: Request) {
 
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
-        .insert({ user_id: user.id, device_id: device.id, job_type: jobType, payload: { ...(payload ?? {}), model: selectedModel, pack_id: selectedPackId, model_name: selectedModelName } })
+        .insert({
+          user_id: user.id, device_id: device.id, job_type: jobType,
+          model_id: selectedModel, model_name: selectedModelName, pack_id: selectedPackId,
+          payload: { ...(payload ?? {}), model: selectedModel, model_id: selectedModel, pack_id: selectedPackId, model_name: selectedModelName }
+        })
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
@@ -446,7 +467,11 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .upload(path, bytes, { contentType: "audio/wav", upsert: false });
       if (uploadError) throw uploadError;
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
-        .insert({ id: jobId, user_id: user.id, device_id: device.id, job_type: "stt", payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, language: requestedLanguage || "auto" } })
+        .insert({
+          id: jobId, user_id: user.id, device_id: device.id, job_type: "stt",
+          model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel,
+          payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel, language: requestedLanguage || "auto" }
+        })
         .select("id,status,expires_at").single();
       if (error) { await db.storage.from("workly-ai-voice-audio").remove([path]); throw error; }
       return json({ job });
