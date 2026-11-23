@@ -107,7 +107,17 @@ class SpeechPackDownloadManager(context: Context) {
             rows.any { it.state == State.PAUSED } -> State.PAUSED
             else -> State.NOT_DOWNLOADED
         }
+        if (state == State.COMPLETE && !prefs.contains(installedAtKey(pack.id))) {
+            prefs.edit().putString(installedAtKey(pack.id), java.time.Instant.now().toString()).apply()
+        }
         return Snapshot(pack.id, state, downloaded, pack.totalBytes, rows)
+    }
+
+    /** Stable first-completion timestamp retained locally and synced with worker metadata. */
+    fun installedAt(pack: SpeechModelCatalog.Pack): String? {
+        val current = snapshot(pack)
+        if (current.state != State.COMPLETE) return null
+        return prefs.getString(installedAtKey(pack.id), null)
     }
 
     /** Stops active transfers but deliberately keeps completed model files. */
@@ -123,6 +133,7 @@ class SpeechPackDownloadManager(context: Context) {
     fun delete(pack: SpeechModelCatalog.Pack) {
         cancel(pack)
         pack.files.forEach { file -> targetFile(pack, file.relativePath).delete() }
+        prefs.edit().remove(installedAtKey(pack.id)).apply()
     }
 
     fun modelDirectory(pack: SpeechModelCatalog.Pack): File =
@@ -163,4 +174,5 @@ class SpeechPackDownloadManager(context: Context) {
     }
 
     private fun fileKey(packId: String, relativePath: String) = "download_id_${packId}_${relativePath}"
+    private fun installedAtKey(packId: String) = "installed_at_${packId}"
 }
