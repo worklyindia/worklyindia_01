@@ -249,6 +249,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         ...row,
         worker_status: row.revoked_at ? "REVOKED" : row.online ? "ACTIVE" : row.worker_enabled ? "OFFLINE" : "OFF"
       }));
+      const jobsById = new Map(jobs.map((row: any) => [String(row.id), row]));
       const logs = [
         ...jobs.map((row: any) => ({
           id: "job:" + row.id,
@@ -261,17 +262,24 @@ export async function handleWorklyVoiceRelay(req: Request) {
           message: row.result?.error ?? (String(row.job_type || "job").toUpperCase() + " request"),
           error_type: row.status === "failed" || row.status === "expired" ? row.status : ""
         })),
-        ...diagnostics.map((row: any) => ({
-          id: "diagnostic:" + row.id,
-          created_at: row.created_at,
-          source: "APP EVENT",
-          status: row.error_type || row.error_message ? "ERROR" : "INFO",
-          model: [row.metadata?.pack_id, row.metadata?.model_name, row.metadata?.model]
-            .find((value: unknown) => typeof value === "string" && value.trim().length > 0) ?? "",
-          language: row.language ?? "",
-          message: row.error_message || row.metadata?.message || row.event_type || "App event",
-          error_type: row.error_type ?? ""
-        }))
+        ...diagnostics.map((row: any) => {
+          const linkedJob: any = row.job_id ? jobsById.get(String(row.job_id)) : null;
+          const jobPayload = linkedJob?.payload && typeof linkedJob.payload === "object" ? linkedJob.payload : {};
+          const model = [
+            row.metadata?.pack_id, row.metadata?.model_name, row.metadata?.model, row.metadata?.model_id,
+            jobPayload.pack_id, jobPayload.model_name, jobPayload.model, jobPayload.model_id
+          ].find((value: unknown) => typeof value === "string" && value.trim().length > 0) ?? "";
+          return {
+            id: "diagnostic:" + row.id,
+            created_at: row.created_at,
+            source: "APP EVENT",
+            status: row.error_type || row.error_message ? "ERROR" : "INFO",
+            model,
+            language: row.language ?? jobPayload.language ?? jobPayload.source_language ?? "",
+            message: row.error_message || row.metadata?.message || row.event_type || "App event",
+            error_type: row.error_type ?? ""
+          };
+        })
       ].sort((a: any, b: any) => Date.parse(b.created_at || "") - Date.parse(a.created_at || "")).slice(0, 250);
       return json({
         generated_at: now,
