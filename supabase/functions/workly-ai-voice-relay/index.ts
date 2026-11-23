@@ -243,26 +243,41 @@ export async function handleWorklyVoiceRelay(req: Request) {
         }
         return { ...row, metadata: safeMetadata };
       });
-      const activeJobs = jobs.filter((row: any) => row.status === "pending" || row.status === "running").length;
-      const failedJobs = jobs.filter((row: any) => row.status === "failed" || row.status === "expired").length;
-      const recentErrors = diagnostics.filter((row: any) => !!row.error_type || !!row.error_message).length;
+      const deviceRows = devices.map((row: any) => ({
+        ...row,
+        worker_status: row.revoked_at ? "REVOKED" : row.online ? "ACTIVE" : row.worker_enabled ? "OFFLINE" : "OFF"
+      }));
+      const logs = [
+        ...jobs.map((row: any) => ({
+          id: "job:" + row.id,
+          created_at: row.created_at,
+          source: "VOICE JOB",
+          status: row.status ? String(row.status).toUpperCase() : "UNKNOWN",
+          model: row.payload?.model ?? "",
+          language: row.payload?.language ?? row.payload?.source_language ?? "",
+          message: row.result?.error ?? (String(row.job_type || "job").toUpperCase() + " request"),
+          error_type: row.status === "failed" || row.status === "expired" ? row.status : ""
+        })),
+        ...diagnostics.map((row: any) => ({
+          id: "diagnostic:" + row.id,
+          created_at: row.created_at,
+          source: "APP EVENT",
+          status: row.error_type || row.error_message ? "ERROR" : "INFO",
+          model: "",
+          language: row.language ?? "",
+          message: row.error_message || row.event_type || "App event",
+          error_type: row.error_type ?? ""
+        }))
+      ].sort((a: any, b: any) => Date.parse(b.created_at || "") - Date.parse(a.created_at || "")).slice(0, 250);
       return json({
         generated_at: now,
         summary: {
           devices_total: devicesResult.count ?? devices.length,
-          workers_enabled: devices.filter((row: any) => row.worker_enabled && !row.revoked_at).length,
           workers_online: devices.filter((row: any) => row.online).length,
-          jobs_total: jobsResult.count ?? jobs.length,
-          active_jobs: activeJobs,
-          failed_jobs_in_loaded_records: failedJobs,
-          diagnostics_total: diagnosticsResult.count ?? diagnostics.length,
-          recent_errors_in_loaded_records: recentErrors,
-          releases_total: 0
+          logs_total: logs.length
         },
-        devices,
-        jobs,
-        diagnostics,
-        releases: []
+        devices: deviceRows,
+        logs
       });
     }
 
