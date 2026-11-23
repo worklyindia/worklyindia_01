@@ -101,6 +101,7 @@ export default function TextToVoice() {
   const [catalog, setCatalog] = useState<PreviewCatalog>(FALLBACK_PREVIEW_TEXTS);
   const audioRef = useRef<HTMLAudioElement>(null);
   const previewPlayer = useRef<HTMLAudioElement | null>(null);
+  const previewingRef = useRef(false);
 
   const availableLanguages = useMemo(
     () => LANGUAGES.filter((item) => MODELS.find((entry) => entry.value === model)?.languages.includes(item.value)),
@@ -124,6 +125,7 @@ export default function TextToVoice() {
 
   useEffect(() => {
     const onStatus = (event: Event) => {
+      if (previewingRef.current) return;
       const detail = (event as CustomEvent).detail ?? {};
       if (detail.status === "queued") {
         setStatus("Waiting for your Workly Android app…");
@@ -224,9 +226,13 @@ export default function TextToVoice() {
     try {
       await player.play();
       setStatus(`Playing ${selectedVoice} preview · tap Stop to end`);
+      return true;
     } catch {
       setPreviewPlaying(false);
-      toast({ title: "Playback unavailable", description: "The saved preview could not be played. Check your connection and try again.", variant: "destructive" });
+      player.pause();
+      player.removeAttribute("src");
+      player.load();
+      return false;
     }
   };
 
@@ -245,6 +251,7 @@ export default function TextToVoice() {
       return;
     }
 
+    previewingRef.current = true;
     setPreviewing(true);
     setStatus("Checking saved voice preview…");
     try {
@@ -257,8 +264,10 @@ export default function TextToVoice() {
 
       if (cacheExists) {
         setPreviewReadyUrl(cachedUrl);
-        await playPreviewUrl(cachedUrl);
-        return;
+        const played = await playPreviewUrl(cachedUrl);
+        if (played) return;
+        // A stale/corrupt R2 preview must not trap this voice in a permanent failure loop.
+        setPreviewReadyUrl("");
       }
 
       setStatus("Creating voice preview…");
@@ -270,12 +279,14 @@ export default function TextToVoice() {
       setStatus("Finishing voice preview…");
       const savedUrl = await saveVoicePreviewToR2(model, language, voice, blob);
       setPreviewReadyUrl(savedUrl);
-      await playPreviewUrl(savedUrl);
+      const played = await playPreviewUrl(savedUrl);
+      if (!played) throw new Error("The new voice preview was generated but this browser could not play its WAV audio.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Voice preview failed.";
       setStatus(message);
       toast({ title: "Preview unavailable", description: message, variant: "destructive" });
     } finally {
+      previewingRef.current = false;
       setPreviewing(false);
     }
   };
@@ -331,10 +342,10 @@ export default function TextToVoice() {
           <div className="flex items-center justify-between"><label className="text-sm font-medium" htmlFor="tts-text">Your text</label><span className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters</span></div>
           <Textarea id="tts-text" value={text} onChange={(event) => setText(event.target.value)} placeholder="Type or paste your text here…" className="min-h-[42vh] resize-y text-base" disabled={busy} />
         </div>
-        <Button className="h-12 w-full" onClick={convert} disabled={busy || previewing || !text.trim()}>
+        <Button className="h-12 w-full" onClick={convert} disabled={busy || !text.trim()}>
           {busy ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Converting…</> : <><Volume2 className="mr-2 h-4 w-4" />Convert To Voice</>}
         </Button>
-        {(busy || status) && <div className="space-y-2" role="status" aria-live="polite">
+        {(busy || (status && status !== "Generating Audio...")) && <div className="space-y-2" role="status" aria-live="polite">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="min-w-0 truncate text-muted-foreground">{busy ? "Generating Audio..." : status}</span>
             {busy && <span className="shrink-0 font-semibold tabular-nums">{progress}%</span>}
