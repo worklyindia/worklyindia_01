@@ -223,7 +223,7 @@ async function callWorklyVoiceFirst(
   }
 
   callbacks.onLifecycle?.('server_accepted');
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + 300_000;
   let pollErrors = 0;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
