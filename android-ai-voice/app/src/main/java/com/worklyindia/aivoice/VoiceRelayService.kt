@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONObject
@@ -21,8 +22,8 @@ import org.json.JSONObject
 class VoiceRelayService : Service() {
     private val running = AtomicBoolean(false)
     private val diagnosticsExecutor = Executors.newSingleThreadExecutor()
-    @Volatile private var activeJobId: String? = null
-    @Volatile private var activeAudioFile: File? = null
+    private val activeJobIds = ConcurrentHashMap.newKeySet<String>()
+    private val kokoroSynthesisLock = Any()
     private val speechManager by lazy { SpeechPackDownloadManager(this) }
     // Keep the 295 MB Kokoro runtime alive between website jobs. Recreating it
     // for every request forces the model to reload and makes Hindi/English slow.
@@ -120,6 +121,39 @@ class VoiceRelayService : Service() {
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
+    /**
+     * Re-evaluates device headroom before every claim. Heavy inference is never
+     * assigned just because the worker is online: free RAM, CPU pressure,
+     * thermal state and battery determine how many jobs may run concurrently.
+     */
+    private fun maxConcurrentJobs(): Int {
+        val metrics = WorkerDeviceMetrics.snapshot(this)
+        val totalRam = metrics.optLong("ram_total_bytes", 0L)
+        val freeRam = metrics.optLong("ram_available_bytes", 0L)
+        val cpu = metrics.optDouble("app_cpu_usage_percent", 0.0)
+        val thermal = metrics.optString("thermal_status", "unknown")
+        val battery = metrics.optInt("battery_percent", -1)
+        val discharging = metrics.optString("battery_status") == "Discharging"
+        val gib = 1024L * 1024L * 1024L
+
+        if (freeRam < gib) return 0
+        if (thermal in setOf("severe", "critical", "emergency", "shutdown")) return 0
+
+        var slots = when {
+            totalRam >= 8L * gib && freeRam >= 5L * gib -> 3
+            totalRam >= 6L * gib && freeRam >= 2L * gib -> 2
+            else -> 1
+        }
+        if (metrics.optBoolean("low_memory")) slots = minOf(slots, 1)
+        if (thermal == "moderate") slots = minOf(slots, 1)
+        else if (thermal == "light") slots = minOf(slots, 2)
+        if (cpu >= 85.0) slots = minOf(slots, 1)
+        else if (cpu >= 65.0) slots = minOf(slots, 2)
+        if (discharging && battery in 0..15) return 0
+        if (discharging && battery in 0..25) slots = minOf(slots, 1)
+        return slots.coerceIn(1, 3)
+    }
+
     private fun pollLoop(token: String) {
         setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
         var wasWaitingForData = !hasValidatedInternet()
@@ -158,8 +192,9 @@ class VoiceRelayService : Service() {
                         lastMetricsRefresh = refreshNow
                     }
                 }
-                if (activeJobId != null) {
-                    Thread.sleep(500)
+                val allowedJobs = maxConcurrentJobs()
+                if (allowedJobs == 0 || activeJobIds.size >= allowedJobs) {
+                    Thread.sleep(750)
                     continue
                 }
                 val response = VoiceRelayApi.poll(token)
@@ -168,6 +203,7 @@ class VoiceRelayService : Service() {
                 if (job != null) {
                     idlePollDelayMs = POLL_INTERVAL_MS
                     val jobId = job.optString("id")
+                    activeJobIds.add(jobId)
                     val requestPayload = job.optJSONObject("payload")
                     val requestModel = requestPayload?.optString("pack_id")?.takeIf { it.isNotBlank() }
                         ?: requestPayload?.optString("model").orEmpty()
@@ -177,7 +213,10 @@ class VoiceRelayService : Service() {
                         "ai" -> handleAiJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "stt" -> handleSttJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
                         "translate" -> handleTranslationJob(token, jobId, job.optJSONObject("payload") ?: JSONObject())
-                        else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
+                        else -> {
+                            runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
+                            activeJobIds.remove(jobId)
+                        }
                     }
                 } else {
                     idlePollDelayMs = (idlePollDelayMs * 3 / 2).coerceAtMost(5_000L)
@@ -200,11 +239,6 @@ class VoiceRelayService : Service() {
     }
 
     private fun handleSttJob(token: String, jobId: String, payload: JSONObject) {
-        if (activeJobId != null) {
-            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
-            return
-        }
-        activeJobId = jobId
         Thread {
             var recognizer: OfflineSpeechRecognizer? = null
             try {
@@ -237,7 +271,7 @@ class VoiceRelayService : Service() {
                 setStatus("Speech recognition failed: " + (error.message ?: "model or audio error"))
             } finally {
                 runCatching { recognizer?.close() }
-                activeJobId = null
+                activeJobIds.remove(jobId)
             }
         }.start()
     }
@@ -283,11 +317,6 @@ class VoiceRelayService : Service() {
     }
 
     private fun handleAiJob(token: String, jobId: String, payload: JSONObject) {
-        if (activeJobId != null) {
-            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
-            return
-        }
-        activeJobId = jobId
         Thread {
             val engine = OfflineAiEngine()
             try {
@@ -320,18 +349,13 @@ class VoiceRelayService : Service() {
                 setStatus("Local AI request failed: " + (error.message ?: "model error"))
             } finally {
                 runCatching { engine.unload() }
-                activeJobId = null
+                activeJobIds.remove(jobId)
             }
         }.start()
     }
 
     /** Offline ML Kit translation worker; only already-downloaded language pairs are accepted. */
     private fun handleTranslationJob(token: String, jobId: String, payload: JSONObject) {
-        if (activeJobId != null) {
-            VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
-            return
-        }
-        activeJobId = jobId
         Thread {
             var translator: com.google.mlkit.nl.translate.Translator? = null
             try {
@@ -365,21 +389,15 @@ class VoiceRelayService : Service() {
                 setStatus("Translation failed: " + (error.message ?: "model or language error"))
             } finally {
                 runCatching { translator?.close() }
-                activeJobId = null
+                activeJobIds.remove(jobId)
             }
         }.start()
     }
 
     /** Website Text To Voice uses only the two approved offline model families. */
     private fun handleTtsJob(token: String, jobId: String, payload: JSONObject) {
-        if (activeJobId != null) {
-            VoiceRelayApi.fail(token, jobId, "Phone is already processing another voice request.")
-            return
-        }
-        activeJobId = jobId
         Thread {
             val outputFile = File(cacheDir, "workly-voice-$jobId.wav")
-            activeAudioFile = outputFile
             try {
                 val text = payload.optString("text").trim()
                 require(text.isNotEmpty()) { "TTS request has no text." }
@@ -443,13 +461,15 @@ class VoiceRelayService : Service() {
                                 val engine = kokoroTtsEngine ?: synchronized(this@VoiceRelayService) {
                                     kokoroTtsEngine ?: KokoroTtsEngine(this@VoiceRelayService).also { kokoroTtsEngine = it }
                                 }
-                                engine.synthesizeToWav(
-                                    pack = pack,
-                                    modelDirectory = speechManager.modelDirectory(pack),
-                                    text = text,
-                                    voiceId = selectedVoice,
-                                    outputFile = outputFile
-                                )
+                                synchronized(kokoroSynthesisLock) {
+                                    engine.synthesizeToWav(
+                                        pack = pack,
+                                        modelDirectory = speechManager.modelDirectory(pack),
+                                        text = text,
+                                        voiceId = selectedVoice,
+                                        outputFile = outputFile
+                                    )
+                                }
                             }
                             "itantra" -> {
                                 val pack = SpeechModelCatalog.itantraVits(language)
@@ -473,8 +493,8 @@ class VoiceRelayService : Service() {
                 setStatus("Voice conversion failed: " + (error.message ?: "unknown error"))
             } finally {
                 outputFile.delete()
-                activeAudioFile = null
-                activeJobId = null
+
+                activeJobIds.remove(jobId)
             }
         }.start()
     }
