@@ -101,7 +101,29 @@ class WebsiteAiRelayActivity : Activity() {
             callback.appendQueryParameter("localAiFallback", "1")
         }
         runOnUiThread {
-            startActivity(Intent(Intent.ACTION_VIEW, callback.build()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            // Prefer returning to the already-running Workly India app so the
+            // reply is restored inside the same WebView chat, not a new browser.
+            val worklyIntent = Intent().setClassName(
+                "com.worklyindia.app",
+                "com.worklyindia.app.MainActivity"
+            ).apply {
+                putExtra("notification_url", callback.build().toString())
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+            }
+            try {
+                startActivity(worklyIntent)
+            } catch (missingWorklyApp: android.content.ActivityNotFoundException) {
+                // If this request came from Chrome and the Workly wrapper is not
+                // installed, return to the same website in the browser instead.
+                startActivity(
+                    Intent(Intent.ACTION_VIEW, callback.build())
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
         }
     }
 
