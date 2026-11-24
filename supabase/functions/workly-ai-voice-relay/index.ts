@@ -223,13 +223,12 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
       const userId = device.user_id;
-      const deviceId = device.id;
       if (!userId) return json({ error: "User account could not be resolved for this device." }, 403);
 
       const devicesResult = await db.from("workly_ai_voice_devices")
         .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,worker_metrics,metrics_updated_at,revoked_at", { count: "exact" })
         .eq("user_id", userId)
-        .order("created_at", { ascending: false }).limit(100);
+        .order("created_at", { ascending: false }).limit(500);
       if (devicesResult.error) throw devicesResult.error;
       const deviceIds = (devicesResult.data ?? []).map((row: any) => row.id);
 
