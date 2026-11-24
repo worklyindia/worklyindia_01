@@ -430,14 +430,19 @@ export function getTaskRouting(messages: Message[], hasImages: boolean): TaskRou
 
     case 'general_chat':
     default: {
-      const primaryModel = selectBestModel(messages, false);
+      // Keep the full authenticated Workly tool catalog available during normal
+      // conversation. The model decides whether a tool is actually needed;
+      // do not force a tool call for greetings, explanations or ordinary chat.
+      // Without this, general questions like "show current jobs" or "give
+      // support contact" were answered from guesswork because tools were off.
+      const primaryModel = selectBestModel(messages, true);
       return {
         taskType,
-        enableTools: false,
+        enableTools: true,
         primaryModel,
         fallbackChain: FALLBACK_CHAIN,
         toolSubset: null,
-        openerStatus: '💭 Soch rahi hoon...',
+        openerStatus: '💭 Aapka sawal samajhkar jawab taiyaar kar rahi hoon...',
       };
     }
   }

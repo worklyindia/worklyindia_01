@@ -167,3 +167,26 @@ Deno.test('mailbox follow-up "pdf de" stays in mailbox context', () => {
   );
   assertEquals(routing.taskType, 'mailbox');
 });
+
+
+Deno.test('general chat keeps Workly tools available without forcing a tool call', () => {
+  const routing = getTaskRouting([{ role: 'user', content: 'Workly India kya-kya kar sakti hai?' }], false);
+  assertEquals(routing.taskType, 'general_chat');
+  assertEquals(routing.enableTools, true);
+  assertEquals(routing.forceTools, undefined);
+  assertEquals(routing.toolSubset, null);
+});
+
+Deno.test('unrelated new topic is routed as general chat with tools available', () => {
+  const routing = getTaskRouting(
+    [
+      { role: 'user', content: 'Job apply nahi ho raha' },
+      { role: 'assistant', content: 'Job listing mein Apply Now dabayein.' },
+      { role: 'user', content: 'Hello, how are you?' },
+    ],
+    false,
+  );
+  assertEquals(routing.taskType, 'general_chat');
+  assertEquals(routing.enableTools, true);
+  assertEquals(routing.forceTools, undefined);
+});

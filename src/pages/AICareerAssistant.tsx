@@ -68,7 +68,7 @@ import {
   type StatusLangCode,
 } from '@/lib/requestStatus';
 import { callAICareerChat } from '@/lib/aiChatTransport';
-import { requestOwnerPhoneAIReply, requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
+import { requestOwnerPhoneVoiceAudio } from '@/lib/ownerPhoneVoiceRelay';
 import { SubscriptionExpiryBanner } from '@/components/ai-chat/SubscriptionExpiryBanner';
 import YouTubeOAuthBridge from '@/components/youtube/YouTubeOAuthBridge';
 
@@ -143,35 +143,9 @@ async function callWorklyVoiceFirst(
   callbacks: Parameters<typeof callAICareerChat>[1],
   signal?: AbortSignal
 ): Promise<{ fullText: string; cached: boolean }> {
-  // Rich/image requests stay on the existing AI pipeline. For normal text chat,
-  // try the paired Workly Voice Android app first, then preserve the existing AI fallback.
-  const hasImages = body.hasImages === true || (Array.isArray(body.messages) && body.messages.some((message: any) =>
-    Array.isArray(message?.content) && message.content.some((part: any) => part?.type === 'image_url')
-  ));
-  if (!hasImages && !signal?.aborted) {
-    try {
-      callbacks.onLifecycle?.('request_sent');
-      const messages = Array.isArray(body.messages) ? body.messages : [];
-      const prompt = messages
-        .filter((message: any) => message?.role === 'user' || message?.role === 'assistant')
-        .map((message: any) => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${typeof message.content === 'string' ? message.content : ''}`)
-        .filter(Boolean)
-        .join('\\n')
-        .slice(-12000);
-      if (!prompt.trim()) throw new Error('No text available for Workly Voice AI.');
-      const result = await requestOwnerPhoneAIReply(prompt, navigator.language || 'auto');
-      if (signal?.aborted) throw new DOMException('Request aborted', 'AbortError');
-      const reply = result.reply.trim();
-      if (!reply) throw new Error('Workly Voice AI returned an empty reply.');
-      callbacks.onLifecycle?.('server_accepted');
-      callbacks.onDelta?.(reply, reply);
-      callbacks.onDone?.(reply);
-      return { fullText: reply, cached: false };
-    } catch (error) {
-      if (signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) throw error;
-      console.warn('[ai-chat] Workly Voice AI unavailable; using existing AI fallback.', error);
-    }
-  }
+  // Normal AI Chat must always use the existing online AI backend.
+  // The paired Android voice worker is reserved for voice-specific flows;
+  // routing ordinary text through it can reduce answer quality and context.
   return callAICareerChat(body, callbacks, signal);
 }
 
