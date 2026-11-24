@@ -316,7 +316,7 @@ class DataCollectionActivity : Activity() {
         addHealthMetricRow(
             panel,
             healthMetric("APP CPU", if (cpu in 0.0..100.0) String.format(java.util.Locale.ENGLISH, "%.0f%%", cpu) else "—", "ChatWork app usage", cpu.takeIf { it in 0.0..100.0 }?.toInt(), 0xFF55A7FF.toInt()),
-            healthMetric("THERMAL", thermal.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ENGLISH) else it }, "Device thermal state", null, if (thermal.lowercase() in listOf("severe", "critical", "emergency", "shutdown")) 0xFFFF647C.toInt() else 0xFF27C58B.toInt())
+            healthMetric("THERMAL", thermal.replaceFirstChar { it.uppercaseChar() }, "Device thermal state", null, if (thermal.lowercase() in listOf("severe", "critical", "emergency", "shutdown")) 0xFFFF647C.toInt() else 0xFF27C58B.toInt())
         )
 
         val updatedText = when {
