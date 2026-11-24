@@ -512,9 +512,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
           .eq("id", device.id);
       }
 
-      // Every signed-in phone may join the same community pool, but only after
-      // its owner explicitly opts in on that device. Enforce opt-out at poll
-      // time too, so a previously queued job is never delivered after opt-out.
+      // Phones can receive only jobs explicitly assigned to their own account.
+      // A device must also be opted in; enforce opt-out at poll time so queued
+      // work is never delivered after the owner disables this worker.
       if (device.worker_enabled !== true) {
         return json({ job: null, worker_enabled: false, heartbeat_at: new Date().toISOString() });
       }
