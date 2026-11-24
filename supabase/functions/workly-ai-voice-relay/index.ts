@@ -1,3 +1,4 @@
+// This module is bundled into unified-voice; changes must redeploy that parent Edge Function.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
