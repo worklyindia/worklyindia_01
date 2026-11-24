@@ -225,6 +225,9 @@ class DataCollectionActivity : Activity() {
             val batteryLevel = metrics.optInt("battery_percent", -1)
             val batteryStatus = metrics.optString("battery_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
             val batteryText = if (batteryLevel in 0..100) "$batteryLevel% • $batteryStatus" else "Waiting for first report"
+            val cpuUsage = metrics.optDouble("app_cpu_usage_percent", -1.0)
+            val cpuText = if (cpuUsage in 0.0..100.0) String.format(java.util.Locale.ENGLISH, "%.0f%%", cpuUsage) else "Waiting for first report"
+            val thermalStatus = metrics.optString("thermal_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
             val temperature = if (metrics.has("battery_temperature_c")) {
                 String.format(java.util.Locale.ENGLISH, "%.1f°C", metrics.optDouble("battery_temperature_c"))
             } else "—"
@@ -236,6 +239,8 @@ class DataCollectionActivity : Activity() {
             val resourceDetails = listOf(
                 "Internal storage: ${metricBytes("storage_available_bytes", "storage_total_bytes")}",
                 "RAM: ${metricBytes("ram_available_bytes", "ram_total_bytes")}",
+                "App CPU usage: $cpuText",
+                "Thermal status: $thermalStatus",
                 "Battery: $batteryText",
                 "Battery temperature: $temperature",
                 updatedText,
