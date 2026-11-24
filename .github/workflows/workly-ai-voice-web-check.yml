@@ -15,6 +15,7 @@ on:
       - "src/lib/ownerPhoneVoiceRelay.ts"
       - "src/lib/voicePreviewCache.ts"
       - "supabase/functions/unified-voice/index.ts"
+      - "src/pages/AICareerAssistant.tsx"
       - "src/pages/AIVoiceCall.tsx"
       - "src/pages/TextToVoice.tsx"
       - "src/pages/Settings.tsx"
