@@ -1749,35 +1749,6 @@ private fun completeNativePushPermissionFlow(granted: Boolean) {
         }
 
         @JavascriptInterface
-        fun launchChatWorkAi(prompt: String, returnUrl: String, requestId: String): Boolean {
-            val safeReturnUrl = trustedInternalUrl(returnUrl) ?: return false
-            if (Uri.parse(safeReturnUrl).path != "/ai-assistant" ||
-                prompt.isBlank() || prompt.length > 3500 ||
-                requestId.isBlank() || requestId.length > 128
-            ) return false
-
-            val relayUri = Uri.Builder()
-                .scheme("worklychat")
-                .authority("ai")
-                .appendQueryParameter("prompt", prompt)
-                .appendQueryParameter("returnUrl", safeReturnUrl)
-                .appendQueryParameter("requestId", requestId)
-                .build()
-
-            return runCatching {
-                val relayIntent = Intent(Intent.ACTION_VIEW, relayUri).apply {
-                    setPackage("com.worklyindia.chatwork")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(relayIntent)
-                true
-            }.getOrElse { error ->
-                android.util.Log.w("WorklyAiRelay", "Could not launch ChatWork local AI", error)
-                false
-            }
-        }
-
-        @JavascriptInterface
         fun saveLastVisitedRoute(url: String): Boolean {
             val safeUrl = trustedInternalUrl(url) ?: return false
             val uri = Uri.parse(safeUrl)
