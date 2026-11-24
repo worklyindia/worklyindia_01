@@ -105,7 +105,9 @@ begin
   else
     v_language := case
       when v_job.job_type = 'translate'
-        then nullif(lower(coalesce(v_job.payload->>'source_language', '')) || '-' || lower(coalesce(v_job.payload->>'target_language', '')), '-')
+        and nullif(v_job.payload->>'source_language', '') is not null
+        and nullif(v_job.payload->>'target_language', '') is not null
+        then lower(v_job.payload->>'source_language') || '-' || lower(v_job.payload->>'target_language')
       else nullif(lower(coalesce(v_job.payload->>'language', '')), '')
     end;
 
@@ -258,3 +260,6 @@ begin
     'select public.recover_workly_voice_jobs();'
   );
 end $$;
+
+-- Refresh PostgREST's schema cache so the relay can call the new RPC functions.
+notify pgrst, 'reload schema';
