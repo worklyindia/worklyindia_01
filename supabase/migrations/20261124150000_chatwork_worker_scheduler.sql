@@ -177,7 +177,7 @@ begin
   order by
     coalesce(d.last_seen_at > now() - interval '60 seconds', false) desc,
     q.active_count asc,
-    d.last_seen_at asc nulls first
+    d.last_seen_at desc nulls last
   limit 1;
 
   return query
