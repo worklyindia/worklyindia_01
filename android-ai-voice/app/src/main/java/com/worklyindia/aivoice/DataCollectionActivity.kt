@@ -81,9 +81,9 @@ class DataCollectionActivity : Activity() {
         render()
         executor.execute {
             try {
-                // Refresh the Supabase capability snapshot from this phone before
-                // reading it, so size, full pack id and first-install timestamp are current.
-                runCatching {
+                // Upload this phone's latest capability and hardware snapshot first.
+                // Never hide an upload failure: still load the dashboard, but report partial sync.
+                val metricsUploadError = runCatching {
                     val workerEnabled = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
                         .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
                     val capabilities = if (workerEnabled) {
@@ -97,11 +97,15 @@ class DataCollectionActivity : Activity() {
                         capabilities,
                         WorkerDeviceMetrics.snapshot(this)
                     )
-                }
+                }.exceptionOrNull()?.message
                 val response = VoiceRelayApi.userDataDashboard(token)
                 runOnUiThread {
                     dashboard = normalizeDashboard(response)
-                    statusText = "Connected • Live data from Supabase"
+                    statusText = if (metricsUploadError.isNullOrBlank()) {
+                        "Connected • Live data from Supabase"
+                    } else {
+                        "Dashboard loaded • Device metrics sync failed: ${metricsUploadError.take(180)}"
+                    }
                     loading.set(false)
                     render()
                 }
@@ -183,7 +187,7 @@ class DataCollectionActivity : Activity() {
         parent.addView(
             infoCard(
                 "Android device information",
-                "Live hardware health, worker status and installed voice models for devices linked to your account."
+                "Live hardware health, worker status and installed voice models for devices linked to your account. $statusText"
             ),
             LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(12) }
         )
@@ -288,16 +292,23 @@ class DataCollectionActivity : Activity() {
             String.format(java.util.Locale.ENGLISH, "%.1f°C", metrics.optDouble("battery_temperature_c"))
         } else "—"
         val cpu = metrics.optDouble("app_cpu_usage_percent", -1.0)
+        val cpuSampleStatus = metrics.optString("app_cpu_sample_status", "unknown")
         val thermal = metrics.optString("thermal_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
+        val batteryHealth = metrics.optString("battery_health").takeIf { it.isNotBlank() && it != "null" } ?: "Health unavailable"
+        val pluggedType = metrics.optString("battery_plugged_type").takeIf { it.isNotBlank() && it != "null" } ?: "Power source unknown"
+        val batteryVoltage = metrics.optInt("battery_voltage_mv", -1)
+        val collectionStatus = metrics.optString("collection_status", "unknown")
+        val collectionErrors = metrics.optJSONArray("collection_errors") ?: JSONArray()
+        val stalePrefix = if (metricsUpdatedAt != null && !metricsFresh) "STALE • " else ""
 
         val storageValue = if (storageTotal > 0 && storageAvailable >= 0) {
-            "${formatBytes(storageAvailable.coerceAtMost(storageTotal))} free"
+            stalePrefix + "${formatBytes(storageAvailable.coerceAtMost(storageTotal))} free"
         } else "Waiting for report"
         val storageDetail = if (storageTotal > 0 && storageAvailable >= 0) {
             "${formatBytes((storageTotal - storageAvailable).coerceAtLeast(0L))} used of ${formatBytes(storageTotal)}"
         } else "Internal storage"
         val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
-            "${formatBytes(ramAvailable.coerceAtMost(ramTotal))} free"
+            stalePrefix + "${formatBytes(ramAvailable.coerceAtMost(ramTotal))} free"
         } else "Waiting for report"
         val ramDetail = if (ramTotal > 0 && ramAvailable >= 0) {
             "${formatBytes((ramTotal - ramAvailable).coerceAtLeast(0L))} used of ${formatBytes(ramTotal)}"
@@ -310,13 +321,13 @@ class DataCollectionActivity : Activity() {
         )
         addHealthMetricRow(
             panel,
-            healthMetric("BATTERY", if (battery in 0..100) "$battery%" else "—", batteryStatus, battery.takeIf { it in 0..100 }, 0xFF27C58B.toInt()),
-            healthMetric("BATTERY TEMP", temperature, "Battery temperature", null, 0xFFFFB547.toInt())
+            healthMetric("BATTERY", if (battery in 0..100) stalePrefix + "$battery%" else "—", "$batteryStatus • $batteryHealth • $pluggedType" + if (batteryVoltage > 0) " • ${batteryVoltage} mV" else "", battery.takeIf { it in 0..100 }, 0xFF27C58B.toInt()),
+            healthMetric("BATTERY TEMP", if (temperature == "—") "—" else stalePrefix + temperature, "Battery sensor only; not CPU temperature", null, 0xFFFFB547.toInt())
         )
         addHealthMetricRow(
             panel,
-            healthMetric("APP CPU", if (cpu in 0.0..100.0) String.format(java.util.Locale.ENGLISH, "%.0f%%", cpu) else "—", "ChatWork app usage", cpu.takeIf { it in 0.0..100.0 }?.toInt(), 0xFF55A7FF.toInt()),
-            healthMetric("THERMAL", thermal.replaceFirstChar { it.uppercaseChar() }, "Device thermal state", null, if (thermal.lowercase() in listOf("severe", "critical", "emergency", "shutdown")) 0xFFFF647C.toInt() else 0xFF27C58B.toInt())
+            healthMetric("APP CPU", if (cpu in 0.0..100.0) stalePrefix + String.format(java.util.Locale.ENGLISH, "%.0f%%", cpu) else if (cpuSampleStatus == "warming_up") "Sampling…" else "—", "ChatWork app usage", cpu.takeIf { it in 0.0..100.0 }?.toInt(), 0xFF55A7FF.toInt()),
+            healthMetric("THERMAL", stalePrefix + thermal.replaceFirstChar { it.uppercaseChar() }, "Android thermal API status", null, if (thermal.lowercase() in listOf("severe", "critical", "emergency", "shutdown")) 0xFFFF647C.toInt() else 0xFF27C58B.toInt())
         )
 
         val updatedText = when {
@@ -333,6 +344,27 @@ class DataCollectionActivity : Activity() {
             textSize = 11f
             setTextColor(if (metricsFresh) 0xFF27C58B.toInt() else 0xFFFFB547.toInt())
         })
+        val capturedAt = metrics.optLong("captured_at", 0L)
+        val collectionSummary = if (collectionErrors.length() == 0 && collectionStatus == "complete") {
+            "Collection: Complete"
+        } else if (collectionErrors.length() > 0) {
+            val missing = (0 until collectionErrors.length()).map { collectionErrors.optString(it) }.joinToString(", ")
+            "Collection: Partial • $missing"
+        } else {
+            "Collection: ${collectionStatus.replaceFirstChar { it.uppercaseChar() }}"
+        }
+        footer.addView(TextView(this).apply {
+            text = collectionSummary
+            textSize = 11f
+            setTextColor(if (collectionStatus == "complete") 0xFF27C58B.toInt() else 0xFFFFB547.toInt())
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) })
+        if (capturedAt > 0L) {
+            footer.addView(TextView(this).apply {
+                text = "Device snapshot captured  •  ${formatDate(java.time.Instant.ofEpochMilli(capturedAt).toString())}"
+                textSize = 10f
+                setTextColor(muted)
+            }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(5) })
+        }
         footer.addView(TextView(this).apply {
             text = "Last worker heartbeat  •  $lastSeen"
             textSize = 11f

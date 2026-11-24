@@ -167,6 +167,18 @@ export async function handleWorklyVoiceRelay(req: Request) {
           ? metrics.app_cpu_usage_percent : null;
         const thermalStatus = ["none", "light", "moderate", "severe", "critical", "emergency", "shutdown", "unsupported", "unknown"]
           .includes(metrics.thermal_status) ? metrics.thermal_status : "unknown";
+        const safeText = (value: unknown, maxLength = 100) =>
+          typeof value === "string" ? value.trim().slice(0, maxLength) : null;
+        const safeEnum = (value: unknown, allowed: string[]) =>
+          typeof value === "string" && allowed.includes(value) ? value : null;
+        const safeInt = (value: unknown, min: number, max: number) =>
+          typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max ? value : null;
+        const collectionErrors = Array.isArray(metrics.collection_errors)
+          ? metrics.collection_errors
+              .filter((item: unknown) => typeof item === "string")
+              .slice(0, 12)
+              .map((item: string) => item.trim().slice(0, 40))
+          : [];
         update.worker_metrics = {
           storage_total_bytes: safeBytes(metrics.storage_total_bytes),
           storage_available_bytes: safeBytes(metrics.storage_available_bytes),
@@ -174,11 +186,24 @@ export async function handleWorklyVoiceRelay(req: Request) {
           ram_available_bytes: safeBytes(metrics.ram_available_bytes),
           battery_percent: batteryPercent,
           battery_status: batteryStatus,
+          battery_health: safeEnum(metrics.battery_health, ["Good", "Overheat", "Dead", "Over voltage", "Unspecified failure", "Cold", "Unknown"]),
+          battery_plugged_type: safeEnum(metrics.battery_plugged_type, ["AC", "USB", "Wireless", "Unplugged", "Other"]),
+          battery_voltage_mv: safeInt(metrics.battery_voltage_mv, 0, 20000),
           battery_temperature_c: temperature,
           app_cpu_usage_percent: appCpuUsage,
+          app_cpu_sample_status: safeEnum(metrics.app_cpu_sample_status, ["ready", "warming_up"]),
           thermal_status: thermalStatus,
+          thermal_status_supported: metrics.thermal_status_supported === true,
           is_charging: metrics.is_charging === true,
-          low_memory: metrics.low_memory === true
+          low_memory: metrics.low_memory === true,
+          manufacturer: safeText(metrics.manufacturer, 80),
+          device_model: safeText(metrics.device_model, 100),
+          android_version: safeText(metrics.android_version, 30),
+          android_sdk: safeInt(metrics.android_sdk, 1, 100),
+          app_version: safeText(metrics.app_version, 40),
+          collection_status: safeEnum(metrics.collection_status, ["complete", "partial"]) ?? "partial",
+          collection_errors: collectionErrors,
+          captured_at: safeInt(metrics.captured_at, 0, 9007199254740991)
         };
         update.metrics_updated_at = new Date().toISOString();
       }
