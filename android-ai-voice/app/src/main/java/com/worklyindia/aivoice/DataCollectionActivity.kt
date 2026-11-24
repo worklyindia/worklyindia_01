@@ -189,7 +189,7 @@ class DataCollectionActivity : Activity() {
         parent.addView(infoCard("Community Worker: " + workerStatus, "Last heartbeat: " + lastSeen), LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8) })
         parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5); leftMargin = dp(6); rightMargin = dp(6) })
         val capabilities = device?.optJSONArray("model_capabilities") ?: JSONArray()
-        val headers = arrayOf("Model", "Size", "Date", "Time", "Language")
+        val headers = arrayOf("Model", "Size", "Date & Time", "Language")
         val table = TableLayout(this).apply {
             isStretchAllColumns = false
             setPadding(0, dp(2), 0, dp(2))
@@ -214,8 +214,7 @@ class DataCollectionActivity : Activity() {
             val installedAt = listOf("installed_at", "downloaded_at", "completed_at").firstNotNullOfOrNull { key ->
                 cap.optString(key).takeIf { it.isNotBlank() && it != "null" }
             }
-            val date = installedAt?.let { formatDate(it).substringBefore(" ") } ?: "—"
-            val time = installedAt?.let { formatDate(it).substringAfter(" ", "—") } ?: "—"
+            val dateTime = installedAt?.let { formatDate(it) } ?: "—"
             val languages = cap.optJSONArray("languages") ?: JSONArray()
             val languageNames = (0 until languages.length()).mapNotNull { index ->
                 languages.optString(index).takeIf { it.isNotBlank() }?.let { fullLanguageName(it) }
@@ -223,7 +222,7 @@ class DataCollectionActivity : Activity() {
             val row = TableRow(this).apply {
                 setBackgroundColor(if (i % 2 == 0) surface else 0xFF0C1625.toInt())
             }
-            listOf(model, size, date, time, languageNames.joinToString(", ").ifBlank { "—" })
+            listOf(model, size, dateTime, languageNames.joinToString(", ").ifBlank { "—" })
                 .forEachIndexed { index, value ->
                     row.addView(if (index == 0) modelCell(value) else cell(value, false))
                 }
@@ -300,7 +299,7 @@ class DataCollectionActivity : Activity() {
     private fun addSelectedTable(parent: LinearLayout) {
         when (selectedTab) {
             "Overview" -> addOverview(parent)
-            "Logs" -> addTable(parent, arrayOf("Date & Time", "Source", "Status", "Model", "Language", "Error"),
+            "Logs" -> addTable(parent, arrayOf("Date & Time", "Source", "Status", "Model", "Language", "Message"),
                 "logs", arrayOf("created_at", "source", "status", "model", "language", "message"))
         }
     }
@@ -474,7 +473,7 @@ class DataCollectionActivity : Activity() {
 
     private fun formatDate(value: String): String = try {
         val parsed = java.time.Instant.parse(value).toEpochMilli()
-        java.text.SimpleDateFormat("dd/MM/yyyy hh:mm:ss a", java.util.Locale.ENGLISH).format(Date(parsed))
+        java.text.SimpleDateFormat("dd/MM/yyyy-hh:mm:ss a", java.util.Locale.ENGLISH).format(Date(parsed))
     } catch (_: Exception) { value }
 
     private fun isRecentHeartbeat(value: String): Boolean = try {
