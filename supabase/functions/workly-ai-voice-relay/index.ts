@@ -160,6 +160,11 @@ export async function handleWorklyVoiceRelay(req: Request) {
         const temperature = typeof metrics.battery_temperature_c === "number" &&
           Number.isFinite(metrics.battery_temperature_c) && metrics.battery_temperature_c >= -20 && metrics.battery_temperature_c <= 100
           ? metrics.battery_temperature_c : null;
+        const appCpuUsage = typeof metrics.app_cpu_usage_percent === "number" &&
+          Number.isFinite(metrics.app_cpu_usage_percent) && metrics.app_cpu_usage_percent >= 0 && metrics.app_cpu_usage_percent <= 100
+          ? metrics.app_cpu_usage_percent : null;
+        const thermalStatus = ["none", "light", "moderate", "severe", "critical", "emergency", "shutdown", "unsupported", "unknown"]
+          .includes(metrics.thermal_status) ? metrics.thermal_status : "unknown";
         update.worker_metrics = {
           storage_total_bytes: safeBytes(metrics.storage_total_bytes),
           storage_available_bytes: safeBytes(metrics.storage_available_bytes),
@@ -168,6 +173,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
           battery_percent: batteryPercent,
           battery_status: batteryStatus,
           battery_temperature_c: temperature,
+          app_cpu_usage_percent: appCpuUsage,
+          thermal_status: thermalStatus,
           is_charging: metrics.is_charging === true,
           low_memory: metrics.low_memory === true
         };
@@ -427,6 +434,10 @@ export async function handleWorklyVoiceRelay(req: Request) {
         if (!matchedCapability) continue;
         const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
         if (metrics.low_memory === true) continue;
+        const appCpuUsage = typeof metrics.app_cpu_usage_percent === "number" ? metrics.app_cpu_usage_percent : null;
+        if (appCpuUsage !== null && appCpuUsage >= 85) continue;
+        const thermalStatus = typeof metrics.thermal_status === "string" ? metrics.thermal_status.toLowerCase() : "unknown";
+        if (["severe", "critical", "emergency", "shutdown"].includes(thermalStatus)) continue;
         const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
         if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
         const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
