@@ -413,13 +413,6 @@ export async function handleWorklyVoiceRelay(req: Request) {
       let onlineModelReady = false;
       let onlineModelLanguageReady = false;
       for (const candidate of candidates ?? []) {
-        const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
-        if (metrics.low_memory === true) continue;
-        const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
-        if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
-        const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
-        const minimumRam = jobType === "ai" ? 1024 * 1024 * 1024 : 256 * 1024 * 1024;
-        if (availableRam !== null && availableRam > 0 && availableRam < minimumRam) continue;
         const readyCapabilities = Array.isArray(candidate.model_capabilities)
           ? candidate.model_capabilities.filter((cap: any) =>
               cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
@@ -429,6 +422,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
         const matchedCapability = readyCapabilities.find((cap: any) => supportsRequestedLanguage(cap.languages));
         if (matchedCapability) onlineModelLanguageReady = true;
         if (!matchedCapability) continue;
+        const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
+        if (metrics.low_memory === true) continue;
+        const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
+        if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
+        const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
+        const minimumRam = jobType === "ai" ? 1024 * 1024 * 1024 : 256 * 1024 * 1024;
+        if (availableRam !== null && availableRam > 0 && availableRam < minimumRam) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
           .select("id", { count: "exact", head: true })
           .eq("device_id", candidate.id)
@@ -489,17 +489,17 @@ export async function handleWorklyVoiceRelay(req: Request) {
       let selectedSttModel = "";
       let lightestQueue = Number.MAX_SAFE_INTEGER;
       for (const candidate of candidates ?? []) {
+        const capability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
+          cap && cap.task === "stt" && typeof cap.model === "string" && cap.ready === true &&
+          Array.isArray(cap.languages) && (!requestedLanguage || cap.languages.includes(requestedLanguage))
+        );
+        if (!capability) continue;
         const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
         if (metrics.low_memory === true) continue;
         const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
         if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
         const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
         if (availableRam !== null && availableRam > 0 && availableRam < 512 * 1024 * 1024) continue;
-        const capability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
-          cap && cap.task === "stt" && typeof cap.model === "string" && cap.ready === true &&
-          Array.isArray(cap.languages) && (!requestedLanguage || cap.languages.includes(requestedLanguage))
-        );
-        if (!capability) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
           .select("id", { count: "exact", head: true })
           .eq("device_id", candidate.id)
