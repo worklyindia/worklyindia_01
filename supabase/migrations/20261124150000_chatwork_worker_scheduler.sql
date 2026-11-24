@@ -233,6 +233,7 @@ declare
   v_job public.workly_ai_voice_jobs%rowtype;
   v_target_device uuid;
   v_language text;
+  v_min_ram_bytes bigint;
   v_reason text := left(coalesce(p_reason, 'Worker reported a processing failure'), 500);
 begin
   select * into v_job
@@ -262,51 +263,24 @@ begin
       else nullif(lower(coalesce(v_job.payload->>'language', '')), '')
     end;
 
-    select d.id into v_target_device
-    from public.workly_ai_voice_devices d
-    where d.user_id = v_job.user_id
-      and d.worker_enabled = true
-      and d.revoked_at is null
-      and d.last_seen_at > now() - interval '60 seconds'
-      and (
-        select count(*)
-        from public.workly_ai_voice_jobs active
-        where active.device_id = d.id
-          and active.status in ('pending', 'running')
-          and active.expires_at > now()
-      ) < 100
-      and exists (
-        select 1
-        from jsonb_array_elements(
-          case when jsonb_typeof(d.model_capabilities) = 'array'
-            then d.model_capabilities else '[]'::jsonb end
-        ) cap
-        where cap->>'task' = v_job.job_type
-          and cap->>'model' = coalesce(v_job.model_id, '')
-          and cap->>'ready' = 'true'
-          and (
-            v_language is null
-            or exists (
-              select 1
-              from jsonb_array_elements_text(
-                case when jsonb_typeof(cap->'languages') = 'array'
-                  then cap->'languages' else '[]'::jsonb end
-              ) lang(value)
-              where lower(lang.value) = v_language
-                or lower(lang.value) = 'multilingual'
-                or (v_job.job_type <> 'translate'
-                    and split_part(lower(lang.value), '-', 1) = split_part(v_language, '-', 1))
-            )
-          )
-      )
-    order by (d.id = p_device_id) asc,
-      (select count(*) from public.workly_ai_voice_jobs active
-        where active.device_id = d.id
-          and active.status in ('pending', 'running')
-          and active.expires_at > now()) asc,
-      d.last_seen_at desc
-    limit 1
-    for update of d skip locked;
+    v_min_ram_bytes := case
+      when v_job.job_type = 'ai' then 1073741824
+      when v_job.job_type = 'stt' then 536870912
+      else 268435456
+    end;
+
+    select selected.device_id into v_target_device
+    from public.select_workly_voice_worker(
+      v_job.user_id,
+      v_job.job_type,
+      v_job.model_id,
+      v_language,
+      v_min_ram_bytes
+    ) selected
+    where selected.device_id is not null
+      and selected.worker_online = true
+      and selected.device_id <> p_device_id
+    limit 1;
 
     if v_target_device is null then
       update public.workly_ai_voice_jobs
