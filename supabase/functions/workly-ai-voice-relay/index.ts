@@ -60,9 +60,11 @@ function historyPayload(payload: any, jobType: string) {
   };
 }
 
-async function cleanupExpiredJobs(db: any, now: string) {
+async function cleanupExpiredJobs(db: any, now: string, ownerId: string) {
   const { data: expiredJobs, error } = await db.from("workly_ai_voice_jobs")
     .select("id,status,job_type,result,payload")
+    .eq("user_id", ownerId)
+    .is("cleanup_completed_at", null)
     .lt("expires_at", now)
     .limit(100);
   if (error) throw error;
@@ -79,15 +81,18 @@ async function cleanupExpiredJobs(db: any, now: string) {
     const update: Record<string, unknown> = {
       payload: historyPayload(row.payload, row.job_type),
       result,
+      cleanup_completed_at: now,
     };
     if (row.status === "pending" || row.status === "running") update.status = "expired";
-    const { error: updateError } = await db.from("workly_ai_voice_jobs").update(update).eq("id", row.id);
+    const { error: updateError } = await db.from("workly_ai_voice_jobs").update(update)
+      .eq("id", row.id).eq("user_id", ownerId);
     if (updateError) throw updateError;
   }
 
   // Keep lightweight diagnostics for 30 days; remove only older history rows.
   const retentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { error: retentionError } = await db.from("workly_ai_voice_jobs").delete().lt("created_at", retentionCutoff);
+  const { error: retentionError } = await db.from("workly_ai_voice_jobs").delete()
+    .eq("user_id", ownerId).lt("created_at", retentionCutoff);
   if (retentionError) throw retentionError;
 }
 
@@ -363,7 +368,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
     if (action === "create_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
-      await cleanupExpiredJobs(db, now);
+      await cleanupExpiredJobs(db, now, user.id);
       const jobType = body?.job_type;
       if (!["ai", "tts", "translate", "image", "video"].includes(jobType)) return json({ error: "job_type must be ai, tts, translate, image or video; use create_stt_job for audio transcription." }, 400);
       const payload = body?.payload;
@@ -391,7 +396,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
         });
       };
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities")
+        .select("id,model_capabilities,worker_metrics")
+        .eq("user_id", user.id)
         .eq("worker_enabled", true)
         .is("revoked_at", null)
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
@@ -407,6 +413,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
       let onlineModelReady = false;
       let onlineModelLanguageReady = false;
       for (const candidate of candidates ?? []) {
+        const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
+        if (metrics.low_memory === true) continue;
+        const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
+        if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
+        const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
+        const minimumRam = jobType === "ai" ? 1024 * 1024 * 1024 : 256 * 1024 * 1024;
+        if (availableRam !== null && availableRam > 0 && availableRam < minimumRam) continue;
         const readyCapabilities = Array.isArray(candidate.model_capabilities)
           ? candidate.model_capabilities.filter((cap: any) =>
               cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
@@ -423,7 +436,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
           .gt("expires_at", new Date().toISOString());
         if (countError) throw countError;
         const load = count ?? 0;
-        if (load < activeJobs && load < 20) {
+        if (load < activeJobs && load < 100) {
           device = candidate;
           selectedModel = matchedCapability.model;
           selectedPackId = typeof matchedCapability.pack_id === "string" ? matchedCapability.pack_id : matchedCapability.model;
@@ -451,7 +464,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .insert({
           user_id: user.id, device_id: device.id, job_type: jobType,
           model_id: selectedModel, model_name: selectedModelName, pack_id: selectedPackId,
-          payload: { ...(payload ?? {}), model: selectedModel, model_id: selectedModel, pack_id: selectedPackId, model_name: selectedModelName }
+          payload: { ...(payload ?? {}), model: selectedModel, model_id: selectedModel, pack_id: selectedPackId, model_name: selectedModelName },
+          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
         })
         .select("id,status,expires_at")
         .single();
@@ -467,7 +481,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
       const requestedLanguage = typeof body?.language === "string" ? body.language.split("-")[0].toLowerCase() : "";
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities").eq("worker_enabled", true).is("revoked_at", null)
+        .select("id,model_capabilities,worker_metrics").eq("user_id", user.id).eq("worker_enabled", true).is("revoked_at", null)
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
         .order("last_seen_at", { ascending: false }).limit(100);
       if (deviceError) throw deviceError;
@@ -475,6 +489,12 @@ export async function handleWorklyVoiceRelay(req: Request) {
       let selectedSttModel = "";
       let lightestQueue = Number.MAX_SAFE_INTEGER;
       for (const candidate of candidates ?? []) {
+        const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
+        if (metrics.low_memory === true) continue;
+        const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
+        if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
+        const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
+        if (availableRam !== null && availableRam > 0 && availableRam < 512 * 1024 * 1024) continue;
         const capability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
           cap && cap.task === "stt" && typeof cap.model === "string" && cap.ready === true &&
           Array.isArray(cap.languages) && (!requestedLanguage || cap.languages.includes(requestedLanguage))
@@ -487,7 +507,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
           .gt("expires_at", new Date().toISOString());
         if (countError) throw countError;
         const load = count ?? 0;
-        if (load < lightestQueue && load < 20) {
+        if (load < lightestQueue && load < 100) {
           device = candidate;
           selectedSttModel = capability.model;
           lightestQueue = load;
@@ -507,7 +527,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .insert({
           id: jobId, user_id: user.id, device_id: device.id, job_type: "stt",
           model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel,
-          payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel, language: requestedLanguage || "auto" }
+          payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel, language: requestedLanguage || "auto" },
+          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
         })
         .select("id,status,expires_at").single();
       if (error) { await db.storage.from("workly-ai-voice-audio").remove([path]); throw error; }
@@ -555,24 +576,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
         return json({ job: null, worker_enabled: false, heartbeat_at: new Date().toISOString() });
       }
 
-      const { data: candidate, error: findError } = await db.from("workly_ai_voice_jobs")
-        .select("id,job_type,payload,expires_at")
-        .eq("device_id", device.id)
-        .eq("status", "pending")
-        .gt("expires_at", new Date().toISOString())
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (findError) throw findError;
-      if (!candidate) return json({ job: null, heartbeat_at: new Date().toISOString() });
-
-      const { data: claimed, error: claimError } = await db.from("workly_ai_voice_jobs")
-        .update({ status: "running", started_at: new Date().toISOString() })
-        .eq("id", candidate.id)
-        .eq("status", "pending")
-        .select("id,job_type,payload,expires_at")
-        .maybeSingle();
+      // Claim atomically in Postgres. Concurrent polls cannot receive the same job.
+      const { data: claimedRows, error: claimError } = await db.rpc("claim_workly_voice_job", {
+        p_device_id: device.id
+      });
       if (claimError) throw claimError;
+      const claimed = Array.isArray(claimedRows) ? claimedRows[0] ?? null : null;
+      if (!claimed) return json({ job: null, heartbeat_at: new Date().toISOString() });
       if (claimed?.job_type === "stt" && typeof claimed.payload?.audio_path === "string") {
         const { data: signed, error: signedError } = await db.storage.from("workly-ai-voice-audio").createSignedUrl(claimed.payload.audio_path, 300);
         if (signedError) throw signedError;
@@ -587,16 +597,18 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const jobId = typeof body?.job_id === "string" ? body.job_id : "";
       const reason = typeof body?.reason === "string" ? body.reason.slice(0, 500) : "Voice request failed";
       if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
-      const { data, error } = await db.from("workly_ai_voice_jobs")
-        .update({ status: "failed", result: { error: reason }, completed_at: new Date().toISOString() })
-        .eq("id", jobId)
-        .eq("device_id", device.id)
-        .eq("status", "running")
-        .select("id,status")
-        .maybeSingle();
+      const { data: retryRows, error } = await db.rpc("retry_workly_voice_job", {
+        p_job_id: jobId,
+        p_device_id: device.id,
+        p_reason: reason
+      });
       if (error) throw error;
-      if (!data) return json({ error: "Job not found or already finished" }, 404);
-      return json({ job: data });
+      const retry = Array.isArray(retryRows) ? retryRows[0] ?? null : null;
+      if (!retry) return json({ error: "Job not found or already finished" }, 404);
+      return json({
+        job: { id: retry.job_id, status: retry.status },
+        retrying: retry.status === "pending"
+      });
     }
 
     if (action === "upload_audio") {
