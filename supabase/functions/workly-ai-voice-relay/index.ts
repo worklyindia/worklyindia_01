@@ -232,18 +232,28 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (devicesResult.error) throw devicesResult.error;
       const deviceIds = (devicesResult.data ?? []).map((row: any) => row.id);
 
+      // Fail closed: an account with no owned devices must never run an unscoped
+      // jobs/diagnostics query. All dashboard records are derived from this
+      // server-resolved owner and the exact device IDs returned for that owner.
+      if (deviceIds.length === 0) {
+        return json({
+          generated_at: now,
+          summary: { devices_total: 0, workers_online: 0, logs_total: 0 },
+          devices: [],
+          logs: []
+        });
+      }
+
       const [jobsResult, diagnosticsResult] = await Promise.all([
         db.from("workly_ai_voice_jobs")
           .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,model_id,model_name,pack_id,payload,result", { count: "exact" })
           .eq("user_id", userId)
           .in("device_id", deviceIds)
           .order("created_at", { ascending: false }).limit(250),
-        deviceIds.length
-          ? db.from("workly_ai_voice_diagnostics")
-              .select("id,device_id,job_id,model_id,model_name,pack_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
-              .in("device_id", deviceIds)
-              .order("created_at", { ascending: false }).limit(150)
-          : Promise.resolve({ data: [], error: null, count: 0 })
+        db.from("workly_ai_voice_diagnostics")
+          .select("id,device_id,job_id,model_id,model_name,pack_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
+          .in("device_id", deviceIds)
+          .order("created_at", { ascending: false }).limit(150)
       ]);
       for (const result of [jobsResult, diagnosticsResult]) {
         if (result.error) throw result.error;
