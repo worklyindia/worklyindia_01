@@ -156,7 +156,13 @@ begin
               and split_part(lower(lang.value), '-', 1) = split_part(lower(p_requested_language), '-', 1))
       )
     )
-    and coalesce((d.worker_metrics->>'low_memory')::boolean, false) = false
+    and (
+      case
+        when lower(coalesce(d.worker_metrics->>'low_memory', '')) in ('true', 'false')
+          then (d.worker_metrics->>'low_memory')::boolean = false
+        else true
+      end
+    )
     and (
       case
         when coalesce(d.worker_metrics->>'battery_percent', '') ~ '^[0-9]{1,3}
@@ -424,7 +430,7 @@ notify pgrst, 'reload schema';
           then (d.worker_metrics->>'battery_percent')::integer > 10
         else true
       end
-      or coalesce((d.worker_metrics->>'is_charging')::boolean, false)
+      or lower(coalesce(d.worker_metrics->>'is_charging', 'false')) = 'true'
     )
     and (
       case
