@@ -117,6 +117,13 @@ begin
       and d.worker_enabled = true
       and d.revoked_at is null
       and d.last_seen_at > now() - interval '60 seconds'
+      and (
+        select count(*)
+        from public.workly_ai_voice_jobs active
+        where active.device_id = d.id
+          and active.status in ('pending', 'running')
+          and active.expires_at > now()
+      ) < 100
       and exists (
         select 1
         from jsonb_array_elements(
