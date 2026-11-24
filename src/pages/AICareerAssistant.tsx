@@ -144,9 +144,8 @@ async function callWorklyVoiceFirst(
   callbacks: Parameters<typeof callAICareerChat>[1],
   signal?: AbortSignal
 ): Promise<{ fullText: string; cached: boolean }> {
-  // Only plain, conversational text can use the paired ChatWork Qwen model.
-  // Images, documents, live lookups, account data and actions stay on the
-  // existing online AI transport, which retains its tools and provider chain.
+  // Only plain conversational text is eligible for the paired phone's local Qwen.
+  // Rich requests and unsupported platforms continue through the existing online AI API.
   const isAndroidBrowser = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const latest = [...messages].reverse().find((message: any) => message?.role === 'user');
@@ -159,7 +158,6 @@ async function callWorklyVoiceFirst(
     !hasNonTextContent &&
     latestText.length > 0 &&
     latestText.length <= 3500 &&
-    Boolean(body.localRequestId) &&
     !onlineOnly;
 
   if (!canUseLocal) return callAICareerChat(body, callbacks, signal);
@@ -169,56 +167,71 @@ async function callWorklyVoiceFirst(
     .slice(-6)
     .map((message: any) => {
       const text = typeof message.content === 'string' ? message.content : '';
-      return text ? `${message.role === 'user' ? 'User' : 'Assistant'}: ${text.slice(0, 700)}` : '';
+      return text ? (message.role === 'user' ? 'User: ' : 'Assistant: ') + text.slice(0, 700) : '';
     })
     .filter(Boolean)
     .join('\n');
   const prompt = [
-    'You are Workly AI running locally on the user phone. Answer only from the conversation and general knowledge. Do not claim to access live websites, accounts, databases, job listings, or perform actions. If live information or an action is needed, this request should use online AI.',
+    'You are Workly AI running locally on the user phone. Answer from the conversation and general knowledge. Do not claim to access live websites, accounts, databases, job listings, or perform actions. Live information and actions must use online AI.',
     history,
     'Assistant:'
   ].join('\n\n').slice(-3500);
-  const callbackUrl = new URL(window.location.href);
-  callbackUrl.searchParams.delete('localAiReply');
-  callbackUrl.searchParams.delete('localAiRequestId');
-  callbackUrl.searchParams.delete('localAiFallback');
-  const fallbackUrl = new URL(callbackUrl.href);
-  fallbackUrl.searchParams.set('localAiFallback', '1');
-  fallbackUrl.searchParams.set('localAiRequestId', String(body.localRequestId));
-  const returnUrl = callbackUrl.href;
-  const intentUrl = `intent://ai?prompt=${encodeURIComponent(prompt)}&returnUrl=${encodeURIComponent(returnUrl)}&requestId=${encodeURIComponent(String(body.localRequestId))}#Intent;scheme=worklychat;package=com.worklyindia.chatwork;S.browser_fallback_url=${encodeURIComponent(fallbackUrl.href)};end`;
 
+  if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
   callbacks.onLifecycle?.('request_sent');
-  callbacks.onStatus?.('ChatWork local Qwen ko request bhej rahe hain…');
+  callbacks.onStatus?.('Supabase par ChatWork Qwen request bhej rahe hain…');
 
-  // In the Workly Android WebView, use the native bridge so Android launches
-  // ChatWork directly and can return to this exact in-app WebView route.
-  // Regular Android browsers keep the standard intent:// hand-off.
-  const nativeBridge = (window as any).WorklyAndroid;
-  if (typeof nativeBridge?.launchChatWorkAi === 'function') {
-    const launched = nativeBridge.launchChatWorkAi(
-      prompt,
-      returnUrl,
-      String(body.localRequestId)
-    ) === true;
-    if (!launched) return callAICareerChat(body, callbacks, signal);
-  } else {
-    window.location.href = intentUrl;
+  // Website -> Supabase queue. ChatWork independently polls Supabase.
+  // No intent://, custom URL scheme, native app launch, or browser navigation.
+  const { data: created, error: createError } = await supabase.functions.invoke('unified-voice', {
+    body: { action: 'create_job', job_type: 'ai', payload: { text: prompt, languageTag: 'auto' } }
+  });
+  const jobId = created?.job?.id;
+  if (createError || typeof jobId !== 'string' || !jobId) {
+    callbacks.onStatus?.('Local Qwen available nahi hai; online AI use ho raha hai…');
+    return callAICareerChat(body, callbacks, signal);
   }
 
-  // If Android/browser blocks the app hand-off, continue with the same online
-  // backend instead of leaving the send operation stuck.
-  return new Promise((resolve, reject) => {
-    const fallbackTimer = window.setTimeout(() => {
-      if (document.visibilityState === 'visible' && !signal?.aborted) {
-        callAICareerChat(body, callbacks, signal).then(resolve, reject);
+  callbacks.onLifecycle?.('server_accepted');
+  const deadline = Date.now() + 45000;
+  let lastPollError = false;
+
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
+    const { data: polled, error: pollError } = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'get_job', job_id: jobId }
+    });
+    if (pollError) {
+      lastPollError = true;
+    } else {
+      lastPollError = false;
+      const job = polled?.job;
+      if (job?.status === 'completed') {
+        const reply = typeof job?.result?.reply === 'string' ? job.result.reply.trim() : '';
+        if (reply && job?.result?.provider === 'local-qwen') {
+          callbacks.onLifecycle?.('server_returned_data');
+          callbacks.onDelta?.(reply, reply);
+          callbacks.onDone?.(reply);
+          return { fullText: reply, cached: false };
+        }
+        break;
       }
-    }, 1800);
-    signal?.addEventListener('abort', () => {
-      window.clearTimeout(fallbackTimer);
-      reject(new DOMException('The request was cancelled.', 'AbortError'));
-    }, { once: true });
-  });
+      if (job?.status === 'failed' || job?.status === 'expired') break;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(resolve, 1100);
+      signal?.addEventListener('abort', () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException('The request was cancelled.', 'AbortError'));
+      }, { once: true });
+    });
+  }
+
+  if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
+  callbacks.onStatus?.(lastPollError
+    ? 'Supabase local relay connect nahi hua; online AI par switch ho raha hai…'
+    : 'Local Qwen reply nahi mila; online AI par switch ho raha hai…');
+  return callAICareerChat(body, callbacks, signal);
 }
 
 const CHAT_HEADER_GREEN = '#075E54';
