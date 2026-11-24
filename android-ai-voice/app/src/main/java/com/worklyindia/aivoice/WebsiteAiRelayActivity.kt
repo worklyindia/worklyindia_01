@@ -75,9 +75,9 @@ class WebsiteAiRelayActivity : Activity() {
                 check(engine.loadModel(manager.file(chosen))) { "Qwen could not load the downloaded model." }
                 val reply = engine.generate(prompt).trim()
                 check(reply.isNotBlank()) { "Qwen returned an empty reply." }
-                returnToWebsite(returnUrl, requestId, reply.take(6000), null)
+                returnToWebsite(returnUrl, requestId, reply.take(6000))
             } catch (error: Throwable) {
-                returnToWebsite(returnUrl, requestId, null, error.message ?: "Local Qwen inference failed.")
+                returnToWebsite(returnUrl, requestId, null)
             } finally {
                 runCatching { engine.unload() }
                 runOnUiThread { finish() }
@@ -92,7 +92,7 @@ class WebsiteAiRelayActivity : Activity() {
             uri.path == "/ai-assistant"
     }.getOrDefault(false)
 
-    private fun returnToWebsite(baseUrl: String, requestId: String, reply: String?, error: String?) {
+    private fun returnToWebsite(baseUrl: String, requestId: String, reply: String?) {
         val callback = Uri.parse(baseUrl).buildUpon()
             .appendQueryParameter("localAiRequestId", requestId)
         if (!reply.isNullOrBlank()) {
