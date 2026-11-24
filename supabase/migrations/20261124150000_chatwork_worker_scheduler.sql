@@ -107,7 +107,7 @@ begin
       when v_job.job_type = 'translate'
         and nullif(v_job.payload->>'source_language', '') is not null
         and nullif(v_job.payload->>'target_language', '') is not null
-        then lower(v_job.payload->>'source_language') || '-' || lower(v_job.payload->>'target_language')
+        then split_part(lower(v_job.payload->>'source_language'), '-', 1) || '-' || split_part(lower(v_job.payload->>'target_language'), '-', 1)
       else nullif(lower(coalesce(v_job.payload->>'language', '')), '')
     end;
 
