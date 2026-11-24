@@ -146,10 +146,11 @@ async function callWorklyVoiceFirst(
 ): Promise<{ fullText: string; cached: boolean }> {
   // Only plain conversational text is eligible for the paired phone's local Qwen.
   // Rich requests and unsupported platforms continue through the existing online AI API.
-  const messages = Array.isArray(body.messages) ? body.messages : [];
-  const latest = [...messages].reverse().find((message: any) => message?.role === 'user');
+  type RelayMessage = { role?: unknown; content?: unknown };
+  const messages: RelayMessage[] = Array.isArray(body.messages) ? body.messages as RelayMessage[] : [];
+  const latest = [...messages].reverse().find((message) => message.role === 'user');
   const latestText = typeof latest?.content === 'string' ? latest.content.trim() : '';
-  const hasNonTextContent = messages.some((message: any) => Array.isArray(message?.content));
+  const hasNonTextContent = messages.some((message) => Array.isArray(message.content));
   const onlineOnly = /\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\b/i.test(latestText);
   const canUseLocal =
     !signal?.aborted &&
@@ -162,9 +163,9 @@ async function callWorklyVoiceFirst(
   if (!canUseLocal) return callAICareerChat(body, callbacks, signal);
 
   const history = messages
-    .filter((message: any) => message?.role === 'user' || message?.role === 'assistant')
+    .filter((message) => message.role === 'user' || message.role === 'assistant')
     .slice(-6)
-    .map((message: any) => {
+    .map((message) => {
       const text = typeof message.content === 'string' ? message.content : '';
       return text ? (message.role === 'user' ? 'User: ' : 'Assistant: ') + text.slice(0, 700) : '';
     })
