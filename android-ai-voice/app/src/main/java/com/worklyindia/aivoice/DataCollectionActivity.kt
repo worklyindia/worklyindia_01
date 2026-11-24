@@ -136,7 +136,7 @@ class DataCollectionActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(48)))
         toolbar.addView(TextView(this).apply {
-            text = "ChatWork Data Collection"
+            text = "ChatWork Android Details"
             textSize = 18f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
@@ -187,10 +187,10 @@ class DataCollectionActivity : Activity() {
         }
         parent.addView(
             infoCard(
-                "Worker devices: ${devices.length()} • Online: $onlineCount",
-                "Storage, RAM and battery are reported by each paired phone. Device metrics refresh about every 30 seconds."
+                "Android device information",
+                "Live hardware health, worker status and installed voice models for devices linked to your account."
             ),
-            LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(8) }
+            LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(12) }
         )
 
         if (devices.length() == 0) {
