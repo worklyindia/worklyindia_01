@@ -144,10 +144,119 @@ async function callWorklyVoiceFirst(
   callbacks: Parameters<typeof callAICareerChat>[1],
   signal?: AbortSignal
 ): Promise<{ fullText: string; cached: boolean }> {
-  // The website AI Chat must use the online AI API directly.
-  // Do not enqueue plain-text prompts for the ChatWork phone's local Qwen worker.
+  // Live actions, rich attachments and current-data requests stay on the online API.
+  // Plain conversation is routed to the paired ChatWork phone first.
+  type RelayMessage = { role?: unknown; content?: unknown };
+  const messages: RelayMessage[] = Array.isArray(body.messages) ? body.messages as RelayMessage[] : [];
+  const latest = [...messages].reverse().find((message) => message.role === 'user');
+  const latestText = typeof latest?.content === 'string' ? latest.content.trim() : '';
+  const hasNonTextContent = messages.some((message) => Array.isArray(message.content));
+  const onlineOnly = /\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\b/i.test(latestText);
+  const canUseLocal =
+    !signal?.aborted &&
+    body.hasImages !== true &&
+    !hasNonTextContent &&
+    latestText.length > 0 &&
+    latestText.length <= 3500 &&
+    !onlineOnly;
+
+  if (!canUseLocal) return callAICareerChat(body, callbacks, signal);
+
+  const history = messages
+    .filter((message) => message.role === 'user' || message.role === 'assistant')
+    .slice(-8)
+    .map((message) => {
+      const value = typeof message.content === 'string' ? message.content.trim() : '';
+      return value ? (message.role === 'user' ? 'User: ' : 'Assistant: ') + value.slice(0, 700) : '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .slice(-3500);
+
   if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
-  callbacks.onStatus?.('Online AI se reply aa raha hai…');
+  callbacks.onLifecycle?.('request_sent');
+
+  const wait = (ms: number) => new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('The request was cancelled.', 'AbortError'));
+      return;
+    }
+    const onAbort = () => {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+      reject(new DOMException('The request was cancelled.', 'AbortError'));
+    };
+    const timeout = window.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+
+  // A busy/thermally-limited phone returns 429. Retry instead of immediately
+  // bypassing ChatWork while its worker is still online.
+  let created: any = null;
+  let createError: any = null;
+  const createDeadline = Date.now() + 30_000;
+  let createAttempt = 0;
+  while (Date.now() < createDeadline) {
+    if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
+    callbacks.onStatus?.(createAttempt
+      ? 'ChatWork busy hai; phone worker ke free hone ka wait kar rahe hain…'
+      : 'ChatWork app ko AI request bhej rahe hain…');
+    const response = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'create_job', job_type: 'ai', payload: { text: history, languageTag: 'auto' } }
+    });
+    created = response.data;
+    createError = response.error;
+    if (!createError && typeof created?.job?.id === 'string') break;
+    const status = createError?.context instanceof Response ? createError.context.status : null;
+    if (status !== 429 && created?.retryable !== true) break;
+    createAttempt += 1;
+    await wait(Math.min(1500 * createAttempt, 6000));
+  }
+
+  const jobId = created?.job?.id;
+  if (createError || typeof jobId !== 'string' || !jobId) {
+    callbacks.onStatus?.('ChatWork worker abhi available nahi hai; online AI par switch ho raha hai…');
+    return callAICareerChat(body, callbacks, signal);
+  }
+
+  callbacks.onLifecycle?.('server_accepted');
+  const deadline = Date.now() + 120_000;
+  let pollErrors = 0;
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
+    const { data: polled, error: pollError } = await supabase.functions.invoke('unified-voice', {
+      body: { action: 'get_job', job_id: jobId }
+    });
+    if (pollError) {
+      pollErrors += 1;
+      callbacks.onStatus?.('ChatWork se reply ka connection dobara try kar rahe hain…');
+      await wait(Math.min(1000 * pollErrors, 5000));
+      continue;
+    }
+    pollErrors = 0;
+    const job = polled?.job;
+    if (job?.status === 'completed') {
+      const reply = typeof job?.result?.reply === 'string' ? job.result.reply.trim() : '';
+      if (reply && job?.result?.provider === 'local-qwen') {
+        callbacks.onLifecycle?.('server_returned_data');
+        callbacks.onDelta?.(reply, reply);
+        callbacks.onDone?.(reply);
+        return { fullText: reply, cached: false };
+      }
+      break;
+    }
+    if (job?.status === 'failed' || job?.status === 'expired') break;
+    callbacks.onStatus?.(job?.status === 'running'
+      ? 'ChatWork phone par local AI reply generate ho raha hai…'
+      : 'ChatWork phone request queue mein hai…');
+    await wait(1500);
+  }
+
+  if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
+  callbacks.onStatus?.('ChatWork se reply nahi mila; online AI par switch ho raha hai…');
   return callAICareerChat(body, callbacks, signal);
 }
 
