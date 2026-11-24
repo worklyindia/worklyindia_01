@@ -381,7 +381,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       // an otherwise-ready worker and returned 429 for valid preview requests.
       const requestedLanguage = jobType === "translate" &&
         typeof payload?.source_language === "string" && typeof payload?.target_language === "string"
-        ? payload.source_language.toLowerCase() + "-" + payload.target_language.toLowerCase()
+        ? payload.source_language.toLowerCase().split("-")[0] + "-" + payload.target_language.toLowerCase().split("-")[0]
         : typeof payload?.language === "string" ? payload.language.trim().toLowerCase() : "";
       const supportsRequestedLanguage = (languages: unknown): boolean => {
         if (!requestedLanguage) return true;
@@ -390,6 +390,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
           if (typeof value !== "string") return false;
           const advertised = value.trim().toLowerCase();
           if (advertised === "multilingual" || advertised === requestedLanguage) return true;
+          // Translation capabilities are ordered source-target pairs; never
+          // treat a shared source language as support for a different target.
+          if (jobType === "translate") return false;
           // Accept a base language only when the worker advertises that base
           // explicitly, while matching en-IN with en and vice versa.
           return advertised.split("-")[0] === requestedLanguage.split("-")[0];
@@ -428,7 +431,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
         const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
         const minimumRam = jobType === "ai" ? 1024 * 1024 * 1024 : 256 * 1024 * 1024;
-        if (availableRam !== null && availableRam > 0 && availableRam < minimumRam) continue;
+        if (availableRam !== null && availableRam < minimumRam) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
           .select("id", { count: "exact", head: true })
           .eq("device_id", candidate.id)
@@ -498,7 +501,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
         if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
         const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
-        if (availableRam !== null && availableRam > 0 && availableRam < 512 * 1024 * 1024) continue;
+        if (availableRam !== null && availableRam < 512 * 1024 * 1024) continue;
         const { count, error: countError } = await db.from("workly_ai_voice_jobs")
           .select("id", { count: "exact", head: true })
           .eq("device_id", candidate.id)
