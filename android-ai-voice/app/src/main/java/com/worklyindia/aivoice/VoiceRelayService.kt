@@ -104,7 +104,7 @@ class VoiceRelayService : Service() {
                     val enabled = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
                         .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
                     val capabilities = if (enabled) VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this) else org.json.JSONArray()
-                    VoiceRelayApi.setWorkerState(token, enabled, capabilities)
+                    VoiceRelayApi.setWorkerState(token, enabled, capabilities, WorkerDeviceMetrics.snapshot(this))
                 }.onFailure { error ->
                     setStatus("Relay reconnecting: " + (error.message ?: "network unavailable"))
                 }
@@ -123,7 +123,10 @@ class VoiceRelayService : Service() {
     private fun pollLoop(token: String) {
         setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
         var wasWaitingForData = !hasValidatedInternet()
+        var idlePollDelayMs = POLL_INTERVAL_MS
         var lastCapabilityRefresh = 0L
+        var lastMetricsRefresh = 0L
+        var capabilitiesSnapshot = org.json.JSONArray()
         while (running.get()) {
             if (!hasValidatedInternet()) {
                 wasWaitingForData = true
@@ -139,10 +142,21 @@ class VoiceRelayService : Service() {
                 val workerPrefs = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
                 val workerEnabled = workerPrefs.getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
                 val refreshNow = System.currentTimeMillis()
-                if (workerEnabled && refreshNow - lastCapabilityRefresh >= WORKER_CAPABILITY_REFRESH_MS) {
-                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
-                    VoiceRelayApi.setWorkerState(token, true, capabilities)
-                    lastCapabilityRefresh = refreshNow
+                if (workerEnabled) {
+                    val capabilitiesChanged = refreshNow - lastCapabilityRefresh >= WORKER_CAPABILITY_REFRESH_MS
+                    if (capabilitiesChanged) {
+                        capabilitiesSnapshot = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                        lastCapabilityRefresh = refreshNow
+                    }
+                    if (capabilitiesChanged || refreshNow - lastMetricsRefresh >= WORKER_METRICS_REFRESH_MS) {
+                        VoiceRelayApi.setWorkerState(
+                            token,
+                            true,
+                            capabilitiesSnapshot,
+                            WorkerDeviceMetrics.snapshot(this)
+                        )
+                        lastMetricsRefresh = refreshNow
+                    }
                 }
                 if (activeJobId != null) {
                     Thread.sleep(500)
@@ -152,6 +166,7 @@ class VoiceRelayService : Service() {
                 getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putLong(LAST_POLL_KEY, System.currentTimeMillis()).apply()
                 val job = response.optJSONObject("job")
                 if (job != null) {
+                    idlePollDelayMs = POLL_INTERVAL_MS
                     val jobId = job.optString("id")
                     val requestPayload = job.optJSONObject("payload")
                     val requestModel = requestPayload?.optString("pack_id")?.takeIf { it.isNotBlank() }
@@ -165,6 +180,7 @@ class VoiceRelayService : Service() {
                         else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
                     }
                 } else {
+                    idlePollDelayMs = (idlePollDelayMs * 3 / 2).coerceAtMost(5_000L)
                     setStatus("Shared phone server is online. Waiting for website requests…")
                 }
             } catch (error: Exception) {
@@ -176,9 +192,10 @@ class VoiceRelayService : Service() {
                     stopSelf()
                     break
                 }
+                idlePollDelayMs = (idlePollDelayMs * 2).coerceAtMost(10_000L)
                 setStatus("Relay reconnecting: ${error.message ?: "network unavailable"}")
             }
-            try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
+            try { Thread.sleep(idlePollDelayMs) } catch (_: InterruptedException) { break }
         }
     }
 
@@ -570,6 +587,7 @@ class VoiceRelayService : Service() {
         const val EVENTS_KEY = "recent_activity_events"
         const val POLL_INTERVAL_MS = 1_000L
         const val WORKER_CAPABILITY_REFRESH_MS = 5 * 60 * 1_000L
+        const val WORKER_METRICS_REFRESH_MS = 30 * 1_000L
         const val ACTION_RESTORE_NOTIFICATION = "com.worklyindia.aivoice.RESTORE_SERVER_NOTIFICATION"
         const val ONLINE_NOTIFICATION_TEXT = "Shared phone server is online."
         const val WAITING_NOTIFICATION_TEXT = "Waiting for Data on..."

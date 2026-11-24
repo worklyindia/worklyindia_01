@@ -60,9 +60,11 @@ function historyPayload(payload: any, jobType: string) {
   };
 }
 
-async function cleanupExpiredJobs(db: any, now: string) {
+async function cleanupExpiredJobs(db: any, now: string, ownerId: string) {
   const { data: expiredJobs, error } = await db.from("workly_ai_voice_jobs")
     .select("id,status,job_type,result,payload")
+    .eq("user_id", ownerId)
+    .is("cleanup_completed_at", null)
     .lt("expires_at", now)
     .limit(100);
   if (error) throw error;
@@ -79,15 +81,18 @@ async function cleanupExpiredJobs(db: any, now: string) {
     const update: Record<string, unknown> = {
       payload: historyPayload(row.payload, row.job_type),
       result,
+      cleanup_completed_at: now,
     };
     if (row.status === "pending" || row.status === "running") update.status = "expired";
-    const { error: updateError } = await db.from("workly_ai_voice_jobs").update(update).eq("id", row.id);
+    const { error: updateError } = await db.from("workly_ai_voice_jobs").update(update)
+      .eq("id", row.id).eq("user_id", ownerId);
     if (updateError) throw updateError;
   }
 
   // Keep lightweight diagnostics for 30 days; remove only older history rows.
   const retentionCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { error: retentionError } = await db.from("workly_ai_voice_jobs").delete().lt("created_at", retentionCutoff);
+  const { error: retentionError } = await db.from("workly_ai_voice_jobs").delete()
+    .eq("user_id", ownerId).lt("created_at", retentionCutoff);
   if (retentionError) throw retentionError;
 }
 
@@ -135,16 +140,52 @@ export async function handleWorklyVoiceRelay(req: Request) {
           return json({ error: "Invalid model capability record." }, 400);
         }
       }
+      const update: Record<string, unknown> = {
+        worker_enabled: enabled,
+        model_capabilities: enabled ? capabilities : [],
+        worker_updated_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString()
+      };
+      if (body?.metrics && typeof body.metrics === "object" && !Array.isArray(body.metrics)) {
+        if (JSON.stringify(body.metrics).length > 2_000) return json({ error: "Device metrics exceed 2 KB." }, 413);
+        const metrics = body.metrics;
+        const safeBytes = (value: unknown) =>
+          typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 100_000_000_000_000
+            ? value : null;
+        const batteryPercent = typeof metrics.battery_percent === "number" &&
+          Number.isInteger(metrics.battery_percent) && metrics.battery_percent >= 0 && metrics.battery_percent <= 100
+          ? metrics.battery_percent : null;
+        const batteryStatus = ["Charging", "Discharging", "Full", "Not charging", "Unknown"].includes(metrics.battery_status)
+          ? metrics.battery_status : "Unknown";
+        const temperature = typeof metrics.battery_temperature_c === "number" &&
+          Number.isFinite(metrics.battery_temperature_c) && metrics.battery_temperature_c >= -20 && metrics.battery_temperature_c <= 100
+          ? metrics.battery_temperature_c : null;
+        const appCpuUsage = typeof metrics.app_cpu_usage_percent === "number" &&
+          Number.isFinite(metrics.app_cpu_usage_percent) && metrics.app_cpu_usage_percent >= 0 && metrics.app_cpu_usage_percent <= 100
+          ? metrics.app_cpu_usage_percent : null;
+        const thermalStatus = ["none", "light", "moderate", "severe", "critical", "emergency", "shutdown", "unsupported", "unknown"]
+          .includes(metrics.thermal_status) ? metrics.thermal_status : "unknown";
+        update.worker_metrics = {
+          storage_total_bytes: safeBytes(metrics.storage_total_bytes),
+          storage_available_bytes: safeBytes(metrics.storage_available_bytes),
+          ram_total_bytes: safeBytes(metrics.ram_total_bytes),
+          ram_available_bytes: safeBytes(metrics.ram_available_bytes),
+          battery_percent: batteryPercent,
+          battery_status: batteryStatus,
+          battery_temperature_c: temperature,
+          app_cpu_usage_percent: appCpuUsage,
+          thermal_status: thermalStatus,
+          is_charging: metrics.is_charging === true,
+          low_memory: metrics.low_memory === true
+        };
+        update.metrics_updated_at = new Date().toISOString();
+      }
       const { error } = await db.from("workly_ai_voice_devices")
-        .update({
-          worker_enabled: enabled,
-          model_capabilities: enabled ? capabilities : [],
-          worker_updated_at: new Date().toISOString()
-        })
+        .update(update)
         .eq("id", device.id)
         .is("revoked_at", null);
       if (error) throw error;
-      return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0 });
+      return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0, metrics_saved: !!update.worker_metrics });
     }
 
     if (action === "report_diagnostic") {
@@ -194,29 +235,37 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const device = await deviceFor(req);
       if (!device) return json({ error: "Device authentication failed" }, 401);
       const userId = device.user_id;
-      const deviceId = device.id;
       if (!userId) return json({ error: "User account could not be resolved for this device." }, 403);
 
       const devicesResult = await db.from("workly_ai_voice_devices")
-        .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,revoked_at", { count: "exact" })
-        .eq("id", deviceId)
+        .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,worker_metrics,metrics_updated_at,revoked_at", { count: "exact" })
         .eq("user_id", userId)
-        .order("created_at", { ascending: false }).limit(1);
+        .order("created_at", { ascending: false }).limit(500);
       if (devicesResult.error) throw devicesResult.error;
       const deviceIds = (devicesResult.data ?? []).map((row: any) => row.id);
+
+      // Fail closed: an account with no owned devices must never run an unscoped
+      // jobs/diagnostics query. All dashboard records are derived from this
+      // server-resolved owner and the exact device IDs returned for that owner.
+      if (deviceIds.length === 0) {
+        return json({
+          generated_at: now,
+          summary: { devices_total: 0, workers_online: 0, logs_total: 0 },
+          devices: [],
+          logs: []
+        });
+      }
 
       const [jobsResult, diagnosticsResult] = await Promise.all([
         db.from("workly_ai_voice_jobs")
           .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,model_id,model_name,pack_id,payload,result", { count: "exact" })
           .eq("user_id", userId)
-          .eq("device_id", deviceId)
-          .order("created_at", { ascending: false }).limit(150),
-        deviceIds.length
-          ? db.from("workly_ai_voice_diagnostics")
-              .select("id,device_id,job_id,model_id,model_name,pack_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
-              .in("device_id", deviceIds)
-              .order("created_at", { ascending: false }).limit(150)
-          : Promise.resolve({ data: [], error: null, count: 0 })
+          .in("device_id", deviceIds)
+          .order("created_at", { ascending: false }).limit(250),
+        db.from("workly_ai_voice_diagnostics")
+          .select("id,device_id,job_id,model_id,model_name,pack_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
+          .in("device_id", deviceIds)
+          .order("created_at", { ascending: false }).limit(150)
       ]);
       for (const result of [jobsResult, diagnosticsResult]) {
         if (result.error) throw result.error;
@@ -326,7 +375,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
     if (action === "create_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
-      await cleanupExpiredJobs(db, now);
+      await cleanupExpiredJobs(db, now, user.id);
       const jobType = body?.job_type;
       if (!["ai", "tts", "translate", "image", "video"].includes(jobType)) return json({ error: "job_type must be ai, tts, translate, image or video; use create_stt_job for audio transcription." }, 400);
       const payload = body?.payload;
@@ -334,147 +383,99 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
       const requestedModel = typeof payload?.model === "string" ? payload.model : "";
-      // Keep the full locale (for example en-IN / gu-IN). Android advertises
-      // regional language tags; stripping the region here incorrectly rejected
-      // an otherwise-ready worker and returned 429 for valid preview requests.
       const requestedLanguage = jobType === "translate" &&
         typeof payload?.source_language === "string" && typeof payload?.target_language === "string"
-        ? payload.source_language.toLowerCase() + "-" + payload.target_language.toLowerCase()
+        ? payload.source_language.toLowerCase().split("-")[0] + "-" + payload.target_language.toLowerCase().split("-")[0]
         : typeof payload?.language === "string" ? payload.language.trim().toLowerCase() : "";
-      const supportsRequestedLanguage = (languages: unknown): boolean => {
-        if (!requestedLanguage) return true;
-        if (!Array.isArray(languages)) return false;
-        return languages.some((value: unknown) => {
-          if (typeof value !== "string") return false;
-          const advertised = value.trim().toLowerCase();
-          if (advertised === "multilingual" || advertised === requestedLanguage) return true;
-          // Accept a base language only when the worker advertises that base
-          // explicitly, while matching en-IN with en and vice versa.
-          return advertised.split("-")[0] === requestedLanguage.split("-")[0];
-        });
-      };
-      const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities")
-        .eq("worker_enabled", true)
-        .is("revoked_at", null)
-        .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
-        .order("last_seen_at", { ascending: false })
-        .limit(100);
-      if (deviceError) throw deviceError;
-      const requiredTask = jobType;
-      let device: any = null;
-      let selectedModel = requestedModel;
-      let selectedPackId = "";
-      let selectedModelName = "";
-      let activeJobs = Number.MAX_SAFE_INTEGER;
-      let onlineModelReady = false;
-      let onlineModelLanguageReady = false;
-      for (const candidate of candidates ?? []) {
-        const readyCapabilities = Array.isArray(candidate.model_capabilities)
-          ? candidate.model_capabilities.filter((cap: any) =>
-              cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
-              typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages))
-          : [];
-        if (readyCapabilities.length) onlineModelReady = true;
-        const matchedCapability = readyCapabilities.find((cap: any) => supportsRequestedLanguage(cap.languages));
-        if (matchedCapability) onlineModelLanguageReady = true;
-        if (!matchedCapability) continue;
-        const { count, error: countError } = await db.from("workly_ai_voice_jobs")
-          .select("id", { count: "exact", head: true })
-          .eq("device_id", candidate.id)
-          .in("status", ["pending", "running"])
-          .gt("expires_at", new Date().toISOString());
-        if (countError) throw countError;
-        const load = count ?? 0;
-        if (load < activeJobs && load < 20) {
-          device = candidate;
-          selectedModel = matchedCapability.model;
-          selectedPackId = typeof matchedCapability.pack_id === "string" ? matchedCapability.pack_id : matchedCapability.model;
-          selectedModelName = typeof matchedCapability.model_name === "string" ? matchedCapability.model_name : selectedPackId;
-          activeJobs = load;
-        }
-        if (load === 0) break;
-      }
-      if (!device) {
-        if (!onlineModelReady) {
+      const minimumRamBytes = jobType === "ai" ? 1024 * 1024 * 1024 : 256 * 1024 * 1024;
+      const { data: workerRows, error: workerError } = await db.rpc("select_workly_voice_worker", {
+        p_user_id: user.id,
+        p_job_type: jobType,
+        p_requested_model: requestedModel || null,
+        p_requested_language: requestedLanguage || null,
+        p_min_ram_bytes: minimumRamBytes
+      });
+      if (workerError) throw workerError;
+      const selectedWorker = Array.isArray(workerRows) ? workerRows[0] ?? null : null;
+      const deviceId = selectedWorker?.device_id ?? null;
+      const selectedModel = selectedWorker?.selected_model ?? requestedModel;
+      const selectedPackId = selectedWorker?.selected_pack_id ?? selectedModel;
+      const selectedModelName = selectedWorker?.selected_model_name ?? selectedPackId;
+      const activeJobs = Number(selectedWorker?.queue_depth ?? 0);
+      const selectedDeviceOnline = selectedWorker?.worker_online === true;
+
+      if (!deviceId) {
+        if (!selectedWorker?.model_ready) {
           return json({
             error: requestedModel
-              ? `The ${requestedModel} voice model is not installed and ready on an online Workly phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.`
-              : "No online Workly phone has a ready model for this voice task."
+              ? (requestedModel + " voice model is not installed and ready on any paired phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.")
+              : "No paired phone has a ready model for this voice task."
           }, 409);
         }
-        if (!onlineModelLanguageReady) {
-          return json({ error: `The selected voice model is ready, but not for ${requestedLanguage}. Download its language pack in ChatWork or choose a supported language.` }, 409);
+        if (!selectedWorker?.language_ready) {
+          return json({ error: "The selected voice model is ready, but not for " + requestedLanguage + ". Download its language pack in ChatWork or choose a supported language." }, 409);
         }
-        return json({ error: "All compatible Workly Voice queues are full. Please wait a moment and try again." }, 429);
+        return json({ error: "All compatible Workly Voice queues are full or all phones are under resource pressure. Please wait and retry.", retryable: true, retry_after_seconds: 10 }, 429);
       }
-
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
         .insert({
-          user_id: user.id, device_id: device.id, job_type: jobType,
+          user_id: user.id, device_id: deviceId, job_type: jobType,
           model_id: selectedModel, model_name: selectedModelName, pack_id: selectedPackId,
-          payload: { ...(payload ?? {}), model: selectedModel, model_id: selectedModel, pack_id: selectedPackId, model_name: selectedModelName }
+          payload: { ...(payload ?? {}), model: selectedModel, model_id: selectedModel, pack_id: selectedPackId, model_name: selectedModelName },
+          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
         })
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
-      return json({ job, queue_position: activeJobs + 1 });
+      return json({ job, queue_position: activeJobs + 1, worker_online: selectedDeviceOnline });
     }
 
     if (action === "create_stt_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
-      await cleanupExpiredJobs(db, now);
+      await cleanupExpiredJobs(db, now, user.id);
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
       if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
       const requestedLanguage = typeof body?.language === "string" ? body.language.split("-")[0].toLowerCase() : "";
-      const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities").eq("worker_enabled", true).is("revoked_at", null)
-        .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
-        .order("last_seen_at", { ascending: false }).limit(100);
-      if (deviceError) throw deviceError;
-      let device: any = null;
-      let selectedSttModel = "";
-      let lightestQueue = Number.MAX_SAFE_INTEGER;
-      for (const candidate of candidates ?? []) {
-        const capability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
-          cap && cap.task === "stt" && typeof cap.model === "string" && cap.ready === true &&
-          Array.isArray(cap.languages) && (!requestedLanguage || cap.languages.includes(requestedLanguage))
-        );
-        if (!capability) continue;
-        const { count, error: countError } = await db.from("workly_ai_voice_jobs")
-          .select("id", { count: "exact", head: true })
-          .eq("device_id", candidate.id)
-          .in("status", ["pending", "running"])
-          .gt("expires_at", new Date().toISOString());
-        if (countError) throw countError;
-        const load = count ?? 0;
-        if (load < lightestQueue && load < 20) {
-          device = candidate;
-          selectedSttModel = capability.model;
-          lightestQueue = load;
-        }
-      }
-      if (!device) return json({ error: "No online, opted-in phone has a ready speech-recognition model for this language." }, 404);
+      const { data: workerRows, error: workerError } = await db.rpc("select_workly_voice_worker", {
+        p_user_id: user.id,
+        p_job_type: "stt",
+        p_requested_model: null,
+        p_requested_language: requestedLanguage || null,
+        p_min_ram_bytes: 512 * 1024 * 1024
+      });
+      if (workerError) throw workerError;
+      const selectedWorker = Array.isArray(workerRows) ? workerRows[0] ?? null : null;
+      const deviceId = selectedWorker?.device_id ?? null;
+      const selectedSttModel = selectedWorker?.selected_model ?? "";
+      const selectedSttDeviceOnline = selectedWorker?.worker_online === true;
+      if (!deviceId) return json({
+        error: selectedWorker?.model_ready && selectedWorker?.language_ready
+          ? "All compatible speech-recognition phones are busy or under resource pressure. Please wait and retry."
+          : "No paired, opted-in phone has a ready speech-recognition model for this language.",
+        retryable: Boolean(selectedWorker?.model_ready && selectedWorker?.language_ready),
+        retry_after_seconds: 10
+      }, selectedWorker?.model_ready && selectedWorker?.language_ready ? 429 : 404);
       let bytes: Uint8Array;
       try { const binary = atob(audioBase64); bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0)); }
       catch { return json({ error: "Invalid recorded audio." }, 400); }
       if (bytes.byteLength < 1000 || bytes.byteLength > 1_300_000) return json({ error: "Recorded audio size is invalid." }, 413);
       const jobId = crypto.randomUUID();
-      const path = `${device.id}/input-${jobId}.wav`;
+      const path = `${deviceId}/input-${jobId}.wav`;
       const { error: uploadError } = await db.storage.from("workly-ai-voice-audio")
         .upload(path, bytes, { contentType: "audio/wav", upsert: false });
       if (uploadError) throw uploadError;
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
         .insert({
-          id: jobId, user_id: user.id, device_id: device.id, job_type: "stt",
+          id: jobId, user_id: user.id, device_id: deviceId, job_type: "stt",
           model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel,
-          payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel, language: requestedLanguage || "auto" }
+          payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel, language: requestedLanguage || "auto" },
+          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
         })
         .select("id,status,expires_at").single();
       if (error) { await db.storage.from("workly-ai-voice-audio").remove([path]); throw error; }
-      return json({ job });
+      return json({ job, worker_online: selectedSttDeviceOnline });
     }
 
     if (action === "get_job") {
@@ -511,31 +512,20 @@ export async function handleWorklyVoiceRelay(req: Request) {
           .eq("id", device.id);
       }
 
-      // Every signed-in phone may join the same community pool, but only after
-      // its owner explicitly opts in on that device. Enforce opt-out at poll
-      // time too, so a previously queued job is never delivered after opt-out.
+      // Phones can receive only jobs explicitly assigned to their own account.
+      // A device must also be opted in; enforce opt-out at poll time so queued
+      // work is never delivered after the owner disables this worker.
       if (device.worker_enabled !== true) {
         return json({ job: null, worker_enabled: false, heartbeat_at: new Date().toISOString() });
       }
 
-      const { data: candidate, error: findError } = await db.from("workly_ai_voice_jobs")
-        .select("id,job_type,payload,expires_at")
-        .eq("device_id", device.id)
-        .eq("status", "pending")
-        .gt("expires_at", new Date().toISOString())
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (findError) throw findError;
-      if (!candidate) return json({ job: null, heartbeat_at: new Date().toISOString() });
-
-      const { data: claimed, error: claimError } = await db.from("workly_ai_voice_jobs")
-        .update({ status: "running", started_at: new Date().toISOString() })
-        .eq("id", candidate.id)
-        .eq("status", "pending")
-        .select("id,job_type,payload,expires_at")
-        .maybeSingle();
+      // Claim atomically in Postgres. Concurrent polls cannot receive the same job.
+      const { data: claimedRows, error: claimError } = await db.rpc("claim_workly_voice_job", {
+        p_device_id: device.id
+      });
       if (claimError) throw claimError;
+      const claimed = Array.isArray(claimedRows) ? claimedRows[0] ?? null : null;
+      if (!claimed) return json({ job: null, heartbeat_at: new Date().toISOString() });
       if (claimed?.job_type === "stt" && typeof claimed.payload?.audio_path === "string") {
         const { data: signed, error: signedError } = await db.storage.from("workly-ai-voice-audio").createSignedUrl(claimed.payload.audio_path, 300);
         if (signedError) throw signedError;
@@ -550,16 +540,18 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const jobId = typeof body?.job_id === "string" ? body.job_id : "";
       const reason = typeof body?.reason === "string" ? body.reason.slice(0, 500) : "Voice request failed";
       if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: "Invalid job id" }, 400);
-      const { data, error } = await db.from("workly_ai_voice_jobs")
-        .update({ status: "failed", result: { error: reason }, completed_at: new Date().toISOString() })
-        .eq("id", jobId)
-        .eq("device_id", device.id)
-        .eq("status", "running")
-        .select("id,status")
-        .maybeSingle();
+      const { data: retryRows, error } = await db.rpc("retry_workly_voice_job", {
+        p_job_id: jobId,
+        p_device_id: device.id,
+        p_reason: reason
+      });
       if (error) throw error;
-      if (!data) return json({ error: "Job not found or already finished" }, 404);
-      return json({ job: data });
+      const retry = Array.isArray(retryRows) ? retryRows[0] ?? null : null;
+      if (!retry) return json({ error: "Job not found or already finished" }, 404);
+      return json({
+        job: { id: retry.job_id, status: retry.status },
+        retrying: retry.status === "pending"
+      });
     }
 
     if (action === "upload_audio") {
