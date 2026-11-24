@@ -310,7 +310,7 @@ class DataCollectionActivity : Activity() {
         )
         addHealthMetricRow(
             panel,
-            healthMetric("BATTERY", if (battery in 0..100) "$battery%" else "—", batteryStatus, battery.takeIf { it in 0..100 }?.let { 100 - it }, 0xFF27C58B.toInt()),
+            healthMetric("BATTERY", if (battery in 0..100) "$battery%" else "—", batteryStatus, battery.takeIf { it in 0..100 }, 0xFF27C58B.toInt()),
             healthMetric("BATTERY TEMP", temperature, "Battery temperature", null, 0xFFFFB547.toInt())
         )
         addHealthMetricRow(
@@ -395,23 +395,16 @@ class DataCollectionActivity : Activity() {
             if (metric.progress != null) {
                 val track = FrameLayout(this).apply {
                     background = rounded(0xFF25354A.toInt(), dp(8))
-                    addView(View(this@DataCollectionActivity).apply {
-                        background = rounded(metric.accent, dp(8))
-                    }, FrameLayout.LayoutParams(0, dp(5), Gravity.START).apply {
-                        width = 0
-                    })
                 }
                 val bar = View(this).apply { background = rounded(metric.accent, dp(5)) }
-                track.addView(bar, FrameLayout.LayoutParams(-1, dp(5), Gravity.START).apply {
-                    width = 0
-                })
+                track.addView(bar, FrameLayout.LayoutParams(0, dp(5), Gravity.START))
                 track.post {
                     val width = (track.width * metric.progress / 100f).toInt().coerceAtLeast(if (metric.progress > 0) dp(3) else 0)
                     bar.layoutParams = FrameLayout.LayoutParams(width, dp(5), Gravity.START)
                 }
                 card.addView(track, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(10) })
             }
-            row.addView(card, LinearLayout.LayoutParams(0, -1, 1f).apply {
+            row.addView(card, LinearLayout.LayoutParams(0, -2, 1f).apply {
                 if (index == 0) rightMargin = dp(5) else leftMargin = dp(5)
             })
         }
