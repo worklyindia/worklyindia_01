@@ -135,16 +135,45 @@ export async function handleWorklyVoiceRelay(req: Request) {
           return json({ error: "Invalid model capability record." }, 400);
         }
       }
+      const update: Record<string, unknown> = {
+        worker_enabled: enabled,
+        model_capabilities: enabled ? capabilities : [],
+        worker_updated_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString()
+      };
+      if (body?.metrics && typeof body.metrics === "object" && !Array.isArray(body.metrics)) {
+        if (JSON.stringify(body.metrics).length > 2_000) return json({ error: "Device metrics exceed 2 KB." }, 413);
+        const metrics = body.metrics;
+        const safeBytes = (value: unknown) =>
+          typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 100_000_000_000_000
+            ? value : null;
+        const batteryPercent = typeof metrics.battery_percent === "number" &&
+          Number.isInteger(metrics.battery_percent) && metrics.battery_percent >= 0 && metrics.battery_percent <= 100
+          ? metrics.battery_percent : null;
+        const batteryStatus = ["Charging", "Discharging", "Full", "Not charging", "Unknown"].includes(metrics.battery_status)
+          ? metrics.battery_status : "Unknown";
+        const temperature = typeof metrics.battery_temperature_c === "number" &&
+          Number.isFinite(metrics.battery_temperature_c) && metrics.battery_temperature_c >= -20 && metrics.battery_temperature_c <= 100
+          ? metrics.battery_temperature_c : null;
+        update.worker_metrics = {
+          storage_total_bytes: safeBytes(metrics.storage_total_bytes),
+          storage_available_bytes: safeBytes(metrics.storage_available_bytes),
+          ram_total_bytes: safeBytes(metrics.ram_total_bytes),
+          ram_available_bytes: safeBytes(metrics.ram_available_bytes),
+          battery_percent: batteryPercent,
+          battery_status: batteryStatus,
+          battery_temperature_c: temperature,
+          is_charging: metrics.is_charging === true,
+          low_memory: metrics.low_memory === true
+        };
+        update.metrics_updated_at = new Date().toISOString();
+      }
       const { error } = await db.from("workly_ai_voice_devices")
-        .update({
-          worker_enabled: enabled,
-          model_capabilities: enabled ? capabilities : [],
-          worker_updated_at: new Date().toISOString()
-        })
+        .update(update)
         .eq("id", device.id)
         .is("revoked_at", null);
       if (error) throw error;
-      return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0 });
+      return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0, metrics_saved: !!update.worker_metrics });
     }
 
     if (action === "report_diagnostic") {
@@ -198,10 +227,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!userId) return json({ error: "User account could not be resolved for this device." }, 403);
 
       const devicesResult = await db.from("workly_ai_voice_devices")
-        .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,revoked_at", { count: "exact" })
-        .eq("id", deviceId)
+        .select("id,device_name,created_at,last_seen_at,worker_enabled,model_capabilities,worker_updated_at,worker_metrics,metrics_updated_at,revoked_at", { count: "exact" })
         .eq("user_id", userId)
-        .order("created_at", { ascending: false }).limit(1);
+        .order("created_at", { ascending: false }).limit(100);
       if (devicesResult.error) throw devicesResult.error;
       const deviceIds = (devicesResult.data ?? []).map((row: any) => row.id);
 
@@ -209,8 +237,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
         db.from("workly_ai_voice_jobs")
           .select("id,device_id,job_type,status,created_at,started_at,completed_at,expires_at,model_id,model_name,pack_id,payload,result", { count: "exact" })
           .eq("user_id", userId)
-          .eq("device_id", deviceId)
-          .order("created_at", { ascending: false }).limit(150),
+          .in("device_id", deviceIds)
+          .order("created_at", { ascending: false }).limit(250),
         deviceIds.length
           ? db.from("workly_ai_voice_diagnostics")
               .select("id,device_id,job_id,model_id,model_name,pack_id,event_type,language,duration_ms,audio_bytes,error_type,error_message,app_version,android_version,device_model,metadata,created_at", { count: "exact" })
