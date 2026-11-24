@@ -190,3 +190,36 @@ Deno.test('unrelated new topic is routed as general chat with tools available', 
   assertEquals(routing.enableTools, true);
   assertEquals(routing.forceTools, undefined);
 });
+
+
+Deno.test('support contact question stays general chat with tools available', () => {
+  const routing = getTaskRouting([{ role: 'user', content: 'Customer support ka phone number aur email batao' }], false);
+  assertEquals(routing.taskType, 'general_chat');
+  assertEquals(routing.enableTools, true);
+  assertEquals(routing.forceTools, undefined);
+});
+
+Deno.test('Gujarati platform capability question stays general chat', () => {
+  const routing = getTaskRouting([{ role: 'user', content: 'Workly India shu shu kaam kari shake chhe?' }], false);
+  assertEquals(routing.taskType, 'general_chat');
+  assertEquals(routing.enableTools, true);
+});
+
+Deno.test('current data-entry job request routes to job search tools', () => {
+  const routing = getTaskRouting([{ role: 'user', content: 'Workly India par current data entry jobs batao' }], false);
+  assertEquals(routing.taskType, 'job_search');
+  assertEquals(routing.enableTools, true);
+});
+
+Deno.test('topic switch from job issue to support contact does not retain job-search route', () => {
+  const routing = getTaskRouting(
+    [
+      { role: 'user', content: 'Meri job application submit nahi ho rahi' },
+      { role: 'assistant', content: 'Job details check karte hain.' },
+      { role: 'user', content: 'Ab customer support email batao' },
+    ],
+    false,
+  );
+  assertEquals(routing.taskType, 'general_chat');
+  assertEquals(routing.enableTools, true);
+});

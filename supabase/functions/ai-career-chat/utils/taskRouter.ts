@@ -200,7 +200,12 @@ function classifyTask(
     (UPDATE_VERB_RE.test(text) && recentlyDiscussedProfileUpdate);
   if (isProfileUpdate) return 'profile_update';
 
-  const isDelivery = /\b(email|mail|telegram|push|notification|notify|alert|reminder|send|share|forward|bhej|bhejo|bhejna|bhejdo|mail kar|email kar)\b|ईमेल|मेल|भेज|नोटिफिकेशन|सूचना|रिमाइंडर/.test(text);
+  // Mentioning a contact channel is not itself a send action. For example,
+  // "support email batao" is an information request, not an email-delivery task.
+  const hasDeliveryAction = /\b(send|share|forward|bhej|bhejo|bhejna|bhejdo|mail kar|email kar)\b|भेज|भेजो/.test(text);
+  const isNotificationSetup = /\b(notification|notify|alert|reminder)\b|नोटिफिकेशन|सूचना|रिमाइंडर/.test(text) &&
+    /\b(create|set|schedule|enable|turn on|start|bana|lagao)\b|बनाओ|लगाओ|चालू/.test(text);
+  const isDelivery = hasDeliveryAction || isNotificationSetup;
   if (isDelivery) return 'delivery';
 
   const VERB_RE = /\b(generate|create|make|build|design|draft|prepare|write|bana|banao|banado|bana do|banake|banakar|banwa|banwao|tayar kar|taiyar kar|taiyaar kar|chahiye|chahiyē|do|de do|dedo)\b|बना|बनाओ|बनाकर|बनवा|तैयार|चाहिए/;
