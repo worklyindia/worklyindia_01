@@ -57,7 +57,7 @@ returns table (
 language plpgsql
 security invoker
 set search_path = public, pg_temp
-as $
+as $select_workly_worker$
 declare
   v_model_ready boolean := false;
   v_language_ready boolean := false;
@@ -155,7 +155,37 @@ begin
     )
     and coalesce((d.worker_metrics->>'low_memory')::boolean, false) = false
     and (
-      case when coalesce(d.worker_metrics->>'battery_percent', '') ~ '^[0-9]{1,3}-- One atomic claim per device poll. SKIP LOCKED prevents duplicate delivery
+      case when coalesce(d.worker_metrics->>'battery_percent', '') ~ '^[0-9]{1,3}$'
+        then (d.worker_metrics->>'battery_percent')::integer else null end is null
+      or (d.worker_metrics->>'battery_percent')::integer > 10
+      or coalesce((d.worker_metrics->>'is_charging')::boolean, false)
+    )
+    and (
+      case when coalesce(d.worker_metrics->>'ram_available_bytes', '') ~ '^[0-9]{1,15}$'
+        then (d.worker_metrics->>'ram_available_bytes')::bigint else null end is null
+      or (d.worker_metrics->>'ram_available_bytes')::bigint >= coalesce(p_min_ram_bytes, 0)
+    )
+    and (
+      case when coalesce(d.worker_metrics->>'app_cpu_usage_percent', '') ~ '^[0-9]+(\.[0-9]+)?$'
+        then (d.worker_metrics->>'app_cpu_usage_percent')::numeric else null end is null
+      or (d.worker_metrics->>'app_cpu_usage_percent')::numeric < 85
+    )
+    and lower(coalesce(d.worker_metrics->>'thermal_status', 'unknown'))
+      not in ('severe', 'critical', 'emergency', 'shutdown')
+    and q.active_count < 100
+  order by
+    coalesce(d.last_seen_at > now() - interval '60 seconds', false) desc,
+    q.active_count asc,
+    d.last_seen_at asc nulls first
+  limit 1;
+
+  return query
+  select v_device_id, v_model, v_pack_id, v_model_name,
+    coalesce(v_queue_depth, 0), coalesce(v_online, false), v_model_ready, v_language_ready;
+end;
+$select_workly_worker$;
+
+-- One atomic claim per device poll. SKIP LOCKED prevents duplicate delivery
 -- when multiple requests from the same phone arrive at the same time.
 create or replace function public.claim_workly_voice_job(p_device_id uuid)
 returns table (id uuid, job_type text, payload jsonb, expires_at timestamptz)
