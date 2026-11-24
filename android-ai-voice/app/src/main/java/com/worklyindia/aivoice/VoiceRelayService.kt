@@ -335,13 +335,16 @@ class VoiceRelayService : Service() {
                 check(manager.snapshot(model).state == QwenModelManager.State.READY) {
                     "The assigned Qwen model is no longer downloaded on this phone."
                 }
-                val memoryInfo = android.app.ActivityManager.MemoryInfo()
-                (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memoryInfo)
-                check(manager.isSupported(model, memoryInfo.availMem)) {
-                    "There is not enough free memory to safely run the assigned Qwen model."
-                }
                 synchronized(relayAiEngineLock) {
+                    // Check free RAM only when loading a model. A warmed model itself
+                    // consumes RAM, so checking the original threshold on every turn
+                    // would incorrectly reject the already-loaded model.
                     if (relayAiModelId != model.id || !relayAiEngine.isLoaded) {
+                        val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memoryInfo)
+                        check(manager.isSupported(model, memoryInfo.availMem)) {
+                            "There is not enough free memory to safely run the assigned Qwen model."
+                        }
                         if (relayAiEngine.isLoaded) relayAiEngine.unload()
                         check(relayAiEngine.loadModel(manager.file(model))) { "Qwen could not load the downloaded model." }
                         relayAiModelId = model.id
