@@ -57,8 +57,12 @@ jobs:
               sort -u -o /tmp/functions-to-deploy /tmp/functions-to-deploy
             fi
           fi
-          # This directory is an imported module, not a standalone Edge Function.
-          # It is bundled into unified-voice; deploying it separately wastes a project function slot.
+          # The worker relay is an imported module, not a standalone Edge Function.
+          # Any relay change must redeploy unified-voice, which bundles and imports this module.
+          if grep -qxF 'workly-ai-voice-relay' /tmp/functions-to-deploy; then
+            printf '%s\n' unified-voice >> /tmp/functions-to-deploy
+            sort -u -o /tmp/functions-to-deploy /tmp/functions-to-deploy
+          fi
           grep -vxF 'workly-ai-voice-relay' /tmp/functions-to-deploy > /tmp/functions-to-deploy.filtered || true
           mv /tmp/functions-to-deploy.filtered /tmp/functions-to-deploy
           while IFS= read -r function_name; do
