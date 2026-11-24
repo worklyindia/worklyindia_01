@@ -35,6 +35,7 @@ on:
       - "src/lib/ownerPhoneVoiceRelay.ts"
       - "src/lib/voicePreviewCache.ts"
       - "supabase/functions/unified-voice/index.ts"
+      - "src/pages/AICareerAssistant.tsx"
       - "src/pages/AIVoiceCall.tsx"
       - "src/pages/TextToVoice.tsx"
       - "src/pages/Settings.tsx"
@@ -61,4 +62,6 @@ jobs:
       - name: Type-check website
         run: npx tsc --noEmit -p tsconfig.app.json
       - name: Lint website voice modules
+        # AICareerAssistant.tsx has pre-existing lint debt unrelated to this change.
+        # TypeScript still checks it; keep this targeted lint job on maintained modules.
         run: npx eslint src/lib/browserOfflineVoice.ts src/lib/nativeAppBridge.ts src/lib/ownerPhoneVoiceRelay.ts src/lib/shrutiSpeech.ts src/pages/AIVoiceCall.tsx src/pages/TextToVoice.tsx --max-warnings 0
