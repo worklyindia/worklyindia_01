@@ -27,6 +27,10 @@ class VoiceRelayService : Service() {
     // Keep the 295 MB Kokoro runtime alive between website jobs. Recreating it
     // for every request forces the model to reload and makes Hindi/English slow.
     @Volatile private var kokoroTtsEngine: KokoroTtsEngine? = null
+    // Keep Qwen loaded between website requests so repeat replies do not reload a 1+ GB GGUF file.
+    private val relayAiEngine by lazy { OfflineAiEngine() }
+    private val relayAiEngineLock = Any()
+    @Volatile private var relayAiModelId: String? = null
     private var pollThread: Thread? = null
     private var activeToken: String? = null
     private var relayWakeLock: PowerManager.WakeLock? = null
@@ -60,6 +64,8 @@ class VoiceRelayService : Service() {
             acquire()
         }
         if (running.compareAndSet(false, true)) {
+            // Warm the selected local model while the worker is idle, before the first website message arrives.
+            preloadRelayAiModel()
             pollThread = Thread { pollLoop(token) }.apply {
                 name = "WorklyVoiceRelay"
                 start()
@@ -282,6 +288,38 @@ class VoiceRelayService : Service() {
         }
     }
 
+    /** Load Qwen once and retain it in RAM for subsequent website requests. */
+    private fun preloadRelayAiModel() {
+        Thread {
+            try {
+                val manager = QwenModelManager(this)
+                val memoryInfo = android.app.ActivityManager.MemoryInfo()
+                (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memoryInfo)
+                val selectedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
+                    .getString("selected_model_id", null)
+                val selected = manager.models.firstOrNull { it.id == selectedId }
+                val model = selected?.takeIf {
+                    manager.snapshot(it).state == QwenModelManager.State.READY &&
+                        manager.isSupported(it, memoryInfo.availMem)
+                } ?: manager.recommendedModel(memoryInfo.availMem).takeIf {
+                    manager.snapshot(it).state == QwenModelManager.State.READY &&
+                        manager.isSupported(it, memoryInfo.availMem)
+                }
+                if (model != null && running.get()) {
+                    synchronized(relayAiEngineLock) {
+                        if (running.get() && (relayAiModelId != model.id || !relayAiEngine.isLoaded)) {
+                            if (relayAiEngine.isLoaded) relayAiEngine.unload()
+                            check(relayAiEngine.loadModel(manager.file(model))) { "Qwen warm-up could not load the downloaded model." }
+                            relayAiModelId = model.id
+                        }
+                    }
+                }
+            } catch (error: Exception) {
+                setStatus("Local AI warm-up skipped: " + (error.message ?: "model unavailable"))
+            }
+        }.apply { name = "WorklyQwenWarmup"; isDaemon = true }.start()
+    }
+
     private fun handleAiJob(token: String, jobId: String, payload: JSONObject) {
         if (activeJobId != null) {
             VoiceRelayApi.fail(token, jobId, "Phone is already processing another request.")
@@ -289,26 +327,31 @@ class VoiceRelayService : Service() {
         }
         activeJobId = jobId
         Thread {
-            val engine = OfflineAiEngine()
             try {
                 val requestedModel = payload.optString("model")
-                val model = QwenModelManager(this).models.firstOrNull { "qwen-" + it.id == requestedModel }
+                val manager = QwenModelManager(this)
+                val model = manager.models.firstOrNull { "qwen-" + it.id == requestedModel }
                     ?: throw IllegalStateException("The assigned Qwen model is not supported by this app version.")
-                val modelManager = QwenModelManager(this)
-                check(modelManager.snapshot(model).state == QwenModelManager.State.READY) {
+                check(manager.snapshot(model).state == QwenModelManager.State.READY) {
                     "The assigned Qwen model is no longer downloaded on this phone."
                 }
                 val memoryInfo = android.app.ActivityManager.MemoryInfo()
                 (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memoryInfo)
-                check(modelManager.isSupported(model, memoryInfo.availMem)) {
+                check(manager.isSupported(model, memoryInfo.availMem)) {
                     "There is not enough free memory to safely run the assigned Qwen model."
                 }
-                check(engine.loadModel(modelManager.file(model))) { "Qwen could not load the downloaded model." }
+                synchronized(relayAiEngineLock) {
+                    if (relayAiModelId != model.id || !relayAiEngine.isLoaded) {
+                        if (relayAiEngine.isLoaded) relayAiEngine.unload()
+                        check(relayAiEngine.loadModel(manager.file(model))) { "Qwen could not load the downloaded model." }
+                        relayAiModelId = model.id
+                    }
+                }
                 val userText = payload.optString("text").trim().take(4000)
                 require(userText.isNotBlank()) { "AI request text is empty." }
                 setStatus("Generating AI reply locally with " + model.title + "…")
                 val prompt = "You are Workly AI, a helpful assistant. Answer the user's latest message directly, accurately and concisely. Reply in the same language and script as the user. Do not invent facts.\nUser: " + userText + "\nAssistant:"
-                val reply = engine.generate(prompt).trim()
+                val reply = relayAiEngine.generate(prompt).trim()
                 if (reply.isBlank()) throw IllegalStateException("Qwen returned an empty reply.")
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("reply", reply.take(6000))
@@ -319,10 +362,10 @@ class VoiceRelayService : Service() {
                 runCatching { VoiceRelayApi.fail(token, jobId, error.message ?: "Local Qwen inference failed.") }
                 setStatus("Local AI request failed: " + (error.message ?: "model error"))
             } finally {
-                runCatching { engine.unload() }
+                // Deliberately keep the loaded model in memory for the next request.
                 activeJobId = null
             }
-        }.start()
+        }.apply { name = "WorklyQwenRelay"; isDaemon = true }.start()
     }
 
     /** Offline ML Kit translation worker; only already-downloaded language pairs are accepted. */
@@ -499,6 +542,10 @@ class VoiceRelayService : Service() {
         relayWakeLock = null
         kokoroTtsEngine?.close()
         kokoroTtsEngine = null
+        synchronized(relayAiEngineLock) {
+            runCatching { relayAiEngine.unload() }
+            relayAiModelId = null
+        }
         getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putString(STATUS_KEY, "Phone server stopped.").apply()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
         else stopForeground(true)
