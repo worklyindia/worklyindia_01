@@ -5,12 +5,31 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.Build
+import android.os.PowerManager
+import android.os.SystemClock
 import android.os.Environment
 import android.os.StatFs
 import org.json.JSONObject
 
 /** Lightweight, privacy-safe device resource snapshot for worker scheduling and diagnostics. */
 object WorkerDeviceMetrics {
+    private var previousCpuTimeMs = -1L
+    private var previousElapsedMs = -1L
+
+    @Synchronized
+    private fun appCpuUsagePercent(): Double? {
+        val cpuNow = android.os.Process.getElapsedCpuTime()
+        val elapsedNow = SystemClock.elapsedRealtime()
+        val cpuBefore = previousCpuTimeMs
+        val elapsedBefore = previousElapsedMs
+        previousCpuTimeMs = cpuNow
+        previousElapsedMs = elapsedNow
+        if (cpuBefore < 0L || elapsedBefore < 0L || elapsedNow <= elapsedBefore) return null
+        return (((cpuNow - cpuBefore).coerceAtLeast(0L) * 100.0) /
+            (elapsedNow - elapsedBefore)).coerceIn(0.0, 100.0)
+    }
+
     fun snapshot(context: Context): JSONObject {
         val result = JSONObject()
         runCatching {
@@ -26,6 +45,30 @@ object WorkerDeviceMetrics {
             result.put("ram_total_bytes", memory.totalMem.coerceAtLeast(0L))
             result.put("ram_available_bytes", memory.availMem.coerceAtLeast(0L))
             result.put("low_memory", memory.lowMemory)
+        }
+
+        runCatching {
+            val cpuUsage = appCpuUsagePercent()
+            if (cpuUsage != null) result.put("app_cpu_usage_percent", cpuUsage)
+        }
+
+        runCatching {
+            val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                when (power.currentThermalStatus) {
+                    PowerManager.THERMAL_STATUS_NONE -> "none"
+                    PowerManager.THERMAL_STATUS_LIGHT -> "light"
+                    PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                    PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                    PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                    PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+                    PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+                    else -> "unknown"
+                }
+            } else {
+                "unsupported"
+            }
+            result.put("thermal_status", thermal)
         }
 
         runCatching {
