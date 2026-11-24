@@ -193,28 +193,34 @@ begin
           )
       )
     )
-    and lower(coalesce(d.worker_metrics->>'low_memory', 'false')) <> 'true'
-    and case
-      when coalesce(d.worker_metrics->>'battery_percent', '') ~ '^[0-9]{1,3}$'
-        then (
-          (d.worker_metrics->>'battery_percent')::integer > 10
-          or lower(coalesce(d.worker_metrics->>'is_charging', 'false')) = 'true'
-        )
-      else true
-    end
-    and case
-      when coalesce(d.worker_metrics->>'ram_available_bytes', '') ~ '^[0-9]{1,15}$'
-        then (d.worker_metrics->>'ram_available_bytes')::bigint >=
-             coalesce(p_min_ram_bytes, 0)
-      else true
-    end
-    and case
-      when coalesce(d.worker_metrics->>'app_cpu_usage_percent', '') ~ '^[0-9]+(\.[0-9]+)?$'
-        then (d.worker_metrics->>'app_cpu_usage_percent')::numeric < 85
-      else true
-    end
-    and lower(coalesce(d.worker_metrics->>'thermal_status', 'unknown'))
-      not in ('severe', 'critical', 'emergency', 'shutdown')
+    and (
+      d.metrics_updated_at is null
+      or d.metrics_updated_at < now() - interval '90 seconds'
+      or (
+        lower(coalesce(d.worker_metrics->>'low_memory', 'false')) <> 'true'
+        and case
+          when coalesce(d.worker_metrics->>'battery_percent', '') ~ '^[0-9]{1,3}$'
+            then (
+              (d.worker_metrics->>'battery_percent')::integer > 10
+              or lower(coalesce(d.worker_metrics->>'is_charging', 'false')) = 'true'
+            )
+          else true
+        end
+        and case
+          when coalesce(d.worker_metrics->>'ram_available_bytes', '') ~ '^[0-9]{1,15}$'
+            then (d.worker_metrics->>'ram_available_bytes')::bigint >=
+                 coalesce(p_min_ram_bytes, 0)
+          else true
+        end
+        and case
+          when coalesce(d.worker_metrics->>'app_cpu_usage_percent', '') ~ '^[0-9]+(\\.[0-9]+)?$'
+            then (d.worker_metrics->>'app_cpu_usage_percent')::numeric < 85
+          else true
+        end
+        and lower(coalesce(d.worker_metrics->>'thermal_status', 'unknown'))
+          not in ('severe', 'critical', 'emergency', 'shutdown')
+      )
+    )
     and q.active_count < 100
   order by
     coalesce(d.last_seen_at > now() - interval '60 seconds', false) desc,
