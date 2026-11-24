@@ -426,7 +426,6 @@ class MainActivity : FragmentActivity() {
 
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = true
                 val uri = Uri.parse(url)
                 if (uri.scheme == "https" && uri.host == allowedHost) {
                     lastLoadedUrl = url
