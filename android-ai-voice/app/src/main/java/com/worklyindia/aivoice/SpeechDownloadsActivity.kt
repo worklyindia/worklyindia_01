@@ -71,12 +71,13 @@ class SpeechDownloadsActivity : Activity() {
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
         }
-        val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(18), dp(14), dp(18), dp(24)) }
+        val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(12), dp(14), dp(12), dp(28)) }
         scroll.addView(list)
         page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-        list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
+        card(list, "Download AI Models", "Choose offline AI models for chat, speech recognition and voice generation. Each model downloads directly to this phone.")
+        list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
         qwenManager.models.forEach { addQwenCard(list,it) }
-        list.addView(label("VOICE RECOGNITION · OFFLINE SPEECH TO TEXT",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
+        list.addView(label("VOICE RECOGNITION · OFFLINE SPEECH TO TEXT",16,primary,true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         val recognitionLanguages = listOf(
             "as" to "Assamese", "bn" to "Bengali", "brx" to "Bodo", "doi" to "Dogri",
             "gu" to "Gujarati", "hi" to "Hindi", "kn" to "Kannada", "kok" to "Konkani",
@@ -88,7 +89,7 @@ class SpeechDownloadsActivity : Activity() {
         recognitionLanguages.forEach { (code, language) ->
             addSpeechPack(list,"IndicConformer · $language","AI4Bharat IndicConformer INT8 · $language offline speech-to-text",SpeechModelCatalog.indicConformer(code))
         }
-        list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(0,dp(18),0,dp(5)) })
+        list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         addSpeechPack(list,"Indic Tiny TTS · Gujarati","Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS · Hindi","Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS · English","English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
@@ -100,7 +101,7 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"Chatterbox Multilingual","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.chatterboxMultilingual())
         addSpeechPack(list,"CosyVoice 3","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.cosyVoice3())
         list.addView(label("Every model has its own task and engine. Downloaded does not automatically mean relay-worker compatible; worker eligibility is shown on each model card.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
-        list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(0,dp(22),0,dp(5)) })
+        list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(dp(2),dp(22),dp(2),dp(8)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
         addLocalOnlyCard(list,"Wan 2.1 Text-to-Video 1.3B","Not supported on this phone: Wan needs a multi-gigabyte model pack and substantially more RAM. Download is disabled to prevent storage and memory failures.")
         addLocalOnlyCard(list,"Offline Translation · ML Kit","Lightweight language packs are downloaded to this phone on first use (about 30 MB per language). Translation runs on-device; no translation server is used.")
@@ -156,8 +157,8 @@ class SpeechDownloadsActivity : Activity() {
         val card=card(parent,model.title + if(model.premium) " · PREMIUM" else "","Download: " + "%.0f MB".format(Locale.US,model.size/1e6) + " · Requires about %.1f GB free RAM".format(Locale.US,model.minFreeRam/1e9))
         val status=label("Checking model…",13,secondary,true)
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
-        val action=Button(this).apply { isAllCaps=false }
-        val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
+        val action=Button(this).apply { isAllCaps=false; minHeight=dp(48) }
+        val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; minHeight=dp(46); visibility=View.GONE }
         card.addView(status); card.addView(progress); card.addView(action); card.addView(delete)
         delete.setOnClickListener {
             AlertDialog.Builder(this).setTitle("Delete ${model.title}?")
@@ -195,14 +196,14 @@ class SpeechDownloadsActivity : Activity() {
     private fun addSpeechPack(parent: LinearLayout,title:String,subtitle:String,pack:SpeechModelCatalog.Pack) {
         val card=card(parent,title,subtitle); val status=label("Checking saved files…",13,secondary,true)
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
-        val action=Button(this).apply { isAllCaps=false; text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
+        val action=Button(this).apply { isAllCaps=false; minHeight=dp(48); text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         val isTts = pack.id.startsWith("indic-tiny-tts-")
         val isSherpaVits = pack.id.startsWith("itantra-vits-")
         val isKokoro = pack.id == "kokoro-82m"
         val isMoss = pack.id == "moss-tts-nano"
         val isQvacChatterbox = pack.id == "qvac-chatterbox-multilingual"
         val isQvacCosyVoice = pack.id == "qvac-cosyvoice3"
-        val test=Button(this).apply { text="Test Model"; isAllCaps=false; visibility=View.GONE }
+        val test=Button(this).apply { text="Test Model"; isAllCaps=false; minHeight=dp(46); visibility=View.GONE }
         val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
         card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
         test.setOnClickListener { when { isKokoro -> showKokoroTest(pack); isMoss -> showMossTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); isSherpaVits -> showSherpaVitsTest(pack); else -> showTtsTest(pack) } }
@@ -707,8 +708,21 @@ class SpeechDownloadsActivity : Activity() {
     }
     private fun refreshAll() { rows.forEach { it.refresh() }; handler.removeCallbacks(poll); handler.postDelayed(poll,1000L) }
     private fun card(parent:LinearLayout,title:String,subtitle:String):LinearLayout {
-        val c=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(dp(14),dp(12),dp(14),dp(12));setBackgroundColor(surface);elevation=dp(2).toFloat() }
-        c.addView(label(title,16,primary,true));c.addView(label(subtitle,12,secondary,false));parent.addView(c,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(10) });return c
+        val stroke = if (dark) 0xFF34465F.toInt() else 0xFFDCE5F0.toInt()
+        val c=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(16),dp(15),dp(16),dp(15))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface)
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), stroke)
+            }
+            elevation=dp(2).toFloat()
+        }
+        c.addView(label(title,16,primary,true))
+        c.addView(label(subtitle,13,secondary,false).apply { setPadding(0,dp(5),0,dp(9)) })
+        parent.addView(c,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(12) })
+        return c
     }
     private fun label(value:String,size:Int,color:Int,bold:Boolean)=TextView(this).apply { text=value;textSize=size.toFloat();setTextColor(color);if(bold)setTypeface(typeface,android.graphics.Typeface.BOLD);setPadding(0,dp(5),0,dp(5)) }
     override fun onResume(){super.onResume();refreshAll()}
