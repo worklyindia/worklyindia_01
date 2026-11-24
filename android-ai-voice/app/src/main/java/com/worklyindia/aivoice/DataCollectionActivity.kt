@@ -217,38 +217,10 @@ class DataCollectionActivity : Activity() {
                 return "${formatBytes(total)} total • ${formatBytes(safeAvailable)} available • ${formatBytes(used)} used"
             }
 
-            val batteryLevel = metrics.optInt("battery_percent", -1)
-            val batteryStatus = metrics.optString("battery_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
-            val batteryText = if (batteryLevel in 0..100) "$batteryLevel% • $batteryStatus" else "Waiting for first report"
-            val cpuUsage = metrics.optDouble("app_cpu_usage_percent", -1.0)
-            val cpuText = if (cpuUsage in 0.0..100.0) String.format(java.util.Locale.ENGLISH, "%.0f%%", cpuUsage) else "Waiting for first report"
-            val thermalStatus = metrics.optString("thermal_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
-            val temperature = if (metrics.has("battery_temperature_c")) {
-                String.format(java.util.Locale.ENGLISH, "%.1f°C", metrics.optDouble("battery_temperature_c"))
-            } else "—"
-            val updatedText = when {
-                metricsUpdatedAt == null -> "Metrics: not reported yet"
-                metricsFresh -> "Metrics updated: ${formatDate(metricsUpdatedAt)}"
-                else -> "Metrics stale • last update: ${formatDate(metricsUpdatedAt)}"
-            }
-            val resourceDetails = listOf(
-                "Internal storage: ${metricBytes("storage_available_bytes", "storage_total_bytes")}",
-                "RAM: ${metricBytes("ram_available_bytes", "ram_total_bytes")}",
-                "App CPU usage: $cpuText",
-                "Thermal status: $thermalStatus",
-                "Battery: $batteryText",
-                "Battery temperature: $temperature",
-                updatedText,
-                "Last worker heartbeat: $lastSeen"
-            ).joinToString("\n")
-
             parent.addView(sectionTitle(deviceName), LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(4); leftMargin = dp(8); rightMargin = dp(8)
             })
-            parent.addView(
-                infoCard("Worker status: $workerStatus", resourceDetails),
-                LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(8) }
-            )
+            addWorkerHealthPanel(parent, workerStatus, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
 
             val capabilities = device.optJSONArray("model_capabilities") ?: JSONArray()
             parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply {
@@ -256,6 +228,194 @@ class DataCollectionActivity : Activity() {
             })
             addInstalledModelsTable(parent, capabilities)
         }
+    }
+
+    private fun addWorkerHealthPanel(
+        parent: LinearLayout,
+        workerStatus: String,
+        metrics: JSONObject,
+        metricsUpdatedAt: String?,
+        metricsFresh: Boolean,
+        lastSeen: String
+    ) {
+        val online = workerStatus == "ONLINE"
+        val statusColor = when (workerStatus) {
+            "ONLINE" -> 0xFF27C58B.toInt()
+            "OFFLINE" -> 0xFFFFB547.toInt()
+            "REVOKED" -> 0xFFFF647C.toInt()
+            else -> muted
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = rounded(0xFF0D1929.toInt(), dp(18), line)
+        }
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        statusRow.addView(TextView(this).apply {
+            text = "WORKER STATUS"
+            textSize = 11f
+            letterSpacing = 1.1f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(muted)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        statusRow.addView(TextView(this).apply {
+            text = "●  $workerStatus"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(statusColor)
+            background = rounded(statusColor and 0x00FFFFFF or 0x16000000, dp(20))
+            setPadding(dp(11), dp(7), dp(11), dp(7))
+        })
+        panel.addView(statusRow)
+        panel.addView(TextView(this).apply {
+            text = if (online) "Your ChatWork worker is connected and reporting device health." else "Worker connection needs attention. Check the ChatWork background worker."
+            textSize = 12f
+            setTextColor(muted)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7); bottomMargin = dp(13) })
+
+        val storageTotal = metrics.optLong("storage_total_bytes", -1L)
+        val storageAvailable = metrics.optLong("storage_available_bytes", -1L)
+        val ramTotal = metrics.optLong("ram_total_bytes", -1L)
+        val ramAvailable = metrics.optLong("ram_available_bytes", -1L)
+        val storageUsedPct = usagePercent(storageTotal, storageAvailable)
+        val ramUsedPct = usagePercent(ramTotal, ramAvailable)
+        val battery = metrics.optInt("battery_percent", -1)
+        val batteryStatus = metrics.optString("battery_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
+        val temperature = if (metrics.has("battery_temperature_c")) {
+            String.format(java.util.Locale.ENGLISH, "%.1f°C", metrics.optDouble("battery_temperature_c"))
+        } else "—"
+        val cpu = metrics.optDouble("app_cpu_usage_percent", -1.0)
+        val thermal = metrics.optString("thermal_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
+
+        val storageValue = if (storageTotal > 0 && storageAvailable >= 0) {
+            "${formatBytes(storageAvailable.coerceAtMost(storageTotal))} free"
+        } else "Waiting for report"
+        val storageDetail = if (storageTotal > 0 && storageAvailable >= 0) {
+            "${formatBytes((storageTotal - storageAvailable).coerceAtLeast(0L))} used of ${formatBytes(storageTotal)}"
+        } else "Internal storage"
+        val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
+            "${formatBytes(ramAvailable.coerceAtMost(ramTotal))} free"
+        } else "Waiting for report"
+        val ramDetail = if (ramTotal > 0 && ramAvailable >= 0) {
+            "${formatBytes((ramTotal - ramAvailable).coerceAtLeast(0L))} used of ${formatBytes(ramTotal)}"
+        } else "Device memory"
+
+        addHealthMetricRow(
+            panel,
+            healthMetric("INTERNAL STORAGE", storageValue, storageDetail, storageUsedPct, 0xFF55A7FF.toInt()),
+            healthMetric("AVAILABLE RAM", ramValue, ramDetail, ramUsedPct, 0xFF9A8BFF.toInt())
+        )
+        addHealthMetricRow(
+            panel,
+            healthMetric("BATTERY", if (battery in 0..100) "$battery%" else "—", batteryStatus, battery.takeIf { it in 0..100 }?.let { 100 - it }, 0xFF27C58B.toInt()),
+            healthMetric("BATTERY TEMP", temperature, "Battery temperature", null, 0xFFFFB547.toInt())
+        )
+        addHealthMetricRow(
+            panel,
+            healthMetric("APP CPU", if (cpu in 0.0..100.0) String.format(java.util.Locale.ENGLISH, "%.0f%%", cpu) else "—", "ChatWork app usage", cpu.takeIf { it in 0.0..100.0 }?.toInt(), 0xFF55A7FF.toInt()),
+            healthMetric("THERMAL", thermal.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ENGLISH) else it }, "Device thermal state", null, if (thermal.lowercase() in listOf("severe", "critical", "emergency", "shutdown")) 0xFFFF647C.toInt() else 0xFF27C58B.toInt())
+        )
+
+        val updatedText = when {
+            metricsUpdatedAt == null -> "Metrics have not been reported yet"
+            metricsFresh -> "Updated ${formatDate(metricsUpdatedAt)}"
+            else -> "Last report is stale • ${formatDate(metricsUpdatedAt)}"
+        }
+        val footer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(2), dp(11), dp(2), 0)
+        }
+        footer.addView(TextView(this).apply {
+            text = updatedText
+            textSize = 11f
+            setTextColor(if (metricsFresh) 0xFF27C58B.toInt() else 0xFFFFB547.toInt())
+        })
+        footer.addView(TextView(this).apply {
+            text = "Last worker heartbeat  •  $lastSeen"
+            textSize = 11f
+            setTextColor(muted)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        panel.addView(footer)
+        parent.addView(panel, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(12)
+        })
+    }
+
+    private data class HealthMetric(
+        val title: String,
+        val value: String,
+        val detail: String,
+        val progress: Int?,
+        val accent: Int
+    )
+
+    private fun healthMetric(title: String, value: String, detail: String, progress: Int?, accent: Int) =
+        HealthMetric(title, value, detail, progress?.coerceIn(0, 100), accent)
+
+    private fun usagePercent(total: Long, available: Long): Int? {
+        if (total <= 0L || available < 0L) return null
+        return (((total - available.coerceAtMost(total)).coerceAtLeast(0L).toDouble() / total) * 100.0).toInt().coerceIn(0, 100)
+    }
+
+    private fun addHealthMetricRow(parent: LinearLayout, left: HealthMetric, right: HealthMetric) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        listOf(left, right).forEachIndexed { index, metric ->
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(11), dp(11), dp(11), dp(10))
+                background = rounded(surface, dp(13), line)
+            }
+            card.addView(TextView(this).apply {
+                text = metric.title
+                textSize = 9.5f
+                letterSpacing = 0.7f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(muted)
+            })
+            card.addView(TextView(this).apply {
+                text = metric.value
+                textSize = 17f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(ink)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
+            card.addView(TextView(this).apply {
+                text = metric.detail
+                textSize = 10.5f
+                setTextColor(muted)
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+            if (metric.progress != null) {
+                val track = FrameLayout(this).apply {
+                    background = rounded(0xFF25354A.toInt(), dp(8))
+                    addView(View(this@DataCollectionActivity).apply {
+                        background = rounded(metric.accent, dp(8))
+                    }, FrameLayout.LayoutParams(0, dp(5), Gravity.START).apply {
+                        width = 0
+                    })
+                }
+                val bar = View(this).apply { background = rounded(metric.accent, dp(5)) }
+                track.addView(bar, FrameLayout.LayoutParams(-1, dp(5), Gravity.START).apply {
+                    width = 0
+                })
+                track.post {
+                    val width = (track.width * metric.progress / 100f).toInt().coerceAtLeast(if (metric.progress > 0) dp(3) else 0)
+                    bar.layoutParams = FrameLayout.LayoutParams(width, dp(5), Gravity.START)
+                }
+                card.addView(track, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(10) })
+            }
+            row.addView(card, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                if (index == 0) rightMargin = dp(5) else leftMargin = dp(5)
+            })
+        }
+        parent.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
     }
 
     private fun addInstalledModelsTable(parent: LinearLayout, capabilities: JSONArray) {
