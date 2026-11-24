@@ -345,7 +345,12 @@ set search_path = public, pg_temp
 as $recover_jobs$
 declare
   v_job record;
+  v_pending record;
+  v_target_device uuid;
+  v_language text;
+  v_min_ram_bytes bigint;
   v_recovered integer := 0;
+  v_reassigned integer := 0;
   v_expired integer := 0;
 begin
   for v_job in
@@ -369,6 +374,66 @@ begin
     v_recovered := v_recovered + 1;
   end loop;
 
+  -- Pending jobs assigned while every phone was offline are moved to a
+  -- newly online compatible phone, without consuming a processing attempt.
+  for v_pending in
+    select j.id, j.user_id, j.device_id, j.job_type, j.model_id, j.payload
+    from public.workly_ai_voice_jobs j
+    join public.workly_ai_voice_devices d on d.id = j.device_id
+    where j.status = 'pending'
+      and j.expires_at > now()
+      and (j.next_attempt_at is null or j.next_attempt_at <= now())
+      and (
+        d.revoked_at is not null
+        or d.worker_enabled = false
+        or d.last_seen_at is null
+        or d.last_seen_at < now() - interval '75 seconds'
+      )
+    order by j.created_at asc
+    limit 100
+    for update of j skip locked
+  loop
+    v_language := case
+      when v_pending.job_type = 'translate'
+        and nullif(v_pending.payload->>'source_language', '') is not null
+        and nullif(v_pending.payload->>'target_language', '') is not null
+        then split_part(lower(v_pending.payload->>'source_language'), '-', 1) || '-' ||
+          split_part(lower(v_pending.payload->>'target_language'), '-', 1)
+      else nullif(lower(coalesce(v_pending.payload->>'language', '')), '')
+    end;
+    v_min_ram_bytes := case
+      when v_pending.job_type = 'ai' then 1073741824
+      when v_pending.job_type = 'stt' then 536870912
+      else 268435456
+    end;
+
+    select selected.device_id
+      into v_target_device
+    from public.select_workly_voice_worker(
+      v_pending.user_id,
+      v_pending.job_type,
+      v_pending.model_id,
+      v_language,
+      v_min_ram_bytes
+    ) selected
+    where selected.device_id is not null
+      and selected.worker_online = true
+      and selected.device_id <> v_pending.device_id
+    limit 1;
+
+    if v_target_device is not null then
+      update public.workly_ai_voice_jobs
+      set device_id = v_target_device,
+          next_attempt_at = null,
+          result = coalesce(result, '{}'::jsonb) ||
+            jsonb_build_object('reassigned_after_worker_offline', true)
+      where id = v_pending.id
+        and status = 'pending';
+      v_reassigned := v_reassigned + 1;
+    end if;
+    v_target_device := null;
+  end loop;
+
   with expired as (
     update public.workly_ai_voice_jobs
     set status = 'expired',
@@ -385,7 +450,7 @@ begin
   )
   select count(*)::integer into v_expired from expired;
 
-  return v_recovered + v_expired;
+  return v_recovered + v_reassigned + v_expired;
 end;
 $recover_jobs$;
 
@@ -404,7 +469,7 @@ comment on function public.claim_workly_voice_job(uuid) is
 comment on function public.retry_workly_voice_job(uuid, uuid, text) is
   'Retries a failed ChatWork task only on a compatible phone belonging to the same user account.';
 comment on function public.recover_workly_voice_jobs() is
-  'Scheduled recovery for jobs whose assigned worker has gone offline; preserves account ownership.';
+  'Scheduled recovery and reassignment for pending/running jobs whose assigned worker has gone offline; preserves account ownership.';
 
 do $scheduler_cron$
 declare
