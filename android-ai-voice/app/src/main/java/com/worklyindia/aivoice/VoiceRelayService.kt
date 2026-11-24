@@ -350,11 +350,19 @@ class VoiceRelayService : Service() {
                         relayAiModelId = model.id
                     }
                 }
-                val userText = payload.optString("text").trim().take(4000)
+                val rawText = payload.optString("text").trim()
+                val userMarker = rawText.lastIndexOf("\\nUser:")
+                val assistantMarker = rawText.lastIndexOf("\\nAssistant:")
+                val userText = if (userMarker >= 0) {
+                    val start = userMarker + "\\nUser:".length
+                    val end = if (assistantMarker > userMarker) assistantMarker else rawText.length
+                    rawText.substring(start, end).trim()
+                } else rawText
                 require(userText.isNotBlank()) { "AI request text is empty." }
                 setStatus("Generating AI reply locally with " + model.title + "…")
-                val prompt = "You are Workly AI, a helpful assistant. Answer the user's latest message directly, accurately and concisely. Reply in the same language and script as the user. Do not invent facts.\nUser: " + userText + "\nAssistant:"
-                val reply = relayAiEngine.generate(prompt).trim()
+                // OfflineAiEngine already owns the full Qwen system prompt; pass only
+                // the user's latest text to avoid tokenizing duplicate instructions.
+                val reply = relayAiEngine.generate(userText.take(4000)).trim()
                 if (reply.isBlank()) throw IllegalStateException("Qwen returned an empty reply.")
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("reply", reply.take(6000))
