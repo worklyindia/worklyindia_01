@@ -123,6 +123,7 @@ class VoiceRelayService : Service() {
     private fun pollLoop(token: String) {
         setStatus(if (hasValidatedInternet()) "Connecting to Supabase relay…" else "Waiting for Data on…")
         var wasWaitingForData = !hasValidatedInternet()
+        var idlePollDelayMs = POLL_INTERVAL_MS
         var lastCapabilityRefresh = 0L
         var lastMetricsRefresh = 0L
         var capabilitiesSnapshot = org.json.JSONArray()
@@ -165,6 +166,7 @@ class VoiceRelayService : Service() {
                 getSharedPreferences(STATUS_PREFS, MODE_PRIVATE).edit().putLong(LAST_POLL_KEY, System.currentTimeMillis()).apply()
                 val job = response.optJSONObject("job")
                 if (job != null) {
+                    idlePollDelayMs = POLL_INTERVAL_MS
                     val jobId = job.optString("id")
                     val requestPayload = job.optJSONObject("payload")
                     val requestModel = requestPayload?.optString("pack_id")?.takeIf { it.isNotBlank() }
@@ -178,6 +180,7 @@ class VoiceRelayService : Service() {
                         else -> runCatching { VoiceRelayApi.fail(token, jobId, "Unsupported voice job type.") }
                     }
                 } else {
+                    idlePollDelayMs = (idlePollDelayMs * 3 / 2).coerceAtMost(5_000L)
                     setStatus("Shared phone server is online. Waiting for website requests…")
                 }
             } catch (error: Exception) {
@@ -189,9 +192,10 @@ class VoiceRelayService : Service() {
                     stopSelf()
                     break
                 }
+                idlePollDelayMs = (idlePollDelayMs * 2).coerceAtMost(10_000L)
                 setStatus("Relay reconnecting: ${error.message ?: "network unavailable"}")
             }
-            try { Thread.sleep(POLL_INTERVAL_MS) } catch (_: InterruptedException) { break }
+            try { Thread.sleep(idlePollDelayMs) } catch (_: InterruptedException) { break }
         }
     }
 
