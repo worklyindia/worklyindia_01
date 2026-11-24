@@ -31,7 +31,15 @@ class QwenModelManager(context: Context) {
     fun isSupported(model: Model, availableRam: Long) = availableRam >= model.minFreeRam
     fun snapshot(model: Model): Snapshot {
         val f=file(model)
-        if (valid(f, model)) return Snapshot(State.READY, model.size, model.size)
+        if (valid(f, model)) {
+            if (!prefs.contains("installed_at_" + model.id)) {
+                val stamp = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }.format(java.util.Date())
+                prefs.edit().putString("installed_at_" + model.id, stamp).apply()
+            }
+            return Snapshot(State.READY, model.size, model.size)
+        }
         val id=prefs.getLong("download_" + model.id, -1)
         if (id <= 0) return Snapshot(State.NOT_DOWNLOADED, total=model.size)
         val c=dm.query(DownloadManager.Query().setFilterById(id)) ?: return Snapshot(State.FAILED,total=model.size,downloadId=id)
@@ -50,6 +58,11 @@ class QwenModelManager(context: Context) {
             return Snapshot(state,bytes,total,id)
         }
     }
+    fun installedAt(model: Model): String? {
+        if (snapshot(model).state != State.READY) return null
+        return prefs.getString("installed_at_" + model.id, null)
+    }
+
     @Throws(IOException::class)
     fun startDownload(model: Model, allowMobileData: Boolean = false): Long {
         val s=snapshot(model)
@@ -76,7 +89,7 @@ class QwenModelManager(context: Context) {
         val id=prefs.getLong("download_" + model.id,-1)
         if(id>0) dm.remove(id)
         file(model).delete()
-        prefs.edit().remove("download_" + model.id).apply()
+        prefs.edit().remove("download_" + model.id).remove("installed_at_" + model.id).apply()
     }
     fun valid(file: File, model: Model): Boolean {
         if(!file.isFile || file.length()!=model.size) return false

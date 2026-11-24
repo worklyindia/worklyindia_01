@@ -100,11 +100,31 @@ class TextToVoiceActivity : Activity() {
             // Insets are applied once by the decor view below.
         }
         // Compact single-row toolbar: back arrow and page title share one baseline.
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10),0,dp(16),0); setBackgroundColor(surface) }
-        header.addView(Button(this).apply { text = "‹"; textSize=25f; isAllCaps=false; minWidth=0; minimumWidth=0; setPadding(0,0,0,0); setTextColor(primary); setBackgroundColor(surface); contentDescription="Back"; setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(40),dp(42)))
-        header.addView(TextView(this).apply { text="Text To Voice"; textSize=18f; gravity=Gravity.CENTER_VERTICAL or Gravity.START; setSingleLine(true); includeFontPadding=false; setTextColor(primary); setTypeface(typeface,android.graphics.Typeface.BOLD) }, LinearLayout.LayoutParams(0,dp(42),1f))
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setBackgroundColor(this@TextToVoiceActivity.background)
+        }
+        header.addView(TextView(this).apply {
+            text = "‹"
+            textSize = 36f
+            gravity = Gravity.CENTER
+            translationY = -dp(4).toFloat()
+            setTextColor(primary)
+            contentDescription = "Back"
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(dp(42), dp(48)))
+        header.addView(TextView(this).apply {
+            text = "Text To Voice"
+            textSize = 18f
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            setSingleLine(true)
+            setTextColor(primary)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
         page.addView(header)
-        page.addView(View(this).apply { setBackgroundColor(if(dark) 0x334A5B70 else 0x2234475E) }, LinearLayout.LayoutParams(-1,dp(1)))
+        page.addView(View(this).apply { setBackgroundColor(if (dark) 0xFF29384D.toInt() else 0x2234475E) }, LinearLayout.LayoutParams(-1, dp(1)))
         val scroll=ScrollView(this)
         val content=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(18),dp(16),dp(18),dp(24)) }
         scroll.addView(content)

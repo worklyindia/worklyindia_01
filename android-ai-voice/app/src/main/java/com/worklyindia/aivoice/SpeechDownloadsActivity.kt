@@ -36,7 +36,7 @@ class SpeechDownloadsActivity : Activity() {
     private var choiceShowing = false
     private var availableRam = 0L
     private var activeMossPlayer: MediaPlayer? = null
-    private data class DownloadRow(val status: TextView, val progress: ProgressBar, val action: Button, var lastBytes: Long = 0L, var lastAt: Long = 0L, val refresh: () -> Unit)
+    private data class DownloadRow(val status: TextView, val progress: ProgressBar, val action: Button, val refresh: () -> Unit)
     private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
     private val primary get() = if (dark) 0xFFE8EEF7.toInt() else 0xFF142033.toInt()
@@ -58,15 +58,20 @@ class SpeechDownloadsActivity : Activity() {
     }
 
     private fun buildUi() {
-        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18),dp(12),dp(18),dp(20)); setBackgroundColor(bg) }
-        page.addView(Button(this).apply { text="‹  Back to ChatWork"; isAllCaps=false; setTextColor(primary); setBackgroundColor(bg); gravity=android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL; setOnClickListener { finish() } })
+        val page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10)); setBackgroundColor(bg) }
+        header.addView(TextView(this).apply { text = "‹"; textSize = 36f; gravity = android.view.Gravity.CENTER; translationY = -dp(4).toFloat(); setTextColor(primary); setOnClickListener { finish() } }, LinearLayout.LayoutParams(dp(42), dp(48)))
+        header.addView(TextView(this).apply { text = "Download Models"; textSize = 18f; typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = android.view.Gravity.CENTER_VERTICAL; setTextColor(primary) }, LinearLayout.LayoutParams(0, -2, 1f))
+        page.addView(header)
+        page.addView(View(this).apply { setBackgroundColor(if (dark) 0xFF29384D.toInt() else 0x2234475E) }, LinearLayout.LayoutParams(-1, dp(1)))
         ensureCommunityWorkerEnabled()
         val scroll=ScrollView(this).apply {
             isFillViewport = false
             isHorizontalScrollBarEnabled = false
+            isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
         }
-        val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(18), dp(14), dp(18), dp(24)) }
         scroll.addView(list)
         page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true))
@@ -161,19 +166,13 @@ class SpeechDownloadsActivity : Activity() {
                 .setPositiveButton("Delete") { _,_ -> qwenManager.cancelAndDelete(model); refreshAll() }
                 .show()
         }
-        var lastBytes = 0L
-        var lastAt = 0L
         val row=DownloadRow(status,progress,action) {
             val snap=runCatching { qwenManager.snapshot(model) }.getOrNull() ?: return@DownloadRow
             val supported=qwenManager.isSupported(model,availableRam)
-            val now=android.os.SystemClock.elapsedRealtime()
-            val speed=if(lastAt>0 && now>lastAt && snap.downloaded>=lastBytes) (snap.downloaded-lastBytes)*1000L/(now-lastAt) else 0L
-            lastAt=now; lastBytes=snap.downloaded
             val transferred="%.1f / %.1f MB".format(Locale.US,snap.downloaded/1e6,snap.total/1e6)
-            val speedText=if(snap.state==QwenModelManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
             status.text=when(snap.state) {
                 QwenModelManager.State.READY -> "Downloaded · Ready · " + transferred + " · " + VoiceWorkerCapabilityRegistry.status("qwen-" + model.id, true)
-                QwenModelManager.State.RUNNING -> "Downloading · " + snap.progressPercent + "% · " + transferred + speedText
+                QwenModelManager.State.RUNNING -> "Downloading · " + snap.progressPercent + "% · " + transferred
                 QwenModelManager.State.PENDING -> "Waiting for network · " + transferred
                 QwenModelManager.State.PAUSED -> "Paused · " + transferred
                 QwenModelManager.State.FAILED -> "Download failed · " + transferred + " · Retry"
@@ -218,13 +217,10 @@ class SpeechDownloadsActivity : Activity() {
         var lastAt = 0L
         val row=DownloadRow(status,progress,action) {
             val s=runCatching { speechManager.snapshot(pack) }.getOrNull() ?: return@DownloadRow
-            val now=android.os.SystemClock.elapsedRealtime()
-            val speed=if(lastAt>0 && now>lastAt && s.downloadedBytes>=lastBytes) (s.downloadedBytes-lastBytes)*1000L/(now-lastAt) else 0L
-            lastAt=now; lastBytes=s.downloadedBytes
-            val speedText=if(s.state==SpeechPackDownloadManager.State.RUNNING && speed>0) " · " + "%.1f MB/s".format(Locale.US,speed/1e6) else ""
+
             status.text=when(s.state) {
                 SpeechPackDownloadManager.State.COMPLETE -> "Ready · installed · " + VoiceWorkerCapabilityRegistry.status(pack.id, true)
-                SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB" + speedText
+                SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB"
                 SpeechPackDownloadManager.State.PENDING -> "Waiting for network…"
                 SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
                 SpeechPackDownloadManager.State.FAILED -> "Download failed · tap Retry"

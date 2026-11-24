@@ -22,6 +22,8 @@ internal object ChatWorkTheme {
         return when (lightColor) {
             0xFFF4F7FB.toInt(), 0xFFF4F7FF.toInt(), 0xFFFFFFFF.toInt(), 0xFFE5EAF1.toInt(),
             0xFFE8EDF4.toInt(), 0xFFD8E0EA.toInt() -> 0xFF1B293B.toInt()
+            0xFFEAF1FA.toInt() -> 0xFF2B3B52.toInt()
+            0xFFF7F9FC.toInt() -> 0xFF202F43.toInt()
             0xFF142033.toInt(), 0xFF26364B.toInt() -> 0xFFE8EEF7.toInt()
             0xFF65748B.toInt(), 0xFF536276.toInt(), 0xFF8491A3.toInt() -> 0xFFB5C1D1.toInt()
             else -> lightColor
