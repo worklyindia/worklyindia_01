@@ -476,7 +476,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
     if (action === "create_stt_job") {
       const user = await authenticatedUser(req);
       if (!user) return json({ error: "Authentication required" }, 401);
-      await cleanupExpiredJobs(db, now);
+      await cleanupExpiredJobs(db, now, user.id);
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
       if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
       const requestedLanguage = typeof body?.language === "string" ? body.language.split("-")[0].toLowerCase() : "";
