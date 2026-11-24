@@ -213,7 +213,7 @@ begin
           else true
         end
         and case
-          when coalesce(d.worker_metrics->>'app_cpu_usage_percent', '') ~ '^[0-9]+(\\.[0-9]+)?$'
+          when coalesce(d.worker_metrics->>'app_cpu_usage_percent', '') ~ '^[0-9]+(\.[0-9]+)?$'
             then (d.worker_metrics->>'app_cpu_usage_percent')::numeric < 85
           else true
         end
