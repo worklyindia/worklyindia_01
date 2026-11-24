@@ -86,13 +86,17 @@ class DataCollectionActivity : Activity() {
                 runCatching {
                     val workerEnabled = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
                         .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
-                    if (workerEnabled) {
-                        VoiceRelayApi.setWorkerState(
-                            token,
-                            true,
-                            VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
-                        )
+                    val capabilities = if (workerEnabled) {
+                        VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
+                    } else {
+                        JSONArray()
                     }
+                    VoiceRelayApi.setWorkerState(
+                        token,
+                        workerEnabled,
+                        capabilities,
+                        WorkerDeviceMetrics.snapshot(this)
+                    )
                 }
                 val response = VoiceRelayApi.userDataDashboard(token)
                 runOnUiThread {
@@ -176,19 +180,89 @@ class DataCollectionActivity : Activity() {
 
     private fun addOverview(parent: LinearLayout) {
         val devices = dashboard.optJSONArray("devices") ?: JSONArray()
-        val device = devices.optJSONObject(0)
-        val workerStatus = device?.let { row ->
-            when {
-                !row.isNull("revoked_at") -> "REVOKED"
-                row.optBoolean("worker_enabled", false) && isRecentHeartbeat(row.optString("last_seen_at")) -> "ACTIVE"
-                row.optBoolean("worker_enabled", false) -> "OFFLINE"
-                else -> "OFF"
+        var onlineCount = 0
+        for (i in 0 until devices.length()) {
+            val row = devices.optJSONObject(i) ?: continue
+            if (row.optBoolean("online", false)) onlineCount++
+        }
+        parent.addView(
+            infoCard(
+                "Worker devices: ${devices.length()} • Online: $onlineCount",
+                "Storage, RAM and battery are reported by each paired phone. Device metrics refresh about every 30 seconds."
+            ),
+            LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(8) }
+        )
+
+        if (devices.length() == 0) {
+            parent.addView(infoCard("No registered phones", "Connect ChatWork on a phone to register it with your Workly India account."))
+            return
+        }
+
+        for (deviceIndex in 0 until devices.length()) {
+            val device = devices.optJSONObject(deviceIndex) ?: continue
+            val deviceName = device.optString("device_name").ifBlank { "ChatWork phone ${deviceIndex + 1}" }
+            val workerStatus = when {
+                !device.isNull("revoked_at") -> "REVOKED"
+                device.optBoolean("online", false) -> "ONLINE"
+                device.optBoolean("worker_enabled", false) -> "OFFLINE"
+                else -> "WORKER OFF"
             }
-        } ?: "NOT REGISTERED"
-        val lastSeen = device?.optString("last_seen_at", "")?.takeIf { it.isNotBlank() }?.let { formatDate(it) } ?: "Never"
-        parent.addView(infoCard("Community Worker: " + workerStatus, "Last heartbeat: " + lastSeen), LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8) })
-        parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5); leftMargin = dp(6); rightMargin = dp(6) })
-        val capabilities = device?.optJSONArray("model_capabilities") ?: JSONArray()
+            val lastSeen = device.optString("last_seen_at").takeIf { it.isNotBlank() && it != "null" }
+                ?.let { formatDate(it) } ?: "Never"
+            val metrics = device.optJSONObject("worker_metrics") ?: JSONObject()
+            val metricsUpdatedAt = device.optString("metrics_updated_at").takeIf { it.isNotBlank() && it != "null" }
+            val metricsFresh = metricsUpdatedAt?.let { isFreshMetric(it) } == true
+
+            fun metricBytes(availableKey: String, totalKey: String): String {
+                val total = metrics.optLong(totalKey, -1L)
+                val available = metrics.optLong(availableKey, -1L)
+                if (total <= 0L || available < 0L) return "Waiting for first report"
+                val safeAvailable = available.coerceAtMost(total)
+                val used = (total - safeAvailable).coerceAtLeast(0L)
+                return "${formatBytes(total)} total • ${formatBytes(safeAvailable)} available • ${formatBytes(used)} used"
+            }
+
+            val batteryLevel = metrics.optInt("battery_percent", -1)
+            val batteryStatus = metrics.optString("battery_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
+            val batteryText = if (batteryLevel in 0..100) "$batteryLevel% • $batteryStatus" else "Waiting for first report"
+            val temperature = if (metrics.has("battery_temperature_c")) {
+                String.format(java.util.Locale.ENGLISH, "%.1f°C", metrics.optDouble("battery_temperature_c"))
+            } else "—"
+            val updatedText = when {
+                metricsUpdatedAt == null -> "Metrics: not reported yet"
+                metricsFresh -> "Metrics updated: ${formatDate(metricsUpdatedAt)}"
+                else -> "Metrics stale • last update: ${formatDate(metricsUpdatedAt)}"
+            }
+            val resourceDetails = listOf(
+                "Internal storage: ${metricBytes("storage_available_bytes", "storage_total_bytes")}",
+                "RAM: ${metricBytes("ram_available_bytes", "ram_total_bytes")}",
+                "Battery: $batteryText",
+                "Battery temperature: $temperature",
+                updatedText,
+                "Last worker heartbeat: $lastSeen"
+            ).joinToString("\n")
+
+            parent.addView(sectionTitle(deviceName), LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(4); leftMargin = dp(8); rightMargin = dp(8)
+            })
+            parent.addView(
+                infoCard("Worker status: $workerStatus", resourceDetails),
+                LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(8) }
+            )
+
+            val capabilities = device.optJSONArray("model_capabilities") ?: JSONArray()
+            parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply {
+                leftMargin = dp(8); rightMargin = dp(8)
+            })
+            addInstalledModelsTable(parent, capabilities)
+        }
+    }
+
+    private fun addInstalledModelsTable(parent: LinearLayout, capabilities: JSONArray) {
+        if (capabilities.length() == 0) {
+            parent.addView(infoCard("No installed models", "This phone has not reported any ready voice models."))
+            return
+        }
         val headers = arrayOf("Model", "Size", "Date & Time", "Language")
         val table = TableLayout(this).apply {
             isStretchAllColumns = false
@@ -199,7 +273,6 @@ class DataCollectionActivity : Activity() {
         table.addView(header)
         for (i in 0 until capabilities.length()) {
             val cap = capabilities.optJSONObject(i) ?: continue
-            // Show the exact installed package, not the short relay alias (e.g. "indic").
             val model = listOf("pack_id", "model_name", "model", "model_id", "name", "id")
                 .firstNotNullOfOrNull { key ->
                     cap.optString(key).takeIf { it.isNotBlank() && it != "null" && it != "Unknown model" }
@@ -237,8 +310,12 @@ class DataCollectionActivity : Activity() {
         parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply {
             leftMargin = dp(6); rightMargin = dp(6); bottomMargin = dp(12)
         })
-        if (capabilities.length() == 0) parent.addView(infoCard("No installed models", "No ready model capabilities were reported by this phone."))
     }
+
+    private fun isFreshMetric(value: String): Boolean = try {
+        val parsed = java.time.Instant.parse(value).toEpochMilli()
+        System.currentTimeMillis() - parsed <= 90_000L
+    } catch (_: Exception) { false }
 
     private fun fullLanguageName(code: String): String {
         val normalized = code.substringBefore('-').lowercase(java.util.Locale.ROOT)
