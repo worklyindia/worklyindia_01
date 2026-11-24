@@ -152,7 +152,7 @@ async function callWorklyVoiceFirst(
   const latest = [...messages].reverse().find((message: any) => message?.role === 'user');
   const latestText = typeof latest?.content === 'string' ? latest.content.trim() : '';
   const hasNonTextContent = messages.some((message: any) => Array.isArray(message?.content));
-  const onlineOnly = /\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\\b/i.test(latestText);
+  const onlineOnly = /\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\b/i.test(latestText);
   const canUseLocal = isAndroidBrowser &&
     !signal?.aborted &&
     body.hasImages !== true &&
