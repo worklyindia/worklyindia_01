@@ -383,104 +383,44 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (payloadText.length > 20_000) return json({ error: "Payload exceeds 20 KB" }, 413);
 
       const requestedModel = typeof payload?.model === "string" ? payload.model : "";
-      // Keep the full locale (for example en-IN / gu-IN). Android advertises
-      // regional language tags; stripping the region here incorrectly rejected
-      // an otherwise-ready worker and returned 429 for valid preview requests.
       const requestedLanguage = jobType === "translate" &&
         typeof payload?.source_language === "string" && typeof payload?.target_language === "string"
         ? payload.source_language.toLowerCase().split("-")[0] + "-" + payload.target_language.toLowerCase().split("-")[0]
         : typeof payload?.language === "string" ? payload.language.trim().toLowerCase() : "";
-      const supportsRequestedLanguage = (languages: unknown): boolean => {
-        if (!requestedLanguage) return true;
-        if (!Array.isArray(languages)) return false;
-        return languages.some((value: unknown) => {
-          if (typeof value !== "string") return false;
-          const advertised = value.trim().toLowerCase();
-          if (advertised === "multilingual" || advertised === requestedLanguage) return true;
-          // Translation capabilities are ordered source-target pairs; never
-          // treat a shared source language as support for a different target.
-          if (jobType === "translate") return false;
-          // Accept a base language only when the worker advertises that base
-          // explicitly, while matching en-IN with en and vice versa.
-          return advertised.split("-")[0] === requestedLanguage.split("-")[0];
-        });
-      };
-      const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities,worker_metrics,last_seen_at")
-        .eq("user_id", user.id)
-        .eq("worker_enabled", true)
-        .is("revoked_at", null)
-        .order("last_seen_at", { ascending: true })
-        .limit(500);
-      if (deviceError) throw deviceError;
-      const requiredTask = jobType;
-      let device: any = null;
-      let selectedModel = requestedModel;
-      let selectedPackId = "";
-      let selectedModelName = "";
-      let activeJobs = Number.MAX_SAFE_INTEGER;
-      let selectedDeviceOnline = false;
-      let onlineModelReady = false;
-      let onlineModelLanguageReady = false;
-      for (const candidate of candidates ?? []) {
-        const readyCapabilities = Array.isArray(candidate.model_capabilities)
-          ? candidate.model_capabilities.filter((cap: any) =>
-              cap && cap.task === requiredTask && (!requestedModel || cap.model === requestedModel) &&
-              typeof cap.model === "string" && cap.ready === true && Array.isArray(cap.languages))
-          : [];
-        if (readyCapabilities.length) onlineModelReady = true;
-        const matchedCapability = readyCapabilities.find((cap: any) => supportsRequestedLanguage(cap.languages));
-        if (matchedCapability) onlineModelLanguageReady = true;
-        if (!matchedCapability) continue;
-        const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
-        if (metrics.low_memory === true) continue;
-        const appCpuUsage = typeof metrics.app_cpu_usage_percent === "number" ? metrics.app_cpu_usage_percent : null;
-        if (appCpuUsage !== null && appCpuUsage >= 85) continue;
-        const thermalStatus = typeof metrics.thermal_status === "string" ? metrics.thermal_status.toLowerCase() : "unknown";
-        if (["severe", "critical", "emergency", "shutdown"].includes(thermalStatus)) continue;
-        const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
-        if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
-        const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
-        const minimumRam = jobType === "ai" ? 1024 * 1024 * 1024 : 256 * 1024 * 1024;
-        if (availableRam !== null && availableRam < minimumRam) continue;
-        const { count, error: countError } = await db.from("workly_ai_voice_jobs")
-          .select("id", { count: "exact", head: true })
-          .eq("device_id", candidate.id)
-          .in("status", ["pending", "running"])
-          .gt("expires_at", new Date().toISOString());
-        if (countError) throw countError;
-        const load = count ?? 0;
-        if (load < 100) {
-          const isOnline = !!candidate.last_seen_at && Date.now() - Date.parse(candidate.last_seen_at) <= 60_000;
-          if (!device || (isOnline && !selectedDeviceOnline) ||
-            (isOnline === selectedDeviceOnline && load < activeJobs)) {
-            device = candidate;
-            selectedDeviceOnline = isOnline;
-            selectedModel = matchedCapability.model;
-            selectedPackId = typeof matchedCapability.pack_id === "string" ? matchedCapability.pack_id : matchedCapability.model;
-            selectedModelName = typeof matchedCapability.model_name === "string" ? matchedCapability.model_name : selectedPackId;
-            activeJobs = load;
-          }
-        }
-      }
-      if (!device) {
-        if (!onlineModelReady) {
+      const minimumRamBytes = jobType === "ai" ? 1024 * 1024 * 1024 : 256 * 1024 * 1024;
+      const { data: workerRows, error: workerError } = await db.rpc("select_workly_voice_worker", {
+        p_user_id: user.id,
+        p_job_type: jobType,
+        p_requested_model: requestedModel || null,
+        p_requested_language: requestedLanguage || null,
+        p_min_ram_bytes: minimumRamBytes
+      });
+      if (workerError) throw workerError;
+      const selectedWorker = Array.isArray(workerRows) ? workerRows[0] ?? null : null;
+      const deviceId = selectedWorker?.device_id ?? null;
+      const selectedModel = selectedWorker?.selected_model ?? requestedModel;
+      const selectedPackId = selectedWorker?.selected_pack_id ?? selectedModel;
+      const selectedModelName = selectedWorker?.selected_model_name ?? selectedPackId;
+      const activeJobs = Number(selectedWorker?.queue_depth ?? 0);
+      const selectedDeviceOnline = selectedWorker?.worker_online === true;
+
+      if (!deviceId) {
+        if (!selectedWorker?.model_ready) {
           return json({
             error: requestedModel
-              ? `The ${requestedModel} voice model is not installed and ready on any paired phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.`
+              ? (requestedModel + " voice model is not installed and ready on any paired phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.")
               : "No paired phone has a ready model for this voice task."
           }, 409);
         }
-        if (!onlineModelLanguageReady) {
-          return json({ error: `The selected voice model is ready, but not for ${requestedLanguage}. Download its language pack in ChatWork or choose a supported language.` }, 409);
+        if (!selectedWorker?.language_ready) {
+          return json({ error: "The selected voice model is ready, but not for " + requestedLanguage + ". Download its language pack in ChatWork or choose a supported language." }, 409);
         }
-        return json({ error: "All compatible Workly Voice queues are full. Please wait a moment and try again." }, 429);
+        return json({ error: "All compatible Workly Voice queues are full or all phones are under resource pressure. Please wait and retry.", retryable: true, retry_after_seconds: 10 }, 429);
       }
-
 
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
         .insert({
-          user_id: user.id, device_id: device.id, job_type: jobType,
+          user_id: user.id, device_id: deviceId, job_type: jobType,
           model_id: selectedModel, model_name: selectedModelName, pack_id: selectedPackId,
           payload: { ...(payload ?? {}), model: selectedModel, model_id: selectedModel, pack_id: selectedPackId, model_name: selectedModelName },
           expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
@@ -498,57 +438,37 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const audioBase64 = typeof body?.audio_base64 === "string" ? body.audio_base64 : "";
       if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
       const requestedLanguage = typeof body?.language === "string" ? body.language.split("-")[0].toLowerCase() : "";
-      const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities,worker_metrics,last_seen_at").eq("user_id", user.id).eq("worker_enabled", true).is("revoked_at", null)
-        .order("last_seen_at", { ascending: true }).limit(500);
-      if (deviceError) throw deviceError;
-      let device: any = null;
-      let selectedSttModel = "";
-      let lightestQueue = Number.MAX_SAFE_INTEGER;
-      let selectedSttDeviceOnline = false;
-      for (const candidate of candidates ?? []) {
-        const capability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
-          cap && cap.task === "stt" && typeof cap.model === "string" && cap.ready === true &&
-          Array.isArray(cap.languages) && (!requestedLanguage || cap.languages.includes(requestedLanguage))
-        );
-        if (!capability) continue;
-        const metrics = candidate.worker_metrics && typeof candidate.worker_metrics === "object" ? candidate.worker_metrics : {};
-        if (metrics.low_memory === true) continue;
-        const battery = typeof metrics.battery_percent === "number" ? metrics.battery_percent : null;
-        if (battery !== null && battery <= 10 && metrics.is_charging !== true) continue;
-        const availableRam = typeof metrics.ram_available_bytes === "number" ? metrics.ram_available_bytes : null;
-        if (availableRam !== null && availableRam < 512 * 1024 * 1024) continue;
-        const { count, error: countError } = await db.from("workly_ai_voice_jobs")
-          .select("id", { count: "exact", head: true })
-          .eq("device_id", candidate.id)
-          .in("status", ["pending", "running"])
-          .gt("expires_at", new Date().toISOString());
-        if (countError) throw countError;
-        const load = count ?? 0;
-        if (load < 100) {
-          const isOnline = !!candidate.last_seen_at && Date.now() - Date.parse(candidate.last_seen_at) <= 60_000;
-          if (!device || (isOnline && !selectedSttDeviceOnline) ||
-            (isOnline === selectedSttDeviceOnline && load < lightestQueue)) {
-            device = candidate;
-            selectedSttDeviceOnline = isOnline;
-            selectedSttModel = capability.model;
-            lightestQueue = load;
-          }
-        }
-      }
-      if (!device) return json({ error: "No paired, opted-in phone has a ready speech-recognition model for this language." }, 404);
+      const { data: workerRows, error: workerError } = await db.rpc("select_workly_voice_worker", {
+        p_user_id: user.id,
+        p_job_type: "stt",
+        p_requested_model: null,
+        p_requested_language: requestedLanguage || null,
+        p_min_ram_bytes: 512 * 1024 * 1024
+      });
+      if (workerError) throw workerError;
+      const selectedWorker = Array.isArray(workerRows) ? workerRows[0] ?? null : null;
+      const deviceId = selectedWorker?.device_id ?? null;
+      const selectedSttModel = selectedWorker?.selected_model ?? "";
+      const selectedSttDeviceOnline = selectedWorker?.worker_online === true;
+      if (!deviceId) return json({
+        error: selectedWorker?.model_ready && selectedWorker?.language_ready
+          ? "All compatible speech-recognition phones are busy or under resource pressure. Please wait and retry."
+          : "No paired, opted-in phone has a ready speech-recognition model for this language.",
+        retryable: Boolean(selectedWorker?.model_ready && selectedWorker?.language_ready),
+        retry_after_seconds: 10
+      }, selectedWorker?.model_ready && selectedWorker?.language_ready ? 429 : 404);
       let bytes: Uint8Array;
       try { const binary = atob(audioBase64); bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0)); }
       catch { return json({ error: "Invalid recorded audio." }, 400); }
       if (bytes.byteLength < 1000 || bytes.byteLength > 1_300_000) return json({ error: "Recorded audio size is invalid." }, 413);
       const jobId = crypto.randomUUID();
-      const path = `${device.id}/input-${jobId}.wav`;
+      const path = `${deviceId}/input-${jobId}.wav`;
       const { error: uploadError } = await db.storage.from("workly-ai-voice-audio")
         .upload(path, bytes, { contentType: "audio/wav", upsert: false });
       if (uploadError) throw uploadError;
       const { data: job, error } = await db.from("workly_ai_voice_jobs")
         .insert({
-          id: jobId, user_id: user.id, device_id: device.id, job_type: "stt",
+          id: jobId, user_id: user.id, device_id: deviceId, job_type: "stt",
           model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel,
           payload: { audio_path: path, content_type: "audio/wav", model: selectedSttModel, model_id: selectedSttModel, model_name: selectedSttModel, pack_id: selectedSttModel, language: requestedLanguage || "auto" },
           expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString()
