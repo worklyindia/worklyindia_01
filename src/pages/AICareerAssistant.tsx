@@ -144,10 +144,67 @@ async function callWorklyVoiceFirst(
   callbacks: Parameters<typeof callAICareerChat>[1],
   signal?: AbortSignal
 ): Promise<{ fullText: string; cached: boolean }> {
-  // Normal AI Chat must always use the existing online AI backend.
-  // The paired Android voice worker is reserved for voice-specific flows;
-  // routing ordinary text through it can reduce answer quality and context.
-  return callAICareerChat(body, callbacks, signal);
+  // Only plain, conversational text can use the paired ChatWork Qwen model.
+  // Images, documents, live lookups, account data and actions stay on the
+  // existing online AI transport, which retains its tools and provider chain.
+  const isAndroidBrowser = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  const latest = [...messages].reverse().find((message: any) => message?.role === 'user');
+  const latestText = typeof latest?.content === 'string' ? latest.content.trim() : '';
+  const hasNonTextContent = messages.some((message: any) => Array.isArray(message?.content));
+  const onlineOnly = /\\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\\b/i.test(latestText);
+  const canUseLocal = isAndroidBrowser &&
+    !signal?.aborted &&
+    body.hasImages !== true &&
+    !hasNonTextContent &&
+    latestText.length > 0 &&
+    latestText.length <= 3500 &&
+    Boolean(body.localRequestId) &&
+    !onlineOnly;
+
+  if (!canUseLocal) return callAICareerChat(body, callbacks, signal);
+
+  const history = messages
+    .filter((message: any) => message?.role === 'user' || message?.role === 'assistant')
+    .slice(-6)
+    .map((message: any) => {
+      const text = typeof message.content === 'string' ? message.content : '';
+      return text ? `${message.role === 'user' ? 'User' : 'Assistant'}: ${text.slice(0, 700)}` : '';
+    })
+    .filter(Boolean)
+    .join('\\n');
+  const prompt = [
+    'You are Workly AI running locally on the user phone. Answer only from the conversation and general knowledge. Do not claim to access live websites, accounts, databases, job listings, or perform actions. If live information or an action is needed, this request should use online AI.',
+    history,
+    'Assistant:'
+  ].join('\\n\\n').slice(-3500);
+  const callbackUrl = new URL(window.location.href);
+  callbackUrl.searchParams.delete('localAiReply');
+  callbackUrl.searchParams.delete('localAiRequestId');
+  callbackUrl.searchParams.delete('localAiFallback');
+  const fallbackUrl = new URL(callbackUrl.href);
+  fallbackUrl.searchParams.set('localAiFallback', '1');
+  fallbackUrl.searchParams.set('localAiRequestId', String(body.localRequestId));
+  const returnUrl = callbackUrl.href;
+  const intentUrl = `intent://ai?prompt=${encodeURIComponent(prompt)}&returnUrl=${encodeURIComponent(returnUrl)}&requestId=${encodeURIComponent(String(body.localRequestId))}#Intent;scheme=worklychat;package=com.worklyindia.chatwork;S.browser_fallback_url=${encodeURIComponent(fallbackUrl.href)};end`;
+
+  callbacks.onLifecycle?.('request_sent');
+  callbacks.onStatus?.('ChatWork local Qwen ko request bhej rahe hain…');
+  window.location.href = intentUrl;
+
+  // If Android/browser blocks the app hand-off, continue with the same online
+  // backend instead of leaving the send operation stuck.
+  return new Promise((resolve, reject) => {
+    const fallbackTimer = window.setTimeout(() => {
+      if (document.visibilityState === 'visible' && !signal?.aborted) {
+        callAICareerChat(body, callbacks, signal).then(resolve, reject);
+      }
+    }, 1800);
+    signal?.addEventListener('abort', () => {
+      window.clearTimeout(fallbackTimer);
+      reject(new DOMException('The request was cancelled.', 'AbortError'));
+    }, { once: true });
+  });
 }
 
 const CHAT_HEADER_GREEN = '#075E54';
@@ -233,6 +290,7 @@ export default function AICareerAssistant() {
   }, [subscriptionStatus]);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const localAiReturnHandledRef = useRef(false);
   const loggedMessageIdsRef = useRef<Set<string> | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -549,6 +607,45 @@ export default function AICareerAssistant() {
     return () => subscription.unsubscribe();
   }, [isDeveloper]);
 
+  // A ChatWork Qwen hand-off returns to this same website route. Merge the
+  // local answer into the existing chat history before the pending-message
+  // recovery effect runs, preventing a duplicate online request.
+  useEffect(() => {
+    if (!authChecked) return;
+    const url = new URL(window.location.href);
+    const reply = url.searchParams.get('localAiReply');
+    const requestId = url.searchParams.get('localAiRequestId');
+    if (reply && requestId) {
+      localAiReturnHandledRef.current = true;
+      const stored = chatStorage.loadMessages() as Message[];
+      const alreadyAdded = stored.some(message => message.id === `local-ai-${requestId}`);
+      const updated = stored.map(message =>
+        message.id === requestId && message.role === 'user'
+          ? { ...message, status: 'read' as const }
+          : message
+      );
+      if (!alreadyAdded) {
+        updated.push({
+          id: `local-ai-${requestId}`,
+          role: 'assistant',
+          content: reply.slice(0, 6000),
+          timestamp: formatChatStamp(),
+        });
+      }
+      chatStorage.saveMessages(updated);
+      setMessages(updated);
+      url.searchParams.delete('localAiReply');
+      url.searchParams.delete('localAiRequestId');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    } else if (url.searchParams.has('localAiFallback')) {
+      // ChatWork could not complete locally (or is not installed). The normal
+      // pending-message retry below will send the message through online AI.
+      url.searchParams.delete('localAiFallback');
+      url.searchParams.delete('localAiRequestId');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+    }
+  }, [authChecked]);
+
   // Persist completed ChatWork turns to the secure server-side Owner log.
   // Existing local history is marked as seen on first load and is not backfilled.
   useEffect(() => {
@@ -665,7 +762,7 @@ export default function AICareerAssistant() {
   // AI call, causing duplicate assistant replies in the chat.
   const pendingRetryDone = useRef(false);
   useEffect(() => {
-    if (pendingRetryDone.current || !currentUser) return;
+    if (pendingRetryDone.current || !currentUser || localAiReturnHandledRef.current) return;
     // Mark as done immediately so any subsequent message changes don't re-trigger
     pendingRetryDone.current = true;
 
@@ -718,7 +815,8 @@ export default function AICareerAssistant() {
               hasImages: imageUrls.length > 0,
               currentPage: window.location.pathname,
                audience: chatAudience,
-               pageContext: { path: window.location.pathname, page: 'AI Chat', audience: chatAudience }
+               pageContext: { path: window.location.pathname, page: 'AI Chat', audience: chatAudience },
+              localRequestId: lastMsg.id
             },
             {
               onCached: (text) => {
@@ -1655,7 +1753,8 @@ ${(v.topComments || []).slice(0, 12).map((c) => `- ${c.author}: ${String(c.text 
           audience: chatAudience,
           hasImages: imageUrls.length > 0,
           currentPage: window.location.pathname,
-          pageContext: getPageContext()
+          pageContext: getPageContext(),
+          localRequestId: messageId
         },
         {
           onRunId: (runId) => {
