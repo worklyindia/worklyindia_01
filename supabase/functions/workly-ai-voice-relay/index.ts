@@ -401,8 +401,8 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .eq("worker_enabled", true)
         .is("revoked_at", null)
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
-        .order("last_seen_at", { ascending: false })
-        .limit(100);
+        .order("last_seen_at", { ascending: true })
+        .limit(500);
       if (deviceError) throw deviceError;
       const requiredTask = jobType;
       let device: any = null;
@@ -443,7 +443,6 @@ export async function handleWorklyVoiceRelay(req: Request) {
           selectedModelName = typeof matchedCapability.model_name === "string" ? matchedCapability.model_name : selectedPackId;
           activeJobs = load;
         }
-        if (load === 0) break;
       }
       if (!device) {
         if (!onlineModelReady) {
@@ -483,7 +482,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
         .select("id,model_capabilities,worker_metrics").eq("user_id", user.id).eq("worker_enabled", true).is("revoked_at", null)
         .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
-        .order("last_seen_at", { ascending: false }).limit(100);
+        .order("last_seen_at", { ascending: true }).limit(500);
       if (deviceError) throw deviceError;
       let device: any = null;
       let selectedSttModel = "";
