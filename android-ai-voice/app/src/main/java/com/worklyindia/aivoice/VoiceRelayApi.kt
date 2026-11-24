@@ -47,10 +47,19 @@ object VoiceRelayApi {
     }
 
 
-    fun setWorkerState(deviceToken: String, enabled: Boolean, capabilities: org.json.JSONArray) {
+    fun setWorkerState(
+        deviceToken: String,
+        enabled: Boolean,
+        capabilities: org.json.JSONArray,
+        metrics: JSONObject? = null
+    ) {
+        val values = JSONObject()
+            .put("enabled", enabled)
+            .put("capabilities", if (enabled) capabilities else org.json.JSONArray())
+        if (metrics != null) values.put("metrics", metrics)
         val response = post(
             "set_worker_state",
-            JSONObject().put("enabled", enabled).put("capabilities", if (enabled) capabilities else org.json.JSONArray()),
+            values,
             deviceToken = deviceToken
         )
         if (response.statusCode !in 200..299) {
