@@ -190,7 +190,21 @@ async function callWorklyVoiceFirst(
 
   callbacks.onLifecycle?.('request_sent');
   callbacks.onStatus?.('ChatWork local Qwen ko request bhej rahe hain…');
-  window.location.href = intentUrl;
+
+  // In the Workly Android WebView, use the native bridge so Android launches
+  // ChatWork directly and can return to this exact in-app WebView route.
+  // Regular Android browsers keep the standard intent:// hand-off.
+  const nativeBridge = (window as any).WorklyAndroid;
+  if (typeof nativeBridge?.launchChatWorkAi === 'function') {
+    const launched = nativeBridge.launchChatWorkAi(
+      prompt,
+      returnUrl,
+      String(body.localRequestId)
+    ) === true;
+    if (!launched) return callAICareerChat(body, callbacks, signal);
+  } else {
+    window.location.href = intentUrl;
+  }
 
   // If Android/browser blocks the app hand-off, continue with the same online
   // backend instead of leaving the send operation stuck.
