@@ -56,7 +56,8 @@ create or replace function public.select_workly_voice_worker(
   p_job_type text,
   p_requested_model text default null,
   p_requested_language text default null,
-  p_min_ram_bytes bigint default 0
+  p_min_ram_bytes bigint default 0,
+  p_exclude_device uuid default null
 )
 returns table (
   device_id uuid,
@@ -166,6 +167,7 @@ begin
       and active.expires_at > now()
   ) q
   where d.user_id = p_user_id
+    and (p_exclude_device is null or d.id <> p_exclude_device)
     and d.worker_enabled = true
     and d.revoked_at is null
     and cap->>'task' = p_job_type
@@ -296,12 +298,12 @@ declare
     500
   );
 begin
-  select *
+  select j.*
   into v_job
-  from public.workly_ai_voice_jobs
-  where id = p_job_id
-    and device_id = p_device_id
-    and status = 'running'
+  from public.workly_ai_voice_jobs j
+  where j.id = p_job_id
+    and j.device_id = p_device_id
+    and j.status = 'running'
   for update;
 
   if not found then
@@ -342,11 +344,11 @@ begin
       v_job.job_type,
       v_job.model_id,
       v_language,
-      v_min_ram_bytes
+      v_min_ram_bytes,
+      p_device_id
     ) selected
     where selected.device_id is not null
       and selected.worker_online = true
-      and selected.device_id <> p_device_id
     limit 1;
 
     if v_target_device is null then
@@ -466,11 +468,11 @@ begin
       v_pending.job_type,
       v_pending.model_id,
       v_language,
-      v_min_ram_bytes
+      v_min_ram_bytes,
+      v_pending.device_id
     ) selected
     where selected.device_id is not null
       and selected.worker_online = true
-      and selected.device_id <> v_pending.device_id
     limit 1;
 
     if v_target_device is not null then
@@ -512,7 +514,7 @@ begin
 end;
 $recover_jobs$;
 
-revoke all on function public.select_workly_voice_worker(uuid, text, text, text, bigint)
+revoke all on function public.select_workly_voice_worker(uuid, text, text, text, bigint, uuid)
   from public, anon, authenticated;
 revoke all on function public.claim_workly_voice_job(uuid)
   from public, anon, authenticated;
@@ -521,14 +523,14 @@ revoke all on function public.retry_workly_voice_job(uuid, uuid, text)
 revoke all on function public.recover_workly_voice_jobs()
   from public, anon, authenticated, service_role;
 
-grant execute on function public.select_workly_voice_worker(uuid, text, text, text, bigint)
+grant execute on function public.select_workly_voice_worker(uuid, text, text, text, bigint, uuid)
   to service_role;
 grant execute on function public.claim_workly_voice_job(uuid)
   to service_role;
 grant execute on function public.retry_workly_voice_job(uuid, uuid, text)
   to service_role;
 
-comment on function public.select_workly_voice_worker(uuid, text, text, text, bigint) is
+comment on function public.select_workly_voice_worker(uuid, text, text, text, bigint, uuid) is
   'Selects the least-loaded compatible ChatWork phone for one account using model, language, RAM, CPU, battery and thermal health.';
 comment on function public.claim_workly_voice_job(uuid) is
   'Atomic ChatWork job claim. Callable only by the service-role relay after device-token authentication.';
