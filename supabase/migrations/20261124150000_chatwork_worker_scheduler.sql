@@ -182,6 +182,7 @@ begin
   return query
   select v_device_id, v_model, v_pack_id, v_model_name,
     coalesce(v_queue_depth, 0), coalesce(v_online, false), v_model_ready, v_language_ready;
+  return;
 end;
 $select_workly_worker$;
 
@@ -331,8 +332,9 @@ begin
   select j.id, j.status, j.device_id, j.attempt_count
   from public.workly_ai_voice_jobs j
   where j.id = v_job.id;
+  return;
 end;
-$$;
+$;
 
 -- Recover tasks only when their assigned phone is revoked, opted out or has
 -- missed its heartbeat. Long-running work on a healthy phone is left alone.
