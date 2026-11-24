@@ -152,7 +152,7 @@ async function callWorklyVoiceFirst(
   const latest = [...messages].reverse().find((message: any) => message?.role === 'user');
   const latestText = typeof latest?.content === 'string' ? latest.content.trim() : '';
   const hasNonTextContent = messages.some((message: any) => Array.isArray(message?.content));
-  const onlineOnly = /\\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\\b/i.test(latestText);
+  const onlineOnly = /\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\\b/i.test(latestText);
   const canUseLocal = isAndroidBrowser &&
     !signal?.aborted &&
     body.hasImages !== true &&
@@ -172,12 +172,12 @@ async function callWorklyVoiceFirst(
       return text ? `${message.role === 'user' ? 'User' : 'Assistant'}: ${text.slice(0, 700)}` : '';
     })
     .filter(Boolean)
-    .join('\\n');
+    .join('\n');
   const prompt = [
     'You are Workly AI running locally on the user phone. Answer only from the conversation and general knowledge. Do not claim to access live websites, accounts, databases, job listings, or perform actions. If live information or an action is needed, this request should use online AI.',
     history,
     'Assistant:'
-  ].join('\\n\\n').slice(-3500);
+  ].join('\n\n').slice(-3500);
   const callbackUrl = new URL(window.location.href);
   callbackUrl.searchParams.delete('localAiReply');
   callbackUrl.searchParams.delete('localAiRequestId');
