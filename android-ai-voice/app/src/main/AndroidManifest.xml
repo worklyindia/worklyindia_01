@@ -38,6 +38,18 @@
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
         <activity android:name=".TextToVoiceActivity" android:exported="false" />
         <activity android:name=".DataCollectionActivity" android:exported="false" />
+        <activity
+            android:name=".WebsiteAiRelayActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="worklychat" android:host="ai" />
+            </intent-filter>
+        </activity>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
