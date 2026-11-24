@@ -191,7 +191,8 @@ const OwnerPortal = () => {
       items: [
         { name: "Analytics Overview", icon: TrendingUp, path: "/owner-portal/analytics-dashboard" },
         { name: "Domain Sales", icon: BarChart3, path: "/owner-portal/domain-sales" },
-        { name: "AI Access Logs", icon: Activity, path: "/owner-portal/ai-access-monitoring" }
+        { name: "AI Access Logs", icon: Activity, path: "/owner-portal/ai-access-monitoring" },
+        { name: "ChatWork AI Logs", icon: MessageSquare, path: "/owner-portal/chatwork-ai-logs", badge: "Owner" }
       ]
     },
     {

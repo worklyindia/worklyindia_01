@@ -27,6 +27,7 @@ import { cleanupAiChatTempFiles } from '@/utils/storageCleanup';
 import { toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 import { chatStorage } from '@/lib/chatStorage';
+import { persistAIChatMessages } from '@/lib/aiChatConversationLogger';
 import { aiResponseCache } from '@/lib/aiResponseCache';
 import { wallpaperStorage } from '@/lib/wallpaperStorage';
 import MessageContextMenu from '@/components/MessageContextMenu';
@@ -232,6 +233,7 @@ export default function AICareerAssistant() {
   }, [subscriptionStatus]);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const loggedMessageIdsRef = useRef<Set<string> | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [generationIntent, setGenerationIntent] = useState<GenerationIntent>('text');
@@ -546,6 +548,27 @@ export default function AICareerAssistant() {
 
     return () => subscription.unsubscribe();
   }, [isDeveloper]);
+
+  // Persist completed ChatWork turns to the secure server-side Owner log.
+  // Existing local history is marked as seen on first load and is not backfilled.
+  useEffect(() => {
+    if (!authChecked || !currentUser?.id || isLoading) return;
+    if (loggedMessageIdsRef.current === null) {
+      loggedMessageIdsRef.current = new Set(messages.map((message) => message.id));
+      return;
+    }
+    const unseen = messages.filter((message) => !loggedMessageIdsRef.current!.has(message.id));
+    if (!unseen.length) return;
+    unseen.forEach((message) => loggedMessageIdsRef.current!.add(message.id));
+    const audience = isDeveloper ? 'developer' : isEmployer ? 'employer' : 'default';
+    void persistAIChatMessages(
+      currentUser.id,
+      audience,
+      unseen.map(({ id, role, content, timestamp }) => ({ id, role, content, timestamp })),
+    ).catch((error) => {
+      console.error('[ChatWork AI logs] Failed to save conversation log:', error);
+    });
+  }, [messages, isLoading, authChecked, currentUser?.id, isDeveloper, isEmployer]);
 
   // Check if the logged-in user has the owner role (admin_users.role = 'owner')
   useEffect(() => {

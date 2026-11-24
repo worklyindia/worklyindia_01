@@ -106,6 +106,7 @@ const CreateRole = lazyRetry(() => import("./pages/owner-portal/CreateRole"));
 const AuthUsersManagement = lazyRetry(() => import("./pages/owner-portal/AuthUsersManagement"));
 const AppErrorDetails = lazyRetry(() => import("./pages/owner-portal/AppErrorDetails"));
 const AppUserDetails = lazyRetry(() => import("./pages/owner-portal/AppUserDetails"));
+const ChatWorkAILogs = lazyRetry(() => import("./pages/owner-portal/ChatWorkAILogs"));
 const AIChatPlansManagement = lazyRetry(() => import("./pages/owner-portal/AIChatPlansManagement"));
 const AIPublicPricing = lazyRetry(() => import("./pages/AIPublicPricing"));
 const Pricing = lazyRetry(() => import("./pages/Pricing"));
@@ -1447,6 +1448,11 @@ const AppContent = () => {
           <ProtectedPermissionRoute requiredPermission="team_management.edit_roles" ownerOnly>
             <CreateRole />
           </ProtectedPermissionRoute>
+        } />
+        <Route path="/owner-portal/chatwork-ai-logs" element={
+          <ProtectedAdminRoute requiredRole="owner">
+            <ChatWorkAILogs />
+          </ProtectedAdminRoute>
         } />
         <Route path="/owner-portal/app-error-details" element={
           <ProtectedAdminRoute requiredRole="owner">
