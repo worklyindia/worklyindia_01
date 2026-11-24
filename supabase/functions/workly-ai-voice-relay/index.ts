@@ -399,11 +399,10 @@ export async function handleWorklyVoiceRelay(req: Request) {
         });
       };
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities,worker_metrics")
+        .select("id,model_capabilities,worker_metrics,last_seen_at")
         .eq("user_id", user.id)
         .eq("worker_enabled", true)
         .is("revoked_at", null)
-        .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
         .order("last_seen_at", { ascending: true })
         .limit(500);
       if (deviceError) throw deviceError;
@@ -413,6 +412,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
       let selectedPackId = "";
       let selectedModelName = "";
       let activeJobs = Number.MAX_SAFE_INTEGER;
+      let selectedDeviceOnline = false;
       let onlineModelReady = false;
       let onlineModelLanguageReady = false;
       for (const candidate of candidates ?? []) {
@@ -439,20 +439,25 @@ export async function handleWorklyVoiceRelay(req: Request) {
           .gt("expires_at", new Date().toISOString());
         if (countError) throw countError;
         const load = count ?? 0;
-        if (load < activeJobs && load < 100) {
-          device = candidate;
-          selectedModel = matchedCapability.model;
-          selectedPackId = typeof matchedCapability.pack_id === "string" ? matchedCapability.pack_id : matchedCapability.model;
-          selectedModelName = typeof matchedCapability.model_name === "string" ? matchedCapability.model_name : selectedPackId;
-          activeJobs = load;
+        if (load < 100) {
+          const isOnline = !!candidate.last_seen_at && Date.now() - Date.parse(candidate.last_seen_at) <= 60_000;
+          if (!device || (isOnline && !selectedDeviceOnline) ||
+            (isOnline === selectedDeviceOnline && load < activeJobs)) {
+            device = candidate;
+            selectedDeviceOnline = isOnline;
+            selectedModel = matchedCapability.model;
+            selectedPackId = typeof matchedCapability.pack_id === "string" ? matchedCapability.pack_id : matchedCapability.model;
+            selectedModelName = typeof matchedCapability.model_name === "string" ? matchedCapability.model_name : selectedPackId;
+            activeJobs = load;
+          }
         }
       }
       if (!device) {
         if (!onlineModelReady) {
           return json({
             error: requestedModel
-              ? `The ${requestedModel} voice model is not installed and ready on an online Workly phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.`
-              : "No online Workly phone has a ready model for this voice task."
+              ? `The ${requestedModel} voice model is not installed and ready on any paired phone. Download and enable this model in ChatWork > Download Models, or choose another ready model.`
+              : "No paired phone has a ready model for this voice task."
           }, 409);
         }
         if (!onlineModelLanguageReady) {
@@ -472,7 +477,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .select("id,status,expires_at")
         .single();
       if (error) throw error;
-      return json({ job, queue_position: activeJobs + 1 });
+      return json({ job, queue_position: activeJobs + 1, worker_online: selectedDeviceOnline });
     }
 
     if (action === "create_stt_job") {
@@ -483,13 +488,13 @@ export async function handleWorklyVoiceRelay(req: Request) {
       if (!audioBase64 || audioBase64.length > 1_800_000) return json({ error: "Recorded audio must be under 1.3 MB." }, 413);
       const requestedLanguage = typeof body?.language === "string" ? body.language.split("-")[0].toLowerCase() : "";
       const { data: candidates, error: deviceError } = await db.from("workly_ai_voice_devices")
-        .select("id,model_capabilities,worker_metrics").eq("user_id", user.id).eq("worker_enabled", true).is("revoked_at", null)
-        .gt("last_seen_at", new Date(Date.now() - 60_000).toISOString())
+        .select("id,model_capabilities,worker_metrics,last_seen_at").eq("user_id", user.id).eq("worker_enabled", true).is("revoked_at", null)
         .order("last_seen_at", { ascending: true }).limit(500);
       if (deviceError) throw deviceError;
       let device: any = null;
       let selectedSttModel = "";
       let lightestQueue = Number.MAX_SAFE_INTEGER;
+      let selectedSttDeviceOnline = false;
       for (const candidate of candidates ?? []) {
         const capability = Array.isArray(candidate.model_capabilities) && candidate.model_capabilities.find((cap: any) =>
           cap && cap.task === "stt" && typeof cap.model === "string" && cap.ready === true &&
@@ -509,13 +514,18 @@ export async function handleWorklyVoiceRelay(req: Request) {
           .gt("expires_at", new Date().toISOString());
         if (countError) throw countError;
         const load = count ?? 0;
-        if (load < lightestQueue && load < 100) {
-          device = candidate;
-          selectedSttModel = capability.model;
-          lightestQueue = load;
+        if (load < 100) {
+          const isOnline = !!candidate.last_seen_at && Date.now() - Date.parse(candidate.last_seen_at) <= 60_000;
+          if (!device || (isOnline && !selectedSttDeviceOnline) ||
+            (isOnline === selectedSttDeviceOnline && load < lightestQueue)) {
+            device = candidate;
+            selectedSttDeviceOnline = isOnline;
+            selectedSttModel = capability.model;
+            lightestQueue = load;
+          }
         }
       }
-      if (!device) return json({ error: "No online, opted-in phone has a ready speech-recognition model for this language." }, 404);
+      if (!device) return json({ error: "No paired, opted-in phone has a ready speech-recognition model for this language." }, 404);
       let bytes: Uint8Array;
       try { const binary = atob(audioBase64); bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0)); }
       catch { return json({ error: "Invalid recorded audio." }, 400); }
@@ -534,7 +544,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         })
         .select("id,status,expires_at").single();
       if (error) { await db.storage.from("workly-ai-voice-audio").remove([path]); throw error; }
-      return json({ job });
+      return json({ job, worker_online: selectedSttDeviceOnline });
     }
 
     if (action === "get_job") {
