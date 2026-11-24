@@ -180,11 +180,6 @@ class DataCollectionActivity : Activity() {
 
     private fun addOverview(parent: LinearLayout) {
         val devices = dashboard.optJSONArray("devices") ?: JSONArray()
-        var onlineCount = 0
-        for (i in 0 until devices.length()) {
-            val row = devices.optJSONObject(i) ?: continue
-            if (row.optBoolean("online", false)) onlineCount++
-        }
         parent.addView(
             infoCard(
                 "Android device information",
