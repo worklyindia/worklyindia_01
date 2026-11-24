@@ -146,13 +146,12 @@ async function callWorklyVoiceFirst(
 ): Promise<{ fullText: string; cached: boolean }> {
   // Only plain conversational text is eligible for the paired phone's local Qwen.
   // Rich requests and unsupported platforms continue through the existing online AI API.
-  const isAndroidBrowser = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const latest = [...messages].reverse().find((message: any) => message?.role === 'user');
   const latestText = typeof latest?.content === 'string' ? latest.content.trim() : '';
   const hasNonTextContent = messages.some((message: any) => Array.isArray(message?.content));
   const onlineOnly = /\b(search|find jobs?|job openings?|apply|latest|today|current|live|weather|news|price|check my|my profile|my application|wallet|database|website|open|update|delete|send|call|book|reserve|upload|download|generate image|create image|youtube|instagram|facebook|whatsapp|api|account|payment|subscription|location|near me)\b/i.test(latestText);
-  const canUseLocal = isAndroidBrowser &&
+  const canUseLocal =
     !signal?.aborted &&
     body.hasImages !== true &&
     !hasNonTextContent &&
