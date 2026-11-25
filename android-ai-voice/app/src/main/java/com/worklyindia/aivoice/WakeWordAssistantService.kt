@@ -99,8 +99,18 @@ class WakeWordAssistantService : Service() {
                 reserveRamBytes = 1_200L * 1024L * 1024L,
                 reserveStorageBytes = 256L * 1024L * 1024L
             )
-            val chosen = recommendation.candidate?.let { item -> modelManager.models.firstOrNull { it.id == item.id } }
-                ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
+            val savedModelId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
+                .getString("selected_model_id", null)
+            val chosenCandidate = recommendation.candidate
+            val chosen = if (savedModelId != null) {
+                check(chosenCandidate?.id == savedModelId) {
+                    "The selected Qwen model does not fit the wake assistant memory budget. Choose a smaller tested model in ChatWork first."
+                }
+                modelManager.models.first { it.id == savedModelId }
+            } else {
+                chosenCandidate?.let { item -> modelManager.models.firstOrNull { it.id == item.id } }
+                    ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
+            }
             val activeAiEngine = OfflineAiEngine()
             ai = activeAiEngine
             activeAi = activeAiEngine
