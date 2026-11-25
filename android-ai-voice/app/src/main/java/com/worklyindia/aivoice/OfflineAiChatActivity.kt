@@ -151,6 +151,8 @@ class OfflineAiChatActivity : Activity() {
             }
         }
 
+        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
+
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
@@ -346,6 +348,7 @@ class OfflineAiChatActivity : Activity() {
         modelLoadInProgress = true
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
+        qwenModelPicker.isEnabled = false
         status.text = "Checking Qwen model and phone memory…"
         worker.execute {
             try {
@@ -405,6 +408,7 @@ class OfflineAiChatActivity : Activity() {
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
                     sendButton.alpha = 1f
+                    qwenModelPicker.isEnabled = true
                 }
             } catch (error: Exception) {
                 runOnUiThread {
@@ -412,6 +416,7 @@ class OfflineAiChatActivity : Activity() {
                     modelLoadInProgress = false
                     status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
                     sendButton.isEnabled = false
+                    qwenModelPicker.isEnabled = true
                 }
             }
         }
