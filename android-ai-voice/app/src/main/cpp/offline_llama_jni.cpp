@@ -120,7 +120,7 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     // Qwen3 supports an explicit non-thinking chat mode. Qwen2.5 ignores this branch.
     if (model_is_qwen3) user_content += "\n/no_think";
     const std::string prompt = system_prompt + user_content +
-        "\n<|im_end|>\n<|im_start|>assistant\n"
+        "\n<|im_end|>\n<|im_start|>assistant\n";
 
     const llama_vocab * vocab = llama_model_get_vocab(model);
     const int required = -llama_tokenize(
