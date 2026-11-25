@@ -13,7 +13,7 @@ class QwenModelManager(context: Context) {
     data class Model(val id: String, val title: String, val size: Long, val url: String, val fileName: String, val minFreeRam: Long, val premium: Boolean = false) {
         override fun toString() = title + " · " + (size / 1_000_000) + " MB" + if (premium) " · Premium" else ""
     }
-    enum class State { NOT_DOWNLOADED, PENDING, RUNNING, PAUSED, FAILED, READY }
+    enum class State { NOT_DOWNLOADED, PENDING, RUNNING, PAUSED, FAILED, NEEDS_TEST, READY }
     data class Snapshot(val state: State, val downloaded: Long = 0, val total: Long, val downloadId: Long = -1) {
         val progressPercent get() = if (total > 0) (downloaded * 100 / total).toInt().coerceIn(0,100) else 0
     }
@@ -39,7 +39,8 @@ class QwenModelManager(context: Context) {
                 }.format(java.util.Date())
                 prefs.edit().putString("installed_at_" + model.id, stamp).apply()
             }
-            return Snapshot(State.READY, model.size, model.size)
+            val tested = prefs.getBoolean("tested_" + model.id, false)
+            return Snapshot(if (tested) State.READY else State.NEEDS_TEST, model.size, model.size)
         }
         val id=prefs.getLong("download_" + model.id, -1)
         if (id <= 0) return Snapshot(State.NOT_DOWNLOADED, total=model.size)
@@ -67,7 +68,7 @@ class QwenModelManager(context: Context) {
     @Throws(IOException::class)
     fun startDownload(model: Model, allowMobileData: Boolean = false): Long {
         val s=snapshot(model)
-        if(s.state==State.READY) return -1
+        if(s.state==State.READY || s.state==State.NEEDS_TEST) return -1
         if(s.state==State.RUNNING || s.state==State.PENDING || s.state==State.PAUSED) return s.downloadId
         if(!dir.exists() && !dir.mkdirs()) throw IOException("Cannot create model folder")
         val available=StatFs(dir.absolutePath).availableBytes
@@ -83,14 +84,19 @@ class QwenModelManager(context: Context) {
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(app,Environment.DIRECTORY_DOWNLOADS,"workly-ai/" + model.fileName)
         val id=dm.enqueue(request)
-        prefs.edit().putLong("download_" + model.id,id).apply()
+        prefs.edit().remove("tested_" + model.id).putLong("download_" + model.id,id).apply()
         return id
     }
+    fun markTested(model: Model, passed: Boolean) {
+        prefs.edit().putBoolean("tested_" + model.id, passed).apply()
+    }
+
     fun cancelAndDelete(model: Model) {
         val id=prefs.getLong("download_" + model.id,-1)
         if(id>0) dm.remove(id)
         file(model).delete()
-        prefs.edit().remove("download_" + model.id).remove("installed_at_" + model.id).apply()
+        prefs.edit().remove("download_" + model.id).remove("installed_at_" + model.id)
+            .remove("tested_" + model.id).apply()
     }
     fun valid(file: File, model: Model): Boolean {
         if(!file.isFile || file.length()!=model.size) return false
