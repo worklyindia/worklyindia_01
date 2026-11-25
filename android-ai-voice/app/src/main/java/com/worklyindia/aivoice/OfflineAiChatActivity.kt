@@ -367,6 +367,7 @@ class OfflineAiChatActivity : Activity() {
                     modelManager.models.firstOrNull { it.id == candidate.id }
                 }
                 val chosen = savedReady ?: adaptiveChoice ?: recommended
+                getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit().putString("selected_model_id", chosen.id).apply()
                 selectedQwenModel = chosen
                 runOnUiThread {
                     val index = modelManager.models.indexOf(chosen)
