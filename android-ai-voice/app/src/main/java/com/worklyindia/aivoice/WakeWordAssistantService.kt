@@ -82,8 +82,12 @@ class WakeWordAssistantService : Service() {
             check(speechManager.snapshot(ttsPack).state == SpeechPackDownloadManager.State.COMPLETE) {
                 "Download Indic Tiny TTS ${language.uppercase(Locale.ROOT)} from Download Models first."
             }
+            val wakePack = SpeechModelCatalog.chatWorkWakeWord()
             check(WakeWordEngineFactory.isReady(this)) {
                 "Download the ChatWork Wake Word model from Download Models first."
+            }
+            check(speechManager.isModelTested(wakePack)) {
+                "Run Test Model for the ChatWork Wake Word pack before enabling listening."
             }
 
             val modelManager = QwenModelManager(this)
