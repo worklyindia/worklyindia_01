@@ -345,6 +345,7 @@ class OfflineAiChatActivity : Activity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
             qwenModelPicker.isEnabled = false
             status.text = "Starting Hey ChatWork foreground microphone service…"
+            waitForWakeServiceStop()
         } catch (error: Exception) {
             status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
         }
