@@ -174,19 +174,13 @@ object ModelUsageTracker {
         if (packId.isBlank()) return
         val duration = (android.os.SystemClock.elapsedRealtime() - startedAtElapsedMs).coerceAtLeast(0L)
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val count = prefs.getLong("count_$packId", 0L) + 1L
-        val total = prefs.getLong("total_ms_$packId", 0L) + duration
-        val fastest = prefs.getLong("fastest_ms_$packId", Long.MAX_VALUE).coerceAtMost(duration)
-        val slowest = prefs.getLong("slowest_ms_$packId", 0L).coerceAtLeast(duration)
         prefs.edit()
             .putString("model_name_$packId", modelName)
             .putString("task_$packId", task)
             .putString("last_used_at_$packId", java.time.Instant.now().toString())
             .putLong("last_duration_ms_$packId", duration)
-            .putLong("average_duration_ms_$packId", total / count)
-            .putLong("fastest_duration_ms_$packId", fastest)
-            .putLong("slowest_duration_ms_$packId", slowest)
-            .putLong("count_$packId", count)
+            // Keep one latest successful record per model.
+            .putLong("average_duration_ms_$packId", duration)
             .putString("last_source_$packId", source)
             .putInt("last_input_chars_$packId", inputChars.coerceAtLeast(0))
             .putLong("last_output_bytes_$packId", outputBytes.coerceAtLeast(0L))
@@ -196,25 +190,28 @@ object ModelUsageTracker {
 
     fun snapshot(context: Context, packId: String): JSONObject {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val count = prefs.getLong("count_$packId", 0L)
         return JSONObject()
             .put("last_used_at", prefs.getString("last_used_at_$packId", null) ?: JSONObject.NULL)
             .put("last_duration_ms", prefs.getLong("last_duration_ms_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
             .put("average_duration_ms", prefs.getLong("average_duration_ms_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
-            .put("fastest_duration_ms", prefs.getLong("fastest_duration_ms_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
-            .put("slowest_duration_ms", prefs.getLong("slowest_duration_ms_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
-            .put("use_count", count)
             .put("last_source", prefs.getString("last_source_$packId", null) ?: JSONObject.NULL)
             .put("task", prefs.getString("task_$packId", null) ?: JSONObject.NULL)
             .put("model_name", prefs.getString("model_name_$packId", null) ?: JSONObject.NULL)
-            .put("last_input_chars", prefs.getInt("last_input_chars_$packId", -1).takeIf { it >= 0 } ?: JSONObject.NULL)
-            .put("last_output_bytes", prefs.getLong("last_output_bytes_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
     }
 
-    private fun syncIfDue(context: Context, prefs: android.content.SharedPreferences) {
+    fun clear(context: Context, packId: String) {
+        if (packId.isBlank()) return
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        listOf("model_name_", "task_", "last_used_at_", "last_duration_ms_", "average_duration_ms_",
+            "last_source_", "last_input_chars_", "last_output_bytes_")
+            .forEach { prefs.edit().remove(it + packId).apply() }
+        syncIfDue(context.applicationContext, prefs, force = true)
+    }
+
+    private fun syncIfDue(context: Context, prefs: android.content.SharedPreferences, force: Boolean = false) {
         val token = SecureDeviceTokenStore.read(context) ?: return
         val now = System.currentTimeMillis()
-        if (now - prefs.getLong("last_sync_at", 0L) < 15_000L) return
+        if (!force && now - prefs.getLong("last_sync_at", 0L) < 15_000L) return
         prefs.edit().putLong("last_sync_at", now).apply()
         Thread {
             runCatching {
