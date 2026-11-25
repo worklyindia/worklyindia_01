@@ -219,8 +219,8 @@ object ModelUsageTracker {
         prefs.edit().putLong("last_sync_at", now).apply()
         Thread {
             runCatching {
-                val enabled = context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE)
-                    .getBoolean(WORKER_ENABLED_KEY, false)
+                val enabled = context.getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, Context.MODE_PRIVATE)
+                    .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
                 val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(context)
                 VoiceRelayApi.setWorkerState(
                     token,
