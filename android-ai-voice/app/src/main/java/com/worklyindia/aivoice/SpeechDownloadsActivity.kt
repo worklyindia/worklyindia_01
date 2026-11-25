@@ -182,6 +182,10 @@ class SpeechDownloadsActivity : Activity() {
                     action.text = "Delete"
                     action.isEnabled = true
                     action.setOnClickListener {
+                        if (getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+                            Toast.makeText(this, "Stop Hey ChatWork before deleting an AI model.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
                         AlertDialog.Builder(this).setTitle("Delete ${model.title}?")
                             .setMessage("This removes the downloaded model file from this phone.")
                             .setNegativeButton("Cancel", null)
@@ -319,6 +323,10 @@ class SpeechDownloadsActivity : Activity() {
                 action.text = "Delete"
                 action.isEnabled = true
                 action.setOnClickListener {
+                    if (getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+                        Toast.makeText(this, "Stop Hey ChatWork before deleting a speech model.", Toast.LENGTH_LONG).show()
+                        return@setOnClickListener
+                    }
                     AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                         .setMessage("This removes the downloaded model files from this phone.")
                         .setNegativeButton("Cancel", null)
