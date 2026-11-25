@@ -209,8 +209,8 @@ class SpeechDownloadsActivity : Activity() {
                 else -> {
                     status.visibility = View.VISIBLE
                     status.text = when {
-                        !storageOk -> "Requires ${formatModelSize(model.size + 512L * 1024L * 1024L)} free storage · Delete files to unlock."
-                        !ramOk -> "Requires ${formatModelSize(model.minFreeRam)} free RAM · Close apps to unlock."
+                        !storageOk -> "Not supported on this phone · Requires ${formatModelSize(model.size + 512L * 1024L * 1024L)} free storage; available ${formatModelSize(availableStorageBytes())}."
+                        !ramOk -> "Not supported on this phone · Requires ${formatModelSize(model.minFreeRam)} free RAM; available ${formatModelSize(availableRam)}."
                         snapshot.state == QwenModelManager.State.FAILED -> "Download failed · Check internet and retry."
                         else -> ""
                     }
@@ -338,7 +338,7 @@ class SpeechDownloadsActivity : Activity() {
         val requiredStorage = pack.totalBytes + maxOf(256L * 1024L * 1024L, pack.totalBytes / 10L)
         val freeStorage = availableStorageBytes()
         if (freeStorage < requiredStorage) {
-            return "Requires ${formatModelSize(requiredStorage)} free storage · Delete files to unlock."
+            return "Not supported on this phone · Requires ${formatModelSize(requiredStorage)} free storage; available ${formatModelSize(freeStorage)}."
         }
         val requiredRam = when {
             pack.id == "kokoro-82m" -> 1_200L * 1024L * 1024L
@@ -348,7 +348,7 @@ class SpeechDownloadsActivity : Activity() {
             else -> 1_000L * 1024L * 1024L
         }
         if (availableRam < requiredRam) {
-            return "Requires ${formatModelSize(requiredRam)} free RAM · Close apps to unlock."
+            return "Not supported on this phone · Requires ${formatModelSize(requiredRam)} free RAM; available ${formatModelSize(availableRam)}."
         }
         return null
     }
