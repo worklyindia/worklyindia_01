@@ -10,6 +10,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.content.res.Configuration
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.Build
 import android.view.Gravity
 import android.view.View
@@ -321,8 +322,10 @@ class OfflineAiChatActivity : Activity() {
         status.text = "Generating a reply on this phone…"
         val contextPrompt = if (conversationHistory.isEmpty()) prompt else
             "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
+        val usedModelId = loadedModelId ?: selectedQwenModel?.id
+        val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
-            val startedAt = System.currentTimeMillis()
+            val startedAt = SystemClock.elapsedRealtime()
             val answer = try {
                 engine.generate(contextPrompt) { partial ->
                     runOnUiThread {
@@ -335,7 +338,22 @@ class OfflineAiChatActivity : Activity() {
             } catch (error: Throwable) {
                 "AI reply failed: ${error.message ?: error.javaClass.simpleName}. Model ko Settings se reload karke try karein."
             }
-            val elapsedSeconds = ((System.currentTimeMillis() - startedAt) / 1000L).coerceAtLeast(1)
+            val durationMs = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+            val elapsedSeconds = ((durationMs + 999L) / 1000L).coerceAtLeast(1L)
+            if (!answer.startsWith("AI reply failed:")) {
+                usedModel?.let { model ->
+                    ModelUsageTracker.record(
+                        this,
+                        "qwen-${model.id}",
+                        model.title,
+                        "ai",
+                        "App",
+                        startedAt,
+                        contextPrompt.length,
+                        answer.toByteArray().size.toLong()
+                    )
+                }
+            }
             conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
             runOnUiThread {
@@ -393,7 +411,11 @@ class OfflineAiChatActivity : Activity() {
                 runCatching { if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
                 check(samples.isNotEmpty()) { "No audio was recorded. Tap Voice and speak." }
                 runOnUiThread { status.text = "Transcribing offline with downloaded ${pack.title}…" }
+                val speechStartedAt = SystemClock.elapsedRealtime()
                 val result = speech.transcribe(samples.toFloatArray())
+                if (result.isNotBlank()) {
+                    ModelUsageTracker.record(this, pack.id, pack.title, "stt", "App", speechStartedAt, samples.size, result.toByteArray().size.toLong())
+                }
                 runOnUiThread {
                     if (result.isNotBlank()) {
                         promptInput.setText(result); promptInput.setSelection(promptInput.text.length)
@@ -433,11 +455,13 @@ class OfflineAiChatActivity : Activity() {
         }
         status.text = "Speaking with downloaded Indic Tiny TTS · ${code.uppercase()}…"
         worker.execute {
+            val ttsStartedAt = SystemClock.elapsedRealtime()
             try {
                 tinyTtsEngine?.close()
                 val tiny = IndicTinyTtsEngine.create(this, code)
                 tinyTtsEngine = tiny
                 tiny.speak(value)
+                ModelUsageTracker.record(this, pack.id, pack.title, "tts", "App", ttsStartedAt, value.length)
                 runOnUiThread { status.text = "Spoken using downloaded Indic Tiny TTS · ${code.uppercase()}." }
             } catch (error: Exception) {
                 runOnUiThread { status.text = "Downloaded text-to-speech model error: ${error.message ?: "audio generation failed"}. No mobile TTS fallback was used." }

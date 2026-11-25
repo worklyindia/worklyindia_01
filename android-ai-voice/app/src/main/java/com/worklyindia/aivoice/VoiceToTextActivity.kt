@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
@@ -94,7 +95,6 @@ class VoiceToTextActivity : Activity() {
         convertButton = Button(this).apply { text = "Convert Offline"; isAllCaps = false; setOnClickListener { convertAudio() } }
         content.addView(convertButton, LinearLayout.LayoutParams(-1, dp(52)))
         status = TextView(this).apply { text = "Select a downloaded speech model and an audio file."; textSize = 13f; setTextColor(muted); setPadding(0, dp(12), 0, dp(14)); setTextIsSelectable(true) }
-        content.addView(status)
         content.addView(label("CONVERTED TEXT"))
         resultText = android.widget.EditText(this).apply {
             minLines = 7; maxLines = 18; gravity = Gravity.TOP; textSize = 16f
@@ -168,7 +168,7 @@ class VoiceToTextActivity : Activity() {
         val snapshot = runCatching { speechManager.snapshot(pack) }.getOrNull()
         val ready = snapshot?.state == SpeechPackDownloadManager.State.COMPLETE && OfflineSpeechEngineFactory.isReady(this, pack)
         status.text = if (ready) {
-            "Model ready · ${choice.label} · Offline on this phone. Internet is not required."
+            ""
         } else {
             "Model not downloaded for ${choice.label}. Open Download Models and download AI4Bharat IndicConformer INT8 · ${choice.label} first (about ${pack.totalBytes / 1_000_000} MB)."
         }
@@ -196,12 +196,14 @@ class VoiceToTextActivity : Activity() {
         resultText.setText("")
         copyButton.isEnabled = false
         worker.execute {
+            val modelStartedAt = SystemClock.elapsedRealtime()
             try {
                 val samples = AudioFileDecoder.decode(this, uri)
                 check(samples.isNotEmpty()) { "The selected audio contains no decodable sound." }
                 val engine = OfflineSpeechEngineFactory.openIndicConformer(this, language)
                 val transcript = try { engine.transcribe(samples) } finally { engine.close() }
                 if (transcript.isBlank()) throw IllegalStateException("No speech was detected in this audio.")
+                ModelUsageTracker.record(this, pack.id, pack.title, "stt", "App", modelStartedAt, samples.size, transcript.toByteArray().size.toLong())
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     resultText.setText(transcript)

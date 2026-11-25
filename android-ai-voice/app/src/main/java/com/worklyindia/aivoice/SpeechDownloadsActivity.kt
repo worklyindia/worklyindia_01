@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.media.MediaPlayer
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.Handler
 import android.os.Looper
 import android.os.Environment
@@ -74,7 +75,6 @@ class SpeechDownloadsActivity : Activity() {
         val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(12), dp(14), dp(12), dp(28)) }
         scroll.addView(list)
         page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-        card(list, "Download AI Models", "Choose offline AI models for chat, speech recognition and voice generation. Each model downloads directly to this phone.")
         list.addView(label("OFFLINE AI CHAT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
         qwenManager.models.forEach { addQwenCard(list,it) }
         list.addView(label("VOICE TO TEXT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
@@ -97,9 +97,6 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"iTantra VITS · Hindi","Sherpa-ONNX · Piper Pratham · offline voice",SpeechModelCatalog.itantraVits("hi"))
         addSpeechPack(list,"iTantra VITS · English","Sherpa-ONNX · Piper Lessac · offline voice",SpeechModelCatalog.itantraVits("en"))
         addSpeechPack(list,"Kokoro-82M · Hindi & English","Hindi and English · selectable female and male voices · approximately 295 MB · offline LiteRT",SpeechModelCatalog.kokoro82m())
-        addSpeechPack(list,"MOSS-TTS-Nano · English / Chinese","Large offline model · approximately 712 MB · verify device RAM before use",SpeechModelCatalog.mossTtsNano())
-        addSpeechPack(list,"Chatterbox Multilingual","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.chatterboxMultilingual())
-        addSpeechPack(list,"CosyVoice 3","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.cosyVoice3())
         
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(dp(2),dp(22),dp(2),dp(8)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
@@ -154,91 +151,205 @@ class SpeechDownloadsActivity : Activity() {
         })
     }
     private fun addQwenCard(parent: LinearLayout, model: QwenModelManager.Model) {
-        val card=card(parent,model.title + if(model.premium) " · PREMIUM" else "","Download: " + "%.0f MB".format(Locale.US,model.size/1e6) + " · Requires about %.1f GB free RAM".format(Locale.US,model.minFreeRam/1e9))
-        val status=label("Checking model…",13,secondary,true)
-        val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
-        val action=Button(this).apply { isAllCaps=false; minHeight=dp(48) }
-        val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; minHeight=dp(46); visibility=View.GONE }
-        card.addView(status); card.addView(progress); card.addView(action); card.addView(delete)
-        delete.setOnClickListener {
-            AlertDialog.Builder(this).setTitle("Delete ${model.title}?")
-                .setMessage("This removes the downloaded model file from this app's storage.")
-                .setNegativeButton("Cancel",null)
-                .setPositiveButton("Delete") { _,_ -> qwenManager.cancelAndDelete(model); refreshAll() }
-                .show()
+        val modelCard = card(parent, model.title + if (model.premium) " · PREMIUM" else "", "")
+        val status = label("", 12, secondary, false).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        val row=DownloadRow(status,progress,action) {
-            val snap=runCatching { qwenManager.snapshot(model) }.getOrNull() ?: return@DownloadRow
-            val supported=qwenManager.isSupported(model,availableRam)
-            val transferred="%.1f / %.1f MB".format(Locale.US,snap.downloaded/1e6,snap.total/1e6)
-            status.text=when(snap.state) {
-                QwenModelManager.State.READY -> "Downloaded · Ready · " + transferred + " · " + VoiceWorkerCapabilityRegistry.status("qwen-" + model.id, true)
-                QwenModelManager.State.RUNNING -> "Downloading · " + snap.progressPercent + "% · " + transferred
-                QwenModelManager.State.PENDING -> "Waiting for network · " + transferred
-                QwenModelManager.State.PAUSED -> "Paused · " + transferred
-                QwenModelManager.State.FAILED -> "Download failed · " + transferred + " · Retry"
-                else -> if(supported) "Not downloaded · " + transferred else "Not supported · need more free RAM"
-            }
-            progress.progress=snap.progressPercent
-            progress.visibility=if(snap.state==QwenModelManager.State.RUNNING) View.VISIBLE else View.GONE
-            delete.visibility=if(snap.state==QwenModelManager.State.READY || snap.downloaded>0L) View.VISIBLE else View.GONE
-            action.isEnabled=supported && snap.state!=QwenModelManager.State.RUNNING && snap.state!=QwenModelManager.State.PENDING && snap.state!=QwenModelManager.State.PAUSED
-            action.text=when { !supported -> "Not supported on this phone"; snap.state==QwenModelManager.State.READY -> "Use this model in Chat"; snap.state==QwenModelManager.State.FAILED -> "Retry download"; else -> "Download " + model.title.substringAfter("Qwen 2.5 ") }
-            action.setOnClickListener {
-                if(snap.state==QwenModelManager.State.READY) {
-                    getSharedPreferences("workly_qwen_models",MODE_PRIVATE).edit().putString("selected_model_id",model.id).apply()
-                    status.text="Selected for Offline AI Chat. Only this model will be loaded."
-                } else withNetworkChoice { allow -> runCatching { qwenManager.startDownload(model,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download failed." } }
-            }
+        val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            visibility = View.GONE
         }
-        rows.add(row); row.refresh()
-    }
-    private fun addSpeechPack(parent: LinearLayout,title:String,subtitle:String,pack:SpeechModelCatalog.Pack) {
-        val card=card(parent,title,""); val status=label("Checking model…",13,secondary,true)
-        val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
-        val action=Button(this).apply { isAllCaps=false; minHeight=dp(48); text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
-        val isTts = pack.id.startsWith("indic-tiny-tts-")
-        val isSherpaVits = pack.id.startsWith("itantra-vits-")
-        val isKokoro = pack.id == "kokoro-82m"
-        val isMoss = pack.id == "moss-tts-nano"
-        val isQvacChatterbox = pack.id == "qvac-chatterbox-multilingual"
-        val isQvacCosyVoice = pack.id == "qvac-cosyvoice3"
-        val test=Button(this).apply { text="Test Model"; isAllCaps=false; minHeight=dp(46); visibility=View.GONE }
-        val delete=Button(this).apply { text="Delete Model"; isAllCaps=false; visibility=View.GONE }
-        card.addView(status);card.addView(progress);card.addView(action);card.addView(test);card.addView(delete)
-        test.setOnClickListener { when { isKokoro -> showKokoroTest(pack); isMoss -> showMossTest(pack); isQvacChatterbox -> showQvacTest(pack, QvacTtsEngine.CHATTERBOX); isQvacCosyVoice -> showQvacTest(pack, QvacTtsEngine.COSYVOICE3); isSherpaVits -> showSherpaVitsTest(pack); else -> showTtsTest(pack) } }
-        delete.setOnClickListener {
-            AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
-                .setMessage("This removes this model's downloaded files from ChatWork storage.")
-                .setNegativeButton("Cancel",null)
-                .setPositiveButton("Delete") { _,_ -> speechManager.delete(pack); refreshAll() }
-                .show()
-        }
-        var lastBytes = 0L
-        var lastAt = 0L
-        val row=DownloadRow(status,progress,action) {
-            val s=runCatching { speechManager.snapshot(pack) }.getOrNull() ?: return@DownloadRow
-
-            status.text=when(s.state) {
-                SpeechPackDownloadManager.State.COMPLETE -> "Downloaded"
-                SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB"
-                SpeechPackDownloadManager.State.PENDING -> "Waiting for network…"
-                SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
-                SpeechPackDownloadManager.State.FAILED -> "Download failed · tap Retry"
-                else -> "Not downloaded · ${s.totalBytes/1_000_000} MB"
+        val action = Button(this).apply { isAllCaps = false; minHeight = dp(46) }
+        modelCard.addView(status)
+        modelCard.addView(progress)
+        modelCard.addView(action)
+        val row = DownloadRow(status, progress, action) {
+            val snapshot = runCatching { qwenManager.snapshot(model) }.getOrNull() ?: return@DownloadRow
+            val storageOk = availableStorageBytes() >= model.size + 512L * 1024L * 1024L
+            val ramOk = qwenManager.isSupported(model, availableRam)
+            val supported = storageOk && ramOk
+            progress.progress = snapshot.progressPercent
+            progress.visibility = if (snapshot.state == QwenModelManager.State.RUNNING) View.VISIBLE else View.GONE
+            when (snapshot.state) {
+                QwenModelManager.State.READY -> {
+                    status.visibility = View.GONE
+                    action.text = "Delete"
+                    action.isEnabled = true
+                    action.setOnClickListener {
+                        AlertDialog.Builder(this).setTitle("Delete ${model.title}?")
+                            .setMessage("This removes the downloaded model file from this phone.")
+                            .setNegativeButton("Cancel", null)
+                            .setPositiveButton("Delete") { _, _ ->
+                                qwenManager.cancelAndDelete(model)
+                                ModelUsageTracker.clear(this, "qwen-" + model.id)
+                                refreshAll()
+                            }
+                            .show()
+                    }
+                }
+                QwenModelManager.State.RUNNING, QwenModelManager.State.PENDING, QwenModelManager.State.PAUSED -> {
+                    status.visibility = View.VISIBLE
+                    status.text = when (snapshot.state) {
+                        QwenModelManager.State.RUNNING -> "Downloading · ${snapshot.progressPercent}%"
+                        QwenModelManager.State.PENDING -> "Waiting for network"
+                        else -> "Paused · waiting for network"
+                    }
+                    action.text = "Downloading · ${snapshot.progressPercent}%"
+                    action.isEnabled = false
+                }
+                else -> {
+                    status.visibility = View.VISIBLE
+                    status.text = when {
+                        !storageOk -> "Not supported on this phone · Requires ${formatModelSize(model.size + 512L * 1024L * 1024L)} free storage; available ${formatModelSize(availableStorageBytes())}."
+                        !ramOk -> "Not supported on this phone · Requires ${formatModelSize(model.minFreeRam)} free RAM; available ${formatModelSize(availableRam)}."
+                        snapshot.state == QwenModelManager.State.FAILED -> "Download failed · Check internet and retry."
+                        else -> ""
+                    }
+                    if (supported && snapshot.state == QwenModelManager.State.NOT_DOWNLOADED) status.visibility = View.GONE
+                    action.text = if (!supported) "Unlock Model" else if (snapshot.state == QwenModelManager.State.FAILED) "Retry · ${formatModelSize(model.size)}" else "Download · ${formatModelSize(model.size)}"
+                    action.isEnabled = true
+                    action.setOnClickListener {
+                        if (!supported) {
+                            val guidance = if (!storageOk) "Free up at least ${formatModelSize(model.size + 512L * 1024L * 1024L)} of phone storage, then reopen Download Models." else "Close background apps to free at least ${formatModelSize(model.minFreeRam)} RAM, then reopen Download Models."
+                            AlertDialog.Builder(this).setTitle("Unlock ${model.title}").setMessage(guidance).setPositiveButton("OK", null).show()
+                            return@setOnClickListener
+                        }
+                        withNetworkChoice { allow ->
+                            runCatching { qwenManager.startDownload(model, allow); refreshAll() }
+                                .onFailure { status.visibility = View.VISIBLE; status.text = it.message ?: "Download failed." }
+                        }
+                    }
+                }
             }
-            progress.progress=s.percent; progress.visibility=if(s.state==SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
-            val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
-            action.visibility=if(installed || s.state==SpeechPackDownloadManager.State.RUNNING || s.state==SpeechPackDownloadManager.State.PENDING || s.state==SpeechPackDownloadManager.State.PAUSED) View.GONE else View.VISIBLE
-            action.text=if(s.state==SpeechPackDownloadManager.State.FAILED) "Retry download" else "Download"
-            test.visibility=if((isTts || isSherpaVits || isKokoro || isMoss || isQvacChatterbox || isQvacCosyVoice) && installed) View.VISIBLE else View.GONE
-            delete.visibility=if(installed || s.downloadedBytes>0L) View.VISIBLE else View.GONE
         }
         rows.add(row)
         row.refresh()
     }
 
+    private fun addSpeechPack(parent: LinearLayout, title: String, subtitle: String, pack: SpeechModelCatalog.Pack) {
+        val modelCard = card(parent, title, "")
+        val status = label("", 12, secondary, false).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            visibility = View.GONE
+        }
+        val action = Button(this).apply { isAllCaps = false; minHeight = dp(46) }
+        val isTts = pack.id.startsWith("indic-tiny-tts-")
+        val isSherpaVits = pack.id.startsWith("itantra-vits-")
+        val isKokoro = pack.id == "kokoro-82m"
+        val test = Button(this).apply {
+            text = "Test Model"
+            isAllCaps = false
+            minHeight = dp(42)
+            visibility = View.GONE
+        }
+        modelCard.addView(status)
+        modelCard.addView(progress)
+        modelCard.addView(action)
+        modelCard.addView(test)
+        test.setOnClickListener {
+            when {
+                isKokoro -> showKokoroTest(pack)
+                isSherpaVits -> showSherpaVitsTest(pack)
+                else -> showTtsTest(pack)
+            }
+        }
+        val row = DownloadRow(status, progress, action) {
+            val snapshot = runCatching { speechManager.snapshot(pack) }.getOrNull() ?: return@DownloadRow
+            val supportedReason = speechPackSupportReason(pack)
+            val installed = snapshot.state == SpeechPackDownloadManager.State.COMPLETE
+            progress.progress = snapshot.percent
+            progress.visibility = if (snapshot.state == SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
+            test.visibility = if (installed && (isTts || isSherpaVits || isKokoro)) View.VISIBLE else View.GONE
+            if (installed) {
+                status.visibility = View.GONE
+                action.text = "Delete"
+                action.isEnabled = true
+                action.setOnClickListener {
+                    AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
+                        .setMessage("This removes the downloaded model files from this phone.")
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Delete") { _, _ ->
+                            speechManager.delete(pack)
+                            ModelUsageTracker.clear(this, pack.id)
+                            refreshAll()
+                        }
+                        .show()
+                }
+            } else {
+                status.text = when {
+                    supportedReason != null -> supportedReason
+                    snapshot.state == SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${snapshot.percent}%"
+                    snapshot.state == SpeechPackDownloadManager.State.PENDING -> "Waiting for network"
+                    snapshot.state == SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
+                    snapshot.state == SpeechPackDownloadManager.State.FAILED -> "Download failed · check internet and retry."
+                    else -> ""
+                }
+                status.visibility = if (supportedReason != null ||
+                    snapshot.state == SpeechPackDownloadManager.State.RUNNING ||
+                    snapshot.state == SpeechPackDownloadManager.State.PENDING ||
+                    snapshot.state == SpeechPackDownloadManager.State.PAUSED ||
+                    snapshot.state == SpeechPackDownloadManager.State.FAILED) View.VISIBLE else View.GONE
+                action.text = when {
+                    supportedReason != null -> "Unlock Model"
+                    snapshot.state == SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${snapshot.percent}%"
+                    snapshot.state == SpeechPackDownloadManager.State.PENDING -> "Waiting…"
+                    snapshot.state == SpeechPackDownloadManager.State.PAUSED -> "Paused"
+                    snapshot.state == SpeechPackDownloadManager.State.FAILED -> "Retry · ${formatModelSize(pack.totalBytes)}"
+                    else -> "Download · ${formatModelSize(pack.totalBytes)}"
+                }
+                action.isEnabled = snapshot.state != SpeechPackDownloadManager.State.RUNNING &&
+                    snapshot.state != SpeechPackDownloadManager.State.PENDING &&
+                    snapshot.state != SpeechPackDownloadManager.State.PAUSED
+                action.setOnClickListener {
+                    if (supportedReason != null) {
+                        AlertDialog.Builder(this).setTitle("Unlock $title")
+                            .setMessage(supportedReason)
+                            .setPositiveButton("OK", null).show()
+                        return@setOnClickListener
+                    }
+                    withNetworkChoice { allow ->
+                        runCatching { speechManager.start(pack, allow); refreshAll() }
+                            .onFailure { status.visibility = View.VISIBLE; status.text = it.message ?: "Download could not start." }
+                    }
+                }
+            }
+        }
+        rows.add(row)
+        row.refresh()
+    }
 
+    private fun availableStorageBytes(): Long =
+        runCatching { android.os.StatFs((getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir).absolutePath).availableBytes }.getOrDefault(0L)
+
+    private fun speechPackSupportReason(pack: SpeechModelCatalog.Pack): String? {
+        val requiredStorage = pack.totalBytes + maxOf(256L * 1024L * 1024L, pack.totalBytes / 10L)
+        val freeStorage = availableStorageBytes()
+        if (freeStorage < requiredStorage) {
+            return "Not supported on this phone · Requires ${formatModelSize(requiredStorage)} free storage; available ${formatModelSize(freeStorage)}."
+        }
+        val requiredRam = when {
+            pack.id == "kokoro-82m" -> 1_200L * 1024L * 1024L
+            pack.id.startsWith("indicconformer-") -> 512L * 1024L * 1024L
+            pack.id.startsWith("indic-tiny-tts-") -> 512L * 1024L * 1024L
+            pack.id.startsWith("itantra-vits-") -> 512L * 1024L * 1024L
+            else -> 1_000L * 1024L * 1024L
+        }
+        if (availableRam < requiredRam) {
+            return "Not supported on this phone · Requires ${formatModelSize(requiredRam)} free RAM; available ${formatModelSize(availableRam)}."
+        }
+        return null
+    }
+
+    private fun formatModelSize(bytes: Long): String = if (bytes >= 1_000_000_000L) {
+        "%.1f GB".format(Locale.US, bytes / 1_000_000_000.0)
+    } else {
+        "%.0f MB".format(Locale.US, bytes / 1_000_000.0)
+    }
 
     private fun showSherpaVitsTest(pack: SpeechModelCatalog.Pack) {
         val language = pack.languageCode
@@ -265,9 +376,11 @@ class SpeechDownloadsActivity : Activity() {
                     return@setPositiveButton
                 }
                 ttsExecutor.execute {
+                    val startedAt = SystemClock.elapsedRealtime()
                     val output = File(cacheDir, "itantra_vits_test_${System.currentTimeMillis()}.wav")
                     try {
                         SherpaVitsTtsEngine.create(this, pack).use { it.synthesizeToWav(textToSpeak, output) }
+                        ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Model test", startedAt, textToSpeak.length, output.length())
                         runOnUiThread {
                             if (isFinishing || !output.isFile) return@runOnUiThread
                             activeMossPlayer?.release()
@@ -364,6 +477,7 @@ class SpeechDownloadsActivity : Activity() {
                 }
                 statusToast("Generating " + selectedLanguage.label + " · " + selectedVoice.label + " offline…")
                 ttsExecutor.execute {
+                    val startedAt = SystemClock.elapsedRealtime()
                     try {
                         val output = KokoroTtsEngine(this).use { engine ->
                             engine.synthesizeToWav(
@@ -374,6 +488,7 @@ class SpeechDownloadsActivity : Activity() {
                                 outputFile = java.io.File(cacheDir, "kokoro_tts_test.wav")
                             )
                         }
+                        ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Model test", startedAt, text.length, output.length())
                         runOnUiThread {
                             try {
                                 activeMossPlayer?.release()
@@ -443,8 +558,10 @@ class SpeechDownloadsActivity : Activity() {
                 if(text.isBlank()) { Toast.makeText(this,"Enter text to test.",Toast.LENGTH_SHORT).show(); return@setPositiveButton }
                 statusToast("Generating " + voice + " voice offline…")
                 ttsExecutor.execute {
+                    val startedAt = SystemClock.elapsedRealtime()
                     try {
                         IndicTinyTtsEngine.create(this,language).use { it.speak(text, voice = voice) }
+                        ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Model test", startedAt, text.length)
                         runOnUiThread { Toast.makeText(this,"Voice test finished.",Toast.LENGTH_SHORT).show() }
                     } catch(error:Throwable) {
                         runOnUiThread { AlertDialog.Builder(this).setTitle("Voice test failed").setMessage(error.message ?: "Could not generate speech.").setPositiveButton("OK",null).show() }
@@ -720,12 +837,20 @@ class SpeechDownloadsActivity : Activity() {
             elevation=dp(2).toFloat()
         }
         c.addView(label(title,16,primary,true))
-        c.addView(label(subtitle,13,secondary,false).apply { setPadding(0,dp(5),0,dp(9)) })
+        if (subtitle.isNotBlank()) {
+            c.addView(label(subtitle,13,secondary,false).apply { setPadding(0,dp(5),0,dp(9)) })
+        }
         parent.addView(c,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(12) })
         return c
     }
     private fun label(value:String,size:Int,color:Int,bold:Boolean)=TextView(this).apply { text=value;textSize=size.toFloat();setTextColor(color);if(bold)setTypeface(typeface,android.graphics.Typeface.BOLD);setPadding(0,dp(5),0,dp(5)) }
-    override fun onResume(){super.onResume();refreshAll()}
+    override fun onResume() {
+        super.onResume()
+        val info = ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(info)
+        availableRam = info.availMem
+        refreshAll()
+    }
     override fun onDestroy(){handler.removeCallbacksAndMessages(null);ttsExecutor.shutdownNow();activeMossPlayer?.release();activeMossPlayer=null;super.onDestroy()}
     private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
 }

@@ -2,6 +2,7 @@ package com.worklyindia.aivoice
 
 import android.app.Activity
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -189,8 +190,19 @@ class ChatWorkTranslatorActivity : Activity() {
             .addOnSuccessListener {
                 if (isFinishing || isDestroyed) return@addOnSuccessListener
                 status.text = "Translating on this phone…"
+                val translateStartedAt = SystemClock.elapsedRealtime()
                 translator.translate(input)
                     .addOnSuccessListener { translated ->
+                        ModelUsageTracker.record(
+                            this,
+                            "mlkit-translation",
+                            "ML Kit Translation",
+                            "translate",
+                            "App",
+                            translateStartedAt,
+                            input.length,
+                            translated.toByteArray().size.toLong()
+                        )
                         if (!isFinishing && !isDestroyed) {
                             resultText.text = translated
                             status.text = "Translation complete · Offline on-device"

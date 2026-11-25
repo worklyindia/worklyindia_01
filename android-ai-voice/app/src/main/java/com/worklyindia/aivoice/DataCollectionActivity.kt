@@ -97,11 +97,7 @@ class DataCollectionActivity : Activity() {
                 runCatching {
                     val workerEnabled = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
                         .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
-                    val capabilities = if (workerEnabled) {
-                        VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
-                    } else {
-                        JSONArray()
-                    }
+                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
                     VoiceRelayApi.setWorkerState(
                         token,
                         workerEnabled,
@@ -262,7 +258,76 @@ class DataCollectionActivity : Activity() {
                 leftMargin = dp(8); rightMargin = dp(8)
             })
             addInstalledModelsTable(parent, installedCapabilities)
+            addTtsUsageTable(parent, installedCapabilities)
         }
+    }
+
+    private fun addTtsUsageTable(parent: LinearLayout, capabilities: JSONArray) {
+        if (capabilities.length() == 0) return
+
+        parent.addView(sectionTitle("Time To Work"), LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(8); rightMargin = dp(8)
+        })
+        val table = TableLayout(this).apply { isStretchAllColumns = false }
+        val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
+        arrayOf("Model", "Task", "Last used", "Average", "Source")
+            .forEach { header.addView(cell(it, true)) }
+        table.addView(header)
+
+        for (index in 0 until capabilities.length()) {
+            val capability = capabilities.optJSONObject(index) ?: continue
+            val usage = capability.optJSONObject("usage") ?: JSONObject()
+            val modelName = capability.optString("model_name")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?: usage.optString("model_name").takeIf { it.isNotBlank() && it != "null" }
+                ?: capability.optString("pack_id", "Unknown model")
+            val task = when (capability.optString("task")) {
+                "tts" -> "Text To Voice"
+                "stt" -> "Voice To Text"
+                "ai" -> "AI Chat"
+                "translate" -> "Translation"
+                else -> capability.optString("task").ifBlank { "Model" }
+            }
+            val lastUsed = usage.optString("last_used_at")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?: capability.optString("last_used_at").takeIf { it.isNotBlank() && it != "null" }
+            val averageMs = usage.optLong("average_duration_ms",
+                usage.optLong("last_duration_ms", capability.optLong("last_duration_ms", -1L)))
+            val source = usage.optString("last_source").takeIf { it.isNotBlank() && it != "null" } ?: "—"
+            val row = TableRow(this).apply {
+                setBackgroundColor(if (index % 2 == 0) surface else 0xFF0C1625.toInt())
+            }
+            listOf(
+                modelName,
+                task,
+                lastUsed?.let { formatDate(it) } ?: "Not used yet",
+                if (averageMs >= 0L) formatWorkDuration(averageMs) else "—",
+                source
+            ).forEachIndexed { column, value ->
+                row.addView(if (column == 0) modelCell(value) else cell(value, false))
+            }
+            table.addView(row)
+        }
+        val horizontal = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = true
+            clipToPadding = false
+            background = rounded(surface, dp(12), line)
+            addView(table)
+        }
+        parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(6); rightMargin = dp(6); bottomMargin = dp(12)
+        })
+    }
+
+    private fun formatWorkDuration(durationMs: Long): String {
+        val safeMs = durationMs.coerceAtLeast(0L)
+        if (safeMs < 1_000L) return "${safeMs} ms"
+        if (safeMs < 60_000L) {
+            return String.format(java.util.Locale.US, "%.1fs", safeMs / 1_000.0)
+        }
+        val minutes = safeMs / 60_000L
+        val seconds = (safeMs % 60_000L) / 1_000.0
+        return String.format(java.util.Locale.US, "%dm %.1fs", minutes, seconds)
     }
 
     private fun currentWorkerStatus(): String {
@@ -455,7 +520,7 @@ class DataCollectionActivity : Activity() {
         table.addView(header)
         for (i in 0 until capabilities.length()) {
             val cap = capabilities.optJSONObject(i) ?: continue
-            val model = listOf("pack_id", "model_name", "model", "model_id", "name", "id")
+            val model = listOf("model_name", "pack_id", "model", "model_id", "name", "id")
                 .firstNotNullOfOrNull { key ->
                     cap.optString(key).takeIf { it.isNotBlank() && it != "null" && it != "Unknown model" }
                 } ?: "Unknown model"
@@ -576,6 +641,7 @@ class DataCollectionActivity : Activity() {
         val matching = ArrayList<JSONObject>()
         for (index in 0 until records.length()) {
             val record = records.optJSONObject(index) ?: continue
+            if (arrayName == "logs" && !isTodayRecord(record.optString("created_at"))) continue
             matching.add(record)
         }
         val shown = matching.take(maxRows)
@@ -732,10 +798,25 @@ class DataCollectionActivity : Activity() {
             if (stroke != null) setStroke(dp(1), stroke)
         }
 
-    private fun formatDate(value: String): String = try {
-        val parsed = java.time.Instant.parse(value).toEpochMilli()
-        java.text.SimpleDateFormat("dd/MM/yyyy-hh:mm:ss a", java.util.Locale.ENGLISH).format(Date(parsed))
-    } catch (_: Exception) { value }
+    private fun parseTimestamp(value: String): java.time.Instant? {
+        val cleaned = value.trim().replace(
+            Regex("(\\.\\d+)\\s+(\\d+)(Z|[+-]\\d{2}:\\d{2})$"),
+            "$1$2$3"
+        )
+        return runCatching { java.time.Instant.parse(cleaned) }.getOrNull()
+            ?: runCatching { java.time.OffsetDateTime.parse(cleaned).toInstant() }.getOrNull()
+    }
+
+    private fun formatDate(value: String): String {
+        val instant = parseTimestamp(value) ?: return "—"
+        return java.text.SimpleDateFormat("dd/MM/yyyy-hh:mm:ss a", java.util.Locale.ENGLISH)
+            .format(Date(instant.toEpochMilli()))
+    }
+
+    private fun isTodayRecord(value: String): Boolean {
+        val instant = parseTimestamp(value) ?: return false
+        return instant.atZone(java.time.ZoneId.systemDefault()).toLocalDate() == java.time.LocalDate.now()
+    }
 
     private fun isRecentHeartbeat(value: String): Boolean = try {
         val parsed = java.time.Instant.parse(value).toEpochMilli()

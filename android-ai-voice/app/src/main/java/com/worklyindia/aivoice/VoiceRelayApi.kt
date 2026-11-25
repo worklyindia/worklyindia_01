@@ -55,7 +55,7 @@ object VoiceRelayApi {
     ) {
         val values = JSONObject()
             .put("enabled", enabled)
-            .put("capabilities", if (enabled) capabilities else org.json.JSONArray())
+            .put("capabilities", capabilities)
         if (metrics != null) values.put("metrics", metrics)
         val response = post(
             "set_worker_state",
