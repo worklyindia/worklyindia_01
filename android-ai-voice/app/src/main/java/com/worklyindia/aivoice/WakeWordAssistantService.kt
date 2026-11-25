@@ -35,11 +35,15 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
+        if (intent == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        if (intent.action == ACTION_STOP) {
             stopAssistant()
             return START_NOT_STICKY
         }
-        if (!running.compareAndSet(false, true)) return START_STICKY
+        if (!running.compareAndSet(false, true)) return START_NOT_STICKY
         val notification = buildNotification("Preparing offline voice models…")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -48,7 +52,7 @@ class WakeWordAssistantService : Service() {
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         worker.execute { runAssistantLoop() }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun runAssistantLoop() {
