@@ -274,7 +274,7 @@ class DataCollectionActivity : Activity() {
         })
         val table = TableLayout(this).apply { isStretchAllColumns = false }
         val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
-        arrayOf("Model", "Task", "Last used", "Last time", "Average", "Fastest", "Uses", "Source")
+        arrayOf("Model", "Task", "Last used", "Last time", "Average", "Fastest", "Slowest", "Uses", "Source")
             .forEach { header.addView(cell(it, true)) }
         table.addView(header)
 
@@ -299,6 +299,7 @@ class DataCollectionActivity : Activity() {
                 capability.optLong("last_duration_ms", -1L))
             val averageMs = usage.optLong("average_duration_ms", -1L)
             val fastestMs = usage.optLong("fastest_duration_ms", -1L)
+            val slowestMs = usage.optLong("slowest_duration_ms", -1L)
             val useCount = usage.optLong("use_count", 0L)
             val source = usage.optString("last_source").takeIf { it.isNotBlank() && it != "null" } ?: "—"
             val languages = capability.optJSONArray("languages") ?: JSONArray()
@@ -316,6 +317,7 @@ class DataCollectionActivity : Activity() {
                 if (lastTimeMs >= 0L) formatWorkDuration(lastTimeMs) else "—",
                 if (averageMs >= 0L) formatWorkDuration(averageMs) else "—",
                 if (fastestMs >= 0L) formatWorkDuration(fastestMs) else "—",
+                if (slowestMs >= 0L) formatWorkDuration(slowestMs) else "—",
                 if (useCount > 0L) useCount.toString() else "0",
                 source
             ).forEachIndexed { column, value ->
