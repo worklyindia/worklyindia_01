@@ -168,6 +168,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
         const thermalStatus = ["none", "light", "moderate", "severe", "critical", "emergency", "shutdown", "unsupported", "unknown"]
           .includes(metrics.thermal_status) ? metrics.thermal_status : "unknown";
         update.worker_metrics = {
+          device_name: typeof metrics.device_name === "string" ? metrics.device_name.slice(0, 80) : null,
+          device_model: typeof metrics.device_model === "string" ? metrics.device_model.slice(0, 100) : null,
+          device_manufacturer: typeof metrics.device_manufacturer === "string" ? metrics.device_manufacturer.slice(0, 60) : null,
           storage_total_bytes: safeBytes(metrics.storage_total_bytes),
           storage_available_bytes: safeBytes(metrics.storage_available_bytes),
           ram_total_bytes: safeBytes(metrics.ram_total_bytes),
