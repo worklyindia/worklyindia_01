@@ -124,14 +124,33 @@ class ChatWorkAssistantActivity : Activity(), TextToSpeech.OnInitListener {
             try {
                 val memory = ActivityManager.MemoryInfo()
                 (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
-                val model = modelManager.models
-                    .filter { modelManager.snapshot(it).state == QwenModelManager.State.READY }
-                    .filter { modelManager.isSupported(it, memory.availMem) }
-                    .maxByOrNull { it.size }
-                if (model == null) {
-                    main.post { status.text = "No compatible downloaded AI model. Open Download Models and download a supported Qwen model." }
+                val readyModels = modelManager.models.filter {
+                    modelManager.snapshot(it).state == QwenModelManager.State.READY
+                }
+                val modelDirectory = modelManager.file(modelManager.models.first()).parentFile ?: filesDir
+                val budget = AssistantModelPolicy.readBudget(this, modelDirectory)
+                val candidates = modelManager.models.map { model ->
+                    AssistantModelPolicy.Candidate(
+                        id = model.id,
+                        displayName = model.title,
+                        expectedBytes = model.size,
+                        minimumAvailableRamBytes = model.minFreeRam,
+                        minimumFreeStorageBytes = 256L * 1024L * 1024L,
+                        enabled = readyModels.any { it.id == model.id }
+                    )
+                }
+                val recommendation = AssistantModelPolicy.recommend(
+                    candidates = candidates,
+                    budget = budget,
+                    reserveRamBytes = 512L * 1024L * 1024L,
+                    reserveStorageBytes = 256L * 1024L * 1024L
+                )
+                val selected = recommendation.candidate
+                if (selected == null) {
+                    main.post { status.text = recommendation.reason + " Open Download Models to install a compatible model." }
                     return@execute
                 }
+                val model = modelManager.models.first { it.id == selected.id }
                 val loaded = ai.loadModel(modelManager.file(model))
                 modelReady = loaded
                 main.post {
