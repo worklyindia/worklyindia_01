@@ -366,12 +366,16 @@ class TextToVoiceActivity : Activity() {
                 check(output.isFile && output.length()>44L) { "Audio file was not generated." }
                 val conversionDurationMs = (SystemClock.elapsedRealtime() - conversionStartedAt).coerceAtLeast(0L)
                 val completedAt = java.time.Instant.now().toString()
-                getSharedPreferences("workly_tts_usage", MODE_PRIVATE).edit()
-                    .putString("last_used_at_${pack.id}", completedAt)
-                    .putLong("last_duration_ms_${pack.id}", conversionDurationMs)
-                    .putInt("last_text_chars_${pack.id}", text.length)
-                    .putLong("last_output_bytes_${pack.id}", output.length())
-                    .apply()
+                ModelUsageTracker.record(
+                    this,
+                    pack.id,
+                    pack.title,
+                    "tts",
+                    "App",
+                    conversionStartedAt,
+                    text.length,
+                    output.length()
+                )
                 runOnUiThread {
                     currentOutput=output
                     convertButton.isEnabled=true
