@@ -19,10 +19,11 @@ import android.widget.TextView
 import android.widget.Toast
 import java.util.concurrent.Executors
 
-/** Audio-file transcription workspace using the authenticated Workly Voice STT endpoint. */
+/** On-device audio-file transcription using the same downloaded IndicConformer packs as Download Models. */
 class VoiceToTextActivity : Activity() {
     private data class Choice(val label: String, val value: String) { override fun toString() = label }
     private val worker = Executors.newSingleThreadExecutor()
+    private val speechManager by lazy { SpeechPackDownloadManager(this) }
     private var dark = false
     private var selectedAudio: Uri? = null
     private lateinit var modelSpinner: Spinner
@@ -32,8 +33,15 @@ class VoiceToTextActivity : Activity() {
     private lateinit var convertButton: Button
     private lateinit var resultText: android.widget.EditText
     private lateinit var copyButton: Button
-    private val models = listOf(Choice("Auto · Recommended", "auto"), Choice("AssemblyAI", "assemblyai"), Choice("GPT-4o mini Transcribe", "gpt-4o-mini"))
-    private val languages = listOf(Choice("Auto Detect", "auto"), Choice("Hindi", "hi"), Choice("Gujarati", "gu"), Choice("English", "en"))
+    private val models = listOf(Choice("AI4Bharat IndicConformer INT8 · Offline", "indicconformer"))
+    private val languages = listOf(
+        "as" to "Assamese", "bn" to "Bengali", "brx" to "Bodo", "doi" to "Dogri",
+        "gu" to "Gujarati", "hi" to "Hindi", "kn" to "Kannada", "kok" to "Konkani",
+        "ks" to "Kashmiri", "mai" to "Maithili", "ml" to "Malayalam", "mni" to "Manipuri",
+        "mr" to "Marathi", "ne" to "Nepali", "or" to "Odia", "pa" to "Punjabi",
+        "sa" to "Sanskrit", "sat" to "Santali", "sd" to "Sindhi", "ta" to "Tamil",
+        "te" to "Telugu", "ur" to "Urdu", "en" to "English"
+    ).map { Choice(it.second, it.first) }
     private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
     private val ink get() = if (dark) 0xFFE8EEF7.toInt() else 0xFF142033.toInt()
@@ -46,6 +54,7 @@ class VoiceToTextActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         buildUi()
+        refreshModelStatus()
     }
 
     private fun buildUi() {
@@ -65,20 +74,29 @@ class VoiceToTextActivity : Activity() {
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(28)) }
         scroll.addView(content)
         page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        content.addView(label("MODEL"))
+        content.addView(label("OFFLINE MODEL"))
         modelSpinner = Spinner(this); modelSpinner.adapter = adapter(models)
         content.addView(modelSpinner, fieldParams())
         content.addView(label("LANGUAGE"))
         languageSpinner = Spinner(this); languageSpinner.adapter = adapter(languages)
+        languageSpinner.setSelection(languages.indexOfFirst { it.value == "hi" }.coerceAtLeast(0))
+        languageSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) { refreshModelStatus() }
+        }
         content.addView(languageSpinner, fieldParams())
         content.addView(label("AUDIO FILE"))
-        content.addView(Button(this).apply { text = "Upload Audio"; isAllCaps = false; setOnClickListener { chooseAudio() } }, LinearLayout.LayoutParams(-1, dp(50)))
+        content.addView(Button(this).apply { text = "Choose Audio File"; isAllCaps = false; setOnClickListener { chooseAudio() } }, LinearLayout.LayoutParams(-1, dp(50)))
         fileName = TextView(this).apply { text = "No audio selected"; textSize = 13f; setTextColor(muted); setPadding(0, dp(7), 0, dp(12)) }
         content.addView(fileName)
-        convertButton = Button(this).apply { text = "Convert To Text"; isAllCaps = false; setOnClickListener { convertAudio() } }
+        convertButton = Button(this).apply { text = "Convert Offline"; isAllCaps = false; setOnClickListener { convertAudio() } }
         content.addView(convertButton, LinearLayout.LayoutParams(-1, dp(52)))
-        status = TextView(this).apply { text = "Select an audio file, then tap Convert To Text."; textSize = 13f; setTextColor(muted); setPadding(0, dp(12), 0, dp(14)); setTextIsSelectable(true) }
+        status = TextView(this).apply { text = "Select a downloaded speech model and an audio file."; textSize = 13f; setTextColor(muted); setPadding(0, dp(12), 0, dp(14)); setTextIsSelectable(true) }
         content.addView(status)
+        content.addView(Button(this).apply {
+            text = "Open Download Models"; isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@VoiceToTextActivity, SpeechDownloadsActivity::class.java)) }
+        }, LinearLayout.LayoutParams(-1, dp(46)))
         content.addView(label("CONVERTED TEXT"))
         resultText = android.widget.EditText(this).apply {
             minLines = 7; maxLines = 18; gravity = Gravity.TOP; textSize = 16f
@@ -93,8 +111,9 @@ class VoiceToTextActivity : Activity() {
 
     private fun chooseAudio() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE); type = "audio/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav", "audio/aac", "audio/ogg", "audio/webm", "audio/3gpp"))
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "audio/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         startActivityForResult(intent, REQUEST_AUDIO)
     }
@@ -105,8 +124,9 @@ class VoiceToTextActivity : Activity() {
         if (requestCode != REQUEST_AUDIO || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         selectedAudio = uri
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         fileName.text = queryDisplayName(uri) ?: "Selected audio"
-        status.text = "Audio selected. Ready to convert."
+        status.text = "Audio selected. It will be processed on this phone; no audio upload or internet is used."
         resultText.setText(""); copyButton.isEnabled = false
     }
 
@@ -116,46 +136,58 @@ class VoiceToTextActivity : Activity() {
         }
     }.getOrNull()
 
+    private fun selectedLanguage() = languages.getOrElse(languageSpinner.selectedItemPosition) { languages.first() }
+
+    private fun refreshModelStatus() {
+        if (!::status.isInitialized || isFinishing) return
+        val language = selectedLanguage().value
+        val pack = SpeechModelCatalog.indicConformer(language)
+        val snapshot = runCatching { speechManager.snapshot(pack) }.getOrNull()
+        val ready = snapshot?.state == SpeechPackDownloadManager.State.COMPLETE && OfflineSpeechEngineFactory.isReady(this, pack)
+        status.text = if (ready) {
+            "Model ready · ${selectedLanguage().label} · Offline on this phone. Internet is not required."
+        } else {
+            "Model not downloaded for ${selectedLanguage().label}. Open Download Models and download AI4Bharat IndicConformer INT8 · ${selectedLanguage().label} first (about ${pack.totalBytes / 1_000_000} MB)."
+        }
+        convertButton.isEnabled = ready && selectedAudio != null
+    }
+
     private fun convertAudio() {
         val uri = selectedAudio
-        if (uri == null) { Toast.makeText(this, "Please upload an audio file first.", Toast.LENGTH_LONG).show(); return }
-        val deviceToken = SecureDeviceTokenStore.read(this)
-        if (deviceToken.isNullOrBlank()) { status.text = "Connect this phone to your Workly account first."; return }
-        convertButton.isEnabled = false; convertButton.text = "Converting…"
-        status.text = "Uploading audio and converting speech to text…"
-        resultText.setText(""); copyButton.isEnabled = false
-        val model = models[modelSpinner.selectedItemPosition.coerceIn(models.indices)].value
-        val language = languages[languageSpinner.selectedItemPosition.coerceIn(languages.indices)].value
+        if (uri == null) { Toast.makeText(this, "Please choose an audio file first.", Toast.LENGTH_LONG).show(); return }
+        val language = selectedLanguage().value
+        val pack = SpeechModelCatalog.indicConformer(language)
+        if (!OfflineSpeechEngineFactory.isReady(this, pack)) {
+            status.text = "Download the ${selectedLanguage().label} offline model first."
+            convertButton.isEnabled = false
+            return
+        }
+        convertButton.isEnabled = false
+        convertButton.text = "Converting…"
+        status.text = "Decoding audio and transcribing locally on this phone…"
+        resultText.setText("")
+        copyButton.isEnabled = false
         worker.execute {
             try {
-                val bytes = contentResolver.openInputStream(uri)?.use { input ->
-                    val output = java.io.ByteArrayOutputStream()
-                    val buffer = ByteArray(16 * 1024)
-                    var total = 0
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        total += count
-                        if (total > MAX_AUDIO_BYTES) throw IllegalArgumentException("Audio file is too large. Please choose a file under 1.3 MB.")
-                        output.write(buffer, 0, count)
-                    }
-                    output.toByteArray()
-                } ?: throw IllegalStateException("Could not open the selected audio file.")
-                if (bytes.isEmpty()) throw IllegalArgumentException("The selected audio file is empty.")
-                val response = VoiceRelayApi.transcribe(deviceToken, bytes, model, language, contentResolver.getType(uri) ?: "application/octet-stream")
-                val transcript = response.optString("text").trim()
+                val samples = AudioFileDecoder.decode(this, uri)
+                check(samples.isNotEmpty()) { "The selected audio contains no decodable sound." }
+                val engine = OfflineSpeechEngineFactory.openIndicConformer(this, language)
+                val transcript = try { engine.transcribe(samples) } finally { engine.close() }
                 if (transcript.isBlank()) throw IllegalStateException("No speech was detected in this audio.")
                 runOnUiThread {
-                    if (isFinishing) return@runOnUiThread
-                    resultText.setText(transcript); copyButton.isEnabled = true
-                    status.text = "Conversion complete · ${response.optString("detected_language", "unknown").uppercase()} · ${response.optString("provider", "automatic")}"
-                    convertButton.isEnabled = true; convertButton.text = "Convert To Text"
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    resultText.setText(transcript)
+                    copyButton.isEnabled = true
+                    status.text = "Offline conversion complete · ${selectedLanguage().label} · AI4Bharat IndicConformer · processed on this phone."
+                    convertButton.isEnabled = true
+                    convertButton.text = "Convert Offline"
                 }
             } catch (error: Throwable) {
                 runOnUiThread {
-                    if (isFinishing) return@runOnUiThread
-                    status.text = error.message ?: "Audio conversion failed. Please try again."
-                    convertButton.isEnabled = true; convertButton.text = "Convert To Text"
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    status.text = error.message ?: "Offline audio conversion failed."
+                    convertButton.isEnabled = OfflineSpeechEngineFactory.isReady(this, pack) && selectedAudio != null
+                    convertButton.text = "Convert Offline"
                 }
             }
         }
@@ -169,6 +201,7 @@ class VoiceToTextActivity : Activity() {
         Toast.makeText(this, "Text copied.", Toast.LENGTH_SHORT).show()
     }
 
+    override fun onResume() { super.onResume(); refreshModelStatus() }
     private fun label(value: String) = TextView(this).apply {
         text = value; textSize = 12f; setTextColor(muted)
         setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(0, dp(12), 0, dp(5))
@@ -178,5 +211,5 @@ class VoiceToTextActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     override fun onDestroy() { worker.shutdownNow(); super.onDestroy() }
 
-    companion object { private const val REQUEST_AUDIO = 2401; private const val MAX_AUDIO_BYTES = 1_300_000 }
+    companion object { private const val REQUEST_AUDIO = 2401 }
 }
