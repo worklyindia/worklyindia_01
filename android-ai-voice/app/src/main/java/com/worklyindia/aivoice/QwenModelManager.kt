@@ -24,7 +24,8 @@ class QwenModelManager(context: Context) {
     val models = listOf(
         Model("0.5b", "Qwen 2.5 0.5B Q4_K_M", 491400032L, "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf", "qwen2.5-0.5b-instruct-q4_k_m.gguf", 900L*1024*1024),
         Model("1.5b", "Qwen 2.5 1.5B Q4_K_M", 1117320736L, "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf", "qwen2.5-1.5b-instruct-q4_k_m.gguf", 1900L*1024*1024),
-        Model("3b", "Qwen 2.5 3B Q4_K_M", 2104932768L, "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf", "qwen2.5-3b-instruct-q4_k_m.gguf", 3500L*1024*1024, true)
+        Model("3b", "Qwen 2.5 3B Q4_K_M", 2104932768L, "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf", "qwen2.5-3b-instruct-q4_k_m.gguf", 3500L*1024*1024, true),
+        Model("qwen3-0.6b", "Qwen3 0.6B Q8_0", 639446688L, "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf", "qwen3-0.6b-q8_0.gguf", 1400L*1024*1024)
     )
     fun file(model: Model) = File(dir, model.fileName)
     fun recommendedModel(availableRam: Long): Model = models.lastOrNull { availableRam >= it.minFreeRam } ?: models.first()
