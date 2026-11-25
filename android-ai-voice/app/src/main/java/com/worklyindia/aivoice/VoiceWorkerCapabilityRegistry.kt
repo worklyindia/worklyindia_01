@@ -194,7 +194,8 @@ object ModelUsageTracker {
         return JSONObject()
             .put("last_used_at", prefs.getString("last_used_at_$packId", null) ?: JSONObject.NULL)
             .put("last_duration_ms", prefs.getLong("last_duration_ms_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
-            .put("average_duration_ms", prefs.getLong("average_duration_ms_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
+            // Treat the latest successful run as the single-sample average, including legacy records.
+            .put("average_duration_ms", prefs.getLong("last_duration_ms_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
             .put("last_source", prefs.getString("last_source_$packId", null) ?: JSONObject.NULL)
             .put("task", prefs.getString("task_$packId", null) ?: JSONObject.NULL)
             .put("model_name", prefs.getString("model_name_$packId", null) ?: JSONObject.NULL)
