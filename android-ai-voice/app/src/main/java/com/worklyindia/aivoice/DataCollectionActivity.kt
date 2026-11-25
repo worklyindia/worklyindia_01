@@ -141,7 +141,20 @@ class DataCollectionActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
             gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, -2, 1f))
+        val headerStatus = currentWorkerStatus()
+        toolbar.addView(TextView(this).apply {
+            text = headerStatus
+            textSize = 10f
+            letterSpacing = 0.5f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(if (headerStatus == "ONLINE") 0xFF27C58B.toInt() else 0xFFFFB547.toInt())
+            background = rounded(if (headerStatus == "ONLINE") 0xFF12372F.toInt() else 0xFF382B19.toInt(), dp(9))
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+        }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) })
         root.addView(toolbar)
         root.addView(View(this).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(-1, dp(1)))
 
@@ -180,55 +193,75 @@ class DataCollectionActivity : Activity() {
 
     private fun addOverview(parent: LinearLayout) {
         val devices = dashboard.optJSONArray("devices") ?: JSONArray()
-        parent.addView(
-            infoCard(
-                "Android device information",
-                "Live hardware health, worker status and installed voice models for devices linked to your account."
-            ),
-            LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); bottomMargin = dp(12) }
-        )
+        if (devices.length() == 0) return
 
-        if (devices.length() == 0) {
-            parent.addView(infoCard("No registered phones", "Connect ChatWork on a phone to register it with your Workly India account."))
-            return
-        }
-
+        // Show only real hardware reports. Do not render empty mobile-detail cards.
+        val installedCapabilities = JSONArray()
+        val seenCapabilities = HashSet<String>()
         for (deviceIndex in 0 until devices.length()) {
             val device = devices.optJSONObject(deviceIndex) ?: continue
             val metrics = device.optJSONObject("worker_metrics") ?: JSONObject()
-            val deviceName = metrics.optString("device_name").takeIf { it.isNotBlank() && it != "null" }
-                ?: device.optString("device_name").takeIf { it.isNotBlank() && it != "null" }
-                ?: "Android device ${deviceIndex + 1}"
-            val workerStatus = when {
-                !device.isNull("revoked_at") -> "REVOKED"
-                device.optBoolean("online", false) -> "ONLINE"
-                device.optBoolean("worker_enabled", false) -> "OFFLINE"
-                else -> "WORKER OFF"
-            }
-            val lastSeen = device.optString("last_seen_at").takeIf { it.isNotBlank() && it != "null" }
-                ?.let { formatDate(it) } ?: "Never"
-            val metricsUpdatedAt = device.optString("metrics_updated_at").takeIf { it.isNotBlank() && it != "null" }
+            val metricsUpdatedAt = device.optString("metrics_updated_at")
+                .takeIf { it.isNotBlank() && it != "null" }
             val metricsFresh = metricsUpdatedAt?.let { isFreshMetric(it) } == true
+            val lastSeen = device.optString("last_seen_at")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?.let { formatDate(it) } ?: "Never"
 
-            fun metricBytes(availableKey: String, totalKey: String): String {
-                val total = metrics.optLong(totalKey, -1L)
-                val available = metrics.optLong(availableKey, -1L)
-                if (total <= 0L || available < 0L) return "Waiting for first report"
-                val safeAvailable = available.coerceAtMost(total)
-                val used = (total - safeAvailable).coerceAtLeast(0L)
-                return "${formatBytes(total)} total • ${formatBytes(safeAvailable)} available • ${formatBytes(used)} used"
+            val hasHardwareMetrics =
+                metrics.optLong("storage_total_bytes", -1L) > 0L ||
+                metrics.optLong("ram_total_bytes", -1L) > 0L ||
+                metrics.optInt("battery_percent", -1) in 0..100 ||
+                metrics.optDouble("app_cpu_usage_percent", -1.0) in 0.0..100.0 ||
+                metrics.has("battery_temperature_c") ||
+                (metrics.optString("thermal_status").isNotBlank() &&
+                    metrics.optString("thermal_status") != "null")
+
+            if (hasHardwareMetrics) {
+                addWorkerHealthPanel(parent, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
             }
-
-            parent.addView(sectionTitle(deviceName), LinearLayout.LayoutParams(-1, -2).apply {
-                topMargin = dp(4); leftMargin = dp(8); rightMargin = dp(8)
-            })
-            addWorkerHealthPanel(parent, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
 
             val capabilities = device.optJSONArray("model_capabilities") ?: JSONArray()
+            for (index in 0 until capabilities.length()) {
+                val capability = capabilities.optJSONObject(index) ?: continue
+                val key = capability.optString("pack_id",
+                    capability.optString("model_name", capability.toString())) +
+                    "|" + (capability.optJSONArray("languages")?.toString() ?: "")
+                if (seenCapabilities.add(key)) installedCapabilities.put(capability)
+            }
+        }
+
+        // This is deliberately the final section on the page. If no models are
+        // installed, hide both the heading and the empty-state card entirely.
+        if (installedCapabilities.length() > 0) {
             parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply {
                 leftMargin = dp(8); rightMargin = dp(8)
             })
-            addInstalledModelsTable(parent, capabilities)
+            addInstalledModelsTable(parent, installedCapabilities)
+        }
+    }
+
+    private fun currentWorkerStatus(): String {
+        val devices = dashboard.optJSONArray("devices") ?: JSONArray()
+        val currentName = WorkerDeviceMetrics.deviceDisplayName(this)
+        var matched: JSONObject? = null
+        for (index in 0 until devices.length()) {
+            val device = devices.optJSONObject(index) ?: continue
+            val metrics = device.optJSONObject("worker_metrics") ?: JSONObject()
+            val remoteName = metrics.optString("device_name")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?: device.optString("device_name")
+            if (remoteName.equals(currentName, ignoreCase = true)) {
+                matched = device
+                break
+            }
+        }
+        if (matched == null && devices.length() == 1) matched = devices.optJSONObject(0)
+        val device = matched ?: return "OFFLINE"
+        return when {
+            !device.isNull("revoked_at") -> "OFFLINE"
+            device.optBoolean("online", false) -> "ONLINE"
+            else -> "OFFLINE"
         }
     }
 
@@ -388,10 +421,6 @@ class DataCollectionActivity : Activity() {
     }
 
     private fun addInstalledModelsTable(parent: LinearLayout, capabilities: JSONArray) {
-        if (capabilities.length() == 0) {
-            parent.addView(infoCard("No installed models", "This phone has not reported any ready voice models."))
-            return
-        }
         val headers = arrayOf("Model", "Size", "Date & Time", "Language")
         val table = TableLayout(this).apply {
             isStretchAllColumns = false
