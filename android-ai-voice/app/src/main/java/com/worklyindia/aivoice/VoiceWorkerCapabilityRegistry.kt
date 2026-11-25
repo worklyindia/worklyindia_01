@@ -49,7 +49,7 @@ object VoiceWorkerCapabilityRegistry {
         capabilities.firstOrNull { it.packId == packId }
             ?: capabilities.firstOrNull { it.packId.endsWith("*") && packId.startsWith(it.packId.removeSuffix("*")) }
 
-    /** Returns only fully downloaded, relay-wired models. Never advertises test-only packs. */
+    /** Returns the installed model inventory and usage stats. The ready flag gates relay eligibility; test-only packs stay excluded. */
     fun downloadedRelayCapabilities(context: Context): JSONArray {
         val manager = SpeechPackDownloadManager(context)
         val ttsUsage = context.getSharedPreferences("workly_tts_usage", Context.MODE_PRIVATE)
@@ -99,9 +99,8 @@ object VoiceWorkerCapabilityRegistry {
                 .put("ready", true))
         }
 
-        // Qwen is advertised only when the GGUF is valid and current free RAM
-        // meets the model's safety threshold. Never advertise a model that is
-        // merely present but unsafe to load on this device.
+        // Report every valid downloaded Qwen model for Data Collection. The ready flag
+        // is false when current free RAM is too low, so the scheduler cannot assign it.
         val memoryInfo = ActivityManager.MemoryInfo()
         (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memoryInfo)
         val qwenManager = QwenModelManager(context)
