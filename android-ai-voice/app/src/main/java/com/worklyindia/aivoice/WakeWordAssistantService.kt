@@ -179,6 +179,7 @@ class WakeWordAssistantService : Service() {
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
                                 updateNotification("Speaking offline · ${language.uppercase(Locale.ROOT)}")
                                 activeTtsEngine.speak(answer)
+                                discardPlaybackAudio(activeAudio, buffer)
                             } else {
                                 updateNotification("No speech recognized · Listening for Hey ChatWork")
                             }
@@ -209,6 +210,14 @@ class WakeWordAssistantService : Service() {
         }
     }
 
+    /** Ignore the speaker's tail audio so the assistant does not wake itself after speaking. */
+    private fun discardPlaybackAudio(audio: AudioRecord, buffer: ShortArray) {
+        val until = SystemClock.elapsedRealtime() + PLAYBACK_COOLDOWN_MS
+        while (running.get() && SystemClock.elapsedRealtime() < until) {
+            val count = audio.read(buffer, 0, buffer.size)
+            if (count < 0) break
+        }
+    }
     /** Record the command after the wake phrase until 1.2 s of silence or 12 s maximum. */
     private fun captureCommand(audio: AudioRecord, buffer: ShortArray): FloatArray {
         val samples = ArrayList<Float>(WakeWordEngineFactory.SAMPLE_RATE * 8)
@@ -320,5 +329,6 @@ class WakeWordAssistantService : Service() {
         private const val WAIT_FOR_COMMAND_MS = 5_000L
         private const val SILENCE_AFTER_SPEECH_MS = 1_200L
         private const val VOICE_RMS_THRESHOLD = 0.012
+        private const val PLAYBACK_COOLDOWN_MS = 700L
     }
 }
