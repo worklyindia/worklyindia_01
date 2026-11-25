@@ -15,11 +15,13 @@
 namespace {
 std::mutex engine_mutex;
 llama_model * model = nullptr;
+bool model_is_qwen3 = false;
 
 void unload_model_locked() {
     if (model != nullptr) {
         llama_model_free(model);
         model = nullptr;
+        model_is_qwen3 = false;
     }
 }
 
@@ -85,6 +87,10 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeLoadModel(
         LOGE("Unable to load GGUF model: %s", path.c_str());
         return JNI_FALSE;
     }
+    char architecture[128] = {};
+    if (llama_model_meta_val_str(model, "general.architecture", architecture, sizeof(architecture)) > 0) {
+        model_is_qwen3 = std::string(architecture) == "qwen3";
+    }
     return JNI_TRUE;
 }
 
@@ -98,7 +104,7 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     if (model == nullptr) return env->NewStringUTF("Offline AI model is not loaded.");
 
     // Qwen2.5 uses the ChatML conversation format.
-    const std::string prompt =
+    const std::string system_prompt =
         "<|im_start|>system\n"
         "You are Workly AI, a capable and careful offline assistant. Answer the latest user message directly and accurately. "
         "Use the previous conversation as context and never ask again for details already provided. "
@@ -107,10 +113,14 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
         "If the user writes English, reply in clear English. If the user writes Roman Hindi or Hinglish, reply naturally in the same Roman Hindi/Hinglish style. "
         "For mixed-language messages, follow the language used most by the user and preserve common technical terms when helpful. "
         "Answer the exact question, cover every requested part, and give practical steps when useful. "
-        "Do not invent facts, features, test results, or actions. If uncertain, clearly say what is unknown. "
+        "Do not invent facts, features, test results, or actions. Do not reveal private chain-of-thought; provide concise conclusions and useful steps. "
         "Avoid generic greetings, repetition, filler, and unrelated explanations. Keep simple answers concise and complex answers complete.\n"
-        "<|im_end|>\n<|im_start|>user\n" + question +
-        "\n<|im_end|>\n<|im_start|>assistant\n";
+        "<|im_end|>\n<|im_start|>user\n";
+    std::string user_content = question;
+    // Qwen3 supports an explicit non-thinking chat mode. Qwen2.5 ignores this branch.
+    if (model_is_qwen3) user_content += "\n/no_think";
+    const std::string prompt = system_prompt + user_content +
+        "\n<|im_end|>\n<|im_start|>assistant\n"
 
     const llama_vocab * vocab = llama_model_get_vocab(model);
     const int required = -llama_tokenize(
