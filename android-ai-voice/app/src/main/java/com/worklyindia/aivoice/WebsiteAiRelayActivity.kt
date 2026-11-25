@@ -5,6 +5,7 @@ import android.app.ActivityManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Gravity
 import android.widget.TextView
 import java.util.concurrent.Executors
@@ -73,8 +74,10 @@ class WebsiteAiRelayActivity : Activity() {
                     .maxByOrNull { it.size }
                     ?: throw IllegalStateException("No downloaded Qwen model is ready or enough free memory is unavailable.")
                 check(engine.loadModel(manager.file(chosen))) { "Qwen could not load the downloaded model." }
+                val inferenceStartedAt = SystemClock.elapsedRealtime()
                 val reply = engine.generate(prompt).trim()
                 check(reply.isNotBlank()) { "Qwen returned an empty reply." }
+                ModelUsageTracker.record(this, "qwen-${chosen.id}", chosen.title, "ai", "Website", inferenceStartedAt, prompt.length, reply.toByteArray().size.toLong())
                 returnToWebsite(returnUrl, requestId, reply.take(6000))
             } catch (error: Throwable) {
                 returnToWebsite(returnUrl, requestId, null)
