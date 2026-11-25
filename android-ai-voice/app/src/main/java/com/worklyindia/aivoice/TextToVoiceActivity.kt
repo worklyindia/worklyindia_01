@@ -118,8 +118,7 @@ class TextToVoiceActivity : Activity() {
         header.addView(TextView(this).apply {
             text = "Text To Voice"
             textSize = 18f
-            gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            setSingleLine(true)
+            gravity = Gravity.CENTER_VERTICAL
             setTextColor(primary)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }, LinearLayout.LayoutParams(0, -2, 1f))
