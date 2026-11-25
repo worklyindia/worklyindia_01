@@ -415,6 +415,7 @@ class SpeechDownloadsActivity : Activity() {
             val result = runCatching {
                 WakeWordEngineFactory.open(this).use { }
             }
+            SpeechPackDownloadManager(this).markModelTested(SpeechModelCatalog.chatWorkWakeWord(), result.isSuccess)
             runOnUiThread {
                 if (result.isSuccess) {
                     AlertDialog.Builder(this)
