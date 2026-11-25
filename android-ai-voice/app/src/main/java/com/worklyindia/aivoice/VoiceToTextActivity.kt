@@ -139,7 +139,7 @@ class VoiceToTextActivity : Activity() {
     private fun selectedLanguage() = languages.getOrElse(languageSpinner.selectedItemPosition) { languages.first() }
 
     private fun refreshModelStatus() {
-        if (!::status.isInitialized || isFinishing) return
+        if (!::status.isInitialized || !::convertButton.isInitialized || isFinishing) return
         val language = selectedLanguage().value
         val pack = SpeechModelCatalog.indicConformer(language)
         val snapshot = runCatching { speechManager.snapshot(pack) }.getOrNull()
