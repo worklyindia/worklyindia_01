@@ -244,9 +244,11 @@ class OfflineAiChatActivity : Activity() {
             }
             val wakeEnabled = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
                 .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+            qwenModelPicker.isEnabled = !wakeEnabled
             if (wakeEnabled) {
                 menu.add("Disable Hey ChatWork").setOnMenuItemClickListener {
                     stopService(Intent(this@OfflineAiChatActivity, WakeWordAssistantService::class.java))
+                    qwenModelPicker.isEnabled = true
                     status.text = "Stopping Hey ChatWork microphone service…"
                     true
                 }
@@ -324,6 +326,7 @@ class OfflineAiChatActivity : Activity() {
         try {
             val intent = Intent(this, WakeWordAssistantService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+            qwenModelPicker.isEnabled = false
             status.text = "Starting Hey ChatWork foreground microphone service…"
         } catch (error: Exception) {
             status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
@@ -410,7 +413,8 @@ class OfflineAiChatActivity : Activity() {
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
                     sendButton.alpha = 1f
-                    qwenModelPicker.isEnabled = true
+                    qwenModelPicker.isEnabled = !getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+                        .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
                 }
             } catch (error: Exception) {
                 runOnUiThread {
