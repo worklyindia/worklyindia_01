@@ -54,6 +54,7 @@ class OfflineAiChatActivity : Activity() {
     private val conversationHistory = StringBuilder()
     private var dark = false
     @Volatile private var modelLoadInProgress = false
+    private var ignoreInitialModelSelection = true
     @Volatile private var loadedModelId: String? = null
 
     private data class VoiceLanguage(val label: String, val tag: String, val locale: Locale) {
@@ -130,6 +131,10 @@ class OfflineAiChatActivity : Activity() {
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    if (ignoreInitialModelSelection) {
+                        ignoreInitialModelSelection = false
+                        return
+                    }
                     val selected = modelManager.models[position]
                     selectedQwenModel = selected
                     val selectedState = modelManager.snapshot(selected).state
