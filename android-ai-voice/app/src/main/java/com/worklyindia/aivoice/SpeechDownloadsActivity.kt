@@ -241,6 +241,10 @@ class SpeechDownloadsActivity : Activity() {
     }
 
     private fun runQwenModelTest(model: QwenModelManager.Model, status: TextView, trigger: Button, other: Button) {
+        if (getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+            Toast.makeText(this, "Stop Hey ChatWork before testing another AI model.", Toast.LENGTH_LONG).show()
+            return
+        }
         trigger.isEnabled = false
         other.isEnabled = false
         status.visibility = View.VISIBLE
