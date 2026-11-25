@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
@@ -195,12 +196,14 @@ class VoiceToTextActivity : Activity() {
         resultText.setText("")
         copyButton.isEnabled = false
         worker.execute {
+            val modelStartedAt = SystemClock.elapsedRealtime()
             try {
                 val samples = AudioFileDecoder.decode(this, uri)
                 check(samples.isNotEmpty()) { "The selected audio contains no decodable sound." }
                 val engine = OfflineSpeechEngineFactory.openIndicConformer(this, language)
                 val transcript = try { engine.transcribe(samples) } finally { engine.close() }
                 if (transcript.isBlank()) throw IllegalStateException("No speech was detected in this audio.")
+                ModelUsageTracker.record(this, pack.id, pack.title, "stt", "App", modelStartedAt, samples.size, transcript.toByteArray().size.toLong())
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     resultText.setText(transcript)
