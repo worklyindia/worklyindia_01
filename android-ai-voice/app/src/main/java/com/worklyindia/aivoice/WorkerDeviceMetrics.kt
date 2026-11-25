@@ -10,6 +10,8 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.os.Environment
 import android.os.StatFs
+import android.os.storage.StorageManager
+import android.app.usage.StorageStatsManager
 import android.provider.Settings
 import org.json.JSONObject
 
@@ -49,18 +51,37 @@ object WorkerDeviceMetrics {
         result.put("device_name", deviceDisplayName(context))
         result.put("device_model", Build.MODEL.take(100))
         result.put("device_manufacturer", Build.MANUFACTURER.take(60))
+
+        // Prefer Android's system storage summary API for the primary storage volume.
+        // It reports the retail-sized volume (e.g. 128 GB) rather than only the
+        // smaller usable filesystem capacity. Fall back to StatFs on OEM/API failures.
         runCatching {
-            val storage = StatFs(Environment.getDataDirectory().absolutePath)
-            result.put("storage_total_bytes", storage.totalBytes.coerceAtLeast(0L))
-            result.put("storage_available_bytes", storage.availableBytes.coerceAtLeast(0L))
+            val stats = context.getSystemService(Context.STORAGE_STATS_SERVICE) as StorageStatsManager
+            val total = stats.getTotalBytes(StorageManager.UUID_DEFAULT).coerceAtLeast(0L)
+            val free = stats.getFreeBytes(StorageManager.UUID_DEFAULT).coerceAtLeast(0L).coerceAtMost(total)
+            if (total > 0L) {
+                result.put("storage_total_bytes", total)
+                result.put("storage_available_bytes", free)
+                result.put("storage_source", "StorageStatsManager")
+            }
+        }.onFailure {
+            runCatching {
+                val storage = StatFs(Environment.getDataDirectory().absolutePath)
+                result.put("storage_total_bytes", storage.totalBytes.coerceAtLeast(0L))
+                result.put("storage_available_bytes", storage.availableBytes.coerceAtLeast(0L))
+                result.put("storage_source", "StatFs fallback")
+            }
         }
 
+        // Android's standard API reports physical RAM only. OEM RAM expansion/virtual
+        // memory is not reliably exposed to third-party apps, so never guess or add it.
         runCatching {
             val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val memory = ActivityManager.MemoryInfo()
             manager.getMemoryInfo(memory)
             result.put("ram_total_bytes", memory.totalMem.coerceAtLeast(0L))
             result.put("ram_available_bytes", memory.availMem.coerceAtLeast(0L))
+            result.put("ram_type", "physical")
             result.put("low_memory", memory.lowMemory)
         }
 
