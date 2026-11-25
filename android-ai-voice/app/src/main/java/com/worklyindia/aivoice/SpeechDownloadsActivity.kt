@@ -320,6 +320,7 @@ class SpeechDownloadsActivity : Activity() {
                         .setNegativeButton("Cancel", null)
                         .setPositiveButton("Delete") { _, _ ->
                             speechManager.delete(pack)
+                            if (isWakeWord) File(speechManager.modelDirectory(pack), "model").deleteRecursively()
                             ModelUsageTracker.clear(this, pack.id)
                             refreshAll()
                         }
