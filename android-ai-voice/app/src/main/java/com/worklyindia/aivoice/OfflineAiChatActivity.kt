@@ -248,8 +248,8 @@ class OfflineAiChatActivity : Activity() {
             if (wakeEnabled) {
                 menu.add("Disable Hey ChatWork").setOnMenuItemClickListener {
                     stopService(Intent(this@OfflineAiChatActivity, WakeWordAssistantService::class.java))
-                    qwenModelPicker.isEnabled = true
                     status.text = "Stopping Hey ChatWork microphone service…"
+                    waitForWakeServiceStop()
                     true
                 }
             } else {
@@ -322,6 +322,18 @@ class OfflineAiChatActivity : Activity() {
         }
     }
 
+    private fun waitForWakeServiceStop(attempt: Int = 0) {
+        status.postDelayed({
+            val active = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+                .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+            if (!active) {
+                qwenModelPicker.isEnabled = true
+                if (!engine.isLoaded && !modelLoadInProgress) loadModel()
+            } else if (attempt < 20) {
+                waitForWakeServiceStop(attempt + 1)
+            }
+        }, 500L)
+    }
     private fun startWakeWordService() {
         try {
             val intent = Intent(this, WakeWordAssistantService::class.java)
