@@ -132,7 +132,8 @@ class OfflineAiChatActivity : Activity() {
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
                     val selected = modelManager.models[position]
                     selectedQwenModel = selected
-                    val selectedReady = modelManager.snapshot(selected).state == QwenModelManager.State.READY
+                    val selectedState = modelManager.snapshot(selected).state
+                    val selectedReady = selectedState == QwenModelManager.State.READY
                     if (selectedReady && !modelLoadInProgress && selected.id != loadedModelId) {
                         getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit()
                             .putString("selected_model_id", selected.id).apply()
@@ -140,7 +141,11 @@ class OfflineAiChatActivity : Activity() {
                     } else {
                         sendButton.isEnabled = engine.isLoaded && selectedReady && selected.id == loadedModelId
                         sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
-                        if (!selectedReady) status.text = "Run Test Model for this downloaded Qwen model before using it."
+                        if (!selectedReady) status.text = if (selectedState == QwenModelManager.State.NEEDS_TEST) {
+                            "Run Test Model for this downloaded Qwen model before using it."
+                        } else {
+                            "Download this Qwen model from Download Models before using it."
+                        }
                     }
                 }
             }
