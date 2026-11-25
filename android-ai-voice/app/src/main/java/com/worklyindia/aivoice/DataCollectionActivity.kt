@@ -220,7 +220,7 @@ class DataCollectionActivity : Activity() {
             parent.addView(sectionTitle(deviceName), LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(4); leftMargin = dp(8); rightMargin = dp(8)
             })
-            addWorkerHealthPanel(parent, workerStatus, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
+            addWorkerHealthPanel(parent, deviceName, workerStatus, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
 
             val capabilities = device.optJSONArray("model_capabilities") ?: JSONArray()
             parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply {
@@ -232,6 +232,7 @@ class DataCollectionActivity : Activity() {
 
     private fun addWorkerHealthPanel(
         parent: LinearLayout,
+        deviceName: String,
         workerStatus: String,
         metrics: JSONObject,
         metricsUpdatedAt: String?,
@@ -255,7 +256,7 @@ class DataCollectionActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         statusRow.addView(TextView(this).apply {
-            text = "WORKER STATUS"
+            text = deviceName
             textSize = 11f
             letterSpacing = 1.1f
             typeface = Typeface.DEFAULT_BOLD
@@ -270,11 +271,6 @@ class DataCollectionActivity : Activity() {
             setPadding(dp(11), dp(7), dp(11), dp(7))
         })
         panel.addView(statusRow)
-        panel.addView(TextView(this).apply {
-            text = if (online) "Your ChatWork worker is connected and reporting device health." else "Worker connection needs attention. Check the ChatWork background worker."
-            textSize = 12f
-            setTextColor(muted)
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7); bottomMargin = dp(13) })
 
         val storageTotal = metrics.optLong("storage_total_bytes", -1L)
         val storageAvailable = metrics.optLong("storage_available_bytes", -1L)
