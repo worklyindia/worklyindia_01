@@ -291,22 +291,16 @@ class DataCollectionActivity : Activity() {
         val thermal = metrics.optString("thermal_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
 
         val storageValue = if (storageTotal > 0 && storageAvailable >= 0) {
-            "${formatBytes(storageAvailable.coerceAtMost(storageTotal))} free"
+            "${formatBytes((storageTotal - storageAvailable).coerceAtLeast(0L))} / ${formatBytes(storageTotal)}"
         } else "—"
-        val storageDetail = if (storageTotal > 0 && storageAvailable >= 0) {
-            "${formatBytes((storageTotal - storageAvailable).coerceAtLeast(0L))} used of ${formatBytes(storageTotal)}"
-        } else "Storage info"
         val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
-            "${formatBytes(ramAvailable.coerceAtMost(ramTotal))} free"
+            "${formatBytes((ramTotal - ramAvailable).coerceAtLeast(0L))} / ${formatBytes(ramTotal)}"
         } else "—"
-        val ramDetail = if (ramTotal > 0 && ramAvailable >= 0) {
-            "${formatBytes((ramTotal - ramAvailable).coerceAtLeast(0L))} used of ${formatBytes(ramTotal)}"
-        } else "RAM info"
 
         addHealthMetricRow(
             panel,
-            healthMetric("Storage", storageValue, storageDetail, storageUsedPct, 0xFF55A7FF.toInt()),
-            healthMetric("RAM Free", ramValue, ramDetail, ramUsedPct, 0xFF9A8BFF.toInt())
+            healthMetric("Storage", storageValue, "", storageUsedPct, 0xFF55A7FF.toInt()),
+            healthMetric("RAM", ramValue, "", ramUsedPct, 0xFF9A8BFF.toInt())
         )
         addHealthMetricRow(
             panel,
@@ -385,13 +379,15 @@ class DataCollectionActivity : Activity() {
                 maxLines = 1
                 ellipsize = android.text.TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
-            card.addView(TextView(this).apply {
-                text = metric.detail
-                textSize = 10.5f
-                setTextColor(muted)
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+            if (metric.detail.isNotBlank()) {
+                card.addView(TextView(this).apply {
+                    text = metric.detail
+                    textSize = 10.5f
+                    setTextColor(muted)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+            }
             if (metric.progress != null) {
                 val track = FrameLayout(this).apply {
                     background = rounded(0xFF25354A.toInt(), dp(8))
