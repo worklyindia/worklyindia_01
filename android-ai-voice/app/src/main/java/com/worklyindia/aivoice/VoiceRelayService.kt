@@ -11,6 +11,7 @@ import android.net.NetworkCapabilities
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.os.PowerManager
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -259,8 +260,10 @@ class VoiceRelayService : Service() {
                 val audio = VoiceRelayApi.downloadAudio(audioUrl)
                 val samples = decodePcm16MonoWav(audio)
                 recognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
+                val inferenceStartedAt = SystemClock.elapsedRealtime()
                 val transcript = recognizer.transcribe(samples).trim()
                 if (transcript.isBlank()) throw IllegalStateException("No speech was detected in the caller audio.")
+                ModelUsageTracker.record(this, pack.id, pack.title, "stt", "Website", inferenceStartedAt, samples.size, transcript.toByteArray().size.toLong())
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("text", transcript.take(4000))
                     .put("languageTag", language + "-IN")
@@ -337,8 +340,10 @@ class VoiceRelayService : Service() {
                 require(userText.isNotBlank()) { "AI request text is empty." }
                 setStatus("Generating AI reply locally with " + model.title + "…")
                 val prompt = "You are Workly AI, a helpful assistant. Answer the user's latest message directly, accurately and concisely. Reply in the same language and script as the user. Do not invent facts.\nUser: " + userText + "\nAssistant:"
+                val inferenceStartedAt = SystemClock.elapsedRealtime()
                 val reply = engine.generate(prompt).trim()
                 if (reply.isBlank()) throw IllegalStateException("Qwen returned an empty reply.")
+                ModelUsageTracker.record(this, "qwen-" + model.id, model.title, "ai", "Website", inferenceStartedAt, userText.length, reply.toByteArray().size.toLong())
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("reply", reply.take(6000))
                     .put("languageTag", payload.optString("languageTag", "auto"))
@@ -376,8 +381,10 @@ class VoiceRelayService : Service() {
                         .setTargetLanguage(target)
                         .build()
                 )
+                val inferenceStartedAt = SystemClock.elapsedRealtime()
                 val translated = com.google.android.gms.tasks.Tasks.await(translator.translate(text)).trim()
                 if (translated.isBlank()) throw IllegalStateException("The offline translation model returned an empty result.")
+                ModelUsageTracker.record(this, "mlkit-translation", "ML Kit Translation", "translate", "Website", inferenceStartedAt, text.length, translated.toByteArray().size.toLong())
                 VoiceRelayApi.complete(token, jobId, JSONObject()
                     .put("translated_text", translated.take(8000))
                     .put("source_language", sourceTag)
@@ -408,6 +415,13 @@ class VoiceRelayService : Service() {
                     if (language == "gu") "indic" else "kokoro"
                 }
                 outputFile.delete()
+                val usagePack = when (requestedModel) {
+                    "indic" -> SpeechModelCatalog.indicTinyTts(language)
+                    "kokoro" -> SpeechModelCatalog.kokoro82m()
+                    "itantra" -> SpeechModelCatalog.itantraVits(language)
+                    else -> null
+                }
+                val inferenceStartedAt = SystemClock.elapsedRealtime()
                 when (language) {
                     "gu" -> {
                         when (requestedModel) {
@@ -486,6 +500,9 @@ class VoiceRelayService : Service() {
                     else -> throw IllegalArgumentException("Only Gujarati (Indic Tiny TTS), Hindi and English (Kokoro-82M) are supported.")
                 }
                 check(outputFile.isFile && outputFile.length() > 44L) { "The selected offline model returned empty audio." }
+                usagePack?.let { pack ->
+                    ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Website", inferenceStartedAt, text.length, outputFile.length())
+                }
                 VoiceRelayApi.uploadAudio(token, jobId, outputFile.readBytes())
                 setStatus("Offline model voice audio delivered to website. Waiting for next request…")
             } catch (error: Exception) {
