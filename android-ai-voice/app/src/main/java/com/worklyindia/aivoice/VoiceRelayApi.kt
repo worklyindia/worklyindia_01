@@ -172,12 +172,13 @@ object VoiceRelayApi {
         } finally { connection.disconnect() }
     }
 
-    fun transcribe(token: String, audioBytes: ByteArray, model: String = "auto", language: String = "auto"): JSONObject {
+    fun transcribe(token: String, audioBytes: ByteArray, model: String = "auto", language: String = "auto", mimeType: String = "audio/webm"): JSONObject {
         if (audioBytes.isEmpty() || audioBytes.size > 1_300_000) throw RelayApiException(413, "Caller audio is empty or too large.")
         val values = JSONObject()
             .put("audio", Base64.getEncoder().encodeToString(audioBytes))
             .put("model", model)
             .put("language", language)
+            .put("mimeType", mimeType)
         val response = post("speech-to-text", values, deviceToken = token)
         if (response.statusCode !in 200..299) throw RelayApiException(response.statusCode, response.body.optString("error", "Speech recognition failed."))
         return response.body
