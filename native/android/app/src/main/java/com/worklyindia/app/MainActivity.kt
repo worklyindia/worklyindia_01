@@ -893,12 +893,22 @@ class MainActivity : FragmentActivity() {
             view.setPadding(bars.left, bars.top, bars.right, bottomInset)
             WindowInsetsCompat.CONSUMED
         }
-        // Keep the WebView scroll gestures native-refresh-free. The website has
-        // long pages and embedded interview rooms; SwipeRefreshLayout can mistake
-        // an upward/mid-page scroll for a pull gesture and reload the whole app.
-        // Users can still navigate and scroll normally without triggering a reload.
+        // Enable native pull-to-refresh only when the WebView is already at
+        // the top. This prevents refresh gestures from stealing normal page,
+        // nested content, or interview-room scrolling.
         swipeRefreshLayout = SwipeRefreshLayout(this).apply {
-            isEnabled = false
+            setColorSchemeColors(Color.rgb(21, 159, 120), Color.rgb(45, 125, 210))
+            setProgressBackgroundColorSchemeColor(if (startupDarkMode) Color.rgb(17, 27, 45) else Color.WHITE)
+            setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
+            setOnRefreshListener {
+                if (!hasInternetConnection()) {
+                    isRefreshing = false
+                    Toast.makeText(this@MainActivity, "No internet connection. Please try again.", Toast.LENGTH_SHORT).show()
+                } else {
+                    webView.stopLoading()
+                    webView.reload()
+                }
+            }
             addView(webView, ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT

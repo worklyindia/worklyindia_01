@@ -223,7 +223,9 @@ async function callWorklyVoiceFirst(
   }
 
   callbacks.onLifecycle?.('server_accepted');
-  const deadline = Date.now() + 120_000;
+  // Local Qwen inference can take minutes on a thermally paused or busy phone.
+  // Keep a short local-first window so the user gets an online fallback promptly.
+  const deadline = Date.now() + 45_000;
   let pollErrors = 0;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
@@ -252,11 +254,11 @@ async function callWorklyVoiceFirst(
     callbacks.onStatus?.(job?.status === 'running'
       ? 'ChatWork phone par local AI reply generate ho raha hai…'
       : 'ChatWork phone request queue mein hai…');
-    await wait(1500);
+    await wait(900);
   }
 
   if (signal?.aborted) throw new DOMException('The request was cancelled.', 'AbortError');
-  callbacks.onStatus?.('ChatWork se reply nahi mila; online AI par switch ho raha hai…');
+  callbacks.onStatus?.('ChatWork phone par reply abhi ready nahi hai; fast online AI fallback par switch ho raha hai…');
   return callAICareerChat(body, callbacks, signal);
 }
 
