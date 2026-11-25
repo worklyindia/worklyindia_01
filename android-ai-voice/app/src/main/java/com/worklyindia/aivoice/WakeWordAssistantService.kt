@@ -59,13 +59,13 @@ class WakeWordAssistantService : Service() {
     }
 
     private fun runAssistantLoop() {
-        if (!running.get()) return
         var wakeSession: WakeWordEngineFactory.Session? = null
         var speech: OfflineSpeechRecognizer? = null
         var tts: IndicTinyTtsEngine? = null
         var ai: OfflineAiEngine? = null
         var audio: AudioRecord? = null
         try {
+            check(running.get()) { "Hey ChatWork listening was stopped." }
             check(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 "Microphone permission is missing. Open ChatWork and enable Hey ChatWork again."
             }
@@ -214,6 +214,7 @@ class WakeWordAssistantService : Service() {
             runCatching { ai?.unload() }
             activeAi = null
             releaseCpuWakeLock()
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
         }
     }
 
@@ -259,7 +260,6 @@ class WakeWordAssistantService : Service() {
     private fun stopAssistant() {
         running.set(false)
         runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
         releaseCpuWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
