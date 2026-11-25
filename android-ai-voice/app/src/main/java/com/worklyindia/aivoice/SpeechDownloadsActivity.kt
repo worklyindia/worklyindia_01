@@ -44,6 +44,14 @@ class SpeechDownloadsActivity : Activity() {
     private val secondary get() = if (dark) 0xFFB5C1D1.toInt() else 0xFF65748B.toInt()
     private val poll = object : Runnable { override fun run() { rows.forEach { it.refresh() }; if (rows.any { it.status.text.contains("Downloading") || it.status.text.contains("Waiting") || it.status.text.contains("Paused") }) handler.postDelayed(this, 1000L) } }
 
+    override fun onResume() {
+        super.onResume()
+        val info = ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(info)
+        availableRam = info.availMem
+        if (rows.isNotEmpty()) refreshAll()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
@@ -152,7 +160,10 @@ class SpeechDownloadsActivity : Activity() {
     }
     private fun addQwenCard(parent: LinearLayout, model: QwenModelManager.Model) {
         val modelCard = card(parent, model.title + if (model.premium) " · PREMIUM" else "", "")
-        val status = label("", 12, secondary, false)
+        val status = label("", 12, secondary, false).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
         val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             visibility = View.GONE
@@ -177,7 +188,11 @@ class SpeechDownloadsActivity : Activity() {
                         AlertDialog.Builder(this).setTitle("Delete ${model.title}?")
                             .setMessage("This removes the downloaded model file from this phone.")
                             .setNegativeButton("Cancel", null)
-                            .setPositiveButton("Delete") { _, _ -> qwenManager.cancelAndDelete(model); refreshAll() }
+                            .setPositiveButton("Delete") { _, _ ->
+                                qwenManager.cancelAndDelete(model)
+                                ModelUsageTracker.clear(this, "qwen-" + model.id)
+                                refreshAll()
+                            }
                             .show()
                     }
                 }
@@ -194,15 +209,20 @@ class SpeechDownloadsActivity : Activity() {
                 else -> {
                     status.visibility = View.VISIBLE
                     status.text = when {
-                        !storageOk -> "Not supported on this phone · Need ${formatModelSize(model.size + 512L * 1024L * 1024L)} free storage."
-                        !ramOk -> "Not supported on this phone · Requires ${formatModelSize(model.minFreeRam)} free RAM; available ${formatModelSize(availableRam)}."
+                        !storageOk -> "Requires ${formatModelSize(model.size + 512L * 1024L * 1024L)} free storage · Delete files to unlock."
+                        !ramOk -> "Requires ${formatModelSize(model.minFreeRam)} free RAM · Close apps to unlock."
                         snapshot.state == QwenModelManager.State.FAILED -> "Download failed · Check internet and retry."
                         else -> ""
                     }
                     if (supported && snapshot.state == QwenModelManager.State.NOT_DOWNLOADED) status.visibility = View.GONE
-                    action.text = if (!supported) "Not supported · ${formatModelSize(model.size)}" else if (snapshot.state == QwenModelManager.State.FAILED) "Retry · ${formatModelSize(model.size)}" else "Download · ${formatModelSize(model.size)}"
-                    action.isEnabled = supported
+                    action.text = if (!supported) "Unlock Model" else if (snapshot.state == QwenModelManager.State.FAILED) "Retry · ${formatModelSize(model.size)}" else "Download · ${formatModelSize(model.size)}"
+                    action.isEnabled = true
                     action.setOnClickListener {
+                        if (!supported) {
+                            val guidance = if (!storageOk) "Free up at least ${formatModelSize(model.size + 512L * 1024L * 1024L)} of phone storage, then reopen Download Models." else "Close background apps to free at least ${formatModelSize(model.minFreeRam)} RAM, then reopen Download Models."
+                            AlertDialog.Builder(this).setTitle("Unlock ${model.title}").setMessage(guidance).setPositiveButton("OK", null).show()
+                            return@setOnClickListener
+                        }
                         withNetworkChoice { allow ->
                             runCatching { qwenManager.startDownload(model, allow); refreshAll() }
                                 .onFailure { status.visibility = View.VISIBLE; status.text = it.message ?: "Download failed." }
@@ -217,7 +237,10 @@ class SpeechDownloadsActivity : Activity() {
 
     private fun addSpeechPack(parent: LinearLayout, title: String, subtitle: String, pack: SpeechModelCatalog.Pack) {
         val modelCard = card(parent, title, "")
-        val status = label("", 12, secondary, false)
+        val status = label("", 12, secondary, false).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
         val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
             visibility = View.GONE
@@ -258,7 +281,11 @@ class SpeechDownloadsActivity : Activity() {
                     AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                         .setMessage("This removes the downloaded model files from this phone.")
                         .setNegativeButton("Cancel", null)
-                        .setPositiveButton("Delete") { _, _ -> speechManager.delete(pack); refreshAll() }
+                        .setPositiveButton("Delete") { _, _ ->
+                            speechManager.delete(pack)
+                            ModelUsageTracker.clear(this, pack.id)
+                            refreshAll()
+                        }
                         .show()
                 }
             } else {
@@ -276,18 +303,23 @@ class SpeechDownloadsActivity : Activity() {
                     snapshot.state == SpeechPackDownloadManager.State.PAUSED ||
                     snapshot.state == SpeechPackDownloadManager.State.FAILED) View.VISIBLE else View.GONE
                 action.text = when {
-                    supportedReason != null -> "Not supported · ${formatModelSize(pack.totalBytes)}"
+                    supportedReason != null -> "Unlock Model"
                     snapshot.state == SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${snapshot.percent}%"
                     snapshot.state == SpeechPackDownloadManager.State.PENDING -> "Waiting…"
                     snapshot.state == SpeechPackDownloadManager.State.PAUSED -> "Paused"
                     snapshot.state == SpeechPackDownloadManager.State.FAILED -> "Retry · ${formatModelSize(pack.totalBytes)}"
                     else -> "Download · ${formatModelSize(pack.totalBytes)}"
                 }
-                action.isEnabled = supportedReason == null &&
-                    snapshot.state != SpeechPackDownloadManager.State.RUNNING &&
+                action.isEnabled = snapshot.state != SpeechPackDownloadManager.State.RUNNING &&
                     snapshot.state != SpeechPackDownloadManager.State.PENDING &&
                     snapshot.state != SpeechPackDownloadManager.State.PAUSED
                 action.setOnClickListener {
+                    if (supportedReason != null) {
+                        AlertDialog.Builder(this).setTitle("Unlock $title")
+                            .setMessage(supportedReason)
+                            .setPositiveButton("OK", null).show()
+                        return@setOnClickListener
+                    }
                     withNetworkChoice { allow ->
                         runCatching { speechManager.start(pack, allow); refreshAll() }
                             .onFailure { status.visibility = View.VISIBLE; status.text = it.message ?: "Download could not start." }
@@ -306,7 +338,7 @@ class SpeechDownloadsActivity : Activity() {
         val requiredStorage = pack.totalBytes + maxOf(256L * 1024L * 1024L, pack.totalBytes / 10L)
         val freeStorage = availableStorageBytes()
         if (freeStorage < requiredStorage) {
-            return "Not supported on this phone · Need ${formatModelSize(requiredStorage)} free storage; available ${formatModelSize(freeStorage)}."
+            return "Requires ${formatModelSize(requiredStorage)} free storage · Delete files to unlock."
         }
         val requiredRam = when {
             pack.id == "kokoro-82m" -> 1_200L * 1024L * 1024L
@@ -316,7 +348,7 @@ class SpeechDownloadsActivity : Activity() {
             else -> 1_000L * 1024L * 1024L
         }
         if (availableRam < requiredRam) {
-            return "Not supported on this phone · Requires ${formatModelSize(requiredRam)} free RAM; available ${formatModelSize(availableRam)}."
+            return "Requires ${formatModelSize(requiredRam)} free RAM · Close apps to unlock."
         }
         return null
     }
