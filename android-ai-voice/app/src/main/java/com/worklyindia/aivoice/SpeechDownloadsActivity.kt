@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.media.MediaPlayer
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.Handler
 import android.os.Looper
 import android.os.Environment
@@ -351,9 +352,11 @@ class SpeechDownloadsActivity : Activity() {
                     return@setPositiveButton
                 }
                 ttsExecutor.execute {
+                    val startedAt = SystemClock.elapsedRealtime()
                     val output = File(cacheDir, "itantra_vits_test_${System.currentTimeMillis()}.wav")
                     try {
                         SherpaVitsTtsEngine.create(this, pack).use { it.synthesizeToWav(textToSpeak, output) }
+                        ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Model test", startedAt, textToSpeak.length, output.length())
                         runOnUiThread {
                             if (isFinishing || !output.isFile) return@runOnUiThread
                             activeMossPlayer?.release()
@@ -450,6 +453,7 @@ class SpeechDownloadsActivity : Activity() {
                 }
                 statusToast("Generating " + selectedLanguage.label + " · " + selectedVoice.label + " offline…")
                 ttsExecutor.execute {
+                    val startedAt = SystemClock.elapsedRealtime()
                     try {
                         val output = KokoroTtsEngine(this).use { engine ->
                             engine.synthesizeToWav(
@@ -460,6 +464,7 @@ class SpeechDownloadsActivity : Activity() {
                                 outputFile = java.io.File(cacheDir, "kokoro_tts_test.wav")
                             )
                         }
+                        ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Model test", startedAt, text.length, output.length())
                         runOnUiThread {
                             try {
                                 activeMossPlayer?.release()
@@ -529,8 +534,10 @@ class SpeechDownloadsActivity : Activity() {
                 if(text.isBlank()) { Toast.makeText(this,"Enter text to test.",Toast.LENGTH_SHORT).show(); return@setPositiveButton }
                 statusToast("Generating " + voice + " voice offline…")
                 ttsExecutor.execute {
+                    val startedAt = SystemClock.elapsedRealtime()
                     try {
                         IndicTinyTtsEngine.create(this,language).use { it.speak(text, voice = voice) }
+                        ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Model test", startedAt, text.length)
                         runOnUiThread { Toast.makeText(this,"Voice test finished.",Toast.LENGTH_SHORT).show() }
                     } catch(error:Throwable) {
                         runOnUiThread { AlertDialog.Builder(this).setTitle("Voice test failed").setMessage(error.message ?: "Could not generate speech.").setPositiveButton("OK",null).show() }
