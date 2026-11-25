@@ -101,13 +101,17 @@ class WakeWordAssistantService : Service() {
             )
             val chosen = recommendation.candidate?.let { item -> modelManager.models.firstOrNull { it.id == item.id } }
                 ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
-            ai = OfflineAiEngine()
-            activeAi = ai
-            check(ai.loadModel(modelManager.file(chosen))) { "Could not load ${chosen.title}." }
+            val activeAiEngine = OfflineAiEngine()
+            ai = activeAiEngine
+            activeAi = activeAiEngine
+            check(activeAiEngine.loadModel(modelManager.file(chosen))) { "Could not load ${chosen.title}." }
 
-            speech = OfflineSpeechEngineFactory.openIndicConformer(this, language)
-            tts = IndicTinyTtsEngine.create(this, language)
-            wakeSession = WakeWordEngineFactory.open(this)
+            val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
+            speech = activeSpeechRecognizer
+            val activeTtsEngine = IndicTinyTtsEngine.create(this, language)
+            tts = activeTtsEngine
+            val activeWakeSession = WakeWordEngineFactory.open(this)
+            wakeSession = activeWakeSession
 
             val minBuffer = AudioRecord.getMinBufferSize(
                 WakeWordEngineFactory.SAMPLE_RATE,
@@ -123,15 +127,16 @@ class WakeWordAssistantService : Service() {
                 maxOf(minBuffer * 2, 6400)
             )
             check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
-            recorder = audio
-            audio.startRecording()
+            val activeAudio = audio
+            recorder = activeAudio
+            activeAudio.startRecording()
             updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
 
             val history = StringBuilder()
             val buffer = ShortArray(1600)
-            val session = wakeSession
+            val session = activeWakeSession
             while (running.get()) {
-                val count = audio.read(buffer, 0, buffer.size)
+                val count = activeAudio.read(buffer, 0, buffer.size)
                 if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
                 if (count == 0) continue
                 val samples = FloatArray(count) { buffer[it] / 32768.0f }
@@ -142,19 +147,19 @@ class WakeWordAssistantService : Service() {
                     if (detected.isNotBlank()) {
                         session.spotter.reset(session.stream)
                         updateNotification("Hey ChatWork detected · Speak now")
-                        val commandSamples = captureCommand(audio, buffer)
+                        val commandSamples = captureCommand(activeAudio, buffer)
                         if (commandSamples.isNotEmpty()) {
                             updateNotification("Converting your speech offline…")
-                            val userText = speech.transcribe(commandSamples)
+                            val userText = activeSpeechRecognizer.transcribe(commandSamples)
                             if (userText.isNotBlank()) {
                                 history.append("User: ").append(userText).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
                                 updateNotification("ChatWork is thinking offline…")
-                                val answer = ai.generate(history.toString())
+                                val answer = activeAiEngine.generate(history.toString())
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
                                 updateNotification("Speaking offline · ${language.uppercase(Locale.ROOT)}")
-                                tts.speak(answer)
+                                activeTtsEngine.speak(answer)
                             } else {
                                 updateNotification("No speech recognized · Listening for Hey ChatWork")
                             }
