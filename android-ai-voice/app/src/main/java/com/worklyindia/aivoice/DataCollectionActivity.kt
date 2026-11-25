@@ -270,7 +270,7 @@ class DataCollectionActivity : Activity() {
         })
         val table = TableLayout(this).apply { isStretchAllColumns = false }
         val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
-        arrayOf("Model", "Task", "Last used", "Last time", "Average", "Fastest", "Slowest", "Uses", "Source")
+        arrayOf("Model", "Task", "Last used", "Average", "Source")
             .forEach { header.addView(cell(it, true)) }
         table.addView(header)
 
