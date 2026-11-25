@@ -97,11 +97,7 @@ class DataCollectionActivity : Activity() {
                 runCatching {
                     val workerEnabled = getSharedPreferences(VoiceWorkerCapabilityRegistry.WORKER_PREFS, MODE_PRIVATE)
                         .getBoolean(VoiceWorkerCapabilityRegistry.WORKER_ENABLED_KEY, false)
-                    val capabilities = if (workerEnabled) {
-                        VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
-                    } else {
-                        JSONArray()
-                    }
+                    val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
                     VoiceRelayApi.setWorkerState(
                         token,
                         workerEnabled,
