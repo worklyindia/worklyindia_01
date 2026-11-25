@@ -356,7 +356,7 @@ class DataCollectionActivity : Activity() {
 
     private fun addHealthMetricRow(parent: LinearLayout, left: HealthMetric, right: HealthMetric) {
         val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
         }
         listOf(left, right).forEachIndexed { index, metric ->
             val card = LinearLayout(this).apply {
@@ -400,11 +400,11 @@ class DataCollectionActivity : Activity() {
                 }
                 card.addView(track, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(10) })
             }
-            row.addView(card, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                if (index == 0) rightMargin = dp(5) else leftMargin = dp(5)
+            row.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+                if (index == 0) bottomMargin = dp(9)
             })
         }
-        parent.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+        parent.addView(row, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun addInstalledModelsTable(parent: LinearLayout, capabilities: JSONArray) {
