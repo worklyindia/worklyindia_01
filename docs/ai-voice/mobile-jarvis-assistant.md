@@ -108,3 +108,19 @@ Existing capabilities found:
 - Do not bundle multi-gigabyte model weights in the APK.
 - Do not claim the assistant can bypass Android microphone, foreground-service, battery or reboot restrictions.
 - Do not mark a model "offline-ready" from download completion alone; require integrity and inference smoke tests.
+
+## Implementation update — 2026-11-25
+
+- The ChatWork home screen now has an **AI Assistant** entry routed to the existing `OfflineAiChatActivity` (no duplicate chat engine).
+- The existing offline chat already provides on-device Qwen inference, conversation history, downloaded IndicConformer microphone input, and optional downloaded Indic Tiny TTS output.
+- `AssistantModelPolicy` is now connected to model selection. It evaluates live available RAM and storage, keeps safety reserves, prefers a saved compatible model, and otherwise chooses the strongest downloaded model that fits.
+- Added the official `Qwen/Qwen3-0.6B-GGUF` Q8_0 file as an optional separate download (639,446,688 bytes). Qwen2.5 models remain as fallbacks.
+- Upgraded the pinned llama.cpp runtime from `b5046` to `b5092`, the minimum version identified by Qwen's official instructions for Qwen3 support. Native code detects `general.architecture=qwen3` and uses the Qwen3 non-thinking ChatML prompt mode.
+
+### Still not release-complete
+
+- The `Hey ChatWork` keyword-spotting model and its custom tokenized wake phrase are not yet integrated. Do not claim wake-word activation works.
+- No microphone foreground service for locked-screen wake-word listening is enabled. The current assistant uses explicit, user-initiated microphone input in the chat screen.
+- Android 14+ microphone foreground-service start rules, notification controls, Realme background/battery behavior, and lock-screen operation still need implementation and physical-device testing.
+- Qwen3 GGUF download metadata is added, but Qwen3 must pass native load + inference smoke tests on arm64 devices before it can be marked verified or activated by default.
+- The CI APK build and physical-device tests are still required. This PR is not a release-ready JARVIS implementation yet.
