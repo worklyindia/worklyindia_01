@@ -13,6 +13,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -28,6 +29,7 @@ class WakeWordAssistantService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var recorder: AudioRecord? = null
     @Volatile private var activeAi: OfflineAiEngine? = null
+    @Volatile private var cpuWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -51,6 +53,7 @@ class WakeWordAssistantService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
+        acquireCpuWakeLock()
         worker.execute { runAssistantLoop() }
         return START_NOT_STICKY
     }
@@ -200,6 +203,7 @@ class WakeWordAssistantService : Service() {
             runCatching { tts?.close() }
             runCatching { ai?.unload() }
             activeAi = null
+            releaseCpuWakeLock()
         }
     }
 
@@ -238,10 +242,25 @@ class WakeWordAssistantService : Service() {
         running.set(false)
         runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+        releaseCpuWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
+    private fun acquireCpuWakeLock() {
+        if (cpuWakeLock?.isHeld == true) return
+        val power = getSystemService(POWER_SERVICE) as PowerManager
+        cpuWakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ChatWork:HeyChatWork").apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+    }
+
+    private fun releaseCpuWakeLock() {
+        val lock = cpuWakeLock
+        cpuWakeLock = null
+        if (lock?.isHeld == true) runCatching { lock.release() }
+    }
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, "ChatWork AI Assistant", NotificationManager.IMPORTANCE_LOW).apply {
