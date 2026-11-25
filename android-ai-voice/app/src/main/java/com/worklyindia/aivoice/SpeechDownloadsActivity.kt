@@ -294,7 +294,7 @@ class SpeechDownloadsActivity : Activity() {
     }
 
     private fun availableStorageBytes(): Long =
-        runCatching { android.os.StatFs(filesDir.absolutePath).availableBytes }.getOrDefault(0L)
+        runCatching { android.os.StatFs((getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir).absolutePath).availableBytes }.getOrDefault(0L)
 
     private fun speechPackSupportReason(pack: SpeechModelCatalog.Pack): String? {
         val requiredStorage = pack.totalBytes + maxOf(256L * 1024L * 1024L, pack.totalBytes / 10L)
