@@ -272,7 +272,9 @@ async function handleSpeechToText(params: any, req: Request, supabase: any) {
   console.log(`[${requestId}] Audio size: ${binaryAudio.length} bytes`);
 
   const { transcribeAudio } = await import('../_shared/sttFallback.ts');
-  const result = await transcribeAudio(binaryAudio, requestId);
+  const model = typeof params.model === 'string' ? params.model : 'auto';
+  const language = typeof params.language === 'string' ? params.language : 'auto';
+  const result = await transcribeAudio(binaryAudio, requestId, model, language);
   console.log(`[${requestId}] Completed in ${Date.now() - startTime}ms via ${result.provider}`);
 
   return new Response(
