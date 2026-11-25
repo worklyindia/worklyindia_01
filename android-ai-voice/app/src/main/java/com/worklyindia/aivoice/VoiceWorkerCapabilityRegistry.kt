@@ -192,6 +192,7 @@ object ModelUsageTracker {
             .putInt("last_input_chars_$packId", inputChars.coerceAtLeast(0))
             .putLong("last_output_bytes_$packId", outputBytes.coerceAtLeast(0L))
             .apply()
+        syncIfDue(context.applicationContext, prefs)
     }
 
     fun snapshot(context: Context, packId: String): JSONObject {
@@ -209,5 +210,27 @@ object ModelUsageTracker {
             .put("model_name", prefs.getString("model_name_$packId", null) ?: JSONObject.NULL)
             .put("last_input_chars", prefs.getInt("last_input_chars_$packId", -1).takeIf { it >= 0 } ?: JSONObject.NULL)
             .put("last_output_bytes", prefs.getLong("last_output_bytes_$packId", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
+    }
+
+    private fun syncIfDue(context: Context, prefs: android.content.SharedPreferences) {
+        val token = SecureDeviceTokenStore.read(context) ?: return
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong("last_sync_at", 0L) < 15_000L) return
+        prefs.edit().putLong("last_sync_at", now).apply()
+        Thread {
+            runCatching {
+                val enabled = context.getSharedPreferences(WORKER_PREFS, Context.MODE_PRIVATE)
+                    .getBoolean(WORKER_ENABLED_KEY, false)
+                val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(context)
+                VoiceRelayApi.setWorkerState(
+                    token,
+                    enabled,
+                    capabilities,
+                    WorkerDeviceMetrics.snapshot(context)
+                )
+            }.onFailure {
+                prefs.edit().putLong("last_sync_at", 0L).apply()
+            }
+        }.start()
     }
 }
