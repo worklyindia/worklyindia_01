@@ -59,6 +59,7 @@ class WakeWordAssistantService : Service() {
     }
 
     private fun runAssistantLoop() {
+        if (!running.get()) return
         var wakeSession: WakeWordEngineFactory.Session? = null
         var speech: OfflineSpeechRecognizer? = null
         var tts: IndicTinyTtsEngine? = null
@@ -129,6 +130,7 @@ class WakeWordAssistantService : Service() {
             tts = activeTtsEngine
             val activeWakeSession = WakeWordEngineFactory.open(this)
             wakeSession = activeWakeSession
+            check(running.get()) { "Hey ChatWork listening was stopped." }
 
             val minBuffer = AudioRecord.getMinBufferSize(
                 WakeWordEngineFactory.SAMPLE_RATE,
