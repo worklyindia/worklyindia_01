@@ -196,8 +196,9 @@ class SpeechDownloadsActivity : Activity() {
                         !storageOk -> "Not supported on this phone · Need ${formatModelSize(model.size + 512L * 1024L * 1024L)} free storage."
                         !ramOk -> "Not supported on this phone · Requires ${formatModelSize(model.minFreeRam)} free RAM; available ${formatModelSize(availableRam)}."
                         snapshot.state == QwenModelManager.State.FAILED -> "Download failed · Check internet and retry."
-                        else -> "Offline AI model"
+                        else -> ""
                     }
+                    if (supported && snapshot.state == QwenModelManager.State.NOT_DOWNLOADED) status.visibility = View.GONE
                     action.text = if (!supported) "Not supported · ${formatModelSize(model.size)}" else if (snapshot.state == QwenModelManager.State.FAILED) "Retry · ${formatModelSize(model.size)}" else "Download · ${formatModelSize(model.size)}"
                     action.isEnabled = supported
                     action.setOnClickListener {
@@ -260,15 +261,19 @@ class SpeechDownloadsActivity : Activity() {
                         .show()
                 }
             } else {
-                status.visibility = View.VISIBLE
                 status.text = when {
                     supportedReason != null -> supportedReason
                     snapshot.state == SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${snapshot.percent}%"
                     snapshot.state == SpeechPackDownloadManager.State.PENDING -> "Waiting for network"
                     snapshot.state == SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
                     snapshot.state == SpeechPackDownloadManager.State.FAILED -> "Download failed · check internet and retry."
-                    else -> "Offline model · ${pack.languageCode.uppercase(Locale.US)}"
+                    else -> ""
                 }
+                status.visibility = if (supportedReason != null ||
+                    snapshot.state == SpeechPackDownloadManager.State.RUNNING ||
+                    snapshot.state == SpeechPackDownloadManager.State.PENDING ||
+                    snapshot.state == SpeechPackDownloadManager.State.PAUSED ||
+                    snapshot.state == SpeechPackDownloadManager.State.FAILED) View.VISIBLE else View.GONE
                 action.text = when {
                     supportedReason != null -> "Not supported · ${formatModelSize(pack.totalBytes)}"
                     snapshot.state == SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${snapshot.percent}%"
