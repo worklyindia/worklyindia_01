@@ -28,7 +28,7 @@ class QwenModelManager(context: Context) {
         Model("qwen3-0.6b", "Qwen3 0.6B Q8_0", 639446688L, "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf", "qwen3-0.6b-q8_0.gguf", 1400L*1024*1024)
     )
     fun file(model: Model) = File(dir, model.fileName)
-    fun recommendedModel(availableRam: Long): Model = models.lastOrNull { availableRam >= it.minFreeRam } ?: models.first()
+    fun recommendedModel(availableRam: Long): Model = models.filter { availableRam >= it.minFreeRam }.maxByOrNull { it.minFreeRam } ?: models.first()
     fun isSupported(model: Model, availableRam: Long) = availableRam >= model.minFreeRam
     fun snapshot(model: Model): Snapshot {
         val f=file(model)
