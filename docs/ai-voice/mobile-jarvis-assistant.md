@@ -111,16 +111,22 @@ Existing capabilities found:
 
 ## Implementation update — 2026-11-25
 
-- The ChatWork home screen now has an **AI Assistant** entry routed to the existing `OfflineAiChatActivity` (no duplicate chat engine).
-- The existing offline chat already provides on-device Qwen inference, conversation history, downloaded IndicConformer microphone input, and optional downloaded Indic Tiny TTS output.
-- `AssistantModelPolicy` is now connected to model selection. It evaluates live available RAM and storage, keeps safety reserves, prefers a saved compatible model, and otherwise chooses the strongest downloaded model that fits.
-- Added the official `Qwen/Qwen3-0.6B-GGUF` Q8_0 file as an optional separate download (639,446,688 bytes). Qwen2.5 models remain as fallbacks.
-- Upgraded the pinned llama.cpp runtime from `b5046` to `b5092`, the minimum version identified by Qwen's official instructions for Qwen3 support. Native code detects `general.architecture=qwen3` and uses the Qwen3 non-thinking ChatML prompt mode.
+- The ChatWork home screen exposes **AI Assistant** and opens the existing `OfflineAiChatActivity` (no duplicate chat engine).
+- Adaptive model selection is connected to the existing offline chat and wake service. It evaluates live available RAM and storage with safety reserves.
+- Added the official `Qwen/Qwen3-0.6B-GGUF` Q8_0 model as a separate 639,446,688-byte download; Qwen2.5 models remain fallbacks.
+- Upgraded the pinned llama.cpp runtime from `b5046` to `b5092`, the minimum version identified by Qwen's official guidance for Qwen3 support. Native code detects `general.architecture=qwen3` and uses the non-thinking ChatML prompt.
+- Qwen model cards now require a **Test Model** action that loads the native model and generates a real local response before the manager marks the model `READY`.
+- Added the official Sherpa-ONNX GigaSpeech KWS mobile model archive as a separate download. The installer extracts only required ONNX/tokenizer files and verifies their expected sizes and SHA-256 hashes. It configures two BPE phrase variants for `Hey ChatWork`.
+- Added a **Test Model** action for the wake-word pack; it initializes the native keyword spotter and its configured keyword stream.
+- Added an explicitly user-started microphone foreground service with a persistent Stop notification, microphone FGS type/permission, partial CPU wake lock, and `START_NOT_STICKY` so Android does not silently restart listening after process death.
+- The service orchestrates wake-word detection → command capture with silence timeout → downloaded IndicConformer STT → tested Qwen model → downloaded Indic Tiny TTS. All audio inference is local; no audio recording is uploaded by this service.
+- The existing chat screen has an explicit consent/language selection flow, checks required downloads, and requests microphone/notification permissions before starting the service.
 
-### Still not release-complete
+### Release gates still open
 
-- The `Hey ChatWork` keyword-spotting model and its custom tokenized wake phrase are not yet integrated. Do not claim wake-word activation works.
-- No microphone foreground service for locked-screen wake-word listening is enabled. The current assistant uses explicit, user-initiated microphone input in the chat screen.
-- Android 14+ microphone foreground-service start rules, notification controls, Realme background/battery behavior, and lock-screen operation still need implementation and physical-device testing.
-- Qwen3 GGUF download metadata is added, but Qwen3 must pass native load + inference smoke tests on arm64 devices before it can be marked verified or activated by default.
-- The CI APK build and physical-device tests are still required. This PR is not a release-ready JARVIS implementation yet.
+- CI for the latest branch head must pass; multiple Android workflow runs are still building/queued.
+- The wake phrase token variants and detection threshold must be tested with real voices and noise on physical arm64 devices. The wake model test currently verifies model/stream initialization, not live acoustic recognition.
+- Qwen3 inference, Hindi/Gujarati/English STT/TTS quality, long-running memory/thermal behavior, audio echo, lock-screen behavior and Realme battery-management behavior require physical-device tests.
+- Android 14+ microphone foreground-service start/stop behavior and notification controls must be validated on-device.
+- No claim of unrestricted 24/7 listening: Android/OEM policies may stop or restrict the service. The user must start it manually and can stop it from the notification.
+- Do not merge or publish as a release until CI and the physical-device acceptance tests pass.
