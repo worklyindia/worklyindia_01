@@ -238,6 +238,13 @@ object ModelUsageTracker {
         listOf("model_name_", "task_", "last_used_at_", "last_duration_ms_", "average_duration_ms_",
             "last_source_", "last_input_chars_", "last_output_bytes_")
             .forEach { prefs.edit().remove(it + packId).apply() }
+        // Clear legacy timing keys too, so deleting and re-downloading a model never restores stale usage.
+        context.getSharedPreferences("workly_tts_usage", Context.MODE_PRIVATE).edit()
+            .remove("last_used_at_$packId")
+            .remove("last_duration_ms_$packId")
+            .remove("last_text_chars_$packId")
+            .remove("last_output_bytes_$packId")
+            .apply()
         syncIfDue(context.applicationContext, prefs, force = true)
     }
 
