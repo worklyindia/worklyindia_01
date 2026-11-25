@@ -29,6 +29,19 @@ object SpeechModelCatalog {
         val totalBytes: Long get() = files.sumOf { it.expectedBytes }
     }
 
+    private const val CHATWORK_WAKE_WORD_ARCHIVE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile.tar.bz2"
+
+    /** Official Sherpa-ONNX English keyword-spotting pack for the custom "Hey ChatWork" phrase. */
+    fun chatWorkWakeWord(): Pack = Pack(
+        id = "chatwork-wake-word-en",
+        title = "ChatWork Wake Word · English",
+        languageCode = "en",
+        license = "Apache-2.0 (Sherpa-ONNX model; see upstream release)",
+        repository = "k2-fsa/sherpa-onnx · kws-models release",
+        files = listOf(
+            ModelFile("kws-model.tar.bz2", CHATWORK_WAKE_WORD_ARCHIVE, 15_667_804L)
+        )
+    )
     private const val INDICCONFORMER = "https://huggingface.co/parismitaglobalsolutions/indicconformer-sherpa-onnx/resolve/main"
     private const val TINY_GU = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-gujarati/resolve/main"
     private const val TINY_HI = "https://huggingface.co/sulabhkatiyar/indic-tiny-tts-hindi/resolve/main"
