@@ -75,7 +75,9 @@ class SpeechDownloadsActivity : Activity() {
         val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(12), dp(14), dp(12), dp(28)) }
         scroll.addView(list)
         page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-        list.addView(label("OFFLINE AI CHAT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
+        list.addView(label("WAKE WORD · CHATWORK ASSISTANT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
+        addSpeechPack(list,"Hey ChatWork · English Wake Word","Offline keyword spotting model · downloaded separately · requires microphone permission and a visible foreground notification when listening",SpeechModelCatalog.chatWorkWakeWord())
+        list.addView(label("OFFLINE AI CHAT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         qwenManager.models.forEach { addQwenCard(list,it) }
         list.addView(label("VOICE TO TEXT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         val recognitionLanguages = listOf(
@@ -282,6 +284,7 @@ class SpeechDownloadsActivity : Activity() {
         val isTts = pack.id.startsWith("indic-tiny-tts-")
         val isSherpaVits = pack.id.startsWith("itantra-vits-")
         val isKokoro = pack.id == "kokoro-82m"
+        val isWakeWord = pack.id == "chatwork-wake-word-en"
         val test = Button(this).apply {
             text = "Test Model"
             isAllCaps = false
@@ -296,6 +299,7 @@ class SpeechDownloadsActivity : Activity() {
             when {
                 isKokoro -> showKokoroTest(pack)
                 isSherpaVits -> showSherpaVitsTest(pack)
+                isWakeWord -> showWakeWordTest()
                 else -> showTtsTest(pack)
             }
         }
@@ -305,7 +309,7 @@ class SpeechDownloadsActivity : Activity() {
             val installed = snapshot.state == SpeechPackDownloadManager.State.COMPLETE
             progress.progress = snapshot.percent
             progress.visibility = if (snapshot.state == SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
-            test.visibility = if (installed && (isTts || isSherpaVits || isKokoro)) View.VISIBLE else View.GONE
+            test.visibility = if (installed && (isTts || isSherpaVits || isKokoro || isWakeWord)) View.VISIBLE else View.GONE
             if (installed) {
                 status.visibility = View.GONE
                 action.text = "Delete"
@@ -392,6 +396,31 @@ class SpeechDownloadsActivity : Activity() {
         "%.0f MB".format(Locale.US, bytes / 1_000_000.0)
     }
 
+    private fun showWakeWordTest() {
+        Toast.makeText(this, "Loading the offline Hey ChatWork keyword model…", Toast.LENGTH_SHORT).show()
+        ttsExecutor.execute {
+            val result = runCatching {
+                WakeWordEngineFactory.open(this).use { session ->
+                    check(session.stream.ptr != 0L) { "Wake-word stream could not be initialized." }
+                }
+            }
+            runOnUiThread {
+                if (result.isSuccess) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Wake Word Model Ready")
+                        .setMessage("The offline English keyword model and Hey ChatWork phrase loaded successfully. Enable listening from AI Assistant to start the microphone foreground service.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Wake Word Test Failed")
+                        .setMessage(result.exceptionOrNull()?.message ?: "Could not initialize the wake-word model.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+    }
     private fun showSherpaVitsTest(pack: SpeechModelCatalog.Pack) {
         val language = pack.languageCode
         val sample = when (language) {
