@@ -160,7 +160,7 @@ export default function AppDownloadPage() {
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
-      <main className="min-h-screen bg-background pb-24 text-foreground sm:pb-12">
+      <main className="min-h-screen bg-background pb-36 text-foreground sm:pb-12">
         <header className="border-b border-border bg-background">
           <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3 sm:px-6">
             <a href="/" aria-label="Workly India home" className="flex min-h-11 items-center gap-2">
@@ -312,7 +312,7 @@ export default function AppDownloadPage() {
 
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 p-3 backdrop-blur sm:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-50 bg-transparent px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
           <div className="mx-auto max-w-4xl">{installButton}</div>
         </div>
       </main>
