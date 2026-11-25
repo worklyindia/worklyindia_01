@@ -107,7 +107,7 @@ object VoiceWorkerCapabilityRegistry {
         val qwenManager = QwenModelManager(context)
         for (model in qwenManager.models) {
             if (qwenManager.snapshot(model).state != QwenModelManager.State.READY) continue
-            if (!qwenManager.isSupported(model, memoryInfo.availMem)) continue
+            val supportedNow = qwenManager.isSupported(model, memoryInfo.availMem)
             result.put(JSONObject()
                 .put("task", "ai")
                 .put("model", "qwen-" + model.id)
@@ -117,7 +117,8 @@ object VoiceWorkerCapabilityRegistry {
                 .put("installed_at", qwenManager.installedAt(model) ?: JSONObject.NULL)
                 .put("usage", ModelUsageTracker.snapshot(context, "qwen-" + model.id))
                 .put("languages", JSONArray(listOf("multilingual")))
-                .put("ready", true))
+                .put("ready", supportedNow)
+                .put("relay_ready", supportedNow))
         }
 
         // Translation is advertised only for language pairs whose two ML Kit
