@@ -136,6 +136,7 @@ object VoiceWorkerCapabilityRegistry {
                 result.put(JSONObject()
                     .put("task", "translate")
                     .put("model", "mlkit-translation")
+                    .put("model_name", "Offline Translation · ML Kit")
                     .put("pack_id", "mlkit-translation")
                     .put("usage", ModelUsageTracker.snapshot(context, "mlkit-translation"))
                     .put("languages", JSONArray(pairs.take(30)))
