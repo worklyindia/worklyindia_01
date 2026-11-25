@@ -267,36 +267,58 @@ class DataCollectionActivity : Activity() {
     }
 
     private fun addTtsUsageTable(parent: LinearLayout, capabilities: JSONArray) {
-        val ttsModels = ArrayList<JSONObject>()
-        for (index in 0 until capabilities.length()) {
-            val capability = capabilities.optJSONObject(index) ?: continue
-            if (capability.optString("task") == "tts") ttsModels.add(capability)
-        }
-        if (ttsModels.isEmpty()) return
+        if (capabilities.length() == 0) return
 
         parent.addView(sectionTitle("Time To Work"), LinearLayout.LayoutParams(-1, -2).apply {
             leftMargin = dp(8); rightMargin = dp(8)
         })
         val table = TableLayout(this).apply { isStretchAllColumns = false }
         val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
-        arrayOf("Model", "Language", "Last used", "Time to work").forEach { header.addView(cell(it, true)) }
+        arrayOf("Model", "Task", "Last used", "Last time", "Average", "Fastest", "Uses", "Source")
+            .forEach { header.addView(cell(it, true)) }
         table.addView(header)
-        ttsModels.forEachIndexed { index, capability ->
-            val modelName = capability.optString("model_name")
+
+        for (index in 0 until capabilities.length()) {
+            val capability = capabilities.optJSONObject(index) ?: continue
+            val usage = capability.optJSONObject("usage") ?: JSONObject()
+            val modelName = usage.optString("model_name")
                 .takeIf { it.isNotBlank() && it != "null" }
-                ?: capability.optString("pack_id", "Text To Voice")
+                ?: capability.optString("model_name").takeIf { it.isNotBlank() && it != "null" }
+                ?: capability.optString("pack_id", "Unknown model")
+            val task = when (capability.optString("task")) {
+                "tts" -> "Text To Voice"
+                "stt" -> "Voice To Text"
+                "ai" -> "AI Chat"
+                "translate" -> "Translation"
+                else -> capability.optString("task").ifBlank { "Model" }
+            }
+            val lastUsed = usage.optString("last_used_at")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?: capability.optString("last_used_at").takeIf { it.isNotBlank() && it != "null" }
+            val lastTimeMs = usage.optLong("last_duration_ms",
+                capability.optLong("last_duration_ms", -1L))
+            val averageMs = usage.optLong("average_duration_ms", -1L)
+            val fastestMs = usage.optLong("fastest_duration_ms", -1L)
+            val useCount = usage.optLong("use_count", 0L)
+            val source = usage.optString("last_source").takeIf { it.isNotBlank() && it != "null" } ?: "—"
             val languages = capability.optJSONArray("languages") ?: JSONArray()
-            val languageNames = (0 until languages.length()).mapNotNull { languages.optString(it).takeIf { value -> value.isNotBlank() } }
-                .map { fullLanguageName(it) }.joinToString(", ").ifBlank { "—" }
-            val lastUsed = capability.optString("last_used_at")
-                .takeIf { it.isNotBlank() && it != "null" }
-                ?.let { formatDate(it) } ?: "Not used yet"
-            val durationMs = capability.optLong("last_duration_ms", -1L)
-            val duration = if (durationMs >= 0L) formatWorkDuration(durationMs) else "—"
+            val languageLabel = (0 until languages.length()).mapNotNull {
+                languages.optString(it).takeIf { value -> value.isNotBlank() }
+            }.map { fullLanguageName(it) }.joinToString(", ")
+            val displayModel = if (languageLabel.isNotBlank()) "$modelName · $languageLabel" else modelName
             val row = TableRow(this).apply {
                 setBackgroundColor(if (index % 2 == 0) surface else 0xFF0C1625.toInt())
             }
-            listOf(modelName, languageNames, lastUsed, duration).forEachIndexed { column, value ->
+            listOf(
+                displayModel,
+                task,
+                lastUsed?.let { formatDate(it) } ?: "Not used yet",
+                if (lastTimeMs >= 0L) formatWorkDuration(lastTimeMs) else "—",
+                if (averageMs >= 0L) formatWorkDuration(averageMs) else "—",
+                if (fastestMs >= 0L) formatWorkDuration(fastestMs) else "—",
+                if (useCount > 0L) useCount.toString() else "0",
+                source
+            ).forEachIndexed { column, value ->
                 row.addView(if (column == 0) modelCell(value) else cell(value, false))
             }
             table.addView(row)
