@@ -320,12 +320,12 @@ class DataCollectionActivity : Activity() {
         val storageUsed = (storageTotal - storageAvailable).coerceAtLeast(0L)
         val ramUsed = (ramTotal - ramAvailable).coerceAtLeast(0L)
         val storageValue = if (storageTotal > 0 && storageAvailable >= 0) {
-            formatBytes(storageUsed) + " / " + (storageNominalGb?.let { "$it GB" } ?: formatBytes(storageTotal))
+            formatBytes(storageUsed) + " / " + formatBytes(storageTotal)
         } else "—"
         val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
-            formatBytes(ramUsed) + " / " + (ramNominalGb?.let { "$it GB" } ?: formatBytes(ramTotal))
+            formatBytes(ramUsed) + " / " + formatBytes(ramTotal)
         } else "—"
-        val storageDetail = if (storageTotal > 0) "System-reported storage • " + formatBytes(storageAvailable) + " free" else "Android storage"
+        val storageDetail = if (storageTotal > 0) "System-reported free space • " + formatBytes(storageAvailable) else "Android storage"
         val ramDetail = if (ramTotal > 0) "Physical RAM • virtual expansion excluded" else "Android memory"
 
         addHealthMetricRow(
