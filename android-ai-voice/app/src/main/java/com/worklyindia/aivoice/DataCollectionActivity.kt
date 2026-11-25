@@ -136,7 +136,7 @@ class DataCollectionActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(48)))
         toolbar.addView(TextView(this).apply {
-            text = WorkerDeviceMetrics.deviceDisplayName(this)
+            text = WorkerDeviceMetrics.deviceDisplayName(this@DataCollectionActivity)
             textSize = 18f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
