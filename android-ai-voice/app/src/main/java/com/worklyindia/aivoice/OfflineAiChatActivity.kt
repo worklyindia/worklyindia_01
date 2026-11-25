@@ -224,11 +224,91 @@ class OfflineAiChatActivity : Activity() {
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
+            val wakeEnabled = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+                .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+            if (wakeEnabled) {
+                menu.add("Disable Hey ChatWork").setOnMenuItemClickListener {
+                    stopService(Intent(this@OfflineAiChatActivity, WakeWordAssistantService::class.java))
+                    status.text = "Stopping Hey ChatWork microphone service…"
+                    true
+                }
+            } else {
+                menu.add("Enable Hey ChatWork").setOnMenuItemClickListener {
+                    chooseWakeWordLanguage()
+                    true
+                }
+            }
             show()
         }
     }
 
 
+    private fun chooseWakeWordLanguage() {
+        val labels = arrayOf("Hindi · हिन्दी", "Gujarati · ગુજરાતી", "English · India")
+        val codes = arrayOf("hi", "gu", "en")
+        val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+        val saved = prefs.getString(WakeWordAssistantService.KEY_LANGUAGE, "hi") ?: "hi"
+        var selected = codes.indexOf(saved).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Enable Hey ChatWork")
+            .setMessage("When enabled, ChatWork continuously listens for the English wake phrase using a visible microphone notification. Wake detection, speech recognition, AI replies and voice output run on this phone. You can stop listening at any time from the notification.")
+            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue") { _, _ ->
+                prefs.edit().putString(WakeWordAssistantService.KEY_LANGUAGE, codes[selected]).apply()
+                checkWakeModelsAndPermissions(codes[selected])
+            }
+            .show()
+    }
+
+    private fun checkWakeModelsAndPermissions(language: String) {
+        val speechManager = SpeechPackDownloadManager(this)
+        val missing = mutableListOf<String>()
+        if (!WakeWordEngineFactory.isReady(this)) missing.add("ChatWork Wake Word · English")
+        if (!OfflineSpeechEngineFactory.isReady(this, SpeechModelCatalog.indicConformer(language))) {
+            missing.add("IndicConformer ${language.uppercase(Locale.ROOT)} · Voice to Text")
+        }
+        if (speechManager.snapshot(SpeechModelCatalog.indicTinyTts(language)).state != SpeechPackDownloadManager.State.COMPLETE) {
+            missing.add("Indic Tiny TTS ${language.uppercase(Locale.ROOT)} · Text to Voice")
+        }
+        val qwenManager = QwenModelManager(this)
+        if (qwenManager.models.none { qwenManager.snapshot(it).state == QwenModelManager.State.READY }) {
+            missing.add("A Qwen AI model with Test Model passed")
+        }
+        if (missing.isNotEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Download required models")
+                .setMessage("Before enabling Hey ChatWork, download and test:\\n\\n" + missing.joinToString("\\n"))
+                .setNegativeButton("Not now", null)
+                .setPositiveButton("Open Download Models") { _, _ ->
+                    startActivity(Intent(this, SpeechDownloadsActivity::class.java))
+                }
+                .show()
+            return
+        }
+        val permissions = mutableListOf<String>()
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (permissions.isNotEmpty()) {
+            requestPermissions(permissions.toTypedArray(), REQUEST_WAKE_ASSISTANT)
+        } else {
+            startWakeWordService()
+        }
+    }
+
+    private fun startWakeWordService() {
+        try {
+            val intent = Intent(this, WakeWordAssistantService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+            status.text = "Starting Hey ChatWork foreground microphone service…"
+        } catch (error: Exception) {
+            status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+        }
+    }
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
         object : ArrayAdapter<T>(this, android.R.layout.simple_spinner_item, items) {
             private fun row(value: T) = TextView(this@OfflineAiChatActivity).apply {
@@ -565,16 +645,26 @@ class OfflineAiChatActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startDownloadedVoiceInput()
         else if (requestCode == REQUEST_AUDIO) status.text = "Microphone permission denied."
+        else if (requestCode == REQUEST_WAKE_ASSISTANT && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+            startWakeWordService()
+        } else if (requestCode == REQUEST_WAKE_ASSISTANT) {
+            status.text = "Hey ChatWork needs microphone and notification permissions to show its active listening status."
+        }
     }
 
     override fun onDestroy() {
         offlineRecording = false
         activeAudioRecord?.let { runCatching { it.stop() }; it.release() }
-        worker.execute { engine.unload() }
+        val wakeServiceActive = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+            .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+        if (!wakeServiceActive) worker.execute { engine.unload() }
         worker.shutdown()
         tinyTtsEngine?.close()
         super.onDestroy()
     }
 
-    companion object { private const val REQUEST_AUDIO = 5101 }
+    companion object {
+        private const val REQUEST_AUDIO = 5101
+        private const val REQUEST_WAKE_ASSISTANT = 5103
+    }
 }
