@@ -1,7 +1,6 @@
 package com.worklyindia.aivoice
 
 import android.content.Context
-import android.os.Environment
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.KeywordSpotter
 import com.k2fsa.sherpa.onnx.KeywordSpotterConfig
@@ -70,10 +69,7 @@ object WakeWordEngineFactory {
         check(manager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
             "Download the ChatWork Wake Word model from Download Models first."
         }
-        val modelDir = File(
-            app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-            "workly-voice-models/${pack.id}/model"
-        )
+        val modelDir = File(manager.modelDirectory(pack), "model")
         installArchive(manager.modelDirectory(pack), modelDir)
         val encoder = File(modelDir, requiredFiles[0].name)
         val decoder = File(modelDir, requiredFiles[1].name)
