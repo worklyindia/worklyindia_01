@@ -75,9 +75,9 @@ class SpeechDownloadsActivity : Activity() {
         scroll.addView(list)
         page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         card(list, "Download AI Models", "Choose offline AI models for chat, speech recognition and voice generation. Each model downloads directly to this phone.")
-        list.addView(label("OFFLINE AI CHAT · CHOOSE ONE MODEL",16,primary,true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
+        list.addView(label("OFFLINE AI CHAT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
         qwenManager.models.forEach { addQwenCard(list,it) }
-        list.addView(label("VOICE RECOGNITION · OFFLINE SPEECH TO TEXT",16,primary,true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
+        list.addView(label("VOICE TO TEXT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         val recognitionLanguages = listOf(
             "as" to "Assamese", "bn" to "Bengali", "brx" to "Bodo", "doi" to "Dogri",
             "gu" to "Gujarati", "hi" to "Hindi", "kn" to "Kannada", "kok" to "Konkani",
@@ -89,7 +89,7 @@ class SpeechDownloadsActivity : Activity() {
         recognitionLanguages.forEach { (code, language) ->
             addSpeechPack(list,"IndicConformer · $language","AI4Bharat IndicConformer INT8 · $language offline speech-to-text",SpeechModelCatalog.indicConformer(code))
         }
-        list.addView(label("TEXT TO SPEECH · OFFLINE",16,primary,true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
+        list.addView(label("TEXT TO VOICE",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         addSpeechPack(list,"Indic Tiny TTS · Gujarati","Gujarati offline text-to-speech",SpeechModelCatalog.indicTinyTts("gu"))
         addSpeechPack(list,"Indic Tiny TTS · Hindi","Hindi offline text-to-speech",SpeechModelCatalog.indicTinyTts("hi"))
         addSpeechPack(list,"Indic Tiny TTS · English","English offline text-to-speech",SpeechModelCatalog.indicTinyTts("en"))
@@ -100,12 +100,12 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"MOSS-TTS-Nano · English / Chinese","Large offline model · approximately 712 MB · verify device RAM before use",SpeechModelCatalog.mossTtsNano())
         addSpeechPack(list,"Chatterbox Multilingual","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.chatterboxMultilingual())
         addSpeechPack(list,"CosyVoice 3","Native QVAC model · multilingual voice generation · large download",SpeechModelCatalog.cosyVoice3())
-        list.addView(label("Every model has its own task and engine. Downloaded does not automatically mean relay-worker compatible; worker eligibility is shown on each model card.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
+        
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(dp(2),dp(22),dp(2),dp(8)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
         addLocalOnlyCard(list,"Wan 2.1 Text-to-Video 1.3B","Not supported on this phone: Wan needs a multi-gigabyte model pack and substantially more RAM. Download is disabled to prevent storage and memory failures.")
         addLocalOnlyCard(list,"Offline Translation · ML Kit","Lightweight language packs are downloaded to this phone on first use (about 30 MB per language). Translation runs on-device; no translation server is used.")
-        list.addView(label("Model files are downloaded from their listed repositories. Supported speech inference runs on-device; these native engines do not send text to a remote AI inference server.",12,secondary,false).apply { setPadding(0,dp(8),0,dp(16)) })
+        
         setContentView(page)
     }
     /**
@@ -194,7 +194,7 @@ class SpeechDownloadsActivity : Activity() {
         rows.add(row); row.refresh()
     }
     private fun addSpeechPack(parent: LinearLayout,title:String,subtitle:String,pack:SpeechModelCatalog.Pack) {
-        val card=card(parent,title,subtitle); val status=label("Checking saved files…",13,secondary,true)
+        val card=card(parent,title,""); val status=label("Checking model…",13,secondary,true)
         val progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply { max=100; visibility=View.GONE }
         val action=Button(this).apply { isAllCaps=false; minHeight=dp(48); text="Download"; setOnClickListener { withNetworkChoice { allow -> runCatching { speechManager.start(pack,allow); refreshAll() }.onFailure { status.text=it.message ?: "Download could not start." } } } }
         val isTts = pack.id.startsWith("indic-tiny-tts-")
@@ -220,12 +220,12 @@ class SpeechDownloadsActivity : Activity() {
             val s=runCatching { speechManager.snapshot(pack) }.getOrNull() ?: return@DownloadRow
 
             status.text=when(s.state) {
-                SpeechPackDownloadManager.State.COMPLETE -> "Ready · installed · " + VoiceWorkerCapabilityRegistry.status(pack.id, true)
+                SpeechPackDownloadManager.State.COMPLETE -> "Downloaded"
                 SpeechPackDownloadManager.State.RUNNING -> "Downloading · ${s.percent}% · ${"%.1f".format(Locale.US,s.downloadedBytes/1e6)} / ${"%.1f".format(Locale.US,s.totalBytes/1e6)} MB"
                 SpeechPackDownloadManager.State.PENDING -> "Waiting for network…"
                 SpeechPackDownloadManager.State.PAUSED -> "Paused · waiting for network"
                 SpeechPackDownloadManager.State.FAILED -> "Download failed · tap Retry"
-                else -> "Not downloaded · ${s.totalBytes/1_000_000} MB · " + VoiceWorkerCapabilityRegistry.status(pack.id, false)
+                else -> "Not downloaded · ${s.totalBytes/1_000_000} MB"
             }
             progress.progress=s.percent; progress.visibility=if(s.state==SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
             val installed=s.state==SpeechPackDownloadManager.State.COMPLETE
