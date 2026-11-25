@@ -34,7 +34,7 @@ class VoiceToTextActivity : Activity() {
     private lateinit var resultText: android.widget.EditText
     private lateinit var copyButton: Button
     private val models = listOf(Choice("AI4Bharat IndicConformer INT8 · Offline", "indicconformer"))
-    private val languages = listOf(
+    private val supportedLanguages = listOf(
         "as" to "Assamese", "bn" to "Bengali", "brx" to "Bodo", "doi" to "Dogri",
         "gu" to "Gujarati", "hi" to "Hindi", "kn" to "Kannada", "kok" to "Konkani",
         "ks" to "Kashmiri", "mai" to "Maithili", "ml" to "Malayalam", "mni" to "Manipuri",
@@ -42,6 +42,7 @@ class VoiceToTextActivity : Activity() {
         "sa" to "Sanskrit", "sat" to "Santali", "sd" to "Sindhi", "ta" to "Tamil",
         "te" to "Telugu", "ur" to "Urdu", "en" to "English"
     ).map { Choice(it.second, it.first) }
+    private var languages: List<Choice> = supportedLanguages
     private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
     private val ink get() = if (dark) 0xFFE8EEF7.toInt() else 0xFF142033.toInt()
@@ -53,6 +54,7 @@ class VoiceToTextActivity : Activity() {
         ChatWorkTheme.applyWindow(this)
         window.statusBarColor = bg
         window.navigationBarColor = bg
+        languages = downloadedLanguages()
         buildUi()
         refreshModelStatus()
     }
@@ -93,10 +95,6 @@ class VoiceToTextActivity : Activity() {
         content.addView(convertButton, LinearLayout.LayoutParams(-1, dp(52)))
         status = TextView(this).apply { text = "Select a downloaded speech model and an audio file."; textSize = 13f; setTextColor(muted); setPadding(0, dp(12), 0, dp(14)); setTextIsSelectable(true) }
         content.addView(status)
-        content.addView(Button(this).apply {
-            text = "Open Download Models"; isAllCaps = false
-            setOnClickListener { startActivity(Intent(this@VoiceToTextActivity, SpeechDownloadsActivity::class.java)) }
-        }, LinearLayout.LayoutParams(-1, dp(46)))
         content.addView(label("CONVERTED TEXT"))
         resultText = android.widget.EditText(this).apply {
             minLines = 7; maxLines = 18; gravity = Gravity.TOP; textSize = 16f
@@ -136,18 +134,43 @@ class VoiceToTextActivity : Activity() {
         }
     }.getOrNull()
 
-    private fun selectedLanguage() = languages.getOrElse(languageSpinner.selectedItemPosition) { languages.first() }
+    private fun downloadedLanguages(): List<Choice> = supportedLanguages.filter { choice ->
+        runCatching {
+            val pack = SpeechModelCatalog.indicConformer(choice.value)
+            speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE &&
+                OfflineSpeechEngineFactory.isReady(this, pack)
+        }.getOrDefault(false)
+    }
+
+    private fun selectedLanguage(): Choice? = languages.getOrNull(languageSpinner.selectedItemPosition)
+
+    private fun refreshDownloadedLanguages() {
+        if (!::languageSpinner.isInitialized || isFinishing) return
+        val selected = selectedLanguage()?.value
+        val available = downloadedLanguages()
+        if (available.map { it.value } == languages.map { it.value }) return
+        languages = available
+        languageSpinner.adapter = adapter(languages)
+        val selectedIndex = languages.indexOfFirst { it.value == selected }
+        if (languages.isNotEmpty()) languageSpinner.setSelection(if (selectedIndex >= 0) selectedIndex else 0)
+    }
 
     private fun refreshModelStatus() {
         if (!::status.isInitialized || !::convertButton.isInitialized || isFinishing) return
-        val language = selectedLanguage().value
+        val choice = selectedLanguage()
+        if (choice == null) {
+            status.text = "No downloaded speech model is available. Download a language model in Download Models first."
+            convertButton.isEnabled = false
+            return
+        }
+        val language = choice.value
         val pack = SpeechModelCatalog.indicConformer(language)
         val snapshot = runCatching { speechManager.snapshot(pack) }.getOrNull()
         val ready = snapshot?.state == SpeechPackDownloadManager.State.COMPLETE && OfflineSpeechEngineFactory.isReady(this, pack)
         status.text = if (ready) {
-            "Model ready · ${selectedLanguage().label} · Offline on this phone. Internet is not required."
+            "Model ready · ${choice.label} · Offline on this phone. Internet is not required."
         } else {
-            "Model not downloaded for ${selectedLanguage().label}. Open Download Models and download AI4Bharat IndicConformer INT8 · ${selectedLanguage().label} first (about ${pack.totalBytes / 1_000_000} MB)."
+            "Model not downloaded for ${choice.label}. Open Download Models and download AI4Bharat IndicConformer INT8 · ${choice.label} first (about ${pack.totalBytes / 1_000_000} MB)."
         }
         convertButton.isEnabled = ready && selectedAudio != null
     }
@@ -155,10 +178,15 @@ class VoiceToTextActivity : Activity() {
     private fun convertAudio() {
         val uri = selectedAudio
         if (uri == null) { Toast.makeText(this, "Please choose an audio file first.", Toast.LENGTH_LONG).show(); return }
-        val language = selectedLanguage().value
+        val choice = selectedLanguage()
+        if (choice == null) {
+            status.text = "No downloaded speech model is available. Download a language model in Download Models first."
+            return
+        }
+        val language = choice.value
         val pack = SpeechModelCatalog.indicConformer(language)
         if (!OfflineSpeechEngineFactory.isReady(this, pack)) {
-            status.text = "Download the ${selectedLanguage().label} offline model first."
+            status.text = "Download the ${choice.label} offline model first."
             convertButton.isEnabled = false
             return
         }
@@ -178,7 +206,7 @@ class VoiceToTextActivity : Activity() {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     resultText.setText(transcript)
                     copyButton.isEnabled = true
-                    status.text = "Offline conversion complete · ${selectedLanguage().label} · AI4Bharat IndicConformer · processed on this phone."
+                    status.text = "Offline conversion complete · ${choice.label} · AI4Bharat IndicConformer · processed on this phone."
                     convertButton.isEnabled = true
                     convertButton.text = "Convert Offline"
                 }
@@ -201,7 +229,11 @@ class VoiceToTextActivity : Activity() {
         Toast.makeText(this, "Text copied.", Toast.LENGTH_SHORT).show()
     }
 
-    override fun onResume() { super.onResume(); refreshModelStatus() }
+    override fun onResume() {
+        super.onResume()
+        refreshDownloadedLanguages()
+        refreshModelStatus()
+    }
     private fun label(value: String) = TextView(this).apply {
         text = value; textSize = 12f; setTextColor(muted)
         setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(0, dp(12), 0, dp(5))
