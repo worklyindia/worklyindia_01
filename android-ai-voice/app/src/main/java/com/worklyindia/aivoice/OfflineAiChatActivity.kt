@@ -328,24 +328,34 @@ class OfflineAiChatActivity : Activity() {
 
     private fun waitForWakeServiceStop(attempt: Int = 0) {
         status.postDelayed({
-            val active = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
-                .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
-            if (!active) {
+            val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+            val requested = prefs.getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+            val active = WakeWordAssistantService.isRunning
+            if (active) {
+                if (attempt < 20) waitForWakeServiceStop(attempt + 1)
+            } else if (requested && attempt < 4) {
+                // Allow up to two seconds for Android to create the foreground service.
+                waitForWakeServiceStop(attempt + 1)
+            } else {
+                prefs.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
                 qwenModelPicker.isEnabled = true
                 if (!engine.isLoaded && !modelLoadInProgress) loadModel()
-            } else if (attempt < 20) {
-                waitForWakeServiceStop(attempt + 1)
             }
         }, 500L)
     }
     private fun startWakeWordService() {
         try {
+            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
             val intent = Intent(this, WakeWordAssistantService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
             qwenModelPicker.isEnabled = false
             status.text = "Starting Hey ChatWork foreground microphone service…"
             waitForWakeServiceStop()
         } catch (error: Exception) {
+            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+            qwenModelPicker.isEnabled = true
             status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
         }
     }
