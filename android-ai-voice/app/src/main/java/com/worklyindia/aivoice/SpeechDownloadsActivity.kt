@@ -400,9 +400,7 @@ class SpeechDownloadsActivity : Activity() {
         Toast.makeText(this, "Loading the offline Hey ChatWork keyword model…", Toast.LENGTH_SHORT).show()
         ttsExecutor.execute {
             val result = runCatching {
-                WakeWordEngineFactory.open(this).use { session ->
-                    session.stream.hashCode()
-                }
+                WakeWordEngineFactory.open(this).use { }
             }
             runOnUiThread {
                 if (result.isSuccess) {
