@@ -37,6 +37,7 @@
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
         <activity android:name=".TextToVoiceActivity" android:exported="false" />
+        <activity android:name=".VoiceToTextActivity" android:exported="false" />
         <activity android:name=".DataCollectionActivity" android:exported="false" />
         <activity
             android:name=".WebsiteAiRelayActivity"
