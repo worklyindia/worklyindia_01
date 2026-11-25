@@ -627,6 +627,10 @@ class OfflineAiChatActivity : Activity() {
         val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
             .getString("selected_model_id", null)
         val wakeActive = WakeWordAssistantService.isRunning
+        if (!wakeActive) {
+            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+        }
         qwenModelPicker.isEnabled = !wakeActive && !modelLoadInProgress
         if (!wakeActive && !modelLoadInProgress && (!engine.isLoaded || (savedId != null && savedId != loadedModelId))) loadModel()
     }
