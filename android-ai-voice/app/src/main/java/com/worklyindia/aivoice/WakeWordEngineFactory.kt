@@ -153,13 +153,11 @@ object WakeWordEngineFactory {
         return actual.equals(required.sha256, ignoreCase = true)
     }
 
-    companion object {
-        const val SAMPLE_RATE = 16_000
-        const val WAKE_PHRASE = "Hey ChatWork"
-        // BPE tokens verified against the released GigaSpeech vocabulary.
-        // Accept both the single-word brand pronunciation and a separated "Chat Work".
-        private const val WAKE_KEYWORD_LINE =
-            "▁HE Y ▁CHA T W OR K :2.0 #0.35 @HEY_CHATWORK_COMPOUND\n" +
-                "▁HE Y ▁CHA T ▁WORK :2.0 #0.35 @HEY_CHATWORK_SPACED"
-    }
+    const val SAMPLE_RATE = 16_000
+    const val WAKE_PHRASE = "Hey ChatWork"
+    // BPE tokens verified against the released GigaSpeech vocabulary.
+    // Accept both the single-word brand pronunciation and a separated "Chat Work".
+    private const val WAKE_KEYWORD_LINE =
+        "▁HE Y ▁CHA T W OR K :2.0 #0.35 @HEY_CHATWORK_COMPOUND\n" +
+            "▁HE Y ▁CHA T ▁WORK :2.0 #0.35 @HEY_CHATWORK_SPACED"
 }
