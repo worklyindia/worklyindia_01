@@ -58,8 +58,8 @@ class ChatWorkAssistantActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ChatWorkTheme.applyWindow(this)
-        tts = TextToSpeech(this, this)
         buildUi()
+        tts = TextToSpeech(this, this)
         loadBestAvailableModel()
     }
 
