@@ -144,7 +144,9 @@ export async function handleWorklyVoiceRelay(req: Request) {
       }
       const update: Record<string, unknown> = {
         worker_enabled: enabled,
-        model_capabilities: enabled ? capabilities : [],
+        // Keep this owner's private installed-model/performance snapshot for Data Collection.
+        // The scheduler still requires worker_enabled=true, so disabled phones receive no jobs.
+        model_capabilities: capabilities,
         worker_updated_at: new Date().toISOString(),
         last_seen_at: new Date().toISOString()
       };
