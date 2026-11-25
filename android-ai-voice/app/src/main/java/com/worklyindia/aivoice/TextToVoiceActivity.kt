@@ -9,6 +9,7 @@ import android.content.res.Configuration
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.view.Gravity
 import android.view.View
@@ -313,6 +314,7 @@ class TextToVoiceActivity : Activity() {
         convertButton.text="Converting…"
         modelStatus.text="Generating audio offline…"
         executor.execute {
+            val conversionStartedAt = SystemClock.elapsedRealtime()
             try {
                 val output=File(cacheDir,"text_to_voice_${System.currentTimeMillis()}.wav")
                 when(model) {
@@ -362,6 +364,14 @@ class TextToVoiceActivity : Activity() {
                     }
                 }
                 check(output.isFile && output.length()>44L) { "Audio file was not generated." }
+                val conversionDurationMs = (SystemClock.elapsedRealtime() - conversionStartedAt).coerceAtLeast(0L)
+                val completedAt = java.time.Instant.now().toString()
+                getSharedPreferences("workly_tts_usage", MODE_PRIVATE).edit()
+                    .putString("last_used_at_${pack.id}", completedAt)
+                    .putLong("last_duration_ms_${pack.id}", conversionDurationMs)
+                    .putInt("last_text_chars_${pack.id}", text.length)
+                    .putLong("last_output_bytes_${pack.id}", output.length())
+                    .apply()
                 runOnUiThread {
                     currentOutput=output
                     convertButton.isEnabled=true
