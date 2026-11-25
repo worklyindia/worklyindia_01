@@ -186,4 +186,5 @@ class SpeechPackDownloadManager(context: Context) {
 
     private fun fileKey(packId: String, relativePath: String) = "download_id_${packId}_${relativePath}"
     private fun installedAtKey(packId: String) = "installed_at_${packId}"
+    private fun testedKey(packId: String) = "tested_${packId}"
 }
