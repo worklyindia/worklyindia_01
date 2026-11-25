@@ -117,7 +117,7 @@ class MainActivity : Activity() {
             isFocusable = true
             background = null
             setOnClickListener {
-                startActivity(Intent(this@MainActivity, ChatWorkAssistantActivity::class.java))
+                startActivity(Intent(this@MainActivity, OfflineAiChatActivity::class.java))
             }
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
