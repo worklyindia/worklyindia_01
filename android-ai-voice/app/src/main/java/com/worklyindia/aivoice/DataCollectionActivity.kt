@@ -320,13 +320,13 @@ class DataCollectionActivity : Activity() {
         val storageUsed = (storageTotal - storageAvailable).coerceAtLeast(0L)
         val ramUsed = (ramTotal - ramAvailable).coerceAtLeast(0L)
         val storageValue = if (storageTotal > 0 && storageAvailable >= 0) {
-            formatBytes(storageUsed) + " / " + (storageNominalGb?.let { "$it GB" } ?: formatBytes(storageTotal))
+            formatDecimalGb(storageUsed) + " / " + (storageNominalGb?.let { "$it GB" } ?: formatDecimalGb(storageTotal))
         } else "—"
         val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
-            formatBytes(ramUsed) + " / " + (ramNominalGb?.let { "$it GB" } ?: formatBytes(ramTotal))
+            formatBytes(ramUsed) + " / " + formatBytes(ramTotal)
         } else "—"
-        val storageDetail = if (storageTotal > 0) "Nominal capacity • " + formatBytes(storageTotal) + " usable" else "Android storage"
-        val ramDetail = if (ramTotal > 0) "Nominal capacity • " + formatBytes(ramTotal) + " usable" else "Android memory"
+        val storageDetail = if (storageTotal > 0) "System-reported free space • " + formatDecimalGb(storageAvailable) else "Android storage"
+        val ramDetail = if (ramTotal > 0) "Physical RAM • virtual expansion excluded" else "Android memory"
 
         addHealthMetricRow(
             panel,
@@ -519,6 +519,8 @@ class DataCollectionActivity : Activity() {
         }
         return name.ifBlank { code }
     }
+
+    private fun formatDecimalGb(bytes: Long): String = String.format(java.util.Locale.ENGLISH, "%.2f GB", bytes.coerceAtLeast(0L).toDouble() / 1_000_000_000.0)
 
     private fun formatBytes(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"
