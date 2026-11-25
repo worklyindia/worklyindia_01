@@ -94,7 +94,6 @@ class VoiceToTextActivity : Activity() {
         convertButton = Button(this).apply { text = "Convert Offline"; isAllCaps = false; setOnClickListener { convertAudio() } }
         content.addView(convertButton, LinearLayout.LayoutParams(-1, dp(52)))
         status = TextView(this).apply { text = "Select a downloaded speech model and an audio file."; textSize = 13f; setTextColor(muted); setPadding(0, dp(12), 0, dp(14)); setTextIsSelectable(true) }
-        content.addView(status)
         content.addView(label("CONVERTED TEXT"))
         resultText = android.widget.EditText(this).apply {
             minLines = 7; maxLines = 18; gravity = Gravity.TOP; textSize = 16f
@@ -168,7 +167,7 @@ class VoiceToTextActivity : Activity() {
         val snapshot = runCatching { speechManager.snapshot(pack) }.getOrNull()
         val ready = snapshot?.state == SpeechPackDownloadManager.State.COMPLETE && OfflineSpeechEngineFactory.isReady(this, pack)
         status.text = if (ready) {
-            "Model ready · ${choice.label} · Offline on this phone. Internet is not required."
+            ""
         } else {
             "Model not downloaded for ${choice.label}. Open Download Models and download AI4Bharat IndicConformer INT8 · ${choice.label} first (about ${pack.totalBytes / 1_000_000} MB)."
         }
