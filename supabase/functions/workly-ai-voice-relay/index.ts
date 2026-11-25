@@ -192,7 +192,7 @@ export async function handleWorklyVoiceRelay(req: Request) {
         .eq("id", device.id)
         .is("revoked_at", null);
       if (error) throw error;
-      return json({ worker_enabled: enabled, capability_count: enabled ? capabilities.length : 0, metrics_saved: !!update.worker_metrics });
+      return json({ worker_enabled: enabled, capability_count: capabilities.length, metrics_saved: !!update.worker_metrics });
     }
 
     if (action === "report_diagnostic") {
