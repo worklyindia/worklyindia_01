@@ -44,14 +44,6 @@ class SpeechDownloadsActivity : Activity() {
     private val secondary get() = if (dark) 0xFFB5C1D1.toInt() else 0xFF65748B.toInt()
     private val poll = object : Runnable { override fun run() { rows.forEach { it.refresh() }; if (rows.any { it.status.text.contains("Downloading") || it.status.text.contains("Waiting") || it.status.text.contains("Paused") }) handler.postDelayed(this, 1000L) } }
 
-    override fun onResume() {
-        super.onResume()
-        val info = ActivityManager.MemoryInfo()
-        (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(info)
-        availableRam = info.availMem
-        if (rows.isNotEmpty()) refreshAll()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
@@ -852,7 +844,13 @@ class SpeechDownloadsActivity : Activity() {
         return c
     }
     private fun label(value:String,size:Int,color:Int,bold:Boolean)=TextView(this).apply { text=value;textSize=size.toFloat();setTextColor(color);if(bold)setTypeface(typeface,android.graphics.Typeface.BOLD);setPadding(0,dp(5),0,dp(5)) }
-    override fun onResume(){super.onResume();refreshAll()}
+    override fun onResume() {
+        super.onResume()
+        val info = ActivityManager.MemoryInfo()
+        (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(info)
+        availableRam = info.availMem
+        refreshAll()
+    }
     override fun onDestroy(){handler.removeCallbacksAndMessages(null);ttsExecutor.shutdownNow();activeMossPlayer?.release();activeMossPlayer=null;super.onDestroy()}
     private fun dp(v:Int)=(v*resources.displayMetrics.density).toInt()
 }
