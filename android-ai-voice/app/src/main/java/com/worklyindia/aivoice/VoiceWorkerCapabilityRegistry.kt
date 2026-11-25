@@ -52,6 +52,7 @@ object VoiceWorkerCapabilityRegistry {
     /** Returns only fully downloaded, relay-wired models. Never advertises test-only packs. */
     fun downloadedRelayCapabilities(context: Context): JSONArray {
         val manager = SpeechPackDownloadManager(context)
+        val ttsUsage = context.getSharedPreferences("workly_tts_usage", Context.MODE_PRIVATE)
         val result = JSONArray()
         val ttsPacks = listOf(
             SpeechModelCatalog.indicTinyTts("gu") to "indic",
@@ -72,6 +73,10 @@ object VoiceWorkerCapabilityRegistry {
                 .put("pack_id", pack.id)
                 .put("size_bytes", pack.totalBytes)
                 .put("installed_at", manager.installedAt(pack) ?: JSONObject.NULL)
+                .put("last_used_at", ttsUsage.getString("last_used_at_${pack.id}", null) ?: JSONObject.NULL)
+                .put("last_duration_ms", ttsUsage.getLong("last_duration_ms_${pack.id}", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
+                .put("last_text_chars", ttsUsage.getInt("last_text_chars_${pack.id}", -1).takeIf { it >= 0 } ?: JSONObject.NULL)
+                .put("last_output_bytes", ttsUsage.getLong("last_output_bytes_${pack.id}", -1L).takeIf { it >= 0L } ?: JSONObject.NULL)
                 .put("languages", JSONArray(languages))
                 .put("ready", true))
         }
