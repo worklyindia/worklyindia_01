@@ -142,7 +142,7 @@ class VoiceToTextActivity : Activity() {
                     output.toByteArray()
                 } ?: throw IllegalStateException("Could not open the selected audio file.")
                 if (bytes.isEmpty()) throw IllegalArgumentException("The selected audio file is empty.")
-                val response = VoiceRelayApi.transcribe(deviceToken, bytes, model, language)
+                val response = VoiceRelayApi.transcribe(deviceToken, bytes, model, language, contentResolver.getType(uri) ?: "application/octet-stream")
                 val transcript = response.optString("text").trim()
                 if (transcript.isBlank()) throw IllegalStateException("No speech was detected in this audio.")
                 runOnUiThread {
