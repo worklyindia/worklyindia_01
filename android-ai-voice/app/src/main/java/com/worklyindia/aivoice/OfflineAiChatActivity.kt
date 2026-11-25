@@ -600,7 +600,10 @@ class OfflineAiChatActivity : Activity() {
         // this Activity remained alive never became usable until the app was reopened.
         val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
             .getString("selected_model_id", null)
-        if (!modelLoadInProgress && (!engine.isLoaded || (savedId != null && savedId != loadedModelId))) loadModel()
+        val wakeActive = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+            .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+        qwenModelPicker.isEnabled = !wakeActive && !modelLoadInProgress
+        if (!wakeActive && !modelLoadInProgress && (!engine.isLoaded || (savedId != null && savedId != loadedModelId))) loadModel()
     }
 
     // Language follows the device locale; recognition is allowed to detect the spoken language.
