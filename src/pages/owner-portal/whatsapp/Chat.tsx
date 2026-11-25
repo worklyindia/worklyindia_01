@@ -1,4 +1,5 @@
 import { goBack } from "@/lib/goBack";
+import { useChatStatusBarTheme } from "@/hooks/useChatStatusBarTheme";
 import { ChatDateSeparator } from "@/components/chat/ChatDateSeparator";
 import { startsChatDay } from "@/lib/chatTimestamp";
 import MetaSocialChat from "@/components/social/MetaSocialChat";
@@ -150,6 +151,7 @@ const formatTime12Hour = (dateString: string) => {
 };
 
 export default function WhatsAppChat() {
+  useChatStatusBarTheme();
   const navigate = useNavigate();
   const { phoneNumber: routePhoneNumber } = useParams<{ phoneNumber?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1559,7 +1561,7 @@ export default function WhatsAppChat() {
         {selectedConversation ? (
           <>
             {/* Chat Header */}
-            {!isSelectionMode && <div className="shrink-0 bg-whatsapp-panel px-2 py-2 flex items-center gap-2 border-b border-whatsapp-border">
+            {!isSelectionMode && <div className="shrink-0 bg-whatsapp-panel px-2 py-2 flex items-center gap-2 border-b border-whatsapp-border pt-[max(0.5rem,env(safe-area-inset-top))]">
               <Button 
                 variant="ghost" 
                 size="icon" 
