@@ -46,6 +46,7 @@ class WakeWordAssistantService : Service() {
             return START_NOT_STICKY
         }
         if (!running.compareAndSet(false, true)) return START_NOT_STICKY
+        isRunning = true
         val notification = buildNotification("Preparing offline voice models…")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -202,6 +203,7 @@ class WakeWordAssistantService : Service() {
             if (running.get()) updateNotification("Assistant stopped · ${error.message ?: "Model or microphone error"}")
             running.set(false)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            isRunning = false
             stopSelf()
         } finally {
             running.set(false)
@@ -318,6 +320,7 @@ class WakeWordAssistantService : Service() {
 
     override fun onDestroy() {
         stopAssistant()
+        isRunning = false
         worker.shutdownNow()
         super.onDestroy()
     }
@@ -329,6 +332,8 @@ class WakeWordAssistantService : Service() {
         const val PREFS = "chatwork_wake_word"
         const val KEY_ACTIVE = "active"
         const val KEY_LANGUAGE = "language"
+        @Volatile var isRunning: Boolean = false
+            private set
         private const val CHANNEL_ID = "chatwork_wake_assistant"
         private const val NOTIFICATION_ID = 7421
         private const val MAX_HISTORY_CHARS = 2500
