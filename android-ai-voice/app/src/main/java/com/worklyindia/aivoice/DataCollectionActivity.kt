@@ -17,6 +17,7 @@ import android.widget.ScrollView
 import android.widget.TableLayout
 import android.widget.TableRow
 import android.widget.TextView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Date
@@ -31,6 +32,8 @@ class DataCollectionActivity : Activity() {
     private var dashboard = JSONObject()
     private var selectedTab = "Overview"
     private var statusText = "Connecting to Supabase…"
+    private var pullRefreshLayout: SwipeRefreshLayout? = null
+    private var contentScrollView: ScrollView? = null
 
     private val ink = 0xFFF0F4FA.toInt()
     private val muted = 0xFFAAB7C8.toInt()
@@ -69,16 +72,20 @@ class DataCollectionActivity : Activity() {
         super.onPause()
     }
 
-    private fun refreshData() {
+    private fun refreshData(userInitiated: Boolean = false) {
         val token = SecureDeviceTokenStore.read(this)
         if (token.isNullOrBlank()) {
-            statusText = "Connect your Workly India account to load Supabase data."
-            render()
+            if (dashboard.length() == 0) {
+                statusText = "Connect your Workly India account to load Supabase data."
+                render()
+            }
+            pullRefreshLayout?.isRefreshing = false
             return
         }
-        if (!loading.compareAndSet(false, true)) return
-        statusText = "Refreshing Supabase data…"
-        render()
+        if (!loading.compareAndSet(false, true)) {
+            if (userInitiated) pullRefreshLayout?.isRefreshing = false
+            return
+        }
         executor.execute {
             try {
                 // Refresh the Supabase capability snapshot from this phone before
@@ -100,16 +107,22 @@ class DataCollectionActivity : Activity() {
                 }
                 val response = VoiceRelayApi.userDataDashboard(token)
                 runOnUiThread {
+                    val previousScrollY = contentScrollView?.scrollY ?: 0
                     dashboard = normalizeDashboard(response)
                     statusText = "Connected • Live data from Supabase"
                     loading.set(false)
+                    pullRefreshLayout?.isRefreshing = false
                     render()
+                    contentScrollView?.post { contentScrollView?.scrollTo(0, previousScrollY) }
                 }
             } catch (error: Exception) {
                 runOnUiThread {
-                    statusText = error.message ?: "Could not load ChatWork data."
+                    if (dashboard.length() == 0) {
+                        statusText = error.message ?: "Could not load ChatWork data."
+                        render()
+                    }
                     loading.set(false)
-                    render()
+                    pullRefreshLayout?.isRefreshing = false
                 }
             }
         }
@@ -163,11 +176,18 @@ class DataCollectionActivity : Activity() {
             clipToPadding = false
             setPadding(0, dp(14), 0, dp(24))
         }
+        val swipeRefresh = SwipeRefreshLayout(this).apply {
+            setColorSchemeColors(blue)
+            setOnRefreshListener { refreshData(userInitiated = true) }
+            addView(scroll, androidx.swiperefreshlayout.widget.SwipeRefreshLayout.LayoutParams(-1, -1))
+        }
+        pullRefreshLayout = swipeRefresh
+        contentScrollView = scroll
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
         scroll.addView(body, FrameLayout.LayoutParams(-1, -2))
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(swipeRefresh, LinearLayout.LayoutParams(-1, 0, 1f))
 
         if (dashboard.length() == 0 && loading.get()) {
             val loadingArea = FrameLayout(this).apply {
