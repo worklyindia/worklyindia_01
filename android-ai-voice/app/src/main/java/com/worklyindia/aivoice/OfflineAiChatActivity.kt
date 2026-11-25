@@ -282,7 +282,9 @@ class OfflineAiChatActivity : Activity() {
     private fun checkWakeModelsAndPermissions(language: String) {
         val speechManager = SpeechPackDownloadManager(this)
         val missing = mutableListOf<String>()
+        val wakePack = SpeechModelCatalog.chatWorkWakeWord()
         if (!WakeWordEngineFactory.isReady(this)) missing.add("ChatWork Wake Word · English")
+        else if (!speechManager.isModelTested(wakePack)) missing.add("Test Model · ChatWork Wake Word")
         if (!OfflineSpeechEngineFactory.isReady(this, SpeechModelCatalog.indicConformer(language))) {
             missing.add("IndicConformer ${language.uppercase(Locale.ROOT)} · Voice to Text")
         }
