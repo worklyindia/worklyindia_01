@@ -222,7 +222,22 @@ const ResumeCreate = () => {
             {!isAIStep && (
               <>
                 <StepHeader icon={stepMeta.icon} title={stepMeta.title} description={stepMeta.desc} optional={stepMeta.optional} />
-                {currentStep === 1 && <ResumeScannerPanel />}
+                {currentStep === 1 && (
+                  <ResumeScannerPanel
+                    onImport={({ fullName, email, mobile, resumeText }) => {
+                      try { localStorage.setItem("resume_builder_scanned_source_v1", resumeText); } catch { /* storage may be unavailable */ }
+                      const lines = resumeText.split(/\\r?\\n/);
+                      const summaryIndex = lines.findIndex((line) => /^(professional )?(summary|objective|profile)\\s*:?$/i.test(line.trim()));
+                      const nextHeading = lines.findIndex((line, index) => index > summaryIndex && /^(experience|work experience|employment|education|skills|projects|certifications?)\\s*:?$/i.test(line.trim()));
+                      const summary = summaryIndex >= 0 ? lines.slice(summaryIndex + 1, nextHeading > summaryIndex ? nextHeading : undefined).join(" ").trim() : "";
+                      setDraft((previous) => ({
+                        ...previous,
+                        personal: { ...previous.personal, fullName: fullName || previous.personal.fullName, email: email || previous.personal.email, mobile: mobile || previous.personal.mobile },
+                        summary: summary || previous.summary,
+                      }));
+                    }}
+                  />
+                )}
               </>
             )}
             {isAIStep ? (
