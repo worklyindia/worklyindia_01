@@ -322,7 +322,8 @@ class OfflineAiChatActivity : Activity() {
         status.text = "Generating a reply on this phone…"
         val contextPrompt = if (conversationHistory.isEmpty()) prompt else
             "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
-        val usedModel = selectedQwenModel
+        val usedModelId = loadedModelId ?: selectedQwenModel?.id
+        val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
             val startedAt = SystemClock.elapsedRealtime()
             val answer = try {
