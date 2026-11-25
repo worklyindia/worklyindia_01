@@ -145,6 +145,7 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(downloadOnnxRuntimeAar)
 }
 dependencies {
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("com.google.mediapipe:tasks-audio:1.2.2")
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("com.google.mlkit:translate:17.0.3")
