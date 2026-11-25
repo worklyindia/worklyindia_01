@@ -73,15 +73,19 @@ async function transcribeWithAssemblyAI(
 async function transcribeWithLovable(
   audioBytes: Uint8Array<ArrayBuffer>,
   requestId: string,
-  language: string
+  language: string,
+  mimeType: string
 ): Promise<SttResult> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
 
-  const isWav = audioBytes.length >= 12 && new TextDecoder().decode(audioBytes.slice(0, 4)) === 'RIFF';
-  const audioBlob = new Blob([audioBytes], { type: isWav ? 'audio/wav' : 'audio/webm' });
+  const detectedMime = audioBytes.length >= 12 && new TextDecoder().decode(audioBytes.slice(0, 4)) === 'RIFF'
+    ? 'audio/wav'
+    : (mimeType.startsWith('audio/') ? mimeType.split(';')[0] : 'audio/webm');
+  const extension = ({ 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/webm': 'webm', 'audio/3gpp': '3gp' } as Record<string, string>)[detectedMime] || 'webm';
+  const audioBlob = new Blob([audioBytes], { type: detectedMime });
   const formData = new FormData();
-  formData.append('file', audioBlob, isWav ? 'recording.wav' : 'recording.webm');
+  formData.append('file', audioBlob, 'recording.' + extension);
   formData.append('model', 'openai/gpt-4o-mini-transcribe');
   if (language !== 'auto') formData.append('language', language);
 
@@ -114,18 +118,19 @@ export async function transcribeAudio(
   audioBytes: Uint8Array<ArrayBuffer>,
   requestId: string,
   model = 'auto',
-  language = 'auto'
+  language = 'auto',
+  mimeType = 'audio/webm'
 ): Promise<SttResult> {
   if (!['auto', 'assemblyai', 'gpt-4o-mini'].includes(model)) throw new Error('Unsupported speech recognition model.');
   if (!['auto', 'hi', 'gu', 'en'].includes(language)) throw new Error('Unsupported transcription language.');
   if (model === 'assemblyai') return await transcribeWithAssemblyAI(audioBytes, requestId, language);
-  if (model === 'gpt-4o-mini') return await transcribeWithLovable(audioBytes, requestId, language);
+  if (model === 'gpt-4o-mini') return await transcribeWithLovable(audioBytes, requestId, language, mimeType);
   try {
     return await transcribeWithAssemblyAI(audioBytes, requestId, 'auto');
   } catch (err: any) {
     console.warn(
       `[${requestId}] AssemblyAI failed, falling back to Lovable: ${err?.message || err}`
     );
-    return await transcribeWithLovable(audioBytes, requestId, language);
+    return await transcribeWithLovable(audioBytes, requestId, language, mimeType);
   }
 }
