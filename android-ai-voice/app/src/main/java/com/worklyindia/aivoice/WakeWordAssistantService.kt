@@ -256,7 +256,7 @@ class WakeWordAssistantService : Service() {
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(Notification.Action.Builder(null, "Stop listening", stopIntent).build())
+            .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "Stop listening", stopIntent).build())
             .build()
     }
 
