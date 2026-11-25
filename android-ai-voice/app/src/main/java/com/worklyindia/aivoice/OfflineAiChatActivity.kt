@@ -279,7 +279,7 @@ class OfflineAiChatActivity : Activity() {
         if (missing.isNotEmpty()) {
             AlertDialog.Builder(this)
                 .setTitle("Download required models")
-                .setMessage("Before enabling Hey ChatWork, download and test:\\n\\n" + missing.joinToString("\\n"))
+                .setMessage("Before enabling Hey ChatWork, download and test:\n\n" + missing.joinToString("\n"))
                 .setNegativeButton("Not now", null)
                 .setPositiveButton("Open Download Models") { _, _ ->
                     startActivity(Intent(this, SpeechDownloadsActivity::class.java))
