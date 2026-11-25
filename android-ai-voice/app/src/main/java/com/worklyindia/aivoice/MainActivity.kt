@@ -107,6 +107,21 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
         root.addView(TextView(this).apply {
+            text = "AI Assistant"
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            isClickable = true
+            isFocusable = true
+            background = null
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, ChatWorkAssistantActivity::class.java))
+            }
+        }, LinearLayout.LayoutParams(-1, dp(58)))
+
+        root.addView(TextView(this).apply {
             text = "Download Model"
             textSize = 19f
             gravity = Gravity.CENTER
