@@ -86,6 +86,9 @@ class DataCollectionActivity : Activity() {
             if (userInitiated) pullRefreshLayout?.isRefreshing = false
             return
         }
+        // Show the initial loading state only; background refreshes keep the
+        // existing dashboard visible without a spinner or status-message change.
+        if (dashboard.length() == 0) render()
         executor.execute {
             try {
                 // Refresh the Supabase capability snapshot from this phone before
