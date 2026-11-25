@@ -36,6 +36,9 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/WorklyLaunchTheme">
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-8967355030781141~1824018752" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
