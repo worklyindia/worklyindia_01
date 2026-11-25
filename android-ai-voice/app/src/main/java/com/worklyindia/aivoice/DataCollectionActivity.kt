@@ -292,31 +292,31 @@ class DataCollectionActivity : Activity() {
 
         val storageValue = if (storageTotal > 0 && storageAvailable >= 0) {
             "${formatBytes(storageAvailable.coerceAtMost(storageTotal))} free"
-        } else "Waiting for report"
+        } else "—"
         val storageDetail = if (storageTotal > 0 && storageAvailable >= 0) {
             "${formatBytes((storageTotal - storageAvailable).coerceAtLeast(0L))} used of ${formatBytes(storageTotal)}"
-        } else "Internal storage"
+        } else "Storage info"
         val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
             "${formatBytes(ramAvailable.coerceAtMost(ramTotal))} free"
-        } else "Waiting for report"
+        } else "—"
         val ramDetail = if (ramTotal > 0 && ramAvailable >= 0) {
             "${formatBytes((ramTotal - ramAvailable).coerceAtLeast(0L))} used of ${formatBytes(ramTotal)}"
-        } else "Device memory"
+        } else "RAM info"
 
         addHealthMetricRow(
             panel,
-            healthMetric("INTERNAL STORAGE", storageValue, storageDetail, storageUsedPct, 0xFF55A7FF.toInt()),
-            healthMetric("AVAILABLE RAM", ramValue, ramDetail, ramUsedPct, 0xFF9A8BFF.toInt())
+            healthMetric("Storage", storageValue, storageDetail, storageUsedPct, 0xFF55A7FF.toInt()),
+            healthMetric("RAM Free", ramValue, ramDetail, ramUsedPct, 0xFF9A8BFF.toInt())
         )
         addHealthMetricRow(
             panel,
             healthMetric("BATTERY", if (battery in 0..100) "$battery%" else "—", batteryStatus, battery.takeIf { it in 0..100 }, 0xFF27C58B.toInt()),
-            healthMetric("BATTERY TEMP", temperature, "Battery temperature", null, 0xFFFFB547.toInt())
+            healthMetric("Temp", temperature, "Battery temperature", null, 0xFFFFB547.toInt())
         )
         addHealthMetricRow(
             panel,
-            healthMetric("APP CPU", if (cpu in 0.0..100.0) String.format(java.util.Locale.ENGLISH, "%.0f%%", cpu) else "—", "ChatWork app usage", cpu.takeIf { it in 0.0..100.0 }?.toInt(), 0xFF55A7FF.toInt()),
-            healthMetric("THERMAL", thermal.replaceFirstChar { it.uppercaseChar() }, "Device thermal state", null, if (thermal.lowercase() in listOf("severe", "critical", "emergency", "shutdown")) 0xFFFF647C.toInt() else 0xFF27C58B.toInt())
+            healthMetric("CPU", if (cpu in 0.0..100.0) String.format(java.util.Locale.ENGLISH, "%.0f%%", cpu) else "—", "ChatWork app usage", cpu.takeIf { it in 0.0..100.0 }?.toInt(), 0xFF55A7FF.toInt()),
+            healthMetric("Heat", thermal.replaceFirstChar { it.uppercaseChar() }, "Device thermal state", null, if (thermal.lowercase() in listOf("severe", "critical", "emergency", "shutdown")) 0xFFFF647C.toInt() else 0xFF27C58B.toInt())
         )
 
         val updatedText = when {
