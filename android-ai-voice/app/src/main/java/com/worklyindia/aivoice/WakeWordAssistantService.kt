@@ -123,11 +123,14 @@ class WakeWordAssistantService : Service() {
             ai = activeAiEngine
             activeAi = activeAiEngine
             check(activeAiEngine.loadModel(modelManager.file(chosen))) { "Could not load ${chosen.title}." }
+            check(running.get()) { "Hey ChatWork listening was stopped." }
 
             val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
             speech = activeSpeechRecognizer
+            check(running.get()) { "Hey ChatWork listening was stopped." }
             val activeTtsEngine = IndicTinyTtsEngine.create(this, language)
             tts = activeTtsEngine
+            check(running.get()) { "Hey ChatWork listening was stopped." }
             val activeWakeSession = WakeWordEngineFactory.open(this)
             wakeSession = activeWakeSession
             check(running.get()) { "Hey ChatWork listening was stopped." }
