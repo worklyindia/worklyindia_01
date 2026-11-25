@@ -182,7 +182,7 @@ class SpeechDownloadsActivity : Activity() {
                     action.text = "Delete"
                     action.isEnabled = true
                     action.setOnClickListener {
-                        if (getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+                        if (WakeWordAssistantService.isRunning) {
                             Toast.makeText(this, "Stop Hey ChatWork before deleting an AI model.", Toast.LENGTH_LONG).show()
                             return@setOnClickListener
                         }
