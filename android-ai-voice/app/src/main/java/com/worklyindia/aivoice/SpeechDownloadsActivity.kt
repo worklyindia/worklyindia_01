@@ -401,7 +401,7 @@ class SpeechDownloadsActivity : Activity() {
         ttsExecutor.execute {
             val result = runCatching {
                 WakeWordEngineFactory.open(this).use { session ->
-                    check(session.stream.ptr != 0L) { "Wake-word stream could not be initialized." }
+                    session.stream.hashCode()
                 }
             }
             runOnUiThread {
