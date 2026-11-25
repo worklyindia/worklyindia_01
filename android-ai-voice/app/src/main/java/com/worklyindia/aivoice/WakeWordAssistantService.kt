@@ -321,8 +321,8 @@ class WakeWordAssistantService : Service() {
 
     override fun onDestroy() {
         stopAssistant()
-        isRunning = false
-        worker.shutdownNow()
+        // Let the worker finish its native unload before publishing isRunning=false in finally.
+        worker.shutdown()
         super.onDestroy()
     }
 
