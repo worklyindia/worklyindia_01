@@ -119,15 +119,15 @@ class WakeWordAssistantService : Service() {
                 AudioFormat.ENCODING_PCM_16BIT
             )
             check(minBuffer > 0) { "This phone does not support 16 kHz microphone input." }
-            audio = AudioRecord(
+            val activeAudio = AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 WakeWordEngineFactory.SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
                 maxOf(minBuffer * 2, 6400)
             )
-            check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
-            val activeAudio = audio
+            audio = activeAudio
+            check(activeAudio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
             recorder = activeAudio
             activeAudio.startRecording()
             updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
