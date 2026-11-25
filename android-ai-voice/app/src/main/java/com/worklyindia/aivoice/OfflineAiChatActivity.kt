@@ -258,18 +258,34 @@ class OfflineAiChatActivity : Activity() {
                 val recommended = modelManager.recommendedModel(memoryInfo.availMem)
                 val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE).getString("selected_model_id", null)
                 val savedModel = modelManager.models.firstOrNull { it.id == savedId }
-                // Prefer the saved model only when it is both downloaded and safe for
-                // current free RAM. Otherwise automatically load the largest compatible
-                // model already downloaded on this phone; never silently use cloud/mobile TTS.
+                val modelDirectory = modelManager.file(modelManager.models.first()).parentFile ?: filesDir
+                val budget = AssistantModelPolicy.readBudget(this, modelDirectory)
+                val downloadedCandidates = modelManager.models.map { model ->
+                    AssistantModelPolicy.Candidate(
+                        id = model.id,
+                        displayName = model.title,
+                        expectedBytes = model.size,
+                        minimumAvailableRamBytes = model.minFreeRam,
+                        minimumFreeStorageBytes = 256L * 1024L * 1024L,
+                        enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
+                    )
+                }
+                val recommendation = AssistantModelPolicy.recommend(
+                    candidates = downloadedCandidates,
+                    budget = budget,
+                    reserveRamBytes = 512L * 1024L * 1024L,
+                    reserveStorageBytes = 256L * 1024L * 1024L
+                )
+                // Keep a saved model only if it still fits the live RAM budget.
+                // Otherwise choose the largest downloaded model that fits with safety reserves.
                 val savedReady = savedModel?.takeIf {
-                    memoryInfo.availMem >= it.minFreeRam &&
+                    recommendation.candidate?.id == it.id &&
                         modelManager.snapshot(it).state == QwenModelManager.State.READY
                 }
-                val downloadedCompatible = modelManager.models
-                    .filter { memoryInfo.availMem >= it.minFreeRam }
-                    .filter { modelManager.snapshot(it).state == QwenModelManager.State.READY }
-                    .maxByOrNull { it.size }
-                val chosen = savedReady ?: downloadedCompatible ?: recommended
+                val adaptiveChoice = recommendation.candidate?.let { candidate ->
+                    modelManager.models.firstOrNull { it.id == candidate.id }
+                }
+                val chosen = savedReady ?: adaptiveChoice ?: recommended
                 selectedQwenModel = chosen
                 runOnUiThread {
                     val index = modelManager.models.indexOf(chosen)
