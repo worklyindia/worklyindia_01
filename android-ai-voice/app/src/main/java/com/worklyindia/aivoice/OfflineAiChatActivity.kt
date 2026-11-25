@@ -247,8 +247,7 @@ class OfflineAiChatActivity : Activity() {
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
-            val wakeEnabled = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
-                .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+            val wakeEnabled = WakeWordAssistantService.isRunning
             qwenModelPicker.isEnabled = !wakeEnabled
             if (wakeEnabled) {
                 menu.add("Disable Hey ChatWork").setOnMenuItemClickListener {
@@ -431,8 +430,7 @@ class OfflineAiChatActivity : Activity() {
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
                     sendButton.alpha = 1f
-                    qwenModelPicker.isEnabled = !getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
-                        .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+                    qwenModelPicker.isEnabled = !WakeWordAssistantService.isRunning
                 }
             } catch (error: Exception) {
                 runOnUiThread {
@@ -618,8 +616,7 @@ class OfflineAiChatActivity : Activity() {
         // this Activity remained alive never became usable until the app was reopened.
         val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
             .getString("selected_model_id", null)
-        val wakeActive = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
-            .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+        val wakeActive = WakeWordAssistantService.isRunning
         qwenModelPicker.isEnabled = !wakeActive && !modelLoadInProgress
         if (!wakeActive && !modelLoadInProgress && (!engine.isLoaded || (savedId != null && savedId != loadedModelId))) loadModel()
     }
@@ -704,8 +701,7 @@ class OfflineAiChatActivity : Activity() {
     override fun onDestroy() {
         offlineRecording = false
         activeAudioRecord?.let { runCatching { it.stop() }; it.release() }
-        val wakeServiceActive = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
-            .getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+        val wakeServiceActive = WakeWordAssistantService.isRunning
         if (!wakeServiceActive) worker.execute { engine.unload() }
         worker.shutdown()
         tinyTtsEngine?.close()
