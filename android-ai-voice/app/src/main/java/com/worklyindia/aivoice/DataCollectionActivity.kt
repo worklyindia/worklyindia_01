@@ -222,7 +222,7 @@ class DataCollectionActivity : Activity() {
             parent.addView(sectionTitle(deviceName), LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(4); leftMargin = dp(8); rightMargin = dp(8)
             })
-            addWorkerHealthPanel(parent, deviceName, workerStatus, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
+            addWorkerHealthPanel(parent, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
 
             val capabilities = device.optJSONArray("model_capabilities") ?: JSONArray()
             parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply {
@@ -234,46 +234,16 @@ class DataCollectionActivity : Activity() {
 
     private fun addWorkerHealthPanel(
         parent: LinearLayout,
-        deviceName: String,
-        workerStatus: String,
         metrics: JSONObject,
         metricsUpdatedAt: String?,
         metricsFresh: Boolean,
         lastSeen: String
     ) {
-        val online = workerStatus == "ONLINE"
-        val statusColor = when (workerStatus) {
-            "ONLINE" -> 0xFF27C58B.toInt()
-            "OFFLINE" -> 0xFFFFB547.toInt()
-            "REVOKED" -> 0xFFFF647C.toInt()
-            else -> muted
-        }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(14))
             background = rounded(0xFF0D1929.toInt(), dp(18), line)
         }
-        val statusRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        statusRow.addView(TextView(this).apply {
-            text = deviceName
-            textSize = 11f
-            letterSpacing = 1.1f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(muted)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        statusRow.addView(TextView(this).apply {
-            text = "●  $workerStatus"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(statusColor)
-            background = rounded(statusColor and 0x00FFFFFF or 0x16000000, dp(20))
-            setPadding(dp(11), dp(7), dp(11), dp(7))
-        })
-        panel.addView(statusRow)
-
         val storageTotal = metrics.optLong("storage_total_bytes", -1L)
         val storageAvailable = metrics.optLong("storage_available_bytes", -1L)
         val ramTotal = metrics.optLong("ram_total_bytes", -1L)
