@@ -366,11 +366,6 @@ class MainActivity : FragmentActivity() {
         webView.addJavascriptInterface(WorklyWebBridge(), "WorklyAndroid")
         webView.addJavascriptInterface(WorklyFestivalWidgetBridge(this), "WorklyFestivalWidget")
         webView.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView, url: String) {
-                super.onPageFinished(view, url)
-                if (::swipeRefreshLayout.isInitialized) swipeRefreshLayout.isRefreshing = false
-            }
-
             override fun onReceivedError(
                 view: WebView,
                 request: WebResourceRequest,
