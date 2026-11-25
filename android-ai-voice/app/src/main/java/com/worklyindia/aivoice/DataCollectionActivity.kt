@@ -195,7 +195,9 @@ class DataCollectionActivity : Activity() {
 
         for (deviceIndex in 0 until devices.length()) {
             val device = devices.optJSONObject(deviceIndex) ?: continue
-            val deviceName = device.optString("device_model").takeIf { it.isNotBlank() && it != "null" }\n                ?: device.optString("device_name").takeIf { it.isNotBlank() && it != "null" }\n                ?: "ChatWork phone ${deviceIndex + 1}"
+            val deviceName = device.optString("device_model").takeIf { it.isNotBlank() && it != "null" }
+                ?: device.optString("device_name").takeIf { it.isNotBlank() && it != "null" }
+                ?: "ChatWork phone ${deviceIndex + 1}"
             val workerStatus = when {
                 !device.isNull("revoked_at") -> "REVOKED"
                 device.optBoolean("online", false) -> "ONLINE"
