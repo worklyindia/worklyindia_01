@@ -61,7 +61,7 @@ class QwenModelManager(context: Context) {
         }
     }
     fun installedAt(model: Model): String? {
-        if (snapshot(model).state != State.READY) return null
+        if (snapshot(model).state !in setOf(State.READY, State.NEEDS_TEST)) return null
         return prefs.getString("installed_at_" + model.id, null)
     }
 
