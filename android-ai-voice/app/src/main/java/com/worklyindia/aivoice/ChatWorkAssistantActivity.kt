@@ -182,7 +182,11 @@ class ChatWorkAssistantActivity : Activity(), TextToSpeech.OnInitListener {
                     append("ChatWork: $answer")
                     status.text = "Offline answer ready."
                     sendButton.isEnabled = true
-                    if (ttsReady) tts?.speak(answer, QUEUE_FLUSH, null, "chatwork-answer")
+                    if (ttsReady) {
+                        val selectedLanguage = languages[languagePicker.selectedItemPosition]
+                        tts?.language = selectedLanguage.locale
+                        tts?.speak(answer, QUEUE_FLUSH, null, "chatwork-answer")
+                    }
                 }
             } catch (error: Exception) {
                 main.post {
