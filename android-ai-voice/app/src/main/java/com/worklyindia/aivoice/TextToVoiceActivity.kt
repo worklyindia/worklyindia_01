@@ -364,8 +364,6 @@ class TextToVoiceActivity : Activity() {
                     }
                 }
                 check(output.isFile && output.length()>44L) { "Audio file was not generated." }
-                val conversionDurationMs = (SystemClock.elapsedRealtime() - conversionStartedAt).coerceAtLeast(0L)
-                val completedAt = java.time.Instant.now().toString()
                 ModelUsageTracker.record(
                     this,
                     pack.id,
