@@ -10,10 +10,24 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.os.Environment
 import android.os.StatFs
+import android.provider.Settings
 import org.json.JSONObject
 
 /** Lightweight, privacy-safe device resource snapshot for worker scheduling and diagnostics. */
 object WorkerDeviceMetrics {
+    fun deviceDisplayName(context: Context): String {
+        val configuredName = runCatching {
+            Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME)
+        }.getOrNull()?.trim()?.takeIf {
+            it.isNotBlank() && !it.equals("Android", true) &&
+                !it.equals("ChatWork Android", true) && !it.equals("Workly Android", true)
+        }
+        val manufacturer = Build.MANUFACTURER.trim().replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL.trim()
+        val fallback = listOf(manufacturer, model).filter { it.isNotBlank() }.distinct().joinToString(" ")
+        return (configuredName ?: fallback).take(80).ifBlank { "Android device" }
+    }
+
     private var previousCpuTimeMs = -1L
     private var previousElapsedMs = -1L
 
@@ -32,6 +46,9 @@ object WorkerDeviceMetrics {
 
     fun snapshot(context: Context): JSONObject {
         val result = JSONObject()
+        result.put("device_name", deviceDisplayName(context))
+        result.put("device_model", Build.MODEL.take(100))
+        result.put("device_manufacturer", Build.MANUFACTURER.take(60))
         runCatching {
             val storage = StatFs(Environment.getDataDirectory().absolutePath)
             result.put("storage_total_bytes", storage.totalBytes.coerceAtLeast(0L))
