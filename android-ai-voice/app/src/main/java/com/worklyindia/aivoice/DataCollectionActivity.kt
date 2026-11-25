@@ -333,10 +333,14 @@ class DataCollectionActivity : Activity() {
     }
 
     private fun formatWorkDuration(durationMs: Long): String {
-        val totalSeconds = (durationMs.coerceAtLeast(0L) + 500L) / 1000L
-        val minutes = totalSeconds / 60L
-        val seconds = totalSeconds % 60L
-        return if (minutes > 0L) "${minutes}m ${seconds}s" else "${seconds}s"
+        val safeMs = durationMs.coerceAtLeast(0L)
+        if (safeMs < 1_000L) return "${safeMs} ms"
+        if (safeMs < 60_000L) {
+            return String.format(java.util.Locale.US, "%.1fs", safeMs / 1_000.0)
+        }
+        val minutes = safeMs / 60_000L
+        val seconds = (safeMs % 60_000L) / 1_000.0
+        return String.format(java.util.Locale.US, "%dm %.1fs", minutes, seconds)
     }
 
     private fun currentWorkerStatus(): String {
