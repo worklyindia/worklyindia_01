@@ -262,7 +262,61 @@ class DataCollectionActivity : Activity() {
                 leftMargin = dp(8); rightMargin = dp(8)
             })
             addInstalledModelsTable(parent, installedCapabilities)
+            addTtsUsageTable(parent, installedCapabilities)
         }
+    }
+
+    private fun addTtsUsageTable(parent: LinearLayout, capabilities: JSONArray) {
+        val ttsModels = ArrayList<JSONObject>()
+        for (index in 0 until capabilities.length()) {
+            val capability = capabilities.optJSONObject(index) ?: continue
+            if (capability.optString("task") == "tts") ttsModels.add(capability)
+        }
+        if (ttsModels.isEmpty()) return
+
+        parent.addView(sectionTitle("Time To Work"), LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(8); rightMargin = dp(8)
+        })
+        val table = TableLayout(this).apply { isStretchAllColumns = false }
+        val header = TableRow(this).apply { setBackgroundColor(0xFF1A2A40.toInt()) }
+        arrayOf("Model", "Language", "Last used", "Time to work").forEach { header.addView(cell(it, true)) }
+        table.addView(header)
+        ttsModels.forEachIndexed { index, capability ->
+            val modelName = capability.optString("model_name")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?: capability.optString("pack_id", "Text To Voice")
+            val languages = capability.optJSONArray("languages") ?: JSONArray()
+            val languageNames = (0 until languages.length()).mapNotNull { languages.optString(it).takeIf { value -> value.isNotBlank() } }
+                .map { fullLanguageName(it) }.joinToString(", ").ifBlank { "—" }
+            val lastUsed = capability.optString("last_used_at")
+                .takeIf { it.isNotBlank() && it != "null" }
+                ?.let { formatDate(it) } ?: "Not used yet"
+            val durationMs = capability.optLong("last_duration_ms", -1L)
+            val duration = if (durationMs >= 0L) formatWorkDuration(durationMs) else "—"
+            val row = TableRow(this).apply {
+                setBackgroundColor(if (index % 2 == 0) surface else 0xFF0C1625.toInt())
+            }
+            listOf(modelName, languageNames, lastUsed, duration).forEachIndexed { column, value ->
+                row.addView(if (column == 0) modelCell(value) else cell(value, false))
+            }
+            table.addView(row)
+        }
+        val horizontal = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = true
+            clipToPadding = false
+            background = rounded(surface, dp(12), line)
+            addView(table)
+        }
+        parent.addView(horizontal, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(6); rightMargin = dp(6); bottomMargin = dp(12)
+        })
+    }
+
+    private fun formatWorkDuration(durationMs: Long): String {
+        val totalSeconds = (durationMs.coerceAtLeast(0L) + 500L) / 1000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        return if (minutes > 0L) "${minutes}m ${seconds}s" else "${seconds}s"
     }
 
     private fun currentWorkerStatus(): String {
