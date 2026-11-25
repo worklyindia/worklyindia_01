@@ -12,6 +12,7 @@ import { useReferralSystem } from "@/hooks/useReferralSystem";
 import { useToast } from "@/hooks/use-toast";
 import { SafeAvatarImage } from '@/components/ui/safe-image';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { copyText } from '@/utils/openExternalShareUrl';
 
 const ReferralProfile = () => {
   const navigate = useNavigate();
@@ -94,8 +95,9 @@ const ReferralProfile = () => {
 
   const copyCode = () => {
     if (!referralCode?.referral_code) return;
-    navigator.clipboard.writeText(referralCode.referral_code);
-    toast({ title: "Copied!", description: "Referral code copied to clipboard" });
+    void copyText(referralCode.referral_code).then((copied) => {
+      toast({ title: copied ? "Copied!" : "Copy failed", description: copied ? "Referral code copied to clipboard" : "Please try again", variant: copied ? "default" : "destructive" });
+    });
   };
 
   const openEdit = () => {
