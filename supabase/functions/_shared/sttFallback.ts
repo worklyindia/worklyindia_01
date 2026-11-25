@@ -10,7 +10,8 @@ export interface SttResult {
 
 async function transcribeWithAssemblyAI(
   audioBytes: Uint8Array<ArrayBuffer>,
-  requestId: string
+  requestId: string,
+  language: string
 ): Promise<SttResult> {
   const key = Deno.env.get('ASSEMBLYAI_API_KEY');
   if (!key) throw new Error('ASSEMBLYAI_API_KEY not configured');
@@ -31,7 +32,9 @@ async function transcribeWithAssemblyAI(
   const trRes = await fetch('https://api.assemblyai.com/v2/transcript', {
     method: 'POST',
     headers: { authorization: key, 'content-type': 'application/json' },
-    body: JSON.stringify({ audio_url: upload_url, language_detection: true }),
+    body: JSON.stringify(language === 'auto'
+      ? { audio_url: upload_url, language_detection: true }
+      : { audio_url: upload_url, language_code: language, language_detection: false }),
   });
   if (!trRes.ok) {
     const t = await trRes.text().catch(() => '');
@@ -69,7 +72,8 @@ async function transcribeWithAssemblyAI(
 
 async function transcribeWithLovable(
   audioBytes: Uint8Array<ArrayBuffer>,
-  requestId: string
+  requestId: string,
+  language: string
 ): Promise<SttResult> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
@@ -79,6 +83,7 @@ async function transcribeWithLovable(
   const formData = new FormData();
   formData.append('file', audioBlob, isWav ? 'recording.wav' : 'recording.webm');
   formData.append('model', 'openai/gpt-4o-mini-transcribe');
+  if (language !== 'auto') formData.append('language', language);
 
   const res = await fetch('https://ai.gateway.lovable.dev/v1/audio/transcriptions', {
     method: 'POST',
@@ -107,14 +112,20 @@ async function transcribeWithLovable(
  */
 export async function transcribeAudio(
   audioBytes: Uint8Array<ArrayBuffer>,
-  requestId: string
+  requestId: string,
+  model = 'auto',
+  language = 'auto'
 ): Promise<SttResult> {
+  if (!['auto', 'assemblyai', 'gpt-4o-mini'].includes(model)) throw new Error('Unsupported speech recognition model.');
+  if (!['auto', 'hi', 'gu', 'en'].includes(language)) throw new Error('Unsupported transcription language.');
+  if (model === 'assemblyai') return await transcribeWithAssemblyAI(audioBytes, requestId, language);
+  if (model === 'gpt-4o-mini') return await transcribeWithLovable(audioBytes, requestId, language);
   try {
-    return await transcribeWithAssemblyAI(audioBytes, requestId);
+    return await transcribeWithAssemblyAI(audioBytes, requestId, 'auto');
   } catch (err: any) {
     console.warn(
       `[${requestId}] AssemblyAI failed, falling back to Lovable: ${err?.message || err}`
     );
-    return await transcribeWithLovable(audioBytes, requestId);
+    return await transcribeWithLovable(audioBytes, requestId, language);
   }
 }
