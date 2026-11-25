@@ -69,7 +69,11 @@ object VoiceWorkerCapabilityRegistry {
             result.put(JSONObject()
                 .put("task", "tts")
                 .put("model", relayModel)
-                .put("model_name", pack.title)
+                .put("model_name", when {
+                    pack.id.startsWith("itantra-vits-") -> "iTantra VITS · " + modelLanguageName(pack.languageCode)
+                    pack.id == "kokoro-82m" -> "Kokoro-82M · Hindi & English"
+                    else -> pack.title
+                })
                 .put("pack_id", pack.id)
                 .put("size_bytes", pack.totalBytes)
                 .put("installed_at", manager.installedAt(pack) ?: JSONObject.NULL)
@@ -90,7 +94,7 @@ object VoiceWorkerCapabilityRegistry {
             result.put(JSONObject()
                 .put("task", "stt")
                 .put("model", "indicconformer-" + language)
-                .put("model_name", pack.title)
+                .put("model_name", "IndicConformer · " + modelLanguageName(language))
                 .put("pack_id", pack.id)
                 .put("size_bytes", pack.totalBytes)
                 .put("installed_at", manager.installedAt(pack) ?: JSONObject.NULL)
@@ -144,6 +148,33 @@ object VoiceWorkerCapabilityRegistry {
             }
         }
         return result
+    }
+
+    private fun modelLanguageName(code: String): String = when (code.lowercase(java.util.Locale.ROOT)) {
+        "as" -> "Assamese"
+        "bn" -> "Bengali"
+        "brx" -> "Bodo"
+        "doi" -> "Dogri"
+        "gu" -> "Gujarati"
+        "hi" -> "Hindi"
+        "kn" -> "Kannada"
+        "kok" -> "Konkani"
+        "ks" -> "Kashmiri"
+        "mai" -> "Maithili"
+        "ml" -> "Malayalam"
+        "mni" -> "Manipuri"
+        "mr" -> "Marathi"
+        "ne" -> "Nepali"
+        "or" -> "Odia"
+        "pa" -> "Punjabi"
+        "sa" -> "Sanskrit"
+        "sat" -> "Santali"
+        "sd" -> "Sindhi"
+        "ta" -> "Tamil"
+        "te" -> "Telugu"
+        "ur" -> "Urdu"
+        "en" -> "English"
+        else -> code
     }
 
     fun workerReady(packId: String): Boolean = forPack(packId)?.relayReady == true
