@@ -325,8 +325,8 @@ class DataCollectionActivity : Activity() {
         val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
             formatBytes(ramUsed) + " / " + (ramNominalGb?.let { "$it GB" } ?: formatBytes(ramTotal))
         } else "—"
-        val storageDetail = if (storageTotal > 0) "Nominal capacity • " + formatBytes(storageTotal) + " usable" else "Android storage"
-        val ramDetail = if (ramTotal > 0) "Nominal capacity • " + formatBytes(ramTotal) + " usable" else "Android memory"
+        val storageDetail = if (storageTotal > 0) "System-reported storage • " + formatBytes(storageAvailable) + " free" else "Android storage"
+        val ramDetail = if (ramTotal > 0) "Physical RAM • virtual expansion excluded" else "Android memory"
 
         addHealthMetricRow(
             panel,
