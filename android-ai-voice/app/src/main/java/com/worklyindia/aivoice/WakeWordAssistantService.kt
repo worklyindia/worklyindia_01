@@ -217,6 +217,7 @@ class WakeWordAssistantService : Service() {
             activeAi = null
             releaseCpuWakeLock()
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            isRunning = false
         }
     }
 
