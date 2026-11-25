@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -182,7 +183,7 @@ class DataCollectionActivity : Activity() {
         val swipeRefresh = SwipeRefreshLayout(this).apply {
             setColorSchemeColors(blue)
             setOnRefreshListener { refreshData(userInitiated = true) }
-            addView(scroll, androidx.swiperefreshlayout.widget.SwipeRefreshLayout.LayoutParams(-1, -1))
+            addView(scroll, ViewGroup.LayoutParams(-1, -1))
         }
         pullRefreshLayout = swipeRefresh
         contentScrollView = scroll
