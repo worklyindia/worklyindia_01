@@ -441,7 +441,7 @@ class WorklyAccountActivity : Activity() {
 
     private fun connectAndOpen(accessToken: String, refreshToken: String) {
         SecureDeviceTokenStore.saveAuthSession(this, accessToken, refreshToken)
-        val deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
+        val deviceToken = VoiceRelayApi.registerDevice(accessToken, WorkerDeviceMetrics.deviceDisplayName(this))
         SecureDeviceTokenStore.save(this, deviceToken)
         // Automatically enable community-worker participation after pairing.
         // The foreground service retries registration if the relay is unavailable.

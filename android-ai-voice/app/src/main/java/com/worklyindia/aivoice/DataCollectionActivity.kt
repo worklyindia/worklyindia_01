@@ -136,7 +136,7 @@ class DataCollectionActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(48)))
         toolbar.addView(TextView(this).apply {
-            text = "ChatWork Android Details"
+            text = WorkerDeviceMetrics.deviceDisplayName(this@DataCollectionActivity)
             textSize = 18f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(ink)
@@ -195,7 +195,10 @@ class DataCollectionActivity : Activity() {
 
         for (deviceIndex in 0 until devices.length()) {
             val device = devices.optJSONObject(deviceIndex) ?: continue
-            val deviceName = device.optString("device_name").ifBlank { "ChatWork phone ${deviceIndex + 1}" }
+            val metrics = device.optJSONObject("worker_metrics") ?: JSONObject()
+            val deviceName = metrics.optString("device_name").takeIf { it.isNotBlank() && it != "null" }
+                ?: device.optString("device_name").takeIf { it.isNotBlank() && it != "null" }
+                ?: "Android device ${deviceIndex + 1}"
             val workerStatus = when {
                 !device.isNull("revoked_at") -> "REVOKED"
                 device.optBoolean("online", false) -> "ONLINE"
@@ -204,7 +207,6 @@ class DataCollectionActivity : Activity() {
             }
             val lastSeen = device.optString("last_seen_at").takeIf { it.isNotBlank() && it != "null" }
                 ?.let { formatDate(it) } ?: "Never"
-            val metrics = device.optJSONObject("worker_metrics") ?: JSONObject()
             val metricsUpdatedAt = device.optString("metrics_updated_at").takeIf { it.isNotBlank() && it != "null" }
             val metricsFresh = metricsUpdatedAt?.let { isFreshMetric(it) } == true
 
@@ -220,7 +222,7 @@ class DataCollectionActivity : Activity() {
             parent.addView(sectionTitle(deviceName), LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(4); leftMargin = dp(8); rightMargin = dp(8)
             })
-            addWorkerHealthPanel(parent, workerStatus, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
+            addWorkerHealthPanel(parent, metrics, metricsUpdatedAt, metricsFresh, lastSeen)
 
             val capabilities = device.optJSONArray("model_capabilities") ?: JSONArray()
             parent.addView(sectionTitle("Installed models and languages"), LinearLayout.LayoutParams(-1, -2).apply {
@@ -232,50 +234,16 @@ class DataCollectionActivity : Activity() {
 
     private fun addWorkerHealthPanel(
         parent: LinearLayout,
-        workerStatus: String,
         metrics: JSONObject,
         metricsUpdatedAt: String?,
         metricsFresh: Boolean,
         lastSeen: String
     ) {
-        val online = workerStatus == "ONLINE"
-        val statusColor = when (workerStatus) {
-            "ONLINE" -> 0xFF27C58B.toInt()
-            "OFFLINE" -> 0xFFFFB547.toInt()
-            "REVOKED" -> 0xFFFF647C.toInt()
-            else -> muted
-        }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(14))
             background = rounded(0xFF0D1929.toInt(), dp(18), line)
         }
-        val statusRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        statusRow.addView(TextView(this).apply {
-            text = "WORKER STATUS"
-            textSize = 11f
-            letterSpacing = 1.1f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(muted)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        statusRow.addView(TextView(this).apply {
-            text = "●  $workerStatus"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(statusColor)
-            background = rounded(statusColor and 0x00FFFFFF or 0x16000000, dp(20))
-            setPadding(dp(11), dp(7), dp(11), dp(7))
-        })
-        panel.addView(statusRow)
-        panel.addView(TextView(this).apply {
-            text = if (online) "Your ChatWork worker is connected and reporting device health." else "Worker connection needs attention. Check the ChatWork background worker."
-            textSize = 12f
-            setTextColor(muted)
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7); bottomMargin = dp(13) })
-
         val storageTotal = metrics.optLong("storage_total_bytes", -1L)
         val storageAvailable = metrics.optLong("storage_available_bytes", -1L)
         val ramTotal = metrics.optLong("ram_total_bytes", -1L)
@@ -290,17 +258,23 @@ class DataCollectionActivity : Activity() {
         val cpu = metrics.optDouble("app_cpu_usage_percent", -1.0)
         val thermal = metrics.optString("thermal_status").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown"
 
+        val storageNominalGb = nominalCapacityGb(storageTotal, longArrayOf(16, 32, 64, 128, 256, 512, 1024, 2048))
+        val ramNominalGb = nominalCapacityGb(ramTotal, longArrayOf(1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128))
+        val storageUsed = (storageTotal - storageAvailable).coerceAtLeast(0L)
+        val ramUsed = (ramTotal - ramAvailable).coerceAtLeast(0L)
         val storageValue = if (storageTotal > 0 && storageAvailable >= 0) {
-            "${formatBytes((storageTotal - storageAvailable).coerceAtLeast(0L))} / ${formatBytes(storageTotal)}"
+            formatBytes(storageUsed) + " / " + (storageNominalGb?.let { "$it GB" } ?: formatBytes(storageTotal))
         } else "—"
         val ramValue = if (ramTotal > 0 && ramAvailable >= 0) {
-            "${formatBytes((ramTotal - ramAvailable).coerceAtLeast(0L))} / ${formatBytes(ramTotal)}"
+            formatBytes(ramUsed) + " / " + (ramNominalGb?.let { "$it GB" } ?: formatBytes(ramTotal))
         } else "—"
+        val storageDetail = if (storageTotal > 0) "Nominal capacity • " + formatBytes(storageTotal) + " usable" else "Android storage"
+        val ramDetail = if (ramTotal > 0) "Nominal capacity • " + formatBytes(ramTotal) + " usable" else "Android memory"
 
         addHealthMetricRow(
             panel,
-            healthMetric("Storage", storageValue, "", storageUsedPct, 0xFF55A7FF.toInt()),
-            healthMetric("RAM", ramValue, "", ramUsedPct, 0xFF9A8BFF.toInt())
+            healthMetric("Storage", storageValue, storageDetail, storageUsedPct, 0xFF55A7FF.toInt()),
+            healthMetric("RAM", ramValue, ramDetail, ramUsedPct, 0xFF9A8BFF.toInt())
         )
         addHealthMetricRow(
             panel,
@@ -349,6 +323,12 @@ class DataCollectionActivity : Activity() {
     private fun healthMetric(title: String, value: String, detail: String, progress: Int?, accent: Int) =
         HealthMetric(title, value, detail, progress?.coerceIn(0, 100), accent)
 
+    private fun nominalCapacityGb(actualBytes: Long, tiers: LongArray): Long? {
+        if (actualBytes <= 0L) return null
+        val actualDecimalGb = actualBytes.toDouble() / 1_000_000_000.0
+        return tiers.firstOrNull { actualDecimalGb <= it.toDouble() }
+    }
+
     private fun usagePercent(total: Long, available: Long): Int? {
         if (total <= 0L || available < 0L) return null
         return (((total - available.coerceAtMost(total)).coerceAtLeast(0L).toDouble() / total) * 100.0).toInt().coerceIn(0, 100)
@@ -356,7 +336,7 @@ class DataCollectionActivity : Activity() {
 
     private fun addHealthMetricRow(parent: LinearLayout, left: HealthMetric, right: HealthMetric) {
         val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
         }
         listOf(left, right).forEachIndexed { index, metric ->
             val card = LinearLayout(this).apply {
@@ -400,11 +380,11 @@ class DataCollectionActivity : Activity() {
                 }
                 card.addView(track, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(10) })
             }
-            row.addView(card, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                if (index == 0) rightMargin = dp(5) else leftMargin = dp(5)
+            row.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+                if (index == 0) bottomMargin = dp(9)
             })
         }
-        parent.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+        parent.addView(row, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun addInstalledModelsTable(parent: LinearLayout, capabilities: JSONArray) {

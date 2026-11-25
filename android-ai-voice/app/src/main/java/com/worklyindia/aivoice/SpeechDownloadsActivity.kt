@@ -125,7 +125,7 @@ class SpeechDownloadsActivity : Activity() {
                         android.util.Log.w("ChatWorkWorker", "No saved account session; worker pairing will retry after sign-in.")
                         return@execute
                     }
-                    deviceToken = VoiceRelayApi.registerDevice(accessToken, "ChatWork Android")
+                    deviceToken = VoiceRelayApi.registerDevice(accessToken, WorkerDeviceMetrics.deviceDisplayName(this))
                     SecureDeviceTokenStore.save(this, deviceToken)
                 }
                 val capabilities = VoiceWorkerCapabilityRegistry.downloadedRelayCapabilities(this)
