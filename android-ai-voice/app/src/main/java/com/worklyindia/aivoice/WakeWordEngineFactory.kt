@@ -156,7 +156,10 @@ object WakeWordEngineFactory {
     companion object {
         const val SAMPLE_RATE = 16_000
         const val WAKE_PHRASE = "Hey ChatWork"
-        // Token IDs 49, 17, 285, 4 and 247 in the released GigaSpeech KWS BPE vocabulary.
-        private const val WAKE_KEYWORD_LINE = "▁HE Y ▁CHA T ▁WORK :2.0 #0.35 @HEY_CHATWORK"
+        // BPE tokens verified against the released GigaSpeech vocabulary.
+        // Accept both the single-word brand pronunciation and a separated "Chat Work".
+        private const val WAKE_KEYWORD_LINE =
+            "▁HE Y ▁CHA T W OR K :2.0 #0.35 @HEY_CHATWORK_COMPOUND\n" +
+                "▁HE Y ▁CHA T ▁WORK :2.0 #0.35 @HEY_CHATWORK_SPACED"
     }
 }
