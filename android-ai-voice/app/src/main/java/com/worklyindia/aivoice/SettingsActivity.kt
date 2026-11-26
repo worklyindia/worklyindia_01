@@ -59,8 +59,54 @@ class SettingsActivity : Activity() {
             text = "‹  Back"; isAllCaps = false; setTextColor(primary); setBackgroundColor(bg)
             setOnClickListener { finish() }
         })
-        content.addView(label("Settings", 30, primary, true))
-        content.addView(label("ChatWork connection & diagnostics", 14, secondary, false))
+        content.addView(label("AI Settings", 30, primary, true))
+        content.addView(label("Manage your offline AI assistant, voice models and background listening from one place.", 14, secondary, false))
+
+        val aiDashboard = card()
+        aiDashboard.addView(label("AI Assistant", 19, primary, true))
+        aiDashboard.addView(label("Open your AI chat and use the ⋮ menu → Enable Hey ChatWork to start background wake-word listening. The app will check the required models and permissions first.", 13, secondary, false))
+        aiDashboard.addView(Button(this).apply {
+            text = "Open AI Assistant & Background Voice"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, OfflineAiChatActivity::class.java)) }
+        })
+        aiDashboard.addView(Button(this).apply {
+            text = "Download / Manage AI Models"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, SpeechDownloadsActivity::class.java)) }
+        })
+        aiDashboard.addView(Button(this).apply {
+            text = "Text to Voice · Test Voice"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, TextToVoiceActivity::class.java)) }
+        })
+        aiDashboard.addView(Button(this).apply {
+            text = "Voice to Text"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, VoiceToTextActivity::class.java)) }
+        })
+        aiDashboard.addView(Button(this).apply {
+            text = "Assistant Tools · Memory / Files / Reminders"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, AssistantToolsActivity::class.java)) }
+        })
+        aiDashboard.addView(Button(this).apply {
+            text = "AI Agent"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, ChatWorkAgentActivity::class.java)) }
+        })
+        aiDashboard.addView(Button(this).apply {
+            text = "Mobile Control"
+            isAllCaps = false
+            setOnClickListener { startActivity(Intent(this@SettingsActivity, MobileControlActivity::class.java)) }
+        })
+        val micAllowed = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val notificationsAllowed = Build.VERSION.SDK_INT < 33 || checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        aiDashboard.addView(label("Microphone permission: " + if (micAllowed) "Allowed" else "Not allowed yet", 13, if (micAllowed) 0xFF22A06B.toInt() else 0xFFD97706.toInt(), true))
+        aiDashboard.addView(label("Notifications permission: " + if (notificationsAllowed) "Allowed" else "Not allowed yet", 13, if (notificationsAllowed) 0xFF22A06B.toInt() else 0xFFD97706.toInt(), true))
+        content.addView(aiDashboard)
+
+        content.addView(label("Connection & Diagnostics", 22, primary, true))
 
         val prefs = getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
         val tokenReady = !SecureDeviceTokenStore.read(this).isNullOrBlank()
