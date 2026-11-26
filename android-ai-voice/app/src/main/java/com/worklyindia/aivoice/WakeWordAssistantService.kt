@@ -176,35 +176,57 @@ class WakeWordAssistantService : Service() {
                 if (count == 0) continue
                 val samples = FloatArray(count) { buffer[it] / 32768.0f }
                 session.stream.acceptWaveform(samples, sampleRate = WakeWordEngineFactory.SAMPLE_RATE)
+
+                // Sherpa-ONNX KWS contract: decode every ready frame, then read the
+                // result once. Reading/resetting the result inside this loop can
+                // consume a detection before the stream has finished decoding.
                 while (session.spotter.isReady(session.stream)) {
                     session.spotter.decode(session.stream)
-                    val detected = session.spotter.getResult(session.stream).keyword
-                    if (detected.isNotBlank()) {
-                        session.spotter.reset(session.stream)
-                        updateNotification("Hey ChatWork detected · Speak now")
+                }
+                val detected = session.spotter.getResult(session.stream).keyword
+                if (detected.isNotBlank()) {
+                    session.spotter.reset(session.stream)
+                    updateNotification("Hey ChatWork detected · Listening for your question…")
+                    try {
                         val commandSamples = captureCommand(activeAudio, buffer)
-                        if (commandSamples.isNotEmpty()) {
+                        if (commandSamples.isEmpty()) {
+                            updateNotification("No question heard · Say Hey ChatWork, pause, then ask.")
+                        } else {
                             updateNotification("Converting your speech offline…")
-                            val userText = activeSpeechRecognizer.transcribe(commandSamples)
-                            if (userText.isNotBlank()) {
+                            val userText = activeSpeechRecognizer.transcribe(commandSamples).trim()
+                            if (userText.isBlank()) {
+                                updateNotification("Speech not recognized · Please speak clearly and try again.")
+                            } else {
+                                updateNotification("Heard: ${userText.take(65)}")
                                 history.append("User: ").append(userText).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
                                 updateNotification("ChatWork is thinking offline…")
-                                val answer = activeAiEngine.generate(history.toString())
+                                val prompt = buildString {
+                                    append("You are ChatWork, a helpful offline voice assistant. ")
+                                    append("Answer the user's latest question directly and naturally. ")
+                                    append("Use the same language and script as the user's question. ")
+                                    append("Keep the answer concise and easy to speak aloud. ")
+                                    append("Do not repeat the transcript.\n\n")
+                                    append(history)
+                                    append("Assistant:")
+                                }
+                                val answer = activeAiEngine.generate(prompt).trim()
+                                check(answer.isNotBlank()) { "The AI returned an empty answer." }
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
-                                updateNotification("Speaking offline · ${language.uppercase(Locale.ROOT)}")
+                                updateNotification("Speaking reply · ${language.uppercase(Locale.ROOT)}")
                                 activeTtsEngine.speak(answer)
                                 discardPlaybackAudio(activeAudio, buffer)
-                            } else {
-                                updateNotification("No speech recognized · Listening for Hey ChatWork")
                             }
-                        } else {
-                            updateNotification("No command heard · Listening for Hey ChatWork")
                         }
+                    } catch (turnError: Exception) {
+                        // A single STT/LLM/TTS failure must not kill the always-on
+                        // wake-word loop. Keep listening and expose the exact stage error.
+                        updateNotification("Reply error · ${turnError.message ?: turnError.javaClass.simpleName}. Say Hey ChatWork to retry.")
+                    } finally {
                         session.spotter.reset(session.stream)
-                        updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
                     }
+                    updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
                 }
             }
         } catch (error: Exception) {
@@ -346,10 +368,10 @@ class WakeWordAssistantService : Service() {
         private const val CHANNEL_ID = "chatwork_wake_assistant"
         private const val NOTIFICATION_ID = 7421
         private const val MAX_HISTORY_CHARS = 2500
-        private const val COMMAND_MAX_MS = 12_000L
-        private const val WAIT_FOR_COMMAND_MS = 5_000L
-        private const val SILENCE_AFTER_SPEECH_MS = 1_200L
-        private const val VOICE_RMS_THRESHOLD = 0.012
+        private const val COMMAND_MAX_MS = 15_000L
+        private const val WAIT_FOR_COMMAND_MS = 8_000L
+        private const val SILENCE_AFTER_SPEECH_MS = 1_000L
+        private const val VOICE_RMS_THRESHOLD = 0.006
         private const val PLAYBACK_COOLDOWN_MS = 700L
     }
 }
