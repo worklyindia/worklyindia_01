@@ -327,7 +327,6 @@ class OfflineAiChatActivity : Activity() {
     private fun updateComposerAction(hasText: Boolean) {
         val recording = offlineRecording
         if (recording) {
-            sendButton.setImageDrawable(null)
             sendButton.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
             sendButton.background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xFFEF4444.toInt()); shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -1120,6 +1119,22 @@ class OfflineAiChatActivity : Activity() {
                 runOnUiThread { status.text = "Spoken using downloaded Indic Tiny TTS · ${code.uppercase()}." }
             } catch (error: Exception) {
                 runOnUiThread { status.text = "Downloaded text-to-speech model error: ${error.message ?: "audio generation failed"}. No mobile TTS fallback was used." }
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ATTACHMENT && resultCode == RESULT_OK && data != null) {
+            val uris = mutableListOf<android.net.Uri>()
+            data.clipData?.let { clip -> for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let(uris::add) }
+            data.data?.let { if (uris.isEmpty()) uris.add(it) }
+            if (uris.isNotEmpty()) {
+                val names = uris.mapNotNull { uri ->
+                    runCatching { contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } }.getOrNull()
+                }
+                status.text = "Selected: ${names.joinToString().ifBlank { uris.size.toString() + " attachment(s)" }}. Text extraction is available through Assistant Tools → Files."
+                uris.forEach { uri -> runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
             }
         }
     }
