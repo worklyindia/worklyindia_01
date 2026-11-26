@@ -23,6 +23,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ImageView
 import android.widget.PopupMenu
+import android.app.Dialog
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -32,12 +33,16 @@ import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.text.style.BackgroundColorSpan
 import android.graphics.Typeface
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.drawable.ColorDrawable
 import android.text.TextWatcher
 import android.text.StaticLayout
 import android.text.Layout
 import android.text.Editable
 import java.util.Locale
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.util.concurrent.Executors
 
 class OfflineAiChatActivity : Activity() {
@@ -51,6 +56,9 @@ class OfflineAiChatActivity : Activity() {
     private var tinyTtsEngine: IndicTinyTtsEngine? = null
     private var activeAudioRecord: AudioRecord? = null
     @Volatile private var offlineRecording = false
+    @Volatile private var cancelOfflineRecording = false
+    private lateinit var recordingWaveform: View
+    private var recordingUiActive = false
     private val languages = listOf(
         VoiceLanguage("Hindi · हिन्दी", "hi-IN", Locale.forLanguageTag("hi-IN")),
         VoiceLanguage("English · India", "en-IN", Locale.forLanguageTag("en-IN")),
@@ -240,7 +248,7 @@ class OfflineAiChatActivity : Activity() {
             setColorFilter(primaryText)
             contentDescription = "More options and attachments"
             setPadding(dp(7), dp(7), dp(7), dp(7))
-            setOnClickListener { showChatOptions(this) }
+            setOnClickListener { if (offlineRecording) cancelOfflineVoiceInput() else showAttachmentSheet() }
         }
         promptInput = EditText(this).apply {
             hint = "Message..."
@@ -267,6 +275,7 @@ class OfflineAiChatActivity : Activity() {
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(primaryText)
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
         }
+        recordingWaveform = VoiceWaveformView()
         sendButton = Button(this).apply {
             text = ""
             gravity = Gravity.CENTER
@@ -280,16 +289,15 @@ class OfflineAiChatActivity : Activity() {
             isEnabled = false
             alpha = 0.55f
             contentDescription = "Send message"
-            setOnClickListener { if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
+            setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
         }
         promptInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 updateComposerLayout(s?.toString().orEmpty())
                 val hasText = !s.isNullOrBlank()
-                sendButton.isEnabled = engine.isLoaded && hasText
-                sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
-                sendButton.contentDescription = if (hasText) "Send message" else "Send message"
+                if (!offlineRecording) updateComposerAction(hasText)
+                updateComposerAction(hasText)
             }
             override fun afterTextChanged(s: Editable?) {}
         })
@@ -302,6 +310,119 @@ class OfflineAiChatActivity : Activity() {
             leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(5); bottomMargin = dp(6)
         })
         setContentView(root)
+        // Edge-to-edge windows must explicitly move the composer above the IME.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            if (ime.bottom > 0) chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+        promptInput.setOnFocusChangeListener { _, focused ->
+            if (focused) composerShell.postDelayed({ chatScroll.fullScroll(View.FOCUS_DOWN) }, 180)
+        }
+    }
+
+    private fun updateComposerAction(hasText: Boolean) {
+        val recording = offlineRecording
+        if (recording) {
+            sendButton.setImageDrawable(null)
+            sendButton.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+            sendButton.background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFFEF4444.toInt()); shape = android.graphics.drawable.GradientDrawable.OVAL
+            }
+            sendButton.contentDescription = "Stop recording"
+            sendButton.isEnabled = true; sendButton.alpha = 1f
+        } else {
+            sendButton.setCompoundDrawablesWithIntrinsicBounds(
+                if (hasText) R.drawable.ic_chatwork_send else R.drawable.ic_chatwork_waveform, 0, 0, 0
+            )
+            sendButton.background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF0A84FF.toInt()); shape = android.graphics.drawable.GradientDrawable.OVAL
+            }
+            sendButton.contentDescription = if (hasText) "Send message" else "Start voice input"
+            sendButton.isEnabled = if (hasText) engine.isLoaded else true
+            sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
+        }
+    }
+
+    private fun showAttachmentSheet() {
+        val dialog = Dialog(this)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(26))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface); cornerRadii = floatArrayOf(dp(24).toFloat(),dp(24).toFloat(),dp(24).toFloat(),dp(24).toFloat(),0f,0f,0f,0f)
+            }
+        }
+        val handle = View(this).apply { setBackgroundColor(secondaryText); alpha = .45f }
+        panel.addView(handle, LinearLayout.LayoutParams(dp(52), dp(5)).apply { gravity = Gravity.CENTER; bottomMargin = dp(16) })
+        panel.addView(TextView(this).apply { text = "Attach"; textSize = 18f; setTypeface(null, Typeface.BOLD); setTextColor(primaryText) }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
+        val tiles = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; }
+        fun tile(emoji: String, label: String, action: () -> Unit) {
+            val item = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(8), dp(12), dp(8), dp(8)); isClickable = true; isFocusable = true }
+            val icon = TextView(this).apply { text = emoji; textSize = 27f; gravity = Gravity.CENTER; setTextColor(primaryText); background = android.graphics.drawable.GradientDrawable().apply { setColor(if (dark) 0xFF30435E.toInt() else 0xFFEAF1FA.toInt()); cornerRadius = dp(20).toFloat() } }
+            item.addView(icon, LinearLayout.LayoutParams(dp(64), dp(64)))
+            item.addView(TextView(this).apply { text = label; textSize = 13f; setTextColor(primaryText); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+            item.setOnClickListener { dialog.dismiss(); action() }
+            tiles.addView(item, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        tile("📷", "Camera") { runCatching { startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)) }.onFailure { status.text = "Camera is not available on this device." } }
+        tile("🖼️", "Photos") { openAttachmentPicker("image/*") }
+        tile("📄", "Files") { openAttachmentPicker("*/*") }
+        panel.addView(tiles)
+        dialog.setContentView(panel)
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setLayout(-1, -2); setGravity(Gravity.BOTTOM)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = .42f }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, -2)
+    }
+
+    private fun openAttachmentPicker(type: String) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); this.type = type; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true) }
+        runCatching { startActivityForResult(intent, REQUEST_ATTACHMENT) }.onFailure { status.text = "Could not open attachments." }
+    }
+
+    private fun cancelOfflineVoiceInput() {
+        cancelOfflineRecording = true
+        offlineRecording = false
+        runCatching { activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
+        setRecordingUi(false)
+        status.text = "Recording cancelled."
+    }
+
+    private fun setRecordingUi(active: Boolean) {
+        recordingUiActive = active
+        if (!::composer.isInitialized) return
+        (promptInput.parent as? ViewGroup)?.removeView(promptInput)
+        (recordingWaveform.parent as? ViewGroup)?.removeView(recordingWaveform)
+        if (active) {
+            composer.removeAllViews(); composerRow.removeAllViews()
+            moreButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            moreButton.contentDescription = "Cancel recording"
+            composerRow.addView(moreButton, LinearLayout.LayoutParams(dp(36), dp(36)))
+            composerRow.addView(recordingWaveform, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(8) })
+            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(36), dp(36)))
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(4) })
+            composer.addView(composerRow)
+            micButton.setImageResource(android.R.drawable.ic_media_pause)
+            micButton.contentDescription = "Stop recording"
+            sendButton.setOnClickListener { stopOfflineVoiceInput() }
+            updateComposerAction(false)
+        } else {
+            moreButton.setImageResource(R.drawable.ic_chatwork_add)
+            moreButton.contentDescription = "More options and attachments"
+            micButton.setImageResource(R.drawable.ic_chatwork_mic)
+            micButton.contentDescription = "Voice input"
+            sendButton.setOnClickListener { if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
+            updateComposerLayout(promptInput.text?.toString().orEmpty())
+            updateComposerAction(!promptInput.text.isNullOrBlank())
+        }
     }
 
     /** Mirrors the website AI chat composer: inline for short text, stacked once it wraps. */
@@ -915,8 +1036,9 @@ class OfflineAiChatActivity : Activity() {
         }
         val minBuffer = AudioRecord.getMinBufferSize(OfflineSpeechRecognizer.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (minBuffer <= 0) { status.text = "This phone does not support 16 kHz microphone recording."; return }
+        cancelOfflineRecording = false
         offlineRecording = true
-        micButton.text = "■ Stop recording"
+        runOnUiThread { setRecordingUi(true) }
         status.text = "Recording offline with downloaded ${pack.title} · ${pack.languageCode}. Tap Stop when finished."
         worker.execute {
             var recorder: AudioRecord? = null
@@ -937,8 +1059,10 @@ class OfflineAiChatActivity : Activity() {
                     if (count > 0) for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
                     else if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
                 }
+                val wasCancelled = cancelOfflineRecording
                 offlineRecording = false
                 runCatching { if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
+                if (wasCancelled) return@execute
                 check(samples.isNotEmpty()) { "No audio was recorded. Tap Voice and speak." }
                 runOnUiThread { status.text = "Transcribing offline with downloaded ${pack.title}…" }
                 val speechStartedAt = SystemClock.elapsedRealtime()
@@ -951,12 +1075,12 @@ class OfflineAiChatActivity : Activity() {
                         promptInput.setText(result); promptInput.setSelection(promptInput.text.length)
                         status.text = "Offline speech recognized using downloaded model. Tap Send to ask Workly AI."
                     } else status.text = "No speech recognized. Speak clearly and try again."
-                    micButton.text = "🎙"; micButton.isEnabled = true
+                    setRecordingUi(false); micButton.isEnabled = true
                 }
             } catch (error: Exception) {
                 runOnUiThread {
                     status.text = "Downloaded speech model error: ${error.message ?: "offline recognition failed"}"
-                    micButton.text = "🎙"; micButton.isEnabled = true
+                    setRecordingUi(false); micButton.isEnabled = true
                 }
             } finally {
                 offlineRecording = false; activeAudioRecord = null
@@ -966,11 +1090,12 @@ class OfflineAiChatActivity : Activity() {
     }
 
     private fun stopOfflineVoiceInput() {
+        cancelOfflineRecording = false
         offlineRecording = false
         runCatching {
             activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
         }
-        micButton.isEnabled = false
+        status.text = "Stopping microphone and transcribing…"
         status.text = "Stopping microphone and transcribing…"
     }
 
@@ -1152,9 +1277,25 @@ class OfflineAiChatActivity : Activity() {
         super.onDestroy()
     }
 
+    private inner class VoiceWaveformView : View(this@OfflineAiChatActivity) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF0A84FF.toInt(); strokeWidth = dp(3).toFloat(); strokeCap = Paint.Cap.ROUND }
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val count = 25; val gap = width.toFloat() / (count + 1); val phase = (SystemClock.uptimeMillis() / 110L).toInt()
+            for (i in 0 until count) {
+                val wave = kotlin.math.abs(kotlin.math.sin((i + phase) * .48)).toFloat()
+                val h = dp(5) + wave * dp(24)
+                val x = gap * (i + 1)
+                canvas.drawLine(x, height / 2f - h / 2f, x, height / 2f + h / 2f, paint)
+            }
+            if (recordingUiActive) postInvalidateDelayed(90)
+        }
+    }
+
     companion object {
         private const val REQUEST_AUDIO = 5101
         private const val REQUEST_WAKE_ASSISTANT = 5103
         private const val REQUEST_EXPORT_CONVERSATION = 5105
+        private const val REQUEST_ATTACHMENT = 5106
     }
 }
