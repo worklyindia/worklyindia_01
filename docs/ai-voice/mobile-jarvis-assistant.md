@@ -176,3 +176,20 @@ These are targets and are **not yet implemented/verified** unless listed above a
 7. **Release validation:** automated tests, clean signed APK/AAB build, artifact inspection and physical Android testing across supported Android/OEM versions.
 
 These are roadmap items, not implemented or validated functionality. Keep the PR draft until CI for the latest head and device acceptance tests pass.
+
+
+## Implementation update — 2026-11-26 (continued)
+
+- Added a **Manage / cancel reminders** screen. Pending local reminders are stored with their title and scheduled time; the user can review upcoming reminders and cancel a selected alarm.
+- Reminder records are removed when the reminder fires, avoiding stale items in the management list.
+- Added reboot recovery for future pending reminders using the saved local reminder records and Android's boot-completed broadcast. Past-due reminders are not replayed after reboot.
+- Expanded Mobile Control with a user-triggered installed-app launcher and a shortcut to this app's notification settings. These remain explicit actions; no background app operation was added.
+
+### Remaining work is still substantial
+
+- Reminder editing and recurring schedules are not implemented.
+- File assistant currently supports user-selected bounded plain-text files; PDF extraction, indexing and document search are not implemented.
+- AI Agent planning/execution and action approval/audit UI are not implemented.
+- Full Hindi/Gujarati/English live STT→LLM→TTS round-trip, voice interruption and audio quality require test evidence.
+- No online AI/research connector is wired into this offline chat. Do not imply it is available.
+- Android CI for the newest commit and physical-device tests remain release blockers.
