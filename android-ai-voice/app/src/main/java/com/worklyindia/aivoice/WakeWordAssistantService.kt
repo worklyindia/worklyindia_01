@@ -351,11 +351,15 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onDestroy() {
-        // Do not erase the user's opt-in when Android tears down the service
-        // during process reclamation; START_STICKY can then restore listening.
+        // Android can destroy the service while reclaiming the process. Preserve
+        // the explicit user opt-in so START_STICKY can recreate the listener.
         preserveUserOptInOnDestroy = true
-        stopAssistant(clearUserOptIn = false)
-        // Let the worker finish its native unload before publishing isRunning=false in finally.
+        running.set(false)
+        runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
+        releaseCpuWakeLock()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        // Do not call stopSelf() here: the system must remain free to recreate
+        // this sticky service when it reclaims the app process.
         worker.shutdown()
         super.onDestroy()
     }
