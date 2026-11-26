@@ -14,16 +14,13 @@ import java.util.Date
 import java.util.UUID
 
 /**
- * Offline task-planning foundation.
- *
- * It never executes arbitrary instructions. The user reviews a bounded plan and
- * explicitly approves it; approval is recorded locally for audit. Integrations
- * must be added as separately scoped, confirm-before-run actions.
+ * Offline task-planning foundation. Approval records a plan only; it never runs
+ * arbitrary instructions or changes apps, files, messages, payments or settings.
  */
 class ChatWorkAgentActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("chatwork_agent_audit", MODE_PRIVATE) }
     private lateinit var content: LinearLayout
-    private var pendingGoal: String = ""
+    private var pendingGoal = ""
     private var pendingSteps: List<String> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,10 +29,7 @@ class ChatWorkAgentActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(24, 24, 24, 24)
         }
-        root.addView(TextView(this).apply {
-            text = "AI Agent"
-            textSize = 24f
-        })
+        root.addView(TextView(this).apply { text = "AI Agent"; textSize = 24f })
         root.addView(TextView(this).apply {
             text = "Create an offline task plan. Nothing runs automatically. Review and approve before any future connected action."
             setPadding(0, 12, 0, 16)
@@ -59,10 +53,8 @@ class ChatWorkAgentActivity : Activity() {
         })
         root.addView(buttons)
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val scroll = ScrollView(this).apply { addView(content) }
-        root.addView(scroll, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
+        root.addView(ScrollView(this).apply { addView(content) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(Button(this).apply {
             text = "Back"
             isAllCaps = false
@@ -87,8 +79,8 @@ class ChatWorkAgentActivity : Activity() {
         )
         content.removeAllViews()
         content.addView(TextView(this).apply {
-            text = "Proposed plan for:\\n" + goal + "\\n\\n" +
-                pendingSteps.mapIndexed { index, step -> "${index + 1}. $step" }.joinToString("\\n")
+            text = "Proposed plan for:\n" + goal + "\n\n" +
+                pendingSteps.mapIndexed { index, step -> (index + 1).toString() + ". " + step }.joinToString("\n")
             textSize = 16f
             setPadding(0, 16, 0, 16)
         })
@@ -103,23 +95,26 @@ class ChatWorkAgentActivity : Activity() {
         content.addView(Button(this).apply {
             text = "Discard plan"
             isAllCaps = false
-            setOnClickListener { pendingGoal = ""; pendingSteps = emptyList(); content.removeAllViews() }
+            setOnClickListener {
+                pendingGoal = ""
+                pendingSteps = emptyList()
+                content.removeAllViews()
+            }
         })
     }
 
     private fun approvePlan() {
         if (pendingGoal.isBlank() || pendingSteps.isEmpty()) return
-        val id = UUID.randomUUID().toString()
         val record = listOf(
-            id,
+            UUID.randomUUID().toString(),
             System.currentTimeMillis().toString(),
             "APPROVED_PLAN_ONLY",
-            pendingGoal.replace("\\n", " "),
+            pendingGoal.replace("\n", " "),
             pendingSteps.joinToString(" | ")
-        ).joinToString("\\t")
+        ).joinToString("\t")
         val old = prefs.getString("audit", "").orEmpty()
         val updated = (listOf(record) + old.lines().filter { it.isNotBlank() }).take(100)
-        prefs.edit().putString("audit", updated.joinToString("\\n")).apply()
+        prefs.edit().putString("audit", updated.joinToString("\n")).apply()
         pendingGoal = ""
         pendingSteps = emptyList()
         content.removeAllViews()
@@ -138,19 +133,18 @@ class ChatWorkAgentActivity : Activity() {
             return
         }
         val labels = records.map { line ->
-            val parts = line.split('\\t')
+            val parts = line.split('\t')
             val time = parts.getOrNull(1)?.toLongOrNull()?.let {
                 DateFormat.getDateTimeInstance().format(Date(it))
             } ?: "Unknown time"
-            val goal = parts.getOrNull(3).orEmpty()
-            "$time — $goal"
+            time + " — " + parts.getOrNull(3).orEmpty()
         }
         AlertDialog.Builder(this).setTitle("Local agent audit history")
             .setItems(labels.toTypedArray()) { _, index ->
-                val parts = records[index].split('\\t')
+                val parts = records[index].split('\t')
                 AlertDialog.Builder(this).setTitle("Approved plan (not executed)")
                     .setMessage("Goal: " + parts.getOrNull(3).orEmpty() +
-                        "\\n\\nSteps: " + parts.getOrNull(4).orEmpty())
+                        "\n\nSteps: " + parts.getOrNull(4).orEmpty())
                     .setPositiveButton("OK", null).show()
             }
             .setNeutralButton("Clear history") { _, _ ->
