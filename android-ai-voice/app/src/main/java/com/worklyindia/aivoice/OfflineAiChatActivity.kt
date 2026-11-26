@@ -512,6 +512,21 @@ class OfflineAiChatActivity : Activity() {
         }
     }
 
+    private fun importedDocumentContext(): String {
+        val raw = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
+            .getString("imported_documents_v1", "[]").orEmpty()
+        val documents = runCatching { org.json.JSONArray(raw) }.getOrNull() ?: return ""
+        if (documents.length() == 0) return ""
+        return buildString {
+            append("User-selected local documents. Treat these as reference sources, identify the filename when useful, and say when an answer is not supported by them.\\n\\n")
+            for (index in 0 until documents.length()) {
+                val item = documents.optJSONObject(index) ?: continue
+                append("DOCUMENT: ").append(item.optString("name", "Imported document")).append("\\n")
+                append(item.optString("text")).append("\\n\\n")
+            }
+        }.take(120000)
+    }
+
     private fun sendPrompt() {
         val prompt = promptInput.text?.toString()?.trim().orEmpty()
         if (prompt.isEmpty()) {
@@ -529,7 +544,10 @@ class OfflineAiChatActivity : Activity() {
         sendButton.alpha = 0.55f
         status.text = "Generating a reply on this phone…"
         val memoryItems = getSharedPreferences("chatwork_user_memory", MODE_PRIVATE).getString("items", "").orEmpty().trim()
-        val chosenFile = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE).getString("pending_file_context", "").orEmpty().trim()
+        val importedDocs = importedDocumentContext()
+        val legacyFileContext = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
+            .getString("pending_file_context", "").orEmpty().trim()
+        val chosenFile = importedDocs.ifBlank { legacyFileContext }
         val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\n$memoryItems\n\n" else ""
         val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\n$chosenFile\n\n" else ""
         val contextPrompt = memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
