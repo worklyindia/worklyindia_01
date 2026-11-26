@@ -134,81 +134,24 @@ class OfflineAiChatActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(42), dp(52)))
 
-        val avatar = TextView(this).apply {
-            text = "W"
-            textSize = 25f
-            gravity = Gravity.CENTER
-            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-            setTextColor(0xFF1769C2.toInt())
-            background = android.graphics.drawable.GradientDrawable().apply {
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(0xFFFFFFFF.toInt())
-            }
-            contentDescription = "ChatWork"
+        status = TextView(this).apply { text = "Offline AI"; textSize = 12f; setTextColor(secondaryText); visibility = View.GONE }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
+        fun headerAction(label: String, description: String, onTap: () -> Unit): TextView = TextView(this).apply {
+            text = label; textSize = 21f; gravity = Gravity.CENTER; setTextColor(primaryText); contentDescription = description
+            setPadding(dp(5), 0, dp(5), 0); setOnClickListener { onTap() }
         }
-        header.addView(avatar, LinearLayout.LayoutParams(dp(42), dp(42)).apply {
-            marginStart = dp(3); marginEnd = dp(10)
-        })
-
-        val titleColumn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
+        header.addView(headerAction("‹", "Back") { finish() }, LinearLayout.LayoutParams(dp(42), dp(44)))
+        val usage = TextView(this).apply {
+            text = "⚡ Usage"; textSize = 15f; gravity = Gravity.CENTER; setTextColor(primaryText)
+            setPadding(dp(12), dp(7), dp(12), dp(7))
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(surface); cornerRadius = dp(20).toFloat() }
+            setOnClickListener { AlertDialog.Builder(this@OfflineAiChatActivity).setTitle("ChatWork · Usage").setMessage(status.text?.toString() ?: "Offline AI").setPositiveButton("OK", null).show() }
         }
-        titleColumn.addView(TextView(this).apply {
-            text = "ChatWork"
-            textSize = 18f
-            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-            setTextColor(primaryText)
-        })
-        status = TextView(this).apply {
-            text = "Offline AI · On this device"
-            textSize = 12f
-            setTextColor(0xFF16B981.toInt())
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }
-        titleColumn.addView(status)
-        header.addView(titleColumn, LinearLayout.LayoutParams(0, -2, 1f))
-
-        header.addView(TextView(this).apply {
-            text = "⌕"
-            textSize = 29f
-            gravity = Gravity.CENTER
-            setTextColor(primaryText)
-            contentDescription = "Search conversation"
-            setOnClickListener {
-                val search = EditText(this@OfflineAiChatActivity).apply {
-                    hint = "Find text in this conversation"
-                    setTextColor(primaryText)
-                    setHintTextColor(secondaryText)
-                }
-                AlertDialog.Builder(this@OfflineAiChatActivity)
-                    .setTitle("Search chat")
-                    .setView(search)
-                    .setPositiveButton("Find") { _, _ ->
-                        val query = search.text.toString().trim()
-                        if (query.isNotEmpty()) {
-                            val found = conversationHistory.contains(query, ignoreCase = true)
-                            status.text = if (found) "Found in conversation history" else "No match in conversation history"
-                        }
-                    }
-                    .setNegativeButton("Cancel", null).show()
-            }
-        }, LinearLayout.LayoutParams(dp(42), dp(48)))
-        header.addView(TextView(this).apply {
-            text = "⋮"
-            textSize = 25f
-            gravity = Gravity.CENTER
-            setTextColor(primaryText)
-            contentDescription = "Chat settings"
-            setOnClickListener { showChatOptions(this) }
-        }, LinearLayout.LayoutParams(dp(38), dp(48)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(62)))
-
-        val headerDivider = View(this).apply {
-            setBackgroundColor(if (dark) 0xFF202D40.toInt() else 0xFFE5EAF1.toInt())
-        }
-        root.addView(headerDivider, LinearLayout.LayoutParams(-1, dp(1)))
+        header.addView(usage, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(3); marginEnd = dp(5) })
+        header.addView(headerAction("↗", "Connect") { AlertDialog.Builder(this).setTitle("AI Connect").setMessage("AI Connect is available from the Workly India website.").setPositiveButton("OK", null).show() }, LinearLayout.LayoutParams(dp(38), dp(44)))
+        header.addView(headerAction("♛", "Settings") { startActivity(Intent(this, SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(38), dp(44)))
+        header.addView(headerAction("⋮", "More options") { showChatOptions(it) }, LinearLayout.LayoutParams(dp(38), dp(44)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(48)))
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -223,22 +166,7 @@ class OfflineAiChatActivity : Activity() {
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val datePill = TextView(this).apply {
-            text = java.text.SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(java.util.Date())
-            textSize = 11f
-            gravity = Gravity.CENTER
-            setTextColor(secondaryText)
-            setPadding(dp(13), dp(6), dp(13), dp(6))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (dark) 0xFF1B293B.toInt() else 0xFFE9EEF5.toInt())
-                cornerRadius = dp(18).toFloat()
-            }
-        }
-        chatMessages.addView(datePill, LinearLayout.LayoutParams(-2, -2).apply {
-            gravity = Gravity.CENTER
-            bottomMargin = dp(14)
-        })
-        addMessage("Welcome to ChatWork! 👋\nAsk me anything. Your AI chat runs locally on this phone.", false)
+        // Website chat has no separate welcome/date card.
 
         val composerShell = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
