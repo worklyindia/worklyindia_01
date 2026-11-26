@@ -237,6 +237,11 @@ class ChatWorkAgentActivity : Activity() {
             }.show()
     }
 
+    override fun onDestroy() {
+        plannerExecutor.shutdownNow()
+        super.onDestroy()
+    }
+
     private fun appendAudit(type: String, title: String, details: String) {
         val record = listOf(
             UUID.randomUUID().toString(),
