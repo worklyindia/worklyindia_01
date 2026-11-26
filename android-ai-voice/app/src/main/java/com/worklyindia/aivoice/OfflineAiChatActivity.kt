@@ -26,6 +26,14 @@ import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.text.style.BackgroundColorSpan
+import android.graphics.Typeface
+import android.text.TextWatcher
+import android.text.Editable
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -53,6 +61,7 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var chatScroll: ScrollView
     private val conversationHistory = StringBuilder()
+    private var greetingPane: View? = null
     private var dark = false
     @Volatile private var modelLoadInProgress = false
     private var ignoreInitialModelSelection = true
@@ -175,6 +184,7 @@ class OfflineAiChatActivity : Activity() {
             addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        showGreetingPane()
 
         // Website chat has no separate welcome/date card.
 
@@ -200,6 +210,16 @@ class OfflineAiChatActivity : Activity() {
             setOnEditorActionListener { _, actionId, _ -> if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendPrompt(); true } else false }
         }
         composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
+        promptInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val hasText = !s.isNullOrBlank()
+                sendButton.isEnabled = engine.isLoaded && hasText
+                sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
+                sendButton.contentDescription = if (hasText) "Send message" else "Start voice input"
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
         micButton = Button(this).apply {
             text = ""; contentDescription = "Voice input"; background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
@@ -219,6 +239,55 @@ class OfflineAiChatActivity : Activity() {
         composerShell.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
         root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); topMargin = dp(4); bottomMargin = dp(4) })
         setContentView(root)
+    }
+
+    private fun showGreetingPane() {
+        if (chatMessages.childCount > 0) return
+        val pane = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(18), dp(42), dp(18), dp(28))
+        }
+        pane.addView(TextView(this).apply {
+            text = "✦"; textSize = 38f; gravity = Gravity.CENTER
+            setTextColor(accent); setPadding(0, 0, 0, dp(14))
+        }, LinearLayout.LayoutParams(-1, -2))
+        pane.addView(TextView(this).apply {
+            text = "What can I help with?"; textSize = 25f; gravity = Gravity.CENTER
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD); setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(-1, -2))
+        pane.addView(TextView(this).apply {
+            text = "Ask anything. ChatWork AI runs locally on this phone."
+            textSize = 14f; gravity = Gravity.CENTER; setTextColor(secondaryText)
+            setPadding(dp(12), dp(10), dp(12), dp(24))
+        }, LinearLayout.LayoutParams(-1, -2))
+        val suggestions = listOf(
+            "Explain a topic" to "Explain quantum computing in simple words",
+            "Write something" to "Help me write a professional message",
+            "Translate text" to "Translate this text into Hindi",
+            "Get ideas" to "Give me creative ideas for a new project"
+        )
+        suggestions.forEach { (label, prompt) ->
+            val chip = TextView(this).apply {
+                text = "✧   $label"; textSize = 15f; setTextColor(primaryText)
+                setPadding(dp(16), dp(13), dp(16), dp(13))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(surface)
+                    setStroke(dp(1), if (dark) 0xFF334155.toInt() else 0xFFE2E8F0.toInt())
+                    cornerRadius = dp(18).toFloat()
+                }
+                setOnClickListener {
+                    promptInput.setText(prompt)
+                    promptInput.setSelection(promptInput.text.length)
+                    promptInput.requestFocus()
+                }
+            }
+            pane.addView(chip, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(7); bottomMargin = dp(2)
+            })
+        }
+        chatMessages.addView(pane, LinearLayout.LayoutParams(-1, -2))
+        greetingPane = pane
     }
 
     private fun showChatOptions(anchor: View) {
@@ -292,6 +361,7 @@ class OfflineAiChatActivity : Activity() {
                 conversationHistory.clear()
                 chatMessages.removeAllViews()
                 thinkingBubble = null
+                showGreetingPane()
                 status.text = "Conversation cleared. Local saved memories are unchanged."
             }
             .show()
@@ -528,6 +598,8 @@ class OfflineAiChatActivity : Activity() {
             return
         }
         promptInput.setText("")
+        greetingPane?.let { chatMessages.removeView(it) }
+        greetingPane = null
         addMessage(prompt, true)
         thinkingBubble = addMessage("Thinking…", false)
         sendButton.isEnabled = false
@@ -726,7 +798,7 @@ class OfflineAiChatActivity : Activity() {
         val messageColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = if (fromUser) Gravity.END else Gravity.START; setPadding(dp(1), dp(5), dp(1), dp(5)) }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = if (fromUser) Gravity.END else Gravity.START }
         val bubble = TextView(this).apply {
-            text = value; textSize = 16f; typeface = android.graphics.Typeface.DEFAULT
+            text = if (fromUser) value else formatMarkdown(value); textSize = 16f; typeface = android.graphics.Typeface.DEFAULT
             setTextColor(primaryText); setPadding(if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1), if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1))
             maxWidth = (resources.displayMetrics.widthPixels * 0.92f).toInt(); setLineSpacing(dp(5).toFloat(), 1.04f)
             if (fromUser) { setTextColor(if (dark) 0xFFE8EDF5.toInt() else 0xFF172033.toInt()); background = android.graphics.drawable.GradientDrawable().apply { setColor(if (dark) 0xFF202B3F.toInt() else 0xFFF0F0F0.toInt()); cornerRadius = dp(28).toFloat() } } else background = null
@@ -749,7 +821,7 @@ class OfflineAiChatActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(R.drawable.ic_chat_thumb_up, "Like response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(R.drawable.ic_chat_thumb_down, "Dislike response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(android.R.drawable.ic_btn_speak_now, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            actions.addView(actionIcon(R.drawable.ic_chatwork_mic, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(android.R.drawable.ic_menu_share, "Share response") {
                 val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }
                 startActivity(Intent.createChooser(share, "Share ChatWork response"))
@@ -757,7 +829,7 @@ class OfflineAiChatActivity : Activity() {
             actions.addView(actionIcon(R.drawable.ic_chat_translate, "Translate response") {
                 AlertDialog.Builder(this@OfflineAiChatActivity).setTitle("Translate response").setMessage("Translation is available in the Workly India website chat.").setPositiveButton("OK", null).show()
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(android.R.drawable.ic_menu_more, "More actions") { showChatOptions(actions) }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            actions.addView(actionIcon(R.drawable.ic_chatwork_more, "More actions") { showChatOptions(actions) }, LinearLayout.LayoutParams(dp(42), dp(34)))
             meta.addView(actions, LinearLayout.LayoutParams(-1, -2)); messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
         }
         chatMessages.addView(messageColumn, LinearLayout.LayoutParams(-1, -2))
@@ -766,9 +838,28 @@ class OfflineAiChatActivity : Activity() {
     }
     private fun replaceThinking(answer: String) {
         val bubble = thinkingBubble
-        if (bubble != null) bubble.text = answer else addMessage(answer, false)
+        if (bubble != null) bubble.text = formatMarkdown(answer) else addMessage(answer, false)
         thinkingBubble = null
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun formatMarkdown(source: String): CharSequence {
+        val normalized = source
+            .replace(Regex("(?m)^#{1,6}\\s+"), "")
+            .replace(Regex("(?m)^\\s*[-*]\\s+"), "• ")
+            .replace(Regex("(?m)^\\s*\\d+\\.\\s+"), "• ")
+        val out = SpannableStringBuilder(normalized)
+        Regex("\\*\\*(.+?)\\*\\*").findAll(normalized).forEach { match ->
+            out.setSpan(StyleSpan(Typeface.BOLD), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        Regex("(?<!\\*)\\*([^*\\n]+)\\*(?!\\*)").findAll(normalized).forEach { match ->
+            out.setSpan(StyleSpan(Typeface.ITALIC), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        Regex("\\x60([^\\x60]+)\\x60").findAll(normalized).forEach { match ->
+            out.setSpan(TypefaceSpan("monospace"), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(BackgroundColorSpan(if (dark) 0xFF263449.toInt() else 0xFFF0F2F5.toInt()), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return out
     }
 
     private fun text(value: String, size: Int, color: Int) = TextView(this).apply {
