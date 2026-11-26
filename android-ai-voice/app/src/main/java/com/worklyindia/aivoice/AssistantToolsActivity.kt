@@ -241,6 +241,7 @@ class AssistantToolsActivity : Activity() {
         AlertDialog.Builder(this).setTitle(item.second)
             .setMessage("Scheduled for " + java.text.DateFormat.getDateTimeInstance().format(java.util.Date(item.third)))
             .setNegativeButton("Close", null)
+            .setPositiveButton("Edit") { _, _ -> editReminder(item) }
             .setNeutralButton("Cancel reminder") { _, _ ->
                 val id = item.first.toIntOrNull() ?: return@setNeutralButton
                 val intent = Intent(this, ChatWorkReminderReceiver::class.java).putExtra("id", id)
@@ -253,6 +254,73 @@ class AssistantToolsActivity : Activity() {
                 toolsPrefs.edit().remove("reminder_title_" + id).remove("reminder_at_" + id).remove("reminder_repeat_" + id)
                     .putStringSet("reminder_ids", ids).apply()
                 Toast.makeText(this, "Reminder cancelled.", Toast.LENGTH_SHORT).show()
+                manageReminders()
+            }.show()
+    }
+
+    private fun editReminder(item: Triple<String, String, Long>) {
+        val id = item.first.toIntOrNull() ?: return
+        val titleInput = EditText(this).apply {
+            setText(toolsPrefs.getString("reminder_title_" + id, item.second))
+            hint = "Reminder title"
+        }
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = item.third
+        }
+        val date = DatePicker(this).apply {
+            updateDate(calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH))
+        }
+        val time = TimePicker(this).apply {
+            setIs24HourView(true)
+            hour = calendar.get(Calendar.HOUR_OF_DAY)
+            minute = calendar.get(Calendar.MINUTE)
+        }
+        val repeatModes = listOf("Does not repeat", "Every day", "Every week")
+        val repeat = Spinner(this).apply {
+            adapter = ArrayAdapter(this@AssistantToolsActivity, android.R.layout.simple_spinner_dropdown_item, repeatModes)
+            setSelection(when (toolsPrefs.getString("reminder_repeat_" + id, "none")) {
+                "daily" -> 1
+                "weekly" -> 2
+                else -> 0
+            })
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(titleInput)
+            addView(date)
+            addView(time)
+            addView(TextView(this@AssistantToolsActivity).apply { text = "Repeat" })
+            addView(repeat)
+        }
+        AlertDialog.Builder(this).setTitle("Edit reminder").setView(layout)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save") { _, _ ->
+                val next = Calendar.getInstance().apply {
+                    set(date.year, date.month, date.dayOfMonth, time.hour, time.minute, 0)
+                    set(Calendar.SECOND, 0)
+                }
+                if (next.timeInMillis <= System.currentTimeMillis()) {
+                    Toast.makeText(this, "Choose a future time.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                val reminderTitle = titleInput.text.toString().ifBlank { "ChatWork reminder" }
+                val repeatMode = when (repeat.selectedItemPosition) { 1 -> "daily"; 2 -> "weekly"; else -> "none" }
+                val alarmIntent = Intent(this, ChatWorkReminderReceiver::class.java)
+                    .putExtra("id", id).putExtra("title", reminderTitle)
+                val pending = PendingIntent.getBroadcast(
+                    this, id, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val alarm = getSystemService(ALARM_SERVICE) as AlarmManager
+                alarm.cancel(pending)
+                pending.cancel()
+                val replacement = PendingIntent.getBroadcast(
+                    this, id, alarmIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next.timeInMillis, replacement)
+                toolsPrefs.edit().putString("reminder_title_" + id, reminderTitle)
+                    .putLong("reminder_at_" + id, next.timeInMillis)
+                    .putString("reminder_repeat_" + id, repeatMode).apply()
+                Toast.makeText(this, "Reminder updated.", Toast.LENGTH_SHORT).show()
                 manageReminders()
             }.show()
     }
