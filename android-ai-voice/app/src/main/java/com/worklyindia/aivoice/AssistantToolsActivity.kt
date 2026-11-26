@@ -41,6 +41,8 @@ class AssistantToolsActivity : Activity() {
             text = "Memories are stored locally. Files are only read after you choose them."
             setPadding(0, 12, 0, 12)
         })
+        addButton(if (WakeWordAssistantService.isRunning) "AI Active · ON — Tap to turn OFF" else "AI Active · OFF — Tap to enable") { toggleAssistant() }
+        addButton("AI Settings / Model Downloads") { startActivity(Intent(this, SpeechDownloadsActivity::class.java)) }
         addButton("Add memory") { addMemory() }
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
         addButton("Import multiple text files / PDFs (up to 5)") { chooseFile() }
@@ -59,7 +61,23 @@ class AssistantToolsActivity : Activity() {
         }
     }
 
-    private fun addButton(label: String, action: () -> Unit) {
+
+    private fun toggleAssistant() {
+        val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+        if (WakeWordAssistantService.isRunning || prefs.getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+            prefs.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+            val stop = Intent(this, WakeWordAssistantService::class.java).setAction(WakeWordAssistantService.ACTION_STOP)
+            runCatching { startService(stop) }.onFailure {
+                stopService(Intent(this, WakeWordAssistantService::class.java))
+            }
+            Toast.makeText(this, "Hey ChatWork stopping…", Toast.LENGTH_SHORT).show()
+            root.postDelayed({ recreate() }, 700)
+            return
+        }
+        // The existing setup flow checks language, downloaded/tested models and microphone permissions.
+        startActivity(Intent(this, OfflineAiChatActivity::class.java).putExtra("assistant_tools_setup", true))
+    }
+\n    private fun addButton(label: String, action: () -> Unit) {
         root.addView(Button(this).apply {
             text = label
             isAllCaps = false
