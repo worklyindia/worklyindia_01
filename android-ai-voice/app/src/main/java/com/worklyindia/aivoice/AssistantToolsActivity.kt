@@ -26,6 +26,7 @@ class AssistantToolsActivity : Activity() {
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
         addButton("Choose a text file for AI chat") { chooseFile() }
         addButton("Schedule phone reminder") { scheduleReminder() }
+        addButton("Manage / cancel reminders") { manageReminders() }
         addButton("Mobile Control") { startActivity(Intent(this, MobileControlActivity::class.java)) }
         addButton("Open an installed app") { showApps() }
         addButton("Back") { finish() }
@@ -107,9 +108,56 @@ $text").apply()
                 val pi=PendingIntent.getBroadcast(this,id,intent,PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 val alarm=getSystemService(ALARM_SERVICE) as AlarmManager
                 alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,cal.timeInMillis,pi)
+                val ids = reminderIds().apply { add(id.toString()) }
+                toolsPrefs.edit().putString("reminder_title_$id", title.text.toString().ifBlank { "ChatWork reminder" })
+                    .putLong("reminder_at_$id", cal.timeInMillis).putStringSet("reminder_ids", ids).apply()
                 Toast.makeText(this,"Reminder scheduled.",Toast.LENGTH_LONG).show()
             }.show()
     }
+    private fun reminderIds(): MutableSet<String> =
+        toolsPrefs.getStringSet("reminder_ids", emptySet()).orEmpty().toMutableSet()
+
+    private fun manageReminders() {
+        val ids = reminderIds()
+        val entries = ids.mapNotNull { id ->
+            val title = toolsPrefs.getString("reminder_title_$id", null) ?: return@mapNotNull null
+            val at = toolsPrefs.getLong("reminder_at_$id", 0L)
+            Triple(id, title, at)
+        }.sortedBy { it.third }
+        if (entries.isEmpty()) {
+            AlertDialog.Builder(this).setTitle("Scheduled reminders")
+                .setMessage("No upcoming ChatWork reminders.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val formatter = java.text.DateFormat.getDateTimeInstance(
+            java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT
+        )
+        val labels = entries.map { "${it.second}\n${formatter.format(java.util.Date(it.third))}" }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Scheduled reminders")
+            .setItems(labels) { _, index -> manageReminder(entries[index]) }
+            .setNegativeButton("Done", null).show()
+    }
+
+    private fun manageReminder(item: Triple<String, String, Long>) {
+        AlertDialog.Builder(this).setTitle(item.second)
+            .setMessage("Scheduled for ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(item.third))}")
+            .setNegativeButton("Close", null)
+            .setNeutralButton("Cancel reminder") { _, _ ->
+                val id = item.first.toIntOrNull() ?: return@setNeutralButton
+                val intent = Intent(this, ChatWorkReminderReceiver::class.java).putExtra("id", id)
+                val pending = PendingIntent.getBroadcast(
+                    this, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                (getSystemService(ALARM_SERVICE) as AlarmManager).cancel(pending)
+                pending.cancel()
+                toolsPrefs.edit().remove("reminder_title_$id").remove("reminder_at_$id")
+                    .putStringSet("reminder_ids", reminderIds().apply { remove(item.first) }).apply()
+                Toast.makeText(this, "Reminder cancelled.", Toast.LENGTH_SHORT).show()
+                manageReminders()
+            }.show()
+    }
+
     private fun showApps() {
         val pm=packageManager
         val apps=pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),0)
