@@ -410,14 +410,14 @@ class OfflineAiChatActivity : Activity() {
             composerRow.addView(micButton, LinearLayout.LayoutParams(dp(36), dp(36)))
             composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(4) })
             composer.addView(composerRow)
-            micButton.setImageResource(android.R.drawable.ic_media_pause)
+            micButton.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_media_pause, 0, 0, 0)
             micButton.contentDescription = "Stop recording"
             sendButton.setOnClickListener { stopOfflineVoiceInput() }
             updateComposerAction(false)
         } else {
             moreButton.setImageResource(R.drawable.ic_chatwork_add)
             moreButton.contentDescription = "More options and attachments"
-            micButton.setImageResource(R.drawable.ic_chatwork_mic)
+            micButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
             micButton.contentDescription = "Voice input"
             sendButton.setOnClickListener { if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
             updateComposerLayout(promptInput.text?.toString().orEmpty())
@@ -709,24 +709,6 @@ class OfflineAiChatActivity : Activity() {
                 status.text = "Conversation cleared. Local saved memories are unchanged."
             }
             .show()
-    }
-
-    @Deprecated("Legacy result callback for document export compatibility")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_EXPORT_CONVERSATION || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        val exportText = "ChatWork offline conversation\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\n\n" +
-            conversationHistory.toString()
-        try {
-            contentResolver.openOutputStream(uri, "w")?.use { output ->
-                output.write(exportText.toByteArray(Charsets.UTF_8))
-                output.flush()
-            } ?: throw IllegalStateException("Could not open the selected destination.")
-            status.text = "Conversation exported to the location you selected."
-        } catch (failure: Exception) {
-            status.text = "Conversation export failed: ${failure.message ?: failure.javaClass.simpleName}"
-        }
     }
 
     private fun chooseWakeWordLanguage() {
@@ -1126,6 +1108,21 @@ class OfflineAiChatActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_EXPORT_CONVERSATION && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            val exportText = "ChatWork offline conversation\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\n\n" +
+                conversationHistory.toString()
+            try {
+                contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    output.write(exportText.toByteArray(Charsets.UTF_8))
+                    output.flush()
+                } ?: throw IllegalStateException("Could not open the selected destination.")
+                status.text = "Conversation exported to the location you selected."
+            } catch (failure: Exception) {
+                status.text = "Conversation export failed: ${failure.message ?: failure.javaClass.simpleName}"
+            }
+            return
+        }
         if (requestCode == REQUEST_ATTACHMENT && resultCode == RESULT_OK && data != null) {
             val uris = mutableListOf<android.net.Uri>()
             data.clipData?.let { clip -> for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let(uris::add) }
