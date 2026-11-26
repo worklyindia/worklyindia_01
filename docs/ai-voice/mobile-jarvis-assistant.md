@@ -244,3 +244,9 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Corrected newline and tab delimiters in the local AI Agent audit store and history display.
 - Audit records now use actual line/tab separators, and action previews render on separate lines rather than showing literal escape characters.
 - This is a source-level correction; Android CI and on-device verification are still required.
+
+## AI context formatting corrections — 2026-11-26
+
+- Fixed the selected-document context prefix so the imported text begins on a real new line.
+- Fixed memory and selected-file context separators in the offline chat prompt. They now use actual newline characters rather than literal backslash-n text.
+- These are source-level fixes. They still require a successful Android build and an on-device prompt check before being considered validated.
