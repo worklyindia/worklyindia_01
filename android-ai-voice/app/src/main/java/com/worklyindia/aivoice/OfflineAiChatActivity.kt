@@ -32,6 +32,7 @@ import android.text.style.StyleSpan
 import android.text.style.TypefaceSpan
 import android.text.style.BackgroundColorSpan
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.text.TextWatcher
 import android.text.Editable
 import java.util.Locale
