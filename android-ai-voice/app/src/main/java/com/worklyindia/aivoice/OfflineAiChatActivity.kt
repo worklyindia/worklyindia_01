@@ -93,8 +93,8 @@ class OfflineAiChatActivity : Activity() {
             setPadding(0, dp(4), 0, dp(4))
         }
         header.addView(Button(this).apply {
-            text = "‹"
-            textSize = 30f
+            text = "←"
+            textSize = 24f
             isAllCaps = false
             setTextColor(primaryText)
             setBackgroundColor(bg)
@@ -107,8 +107,8 @@ class OfflineAiChatActivity : Activity() {
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(Button(this).apply {
-            text = "⋮"
-            textSize = 24f
+            text = "⋯"
+            textSize = 26f
             isAllCaps = false
             setTextColor(primaryText)
             setBackgroundColor(bg)
@@ -176,16 +176,16 @@ class OfflineAiChatActivity : Activity() {
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(4), dp(5), dp(4))
+            setPadding(dp(6), dp(5), dp(6), dp(5))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(surface)
                 setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
-                cornerRadius = dp(32).toFloat()
+                cornerRadius = dp(28).toFloat()
             }
         }
         val moreButton = Button(this).apply {
-            text = "+"
-            textSize = 27f
+            text = "＋"
+            textSize = 25f
             isAllCaps = false
             setTextColor(secondaryText)
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -194,10 +194,10 @@ class OfflineAiChatActivity : Activity() {
         }
         composer.addView(moreButton, LinearLayout.LayoutParams(dp(42), dp(48)))
         promptInput = EditText(this).apply {
-            hint = "Message…"
+            hint = "Message Workly AI…"
             textSize = 16f
             minLines = 1
-            maxLines = 4
+            maxLines = 6
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
             setPadding(dp(5), dp(9), dp(5), dp(9))
@@ -209,8 +209,8 @@ class OfflineAiChatActivity : Activity() {
         }
         composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
         micButton = Button(this).apply {
-            text = "🎙"
-            textSize = 20f
+            text = "⌁"
+            textSize = 24f
             isAllCaps = false
             setTextColor(primaryText)
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -219,8 +219,8 @@ class OfflineAiChatActivity : Activity() {
         }
         composer.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(48)))
         sendButton = Button(this).apply {
-            text = "➤"
-            textSize = 22f
+            text = "↑"
+            textSize = 25f
             isAllCaps = false
             setTextColor(0xFFFFFFFF.toInt())
             background = android.graphics.drawable.GradientDrawable().apply {
@@ -779,16 +779,16 @@ class OfflineAiChatActivity : Activity() {
             textSize = 16f
             typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
-            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setPadding(dp(16), dp(12), dp(16), dp(12))
             maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
             setLineSpacing(dp(2).toFloat(), 1.04f)
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (fromUser) 0xFF1769C2.toInt() else surface)
-                cornerRadius = dp(19).toFloat()
+                setColor(if (fromUser) 0xFF1769C2.toInt() else bg)
+                cornerRadius = dp(22).toFloat()
             }
         }
         val params = LinearLayout.LayoutParams(-2, -2).apply {
-            if (fromUser) marginStart = dp(42) else marginEnd = dp(28)
+            if (fromUser) marginStart = dp(36) else marginEnd = dp(8)
         }
         row.addView(bubble, params)
         chatMessages.addView(row, LinearLayout.LayoutParams(-1, -2))
