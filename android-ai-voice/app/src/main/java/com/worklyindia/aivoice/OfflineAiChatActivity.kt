@@ -86,48 +86,12 @@ class OfflineAiChatActivity : Activity() {
             clipToPadding = false
         }
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(4), 0, dp(4))
-        }
-        header.addView(Button(this).apply {
-            text = "‹"
-            textSize = 30f
-            isAllCaps = false
-            setTextColor(primaryText)
-            setBackgroundColor(bg)
-            contentDescription = "Back"
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(TextView(this).apply {
-            text = "⚡  Usage"
-            textSize = 19f
-            setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(Button(this).apply {
-            text = "⋮"
-            textSize = 24f
-            isAllCaps = false
-            setTextColor(primaryText)
-            setBackgroundColor(bg)
-            contentDescription = "Chat settings"
-            setOnClickListener { showChatOptions(this) }
-        }, LinearLayout.LayoutParams(dp(44), dp(48)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
-
-        status = TextView(this).apply {
-            text = "Checking offline AI model…"
-            textSize = 12f
-            setTextColor(secondaryText)
-            setPadding(dp(8), dp(3), dp(8), dp(7))
-            maxLines = 2
-        }
-        root.addView(status, LinearLayout.LayoutParams(-1, -2))
-
+        // Keep model selection available to the existing settings flow, but out of
+        // the conversation canvas so the chat matches a clean messenger layout.
         qwenModelPicker = Spinner(this).apply {
             adapter = readableSpinnerAdapter(modelManager.models)
             isEnabled = false
+            visibility = View.GONE
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -137,8 +101,7 @@ class OfflineAiChatActivity : Activity() {
                     }
                     val selected = modelManager.models[position]
                     selectedQwenModel = selected
-                    val selectedState = modelManager.snapshot(selected).state
-                    val selectedReady = selectedState == QwenModelManager.State.READY
+                    val selectedReady = modelManager.snapshot(selected).state == QwenModelManager.State.READY
                     if (selectedReady && !modelLoadInProgress && selected.id != loadedModelId) {
                         getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit()
                             .putString("selected_model_id", selected.id).apply()
@@ -146,52 +109,158 @@ class OfflineAiChatActivity : Activity() {
                     } else {
                         sendButton.isEnabled = engine.isLoaded && selectedReady && selected.id == loadedModelId
                         sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
-                        if (!selectedReady) status.text = if (selectedState == QwenModelManager.State.NEEDS_TEST) {
-                            "Run Test Model for this downloaded Qwen model before using it."
-                        } else {
-                            "Download this Qwen model from Download Models before using it."
-                        }
                     }
                 }
             }
         }
 
-        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(5), dp(8), dp(5))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(bg)
+            }
+        }
+        header.addView(TextView(this).apply {
+            text = "‹"
+            textSize = 38f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            contentDescription = "Back"
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(dp(42), dp(52)))
+
+        val avatar = TextView(this).apply {
+            text = "W"
+            textSize = 25f
+            gravity = Gravity.CENTER
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            setTextColor(0xFF1769C2.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(0xFFFFFFFF.toInt())
+            }
+            contentDescription = "ChatWork"
+        }
+        header.addView(avatar, LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+            marginStart = dp(3); marginEnd = dp(10)
+        })
+
+        val titleColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleColumn.addView(TextView(this).apply {
+            text = "ChatWork"
+            textSize = 18f
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            setTextColor(primaryText)
+        })
+        status = TextView(this).apply {
+            text = "Offline AI · On this device"
+            textSize = 12f
+            setTextColor(0xFF16B981.toInt())
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        titleColumn.addView(status)
+        header.addView(titleColumn, LinearLayout.LayoutParams(0, -2, 1f))
+
+        header.addView(TextView(this).apply {
+            text = "⌕"
+            textSize = 29f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            contentDescription = "Search conversation"
+            setOnClickListener {
+                val search = EditText(this@OfflineAiChatActivity).apply {
+                    hint = "Find text in this conversation"
+                    setTextColor(primaryText)
+                    setHintTextColor(secondaryText)
+                }
+                AlertDialog.Builder(this@OfflineAiChatActivity)
+                    .setTitle("Search chat")
+                    .setView(search)
+                    .setPositiveButton("Find") { _, _ ->
+                        val query = search.text.toString().trim()
+                        if (query.isNotEmpty()) {
+                            val found = conversationHistory.contains(query, ignoreCase = true)
+                            status.text = if (found) "Found in conversation history" else "No match in conversation history"
+                        }
+                    }
+                    .setNegativeButton("Cancel", null).show()
+            }
+        }, LinearLayout.LayoutParams(dp(42), dp(48)))
+        header.addView(TextView(this).apply {
+            text = "⋮"
+            textSize = 25f
+            gravity = Gravity.CENTER
+            setTextColor(primaryText)
+            contentDescription = "Chat settings"
+            setOnClickListener { showChatOptions(this) }
+        }, LinearLayout.LayoutParams(dp(38), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(62)))
+
+        val headerDivider = View(this).apply {
+            setBackgroundColor(if (dark) 0xFF202D40.toInt() else 0xFFE5EAF1.toInt())
+        }
+        root.addView(headerDivider, LinearLayout.LayoutParams(-1, dp(1)))
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            setPadding(dp(2), dp(6), dp(2), dp(10))
+            setPadding(dp(10), dp(8), dp(10), dp(12))
             chatMessages = LinearLayout(this@OfflineAiChatActivity).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(2), dp(4), dp(2), dp(8))
+                setPadding(dp(1), dp(4), dp(1), dp(8))
             }
             addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
 
-        val composer = LinearLayout(this).apply {
+        val datePill = TextView(this).apply {
+            text = java.text.SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(java.util.Date())
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setTextColor(secondaryText)
+            setPadding(dp(13), dp(6), dp(13), dp(6))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) 0xFF1B293B.toInt() else 0xFFE9EEF5.toInt())
+                cornerRadius = dp(18).toFloat()
+            }
+        }
+        chatMessages.addView(datePill, LinearLayout.LayoutParams(-2, -2).apply {
+            gravity = Gravity.CENTER
+            bottomMargin = dp(14)
+        })
+        addMessage("Welcome to ChatWork! 👋\\nAsk me anything. Your AI chat runs locally on this phone.", false)
+
+        val composerShell = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(4), dp(5), dp(4))
+            setPadding(dp(7), dp(4), dp(6), dp(4))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(surface)
                 setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
                 cornerRadius = dp(32).toFloat()
             }
         }
-        val moreButton = Button(this).apply {
+        val composer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+        }
+        val moreButton = TextView(this).apply {
             text = "+"
-            textSize = 27f
-            isAllCaps = false
+            textSize = 29f
+            gravity = Gravity.CENTER
             setTextColor(secondaryText)
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            contentDescription = "More chat options"
+            contentDescription = "Attach file or more options"
             setOnClickListener { showChatOptions(this) }
         }
-        composer.addView(moreButton, LinearLayout.LayoutParams(dp(42), dp(48)))
+        composer.addView(moreButton, LinearLayout.LayoutParams(dp(38), dp(44)))
         promptInput = EditText(this).apply {
             hint = "Message…"
             textSize = 16f
@@ -199,7 +268,7 @@ class OfflineAiChatActivity : Activity() {
             maxLines = 4
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
-            setPadding(dp(5), dp(9), dp(5), dp(9))
+            setPadding(dp(5), dp(8), dp(5), dp(8))
             background = null
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
             setOnEditorActionListener { _, actionId, _ ->
@@ -207,20 +276,20 @@ class OfflineAiChatActivity : Activity() {
             }
         }
         composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
-        micButton = Button(this).apply {
-            text = "🎙"
-            textSize = 20f
-            isAllCaps = false
+        micButton = TextView(this).apply {
+            text = "♩"
+            textSize = 24f
+            gravity = Gravity.CENTER
             setTextColor(primaryText)
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
             contentDescription = "Voice input"
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
-        }
-        composer.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(48)))
-        sendButton = Button(this).apply {
+        } as Button
+        composer.addView(micButton, LinearLayout.LayoutParams(dp(42), dp(44)))
+        composerShell.addView(composer, LinearLayout.LayoutParams(0, -2, 1f))
+        sendButton = TextView(this).apply {
             text = "➤"
             textSize = 22f
-            isAllCaps = false
+            gravity = Gravity.CENTER
             setTextColor(0xFFFFFFFF.toInt())
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(accent)
@@ -230,11 +299,12 @@ class OfflineAiChatActivity : Activity() {
             alpha = 0.55f
             contentDescription = "Send message"
             setOnClickListener { sendPrompt() }
-        }
-        composer.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
-        root.addView(composer, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(5)
-            bottomMargin = dp(6)
+        } as Button
+        composerShell.addView(sendButton, LinearLayout.LayoutParams(dp(46), dp(46)).apply { leftMargin = dp(4) })
+
+        root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(12); rightMargin = dp(12)
+            topMargin = dp(7); bottomMargin = dp(8)
         })
         setContentView(root)
     }
@@ -733,29 +803,116 @@ class OfflineAiChatActivity : Activity() {
     }
 
     private fun addMessage(value: String, fromUser: Boolean): TextView {
+        val messageColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (fromUser) Gravity.END else Gravity.START
+            setPadding(dp(1), dp(4), dp(1), dp(7))
+        }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = if (fromUser) Gravity.END else Gravity.START
-            setPadding(dp(2), dp(3), dp(2), dp(3))
+        }
+        if (!fromUser) {
+            row.addView(TextView(this).apply {
+                text = "W"
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                setTextColor(0xFF1769C2.toInt())
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(0xFFFFFFFF.toInt())
+                }
+                contentDescription = "ChatWork assistant"
+            }, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginEnd = dp(8) })
         }
         val bubble = TextView(this).apply {
             text = value
             textSize = 16f
             typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
-            setLineSpacing(dp(2).toFloat(), 1.04f)
+            setPadding(dp(15), dp(11), dp(15), dp(11))
+            maxWidth = (resources.displayMetrics.widthPixels * 0.80f).toInt()
+            setLineSpacing(dp(3).toFloat(), 1.05f)
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (fromUser) 0xFF1769C2.toInt() else surface)
-                cornerRadius = dp(19).toFloat()
+                setColor(if (fromUser) {
+                    if (dark) 0xFF203B65.toInt() else 0xFFE8EDF4.toInt()
+                } else surface)
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), if (dark && !fromUser) 0xFF27364B.toInt() else android.graphics.Color.TRANSPARENT)
+            }
+            if (fromUser) setTextColor(if (dark) 0xFFEAF1FA.toInt() else 0xFF142033.toInt())
+        }
+        val bubbleParams = LinearLayout.LayoutParams(-2, -2).apply {
+            if (fromUser) marginStart = dp(48) else marginEnd = dp(18)
+        }
+        row.addView(bubble, bubbleParams)
+        messageColumn.addView(row, LinearLayout.LayoutParams(-1, -2))
+
+        val meta = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (fromUser) Gravity.END else Gravity.START
+            setPadding(if (fromUser) 0 else dp(42), dp(3), dp(3), 0)
+        }
+        val time = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date())
+        meta.addView(TextView(this).apply {
+            text = if (fromUser) "$time  ✓✓" else time
+            textSize = 11f
+            setTextColor(secondaryText)
+        }, LinearLayout.LayoutParams(-2, -2))
+        if (!fromUser) {
+            val actions = listOf(
+                "▢" to "Copy message",
+                "♧" to "Like response",
+                "♧" to "Dislike response",
+                "◖" to "Speak response",
+                "↗" to "Share response",
+                "⋮" to "More message actions"
+            )
+            actions.forEachIndexed { index, item ->
+                val action = TextView(this).apply {
+                    text = item.first
+                    textSize = 16f
+                    gravity = Gravity.CENTER
+                    setTextColor(secondaryText)
+                    contentDescription = item.second
+                    setPadding(dp(5), 0, dp(5), 0)
+                    setOnClickListener {
+                        when (index) {
+                            0 -> {
+                                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text))
+                                android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            1 -> android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
+                            2 -> android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show()
+                            3 -> speakAnswer(bubble.text.toString())
+                            4 -> {
+                                val share = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString())
+                                }
+                                startActivity(Intent.createChooser(share, "Share ChatWork response"))
+                            }
+                            else -> PopupMenu(this@OfflineAiChatActivity, this).apply {
+                                menu.add("Copy").setOnMenuItemClickListener {
+                                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text)); true
+                                }
+                                menu.add("Speak").setOnMenuItemClickListener { speakAnswer(bubble.text.toString()); true }
+                                menu.add("Share").setOnMenuItemClickListener {
+                                    val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }
+                                    startActivity(Intent.createChooser(share, "Share response")); true
+                                }
+                                show()
+                            }
+                        }
+                    }
+                }
+                meta.addView(action, LinearLayout.LayoutParams(dp(28), dp(25)))
             }
         }
-        val params = LinearLayout.LayoutParams(-2, -2).apply {
-            if (fromUser) marginStart = dp(42) else marginEnd = dp(28)
-        }
-        row.addView(bubble, params)
-        chatMessages.addView(row, LinearLayout.LayoutParams(-1, -2))
+        messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
+        chatMessages.addView(messageColumn, LinearLayout.LayoutParams(-1, -2))
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
         return bubble
     }
