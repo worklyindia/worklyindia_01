@@ -53,7 +53,7 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var chatScroll: ScrollView
     private val conversationHistory = StringBuilder()
-    private var dark = false
+    private var dark = false\n    private var thinkMode = false
     @Volatile private var modelLoadInProgress = false
     private var ignoreInitialModelSelection = true
     @Volatile private var loadedModelId: String? = null
@@ -291,7 +291,7 @@ class OfflineAiChatActivity : Activity() {
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
-            menu.add("Create / Edit Image").setOnMenuItemClickListener {
+            menu.add(if (thinkMode) "✓ Think mode · On" else "Think mode · Off").setOnMenuItemClickListener {\n                thinkMode = !thinkMode\n                status.text = if (thinkMode) "Think mode enabled · more deliberate responses" else "Think mode disabled"\n                true\n            }\n            menu.add("Create / Edit Image").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, ChatWorkImageActivity::class.java)); true
             }
             menu.add("Assistant Tools · Memory / Files / Reminders / Apps").setOnMenuItemClickListener {
@@ -614,7 +614,7 @@ class OfflineAiChatActivity : Activity() {
             You are Workly India AI, a capable, thoughtful assistant. Understand the user's actual question before answering.
             Give a direct, accurate, useful answer; explain steps when needed; ask one short clarification only when essential.
             Use the user's language naturally: $replyLanguage. If the user writes Gujarati or Hindi, reply in that script, not English transliteration.
-            Keep relevant conversation context, do not repeat greetings, do not invent facts, links, prices, live data, or completed actions.
+            Keep relevant conversation context, do not repeat greetings, do not invent facts, links, prices, live data, or completed actions.\n            ${if (thinkMode) "Think mode is enabled: carefully reason through the task, verify consistency, and provide a more structured, thorough answer without revealing hidden chain-of-thought." else ""}
             If unsure or lacking current information, say so clearly. For Workly India website/app questions, stay focused on Workly India and give practical guidance.
             Format longer answers with short headings or numbered steps. Avoid generic filler and answer the exact question.
         """.trimIndent()
