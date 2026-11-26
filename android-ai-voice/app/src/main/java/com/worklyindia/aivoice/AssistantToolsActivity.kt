@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Bundle\nimport android.os.Build\nimport java.util.Locale
+import android.os.Bundle
+import android.os.Build
+import java.util.Locale
 import android.widget.Button
 import android.widget.DatePicker
 import android.widget.TimePicker
