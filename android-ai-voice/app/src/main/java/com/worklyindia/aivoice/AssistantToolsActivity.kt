@@ -79,7 +79,7 @@ class AssistantToolsActivity : Activity() {
         // The existing setup flow checks language, downloaded/tested models and microphone permissions.
         chooseAssistantLanguage()
     }
-\n
+
     private fun chooseAssistantLanguage() {
         val labels = arrayOf("Hindi · हिन्दी", "Gujarati · ગુજરાતી", "English · India")
         val codes = arrayOf("hi", "gu", "en")
@@ -145,7 +145,8 @@ class AssistantToolsActivity : Activity() {
             Toast.makeText(this, "Could not start assistant: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
-\n    private fun addButton(label: String, action: () -> Unit) {
+
+    private fun addButton(label: String, action: () -> Unit) {
         root.addView(Button(this).apply {
             text = label
             isAllCaps = false
