@@ -102,7 +102,7 @@ class OfflineAiChatActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = "AI Chat"
+            text = "Workly AI"
             textSize = 19f
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -118,7 +118,7 @@ class OfflineAiChatActivity : Activity() {
         root.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
 
         status = TextView(this).apply {
-            text = "Checking offline AI model…"
+            text = "Preparing your AI chat…"
             textSize = 12f
             setTextColor(secondaryText)
             setPadding(dp(8), dp(3), dp(8), dp(7))
@@ -157,7 +157,56 @@ class OfflineAiChatActivity : Activity() {
             }
         }
 
-        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
+        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)).apply { leftMargin = dp(12); rightMargin = dp(12) })
+        qwenModelPicker.background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(surface)
+            setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
+            cornerRadius = dp(22).toFloat()
+        }
+
+        // Website-inspired AI Chat welcome panel with quick-start prompt tiles.
+        val welcomePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(20), dp(18), dp(20), dp(18))
+        }
+        welcomePanel.addView(TextView(this).apply {
+            text = "✨"
+            textSize = 34f
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, -2))
+        welcomePanel.addView(TextView(this).apply {
+            text = "What can I help you with?"
+            textSize = 22f
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            setTextColor(primaryText)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(5))
+        }, LinearLayout.LayoutParams(-1, -2))
+        welcomePanel.addView(TextView(this).apply {
+            text = "Ask anything, create ideas, or explore a topic."
+            textSize = 14f
+            setTextColor(secondaryText)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(18))
+        }, LinearLayout.LayoutParams(-1, -2))
+        val quickPrompts = listOf("Explain something simply" to "Explain a difficult topic in simple words", "Write something" to "Help me write a message or document", "Brainstorm ideas" to "Give me creative ideas for a project", "Learn a new skill" to "Help me learn a new skill step by step")
+        quickPrompts.forEach { (label, prompt) ->
+            val tile = Button(this).apply {
+                text = "✦  $label"
+                textSize = 14f
+                isAllCaps = false
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setTextColor(primaryText)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(surface)
+                    setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
+                    cornerRadius = dp(16).toFloat()
+                }
+                setOnClickListener { promptInput.setText(prompt); promptInput.setSelection(promptInput.text.length); promptInput.requestFocus() }
+            }
+            welcomePanel.addView(tile, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(6); bottomMargin = dp(6) })
+        }
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -171,7 +220,7 @@ class OfflineAiChatActivity : Activity() {
             addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Tap the microphone, speak, then stop recording; your recognized text will appear in the message box.", false)
+        chatMessages.addView(welcomePanel, LinearLayout.LayoutParams(-1, -2))
 
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
