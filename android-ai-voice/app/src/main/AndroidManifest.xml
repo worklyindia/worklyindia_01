@@ -65,5 +65,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    </application>
+            <receiver android:name=".ChatWorkReminderReceiver" android:exported="false" />\n    </application>
 </manifest>
