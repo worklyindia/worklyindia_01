@@ -211,6 +211,7 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 
 - Assistant Tools can import up to five user-selected plain-text files and PDFs into the next offline chat context, with combined 120,000-character limit.
 - Imported documents are listed by filename and can be removed individually or cleared as a group; the next chat prompt identifies each document separately.
+- Imported document text remains available in subsequent offline turns until the user removes it; it is not silently discarded after the first successful reply.
 - PDF extraction uses PDFBox locally on a background thread; the app does not upload document bytes.
 - Safety limits: 20 MB PDF input, 40 pages, and 120,000 extracted characters.
 - Image-only/scanned PDFs are explicitly reported as unsupported because OCR is not included.
