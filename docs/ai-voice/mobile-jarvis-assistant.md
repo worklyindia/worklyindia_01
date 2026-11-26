@@ -202,3 +202,6 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - One-shot reminders continue to remove their saved record after firing.
 - The reminder manager labels recurring entries and cancellation removes the stored repeat mode as well as the alarm metadata.
 - Recurrence is based on local calendar days/weeks and Android's inexact idle-allowed alarm API; delivery can be delayed by Android battery policies. Exact-alarm permission is not requested.
+
+
+- Added reminder editing: users can update an existing reminder's title, local date/time and repeat mode. The previous PendingIntent/alarm is cancelled and replaced using the same reminder ID to avoid creating a duplicate.
