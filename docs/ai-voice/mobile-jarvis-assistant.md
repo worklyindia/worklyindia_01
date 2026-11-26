@@ -256,3 +256,9 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Offline chat now retains a user-selected document context when model inference fails, so the user can reload the model and retry without selecting the file again.
 - On successful inference, the app clears the pending context only if it still matches the document used for that request; a newer document selected in the meantime is preserved.
 - Requires Android CI and on-device retry testing before release validation.
+
+## AI Agent reminder handoff — 2026-11-26
+
+- Added a confirmed **Create a phone reminder** action to the Agent safe-action allowlist.
+- The action opens the existing reminder editor. The user must enter/review the title, date, time and recurrence and explicitly press Schedule; the Agent does not silently create alarms.
+- This is a user-confirmed handoff to the existing reminder feature, not autonomous task execution.
