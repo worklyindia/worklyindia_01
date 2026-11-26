@@ -222,3 +222,12 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - User enters title/date/time; ChatWork opens the installed calendar app's event editor prefilled for a one-hour event.
 - The user reviews and saves the event in the calendar app.
 - No calendar read/write permission is requested and ChatWork does not read calendar contents.
+
+
+## AI Agent safe action implementation — 2026-11-26
+
+- Added a bounded allowlist in the Agent screen: open Android Wi-Fi, Bluetooth, Display and ChatWork notification settings, or launch a user-selected installed app.
+- Each action displays a preview and requires a separate Run confirmation.
+- The implementation uses Android intents only; it does not toggle system settings, read other apps' screens, enter credentials, or execute free-form model-generated commands.
+- Local audit history records plan approvals, launch requests and caught launch failures (up to 100 records). A launch request is not represented as proof that the destination completed its task.
+- The planner remains a generic offline template, not an LLM task decomposition engine. This is a safe first execution slice, not full autonomous agent capability.
