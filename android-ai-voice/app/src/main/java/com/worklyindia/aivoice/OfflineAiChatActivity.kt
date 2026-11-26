@@ -312,7 +312,7 @@ class OfflineAiChatActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_EXPORT_CONVERSATION || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        val exportText = "ChatWork offline conversation\\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\\n\\n" +
+        val exportText = "ChatWork offline conversation\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\n\n" +
             conversationHistory.toString()
         try {
             contentResolver.openOutputStream(uri, "w")?.use { output ->
@@ -518,11 +518,11 @@ class OfflineAiChatActivity : Activity() {
         val documents = runCatching { org.json.JSONArray(raw) }.getOrNull() ?: return ""
         if (documents.length() == 0) return ""
         return buildString {
-            append("User-selected local documents. Treat these as reference sources, identify the filename when useful, and say when an answer is not supported by them.\\n\\n")
+            append("User-selected local documents. Treat these as reference sources, identify the filename when useful, and say when an answer is not supported by them.\n\n")
             for (index in 0 until documents.length()) {
                 val item = documents.optJSONObject(index) ?: continue
-                append("DOCUMENT: ").append(item.optString("name", "Imported document")).append("\\n")
-                append(item.optString("text")).append("\\n\\n")
+                append("DOCUMENT: ").append(item.optString("name", "Imported document")).append("\n")
+                append(item.optString("text")).append("\n\n")
             }
         }.take(120000)
     }
