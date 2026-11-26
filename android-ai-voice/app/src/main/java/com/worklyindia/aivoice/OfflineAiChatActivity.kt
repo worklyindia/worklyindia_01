@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.content.res.Configuration
 import android.os.Bundle
@@ -36,7 +37,7 @@ class OfflineAiChatActivity : Activity() {
     private var userHasChosenQwenModel = false
     private val speechPackManager by lazy { SpeechPackDownloadManager(this) }
     private val engine by lazy { OfflineAiEngine() }
-    private var tinyTtsEngine: IndicTinyTtsEngine? = null
+    @Volatile private var vitsPlayer: MediaPlayer? = null
     private var activeAudioRecord: AudioRecord? = null
     @Volatile private var offlineRecording = false
     private val languages = listOf(
@@ -101,7 +102,7 @@ class OfflineAiChatActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = if (intent.getBooleanExtra(EXTRA_VOICE_TEST_MODE, false)) "🎙  AI Chat · Voice Test" else "⚡  AI Chat"
+            text = "AI Chat"
             textSize = 19f
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -170,7 +171,7 @@ class OfflineAiChatActivity : Activity() {
             addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addMessage(if (intent.getBooleanExtra(EXTRA_VOICE_TEST_MODE, false)) "Voice test: tap 🎙 and speak, tap Stop recording, then tap Send. ChatWork AI will answer aloud. Status messages show each stage." else "Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
+        addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Tap the microphone, speak, then stop recording; your recognized text will appear in the message box.", false)
 
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -641,7 +642,7 @@ class OfflineAiChatActivity : Activity() {
                 while (offlineRecording && samples.size < maxSamples) {
                     val count = audio.read(buffer, 0, buffer.size)
                     if (count > 0) for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
-                    else if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
+                    else if (count < 0 && offlineRecording) throw IllegalStateException("Microphone read failed ($count).")
                 }
                 offlineRecording = false
                 runCatching { if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
@@ -680,27 +681,41 @@ class OfflineAiChatActivity : Activity() {
         status.text = "Stopping microphone and transcribing…"
     }
 
-    /** Uses downloaded Indic Tiny TTS only; never Android/mobile TTS. */
+    /** Speaks AI replies with the downloaded iTantra VITS Sherpa-ONNX voice. */
     private fun speakAnswer(value: String) {
         val language = selectedLanguage(value)
         val code = when { language.tag.startsWith("hi") -> "hi"; language.tag.startsWith("gu") -> "gu"; else -> "en" }
-        val pack = SpeechModelCatalog.indicTinyTts(code)
-        if (!OfflineSpeechEngineFactory.isReady(this, pack)) {
-            status.text = "No downloaded ${language.label} text-to-speech pack. Open Settings → Model Downloads and download Indic Tiny TTS ${code.uppercase()}."
+        val pack = SpeechModelCatalog.itantraVits(code)
+        if (speechPackManager.snapshot(pack).state != SpeechPackDownloadManager.State.COMPLETE) {
+            status.text = "Download iTantra VITS · ${code.uppercase()} from Download Models to hear AI replies."
             return
         }
-        status.text = "Speaking with downloaded Indic Tiny TTS · ${code.uppercase()}…"
+        status.text = "Preparing iTantra VITS voice · ${code.uppercase()}…"
         worker.execute {
-            val ttsStartedAt = SystemClock.elapsedRealtime()
+            val startedAt = SystemClock.elapsedRealtime()
+            val output = java.io.File(cacheDir, "ai_chat_reply_${System.currentTimeMillis()}.wav")
+            var player: MediaPlayer? = null
             try {
-                tinyTtsEngine?.close()
-                val tiny = IndicTinyTtsEngine.create(this, code)
-                tinyTtsEngine = tiny
-                tiny.speak(value)
-                ModelUsageTracker.record(this, pack.id, pack.title, "tts", "App", ttsStartedAt, value.length)
-                runOnUiThread { status.text = "Spoken using downloaded Indic Tiny TTS · ${code.uppercase()}." }
+                SherpaVitsTtsEngine.create(this, pack).use { it.synthesizeToWav(value, output) }
+                val prepared = MediaPlayer().apply {
+                    setDataSource(output.absolutePath)
+                    prepare()
+                }
+                player = prepared
+                vitsPlayer?.let { runCatching { it.stop() }; runCatching { it.release() } }
+                vitsPlayer = prepared
+                prepared.start()
+                while (prepared.isPlaying && !isFinishing) Thread.sleep(60L)
+                runCatching { prepared.release() }
+                if (vitsPlayer === prepared) vitsPlayer = null
+                ModelUsageTracker.record(this, pack.id, pack.title, "tts", "AI Chat", startedAt, value.length, output.length())
+                runOnUiThread { if (!isFinishing) status.text = "Spoken using iTantra VITS · ${code.uppercase()}." }
             } catch (error: Exception) {
-                runOnUiThread { status.text = "Downloaded text-to-speech model error: ${error.message ?: "audio generation failed"}. No mobile TTS fallback was used." }
+                player?.let { runCatching { it.release() } }
+                if (vitsPlayer === player) vitsPlayer = null
+                runOnUiThread { if (!isFinishing) status.text = "iTantra VITS voice error: ${error.message ?: "audio generation failed"}." }
+            } finally {
+                output.delete()
             }
         }
     }
@@ -804,7 +819,8 @@ class OfflineAiChatActivity : Activity() {
         val wakeServiceActive = WakeWordAssistantService.isRunning
         if (!wakeServiceActive) worker.execute { engine.unload() }
         worker.shutdown()
-        tinyTtsEngine?.close()
+        vitsPlayer?.let { runCatching { it.stop() }; runCatching { it.release() } }
+        vitsPlayer = null
         super.onDestroy()
     }
 
