@@ -189,7 +189,7 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 
 - Reminder editing and recurring schedules are not implemented.
 - File assistant currently supports user-selected bounded plain-text files; PDF extraction, indexing and document search are not implemented.
-- AI Agent planning/execution and action approval/audit UI are not implemented.
+- AI Agent uses local Qwen task-plan generation and user-approved audit records; autonomous execution, typed action adapters, per-action result verification and safe undo remain incomplete.
 - Full Hindi/Gujarati/English live STT→LLM→TTS round-trip, voice interruption and audio quality require test evidence.
 - No online AI/research connector is wired into this offline chat. Do not imply it is available.
 - Android CI for the newest commit and physical-device tests remain release blockers.
@@ -230,7 +230,7 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Each action displays a preview and requires a separate Run confirmation.
 - The implementation uses Android intents only; it does not toggle system settings, read other apps' screens, enter credentials, or execute free-form model-generated commands.
 - Local audit history records plan approvals, launch requests and caught launch failures (up to 100 records). A launch request is not represented as proof that the destination completed its task.
-- The planner remains a generic offline template, not an LLM task decomposition engine. This is a safe first execution slice, not full autonomous agent capability.
+- At the time of this implementation note, the planner was a generic template; it was subsequently replaced by local Qwen-generated task decomposition (see the AI Agent local planning update below). This remains a safe planning slice, not full autonomous agent capability.
 
 
 ## Conversation file controls — 2026-11-26
