@@ -27,7 +27,7 @@ class MainActivity : Activity() {
 
         // Keep the website relay worker active; it is required for website voice processing.
         val relayIntent = Intent(this, VoiceRelayService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(relayIntent) else startService(relayIntent)
+        runCatching {\n            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(relayIntent) else startService(relayIntent)\n        }.onFailure { android.util.Log.e("ChatWorkLauncher", "Relay service startup failed", it) }
 
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
