@@ -1,4 +1,5 @@
 name: ChatWork Android
+# Rebuild native APK for website-matched ChatWork conversation UI.
 
 on:
   push:
