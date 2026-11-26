@@ -51,7 +51,9 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var sendButton: Button
     private lateinit var micButton: Button
     private lateinit var status: TextView
+    private lateinit var composerHint: TextView
     private lateinit var chatScroll: ScrollView
+    private var attachedDocumentName: String? = null
     private val conversationHistory = StringBuilder()
     private var dark = false
     private var thinkMode = false
@@ -102,10 +104,20 @@ class OfflineAiChatActivity : Activity() {
             contentDescription = "Back"
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(TextView(this).apply {
-            text = "Workly AI"
-            textSize = 19f
-            setTextColor(primaryText)
+        header.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(TextView(this@OfflineAiChatActivity).apply {
+                text = "Workly AI"
+                textSize = 18f
+                typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+                setTextColor(primaryText)
+            })
+            addView(TextView(this@OfflineAiChatActivity).apply {
+                text = "●  On-device AI"
+                textSize = 11f
+                setTextColor(if (dark) 0xFF70D6A4.toInt() else 0xFF16845A.toInt())
+            })
         }, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(Button(this).apply {
             text = "⋯"
@@ -172,13 +184,14 @@ class OfflineAiChatActivity : Activity() {
             setPadding(dp(20), dp(18), dp(20), dp(18))
         }
         welcomePanel.addView(TextView(this).apply {
-            text = "✨"
-            textSize = 34f
+            text = "✦"
+            textSize = 32f
             gravity = Gravity.CENTER
+            setTextColor(accent)
         }, LinearLayout.LayoutParams(-1, -2))
         welcomePanel.addView(TextView(this).apply {
-            text = "What can I help you with?"
-            textSize = 22f
+            text = "Hello!  👋"
+            textSize = 25f
             typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
             setTextColor(primaryText)
             gravity = Gravity.CENTER
@@ -191,22 +204,39 @@ class OfflineAiChatActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dp(18))
         }, LinearLayout.LayoutParams(-1, -2))
-        val quickPrompts = listOf("Explain something simply" to "Explain a difficult topic in simple words", "Write something" to "Help me write a message or document", "Brainstorm ideas" to "Give me creative ideas for a project", "Learn a new skill" to "Help me learn a new skill step by step")
-        quickPrompts.forEach { (label, prompt) ->
-            val tile = Button(this).apply {
-                text = "✦  $label"
-                textSize = 14f
-                isAllCaps = false
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setTextColor(primaryText)
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(surface)
-                    setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
-                    cornerRadius = dp(16).toFloat()
+        val quickPrompts = listOf(
+            "Find Jobs" to "Help me explore suitable job opportunities in India. Ask about my skills and experience first.",
+            "Create Resume" to "Help me create a professional resume. Ask me for my education, skills and experience.",
+            "Career Tips" to "Give me practical career guidance based on my current skills and goals.",
+            "Interview Prep" to "Help me prepare for a job interview with realistic practice questions."
+        )
+        quickPrompts.chunked(2).forEach { promptRow ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            promptRow.forEachIndexed { index, (label, prompt) ->
+                val tile = Button(this).apply {
+                    text = "✦  $label  ›"
+                    textSize = 13f
+                    isAllCaps = false
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                    setTextColor(primaryText)
+                    minHeight = dp(58)
+                    setPadding(dp(12), dp(7), dp(8), dp(7))
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(surface)
+                        setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
+                        cornerRadius = dp(17).toFloat()
+                    }
+                    setOnClickListener {
+                        promptInput.setText(prompt)
+                        promptInput.setSelection(promptInput.text.length)
+                        promptInput.requestFocus()
+                    }
                 }
-                setOnClickListener { promptInput.setText(prompt); promptInput.setSelection(promptInput.text.length); promptInput.requestFocus() }
+                row.addView(tile, LinearLayout.LayoutParams(0, dp(62), 1f).apply {
+                    if (index == 0) marginEnd = dp(5) else marginStart = dp(5)
+                })
             }
-            welcomePanel.addView(tile, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(6); bottomMargin = dp(6) })
+            welcomePanel.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5); bottomMargin = dp(5) })
         }
 
         chatScroll = ScrollView(this).apply {
@@ -292,11 +322,12 @@ class OfflineAiChatActivity : Activity() {
         }
         composerTopRow.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(3) })
         composer.addView(composerTopRow, LinearLayout.LayoutParams(-1, -2))
-        val composerHint = TextView(this).apply {
-            text = if (thinkMode) "Think mode enabled" else "ChatWork · On-device AI"
+        composerHint = TextView(this).apply {
+            text = if (thinkMode) "✦ Think mode enabled" else "●  On-device AI  ·  Fast & private"
             textSize = 11f
             setTextColor(secondaryText)
-            setPadding(dp(10), dp(2), dp(10), 0)
+            setPadding(dp(10), dp(3), dp(10), dp(2))
+            maxLines = 1
         }
         composer.addView(composerHint, LinearLayout.LayoutParams(-1, -2))
         root.addView(composer, LinearLayout.LayoutParams(-1, -2).apply {
@@ -310,9 +341,14 @@ class OfflineAiChatActivity : Activity() {
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
-            menu.add(if (thinkMode) "✓ Think mode · On" else "Think mode · Off").setOnMenuItemClickListener {
+            menu.add(if (thinkMode) "✓ Think harder · On" else "Think harder · Off").setOnMenuItemClickListener {
                 thinkMode = !thinkMode
+                composerHint.text = if (thinkMode) "✦ Think harder enabled  ·  On-device AI" else "●  On-device AI  ·  Fast & private"
                 status.text = if (thinkMode) "Think mode enabled · more deliberate responses" else "Think mode disabled"
+                true
+            }
+            menu.add("Attach a document").setOnMenuItemClickListener {
+                openDocumentPicker()
                 true
             }
             menu.add("Create / Edit Image").setOnMenuItemClickListener {
@@ -384,6 +420,12 @@ class OfflineAiChatActivity : Activity() {
     @Deprecated("Legacy result callback for document export compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ATTACH_DOCUMENT) {
+            if (resultCode != RESULT_OK) return
+            val uri = data?.data ?: return
+            importChatDocument(uri)
+            return
+        }
         if (requestCode != REQUEST_EXPORT_CONVERSATION || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         val exportText = "ChatWork offline conversation\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\n\n" +
@@ -396,6 +438,53 @@ class OfflineAiChatActivity : Activity() {
             status.text = "Conversation exported to the location you selected."
         } catch (failure: Exception) {
             status.text = "Conversation export failed: ${failure.message ?: failure.javaClass.simpleName}"
+        }
+    }
+
+    private fun openDocumentPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                "application/pdf", "text/plain", "text/csv", "application/json", "text/markdown",
+                "application/xml", "text/xml", "text/html", "application/rtf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/msword"
+            ))
+        }
+        runCatching { startActivityForResult(intent, REQUEST_ATTACH_DOCUMENT) }
+            .onFailure { status.text = "Could not open the document picker: ${it.message ?: "unknown error"}" }
+    }
+
+    private fun importChatDocument(uri: android.net.Uri) {
+        status.text = "Reading your selected document on this phone…"
+        worker.execute {
+            try {
+                val name = contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                } ?: "Selected document"
+                val mime = contentResolver.getType(uri).orEmpty()
+                val extracted = contentResolver.openInputStream(uri)?.use { input ->
+                    if (mime == "application/pdf" || name.endsWith(".pdf", true)) {
+                        com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
+                        val document = org.apache.pdfbox.pdmodel.PDDocument.load(input)
+                        try { org.apache.pdfbox.text.PDFTextStripper().getText(document) } finally { document.close() }
+                    } else {
+                        input.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                    }
+                }.orEmpty().trim()
+                check(extracted.isNotBlank()) { "No readable text was found. This local chat currently supports text-based documents and PDFs." }
+                val context = "Attached document: $name\n\n$extracted".take(100000)
+                getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE).edit()
+                    .putString("pending_file_context", context).apply()
+                runOnUiThread {
+                    attachedDocumentName = name
+                    composerHint.text = "📎 Attached: $name  ·  Ready to ask"
+                    status.text = "Document attached. Ask a question about it in your next message."
+                }
+            } catch (error: Exception) {
+                runOnUiThread { status.text = "Could not read this document: ${error.message ?: error.javaClass.simpleName}" }
+            }
         }
     }
 
@@ -686,6 +775,8 @@ class OfflineAiChatActivity : Activity() {
                     val filePrefs = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
                     if (filePrefs.getString("pending_file_context", "").orEmpty().trim() == chosenFile) {
                         filePrefs.edit().remove("pending_file_context").apply()
+                        attachedDocumentName = null
+                        composerHint.text = if (thinkMode) "✦ Think harder enabled  ·  On-device AI" else "●  On-device AI  ·  Fast & private"
                     }
                 }
                 replaceThinking(answer)
@@ -923,5 +1014,6 @@ class OfflineAiChatActivity : Activity() {
         private const val REQUEST_AUDIO = 5101
         private const val REQUEST_WAKE_ASSISTANT = 5103
         private const val REQUEST_EXPORT_CONVERSATION = 5105
+        private const val REQUEST_ATTACH_DOCUMENT = 5106
     }
 }
