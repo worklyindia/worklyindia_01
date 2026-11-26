@@ -3,14 +3,14 @@ package com.worklyindia.aivoice
 import android.app.Activity
 import android.app.AlarmManager
 import android.app.AlertDialog
-import android.app.DatePicker
 import android.app.PendingIntent
-import android.app.TimePicker
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Button
+import android.widget.DatePicker
+import android.widget.TimePicker
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
