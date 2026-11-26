@@ -176,22 +176,22 @@ class OfflineAiChatActivity : Activity() {
         }
         titleBlock.addView(TextView(this).apply {
             text = "ChatWork"
-            textSize = 20f
+            textSize = 19f
             setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
         })
         titleBlock.addView(TextView(this).apply {
             text = "AI Assistant"
-            textSize = 12f
+            textSize = 11f
             setTextColor(secondaryText)
         })
-        header.addView(titleBlock, LinearLayout.LayoutParams(0, dp(56), 1f).apply {
+        header.addView(titleBlock, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
             marginStart = dp(4)
         })
         header.addView(headerIcon(R.drawable.ic_chatwork_more, "More options") {
             showChatOptions(header)
         }, LinearLayout.LayoutParams(dp(48), dp(56)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(48)))
         status.setPadding(dp(16), dp(4), dp(16), dp(4))
         root.addView(status, LinearLayout.LayoutParams(-1, -2))
 
@@ -947,8 +947,7 @@ class OfflineAiChatActivity : Activity() {
         } else ""
         val systemInstruction = "You are ChatWork, a helpful, accurate, conversational AI assistant. Answer the user's latest message directly. Understand the user's language and reply in the same language (Hindi/Hinglish, Gujarati, or English as appropriate). Never invent personal details. Never output training artifacts, role labels such as User:, Assistant:, Assist:, or repeat the conversation transcript. Use prior messages only as context. If the request is unclear, ask one short clarification. Give a useful answer with simple wording and appropriate detail.\\n\\n"
         val contextPrompt = systemInstruction + thinkingInstruction + memoryContext + fileContext +
-            (if (conversationHistory.isEmpty()) "Current user message:\\n$prompt" else
-                "Conversation so far (context only):\\n$conversationHistory\\nLatest user message (answer this):\\n$prompt")
+            "Conversation so far (latest user message is the final User turn; answer it only):\\n$conversationHistory"
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
         val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
@@ -1043,7 +1042,8 @@ class OfflineAiChatActivity : Activity() {
                 while (offlineRecording && samples.size < maxSamples) {
                     val count = audio.read(buffer, 0, buffer.size)
                     if (count > 0) for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
-                    else if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
+                    else if (count < 0 && offlineRecording) throw IllegalStateException("Microphone read failed ($count).")
+                    else if (count < 0) break
                 }
                 val wasCancelled = cancelOfflineRecording
                 offlineRecording = false
