@@ -26,7 +26,8 @@ class AssistantToolsActivity : Activity() {
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
         addButton("Choose a text file for AI chat") { chooseFile() }
         addButton("Schedule phone reminder") { scheduleReminder() }
-        addButton("Mobile Control") { startActivity(Intent(this, MobileControlActivity::class.java)) }\n        addButton("Open an installed app") { showApps() }
+        addButton("Mobile Control") { startActivity(Intent(this, MobileControlActivity::class.java)) }
+        addButton("Open an installed app") { showApps() }
         addButton("Back") { finish() }
         setContentView(root)
     }
@@ -35,11 +36,13 @@ class AssistantToolsActivity : Activity() {
         val edit=EditText(this).apply { hint="Memory (avoid sensitive information)" }
         AlertDialog.Builder(this).setTitle("Save local memory").setView(edit).setNegativeButton("Cancel",null)
             .setPositiveButton("Save"){_,_-> val value=edit.text.toString().trim()
-                if(value.isNotBlank()){ val old=prefs.getString("items","").orEmpty(); prefs.edit().putString("items",if(old.isBlank())value else "$old\n$value").apply(); reviewMemory() }
+                if(value.isNotBlank()){ val old=prefs.getString("items","").orEmpty(); prefs.edit().putString("items",if(old.isBlank())value else "$old
+$value").apply(); reviewMemory() }
             }.show()
     }
     private fun reviewMemory() {
-        val items=prefs.getString("items","").orEmpty().split("\n").filter{it.isNotBlank()}
+        val items=prefs.getString("items","").orEmpty().split("
+").filter{it.isNotBlank()}
         val dialog=AlertDialog.Builder(this).setTitle("Saved memories")
         if(items.isEmpty()) { dialog.setMessage("No saved memories."); dialog.setPositiveButton("OK",null).show(); return }
         dialog.setItems(items.toTypedArray()){_,index-> memoryActions(items,index) }
@@ -50,8 +53,10 @@ class AssistantToolsActivity : Activity() {
         AlertDialog.Builder(this).setMessage(items[index]).setTitle("Memory")
             .setNeutralButton("Edit"){_,_-> val input=EditText(this).apply{setText(items[index])}
                 AlertDialog.Builder(this).setTitle("Edit memory").setView(input).setNegativeButton("Cancel",null)
-                    .setPositiveButton("Save"){_,_-> val new=input.text.toString().trim(); val revised=items.toMutableList(); if(new.isBlank()) revised.removeAt(index) else revised[index]=new; prefs.edit().putString("items",revised.joinToString("\n")).apply(); reviewMemory() }.show()
-            }.setNegativeButton("Delete"){_,_->prefs.edit().putString("items",items.filterIndexed{i,_->i!=index}.joinToString("\n")).apply();reviewMemory()}
+                    .setPositiveButton("Save"){_,_-> val new=input.text.toString().trim(); val revised=items.toMutableList(); if(new.isBlank()) revised.removeAt(index) else revised[index]=new; prefs.edit().putString("items",revised.joinToString("
+")).apply(); reviewMemory() }.show()
+            }.setNegativeButton("Delete"){_,_->prefs.edit().putString("items",items.filterIndexed{i,_->i!=index}.joinToString("
+")).apply();reviewMemory()}
             .setPositiveButton("Close",null).show()
     }
     private fun chooseFile() {
@@ -66,7 +71,8 @@ class AssistantToolsActivity : Activity() {
             contentResolver.openInputStream(uri)?.use { stream ->
                 val text=BufferedReader(InputStreamReader(stream)).use{it.readText()}
                 if(text.length>120000) throw IllegalArgumentException("File is too large for chat context (limit 120 KB of text).")
-                toolsPrefs.edit().putString("pending_file_context","Chosen document content (user-selected):\n$text").apply()
+                toolsPrefs.edit().putString("pending_file_context","Chosen document content (user-selected):
+$text").apply()
                 AlertDialog.Builder(this).setMessage("Text read (${text.length} characters). It will be included in your next offline AI chat prompt.").setPositiveButton("OK",null).show()
             } ?: throw IllegalStateException("Unable to read selected document.")
         } catch(e:Exception) { AlertDialog.Builder(this).setMessage("Could not read text: ${e.message}").setPositiveButton("OK",null).show() }
