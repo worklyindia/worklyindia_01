@@ -44,7 +44,7 @@
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
         <activity android:name=".OfflineAiChatActivity" android:exported="false" />
-        <activity android:name=".AssistantToolsActivity" android:exported="false" />
+        <activity android:name=".AssistantToolsActivity" android:exported="false" />\n        <activity android:name=".MobileControlActivity" android:exported="false" />\n        <service android:name=".ChatWorkMobileControlService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="false">\n            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>\n            <meta-data android:name="android.accessibilityservice" android:resource="@xml/chatwork_mobile_control_accessibility" />\n        </service>
         <activity android:name=".TextToVoiceActivity" android:exported="false" />
         <activity android:name=".VoiceToTextActivity" android:exported="false" />
         <activity android:name=".DataCollectionActivity" android:exported="false" />
