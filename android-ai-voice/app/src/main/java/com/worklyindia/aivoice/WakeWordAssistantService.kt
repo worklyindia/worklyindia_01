@@ -208,7 +208,12 @@ class WakeWordAssistantService : Service() {
                 }
             }
         } catch (error: Exception) {
-            if (running.get()) updateNotification("Assistant stopped · ${error.message ?: "Model or microphone error"}")
+            val failureMessage = error.message ?: error.javaClass.simpleName
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_LAST_ERROR, failureMessage)
+                .putBoolean(KEY_ACTIVE, false)
+                .apply()
+            if (running.get()) updateNotification("Assistant stopped · $failureMessage")
             running.set(false)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             isRunning = false
@@ -341,6 +346,7 @@ class WakeWordAssistantService : Service() {
         const val PREFS = "chatwork_wake_word"
         const val KEY_ACTIVE = "active"
         const val KEY_LANGUAGE = "language"
+        const val KEY_LAST_ERROR = "last_start_error"
         @Volatile var isRunning: Boolean = false
             private set
         private const val CHANNEL_ID = "chatwork_wake_assistant"
