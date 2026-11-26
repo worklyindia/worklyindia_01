@@ -208,7 +208,7 @@ class OfflineAiChatActivity : Activity() {
         }
         composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
         micButton = Button(this).apply {
-            text = "♩"
+            text = "🎙"
             textSize = 24f
             gravity = Gravity.CENTER
             setTextColor(primaryText)
