@@ -15,10 +15,28 @@ class ChatWorkReminderReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra("title") ?: "ChatWork reminder"
         val id = intent.getIntExtra("id", 0)
         val prefs = context.getSharedPreferences("chatwork_assistant_tools", Context.MODE_PRIVATE)
-        val ids = prefs.getStringSet("reminder_ids", emptySet()).orEmpty().toMutableSet()
-        ids.remove(id.toString())
-        prefs.edit().remove("reminder_title_$id").remove("reminder_at_$id")
-            .putStringSet("reminder_ids", ids).apply()
+        val repeat = prefs.getString("reminder_repeat_$id", "none") ?: "none"
+        if (repeat == "daily" || repeat == "weekly") {
+            val scheduledAt = prefs.getLong("reminder_at_$id", System.currentTimeMillis())
+            val next = java.util.Calendar.getInstance().apply {
+                timeInMillis = scheduledAt
+                val field = if (repeat == "daily") java.util.Calendar.DAY_OF_YEAR else java.util.Calendar.WEEK_OF_YEAR
+                do { add(field, 1) } while (timeInMillis <= System.currentTimeMillis())
+            }.timeInMillis
+            prefs.edit().putLong("reminder_at_$id", next).apply()
+            val nextIntent = Intent(context, ChatWorkReminderReceiver::class.java)
+                .putExtra("id", id).putExtra("title", title)
+            val nextPending = PendingIntent.getBroadcast(
+                context, id, nextIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
+                .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, nextPending)
+        } else {
+            val ids = prefs.getStringSet("reminder_ids", emptySet()).orEmpty().toMutableSet()
+            ids.remove(id.toString())
+            prefs.edit().remove("reminder_title_$id").remove("reminder_at_$id")
+                .remove("reminder_repeat_$id").putStringSet("reminder_ids", ids).apply()
+        }
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
