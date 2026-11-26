@@ -63,7 +63,7 @@ class WakeWordAssistantService : Service() {
             running.set(false)
             isRunning = false
             stopSelf()
-            throw error
+            return START_NOT_STICKY
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         acquireCpuWakeLock()
