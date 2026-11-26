@@ -65,7 +65,7 @@ class AssistantToolsActivity : Activity() {
                 val text=BufferedReader(InputStreamReader(stream)).use{it.readText()}
                 if(text.length>120000) throw IllegalArgumentException("File is too large for chat context (limit 120 KB of text).")
                 toolsPrefs.edit().putString("pending_file_context","Chosen document content (user-selected):\n$text").apply()
-                AlertDialog.Builder(this).setMessage("Text read (0 characters). It will be included in your next offline AI chat prompt.").setPositiveButton("OK",null).show()
+                AlertDialog.Builder(this).setMessage("Text read (${text.length} characters). It will be included in your next offline AI chat prompt.").setPositiveButton("OK",null).show()
             } ?: throw IllegalStateException("Unable to read selected document.")
         } catch(e:Exception) { AlertDialog.Builder(this).setMessage("Could not read text: ${e.message}").setPositiveButton("OK",null).show() }
     }
