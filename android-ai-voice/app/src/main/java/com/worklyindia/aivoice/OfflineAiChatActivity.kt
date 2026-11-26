@@ -353,8 +353,8 @@ class OfflineAiChatActivity : Activity() {
         if (!OfflineSpeechEngineFactory.isReady(this, SpeechModelCatalog.indicConformer(language))) {
             missing.add("IndicConformer ${language.uppercase(Locale.ROOT)} · Voice to Text")
         }
-        if (speechManager.snapshot(SpeechModelCatalog.indicTinyTts(language)).state != SpeechPackDownloadManager.State.COMPLETE) {
-            missing.add("Indic Tiny TTS ${language.uppercase(Locale.ROOT)} · Text to Voice")
+        if (speechManager.snapshot(SpeechModelCatalog.itantraVits(language)).state != SpeechPackDownloadManager.State.COMPLETE) {
+            missing.add("iTantra VITS ${language.uppercase(Locale.ROOT)} · Text to Voice")
         }
         val qwenManager = QwenModelManager(this)
         if (qwenManager.models.none { qwenManager.snapshot(it).state == QwenModelManager.State.READY }) {
@@ -403,19 +403,28 @@ class OfflineAiChatActivity : Activity() {
         }, 500L)
     }
     private fun startWakeWordService() {
-        try {
-            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
-                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
-            val intent = Intent(this, WakeWordAssistantService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
-            qwenModelPicker.isEnabled = false
-            status.text = "Starting Hey ChatWork foreground microphone service…"
-            waitForWakeServiceStop()
-        } catch (error: Exception) {
-            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
-                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
-            qwenModelPicker.isEnabled = true
-            status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+        qwenModelPicker.isEnabled = false
+        sendButton.isEnabled = false
+        status.text = "Preparing phone memory for Hey ChatWork…"
+        // The chat Activity and foreground listener must not load two Qwen instances
+        // at once. Release the Activity model before starting the microphone service.
+        worker.execute {
+            runCatching { engine.unload() }
+            runOnUiThread {
+                try {
+                    getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
+                    val intent = Intent(this, WakeWordAssistantService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+                    status.text = "Starting Hey ChatWork foreground microphone service…"
+                    waitForWakeServiceStop()
+                } catch (error: Exception) {
+                    getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+                    qwenModelPicker.isEnabled = true
+                    status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+                }
+            }
         }
     }
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
