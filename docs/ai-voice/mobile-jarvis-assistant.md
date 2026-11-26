@@ -250,3 +250,9 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Fixed the selected-document context prefix so the imported text begins on a real new line.
 - Fixed memory and selected-file context separators in the offline chat prompt. They now use actual newline characters rather than literal backslash-n text.
 - These are source-level fixes. They still require a successful Android build and an on-device prompt check before being considered validated.
+
+## Imported-context retry safety — 2026-11-26
+
+- Offline chat now retains a user-selected document context when model inference fails, so the user can reload the model and retry without selecting the file again.
+- On successful inference, the app clears the pending context only if it still matches the document used for that request; a newer document selected in the meantime is preserved.
+- Requires Android CI and on-device retry testing before release validation.
