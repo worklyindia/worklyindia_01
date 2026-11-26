@@ -57,6 +57,7 @@ class OfflineAiChatActivity : Activity() {
     private var activeAudioRecord: AudioRecord? = null
     @Volatile private var offlineRecording = false
     @Volatile private var cancelOfflineRecording = false
+    @Volatile private var stopOfflineRecordingRequested = false
     private lateinit var recordingWaveform: View
     private var recordingUiActive = false
     private val languages = listOf(
@@ -626,11 +627,6 @@ class OfflineAiChatActivity : Activity() {
                 thinkHarderChip.visibility = if (thinkHarderEnabled) View.VISIBLE else View.GONE
                 true
             }
-            menu.add("Choose AI model").setOnMenuItemClickListener {
-                qwenModelPicker.visibility = View.VISIBLE
-                qwenModelPicker.post { qwenModelPicker.performClick() }
-                true
-            }
             menu.add("Download / test models").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SpeechDownloadsActivity::class.java)); true
             }
@@ -861,7 +857,8 @@ class OfflineAiChatActivity : Activity() {
                 val adaptiveChoice = recommendation.candidate?.let { candidate ->
                     modelManager.models.firstOrNull { it.id == candidate.id }
                 }
-                val chosen = savedReady ?: adaptiveChoice ?: recommended
+                val chosen = savedReady ?: adaptiveChoice
+                    ?: throw IllegalStateException("No downloaded AI model is ready for this phone. Open Downloads, install a compatible Qwen model, then return to ChatWork.")
                 getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit().putString("selected_model_id", chosen.id).apply()
                 selectedQwenModel = chosen
                 runOnUiThread {
@@ -930,6 +927,9 @@ class OfflineAiChatActivity : Activity() {
         greetingPane?.let { chatMessages.removeView(it) }
         greetingPane = null
         addMessage(prompt, true)
+        conversationHistory.append("User: ").append(prompt).append("\n")
+        if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
+        saveCurrentConversation()
         thinkingBubble = addMessage("Thinking…", false)
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
@@ -945,8 +945,10 @@ class OfflineAiChatActivity : Activity() {
         val thinkingInstruction = if (thinkHarderEnabled) {
             "Think carefully through the problem before answering. Check important details and provide a clear, well-structured answer with a concise summary of the reasoning. Do not expose private internal reasoning.\n\n"
         } else ""
-        val contextPrompt = thinkingInstruction + memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
-            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
+        val systemInstruction = "You are ChatWork, a helpful, accurate, conversational AI assistant. Answer the user's latest message directly. Understand the user's language and reply in the same language (Hindi/Hinglish, Gujarati, or English as appropriate). Never invent personal details. Never output training artifacts, role labels such as User:, Assistant:, Assist:, or repeat the conversation transcript. Use prior messages only as context. If the request is unclear, ask one short clarification. Give a useful answer with simple wording and appropriate detail.\\n\\n"
+        val contextPrompt = systemInstruction + thinkingInstruction + memoryContext + fileContext +
+            (if (conversationHistory.isEmpty()) "Current user message:\\n$prompt" else
+                "Conversation so far (context only):\\n$conversationHistory\\nLatest user message (answer this):\\n$prompt")
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
         val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
@@ -979,7 +981,7 @@ class OfflineAiChatActivity : Activity() {
                     )
                 }
             }
-            conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
+            conversationHistory.append("Assistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
             saveCurrentConversation()
             runOnUiThread {
@@ -1019,6 +1021,7 @@ class OfflineAiChatActivity : Activity() {
         val minBuffer = AudioRecord.getMinBufferSize(OfflineSpeechRecognizer.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (minBuffer <= 0) { status.text = "This phone does not support 16 kHz microphone recording."; return }
         cancelOfflineRecording = false
+        stopOfflineRecordingRequested = false
         offlineRecording = true
         runOnUiThread { setRecordingUi(true) }
         status.text = "Recording offline with downloaded ${pack.title} · ${pack.languageCode}. Tap Stop when finished."
@@ -1033,6 +1036,7 @@ class OfflineAiChatActivity : Activity() {
                 check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize microphone." }
                 activeAudioRecord = audio
                 audio.startRecording()
+                if (stopOfflineRecordingRequested) offlineRecording = false
                 val buffer = ShortArray(4096)
                 val samples = ArrayList<Float>(OfflineSpeechRecognizer.SAMPLE_RATE * 15)
                 val maxSamples = OfflineSpeechRecognizer.SAMPLE_RATE * 60
@@ -1073,11 +1077,11 @@ class OfflineAiChatActivity : Activity() {
 
     private fun stopOfflineVoiceInput() {
         cancelOfflineRecording = false
+        stopOfflineRecordingRequested = true
         offlineRecording = false
         runCatching {
             activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
         }
-        status.text = "Stopping microphone and transcribing…"
         status.text = "Stopping microphone and transcribing…"
     }
 
@@ -1182,33 +1186,24 @@ class OfflineAiChatActivity : Activity() {
             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             fun actionIcon(drawable: Int, label: String, onTap: () -> Unit) = ImageView(this).apply {
                 setImageResource(drawable); setColorFilter(secondaryText); contentDescription = label; scaleType = ImageView.ScaleType.CENTER
-                setPadding(dp(6), dp(5), dp(6), dp(5)); setOnClickListener { onTap() }
+                setPadding(dp(3), dp(4), dp(3), dp(4)); setOnClickListener { onTap() }
             }
             actions.addView(actionIcon(R.drawable.ic_chat_copy, "Copy message") {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text))
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            }, LinearLayout.LayoutParams(dp(36), dp(30)))
             actions.addView(actionIcon(R.drawable.ic_chat_thumb_up, "Like response") {
                 val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
                 prefs.edit().putString("last_feedback", "positive").putLong("last_feedback_at", System.currentTimeMillis()).apply()
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            }, LinearLayout.LayoutParams(dp(36), dp(30)))
             actions.addView(actionIcon(R.drawable.ic_chat_thumb_down, "Dislike response") {
                 val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
                 prefs.edit().putString("last_feedback", "negative").putLong("last_feedback_at", System.currentTimeMillis()).apply()
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(R.drawable.ic_chatwork_mic, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(android.R.drawable.ic_menu_share, "Share response") {
-                val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }
-                startActivity(Intent.createChooser(share, "Share ChatWork response"))
-            }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(R.drawable.ic_chat_translate, "Translate response") {
-                startActivity(Intent(this@OfflineAiChatActivity, ChatWorkTranslatorActivity::class.java)
-                    .putExtra("chatwork.translate.text", bubble.text.toString()))
-            }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(R.drawable.ic_chatwork_more, "More actions") { showChatOptions(actions) }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            }, LinearLayout.LayoutParams(dp(36), dp(30)))
+            actions.addView(actionIcon(R.drawable.ic_chatwork_mic, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(36), dp(30)))
             meta.addView(actions, LinearLayout.LayoutParams(-1, -2)); messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
         } else {
             messageColumn.addView(TextView(this).apply {
