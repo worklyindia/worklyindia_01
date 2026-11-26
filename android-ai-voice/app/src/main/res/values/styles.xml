@@ -10,4 +10,5 @@
         <item name="android:windowSplashScreenBackground">#F4F7FF</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_workly_voice</item>
     </style>
-    <string name="mobile_control_service_description">ChatWork Mobile Control performs only actions you initiate in its Mobile Control screen. It does not collect screen content or accessibility events.</string>\n</resources>
+    <string name="mobile_control_service_description">ChatWork Mobile Control performs only actions you initiate in its Mobile Control screen. It does not collect screen content or accessibility events.</string>
+</resources>
