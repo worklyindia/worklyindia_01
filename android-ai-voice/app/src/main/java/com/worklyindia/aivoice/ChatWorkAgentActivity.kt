@@ -86,8 +86,8 @@ class ChatWorkAgentActivity : Activity() {
         )
         content.removeAllViews()
         content.addView(TextView(this).apply {
-            text = "Proposed plan for:\\n" + goal + "\\n\\n" +
-                pendingSteps.mapIndexed { index, step -> (index + 1).toString() + ". " + step }.joinToString("\\n")
+            text = "Proposed plan for:\n" + goal + "\n\n" +
+                pendingSteps.mapIndexed { index, step -> (index + 1).toString() + ". " + step }.joinToString("\n")
             textSize = 16f
             setPadding(0, 16, 0, 16)
         })
@@ -162,7 +162,7 @@ class ChatWorkAgentActivity : Activity() {
 
     private fun confirmAndRun(action: SafeAction) {
         AlertDialog.Builder(this).setTitle("Review action")
-            .setMessage(action.label + "\\n\\n" + action.details + "\\n\\nRun this action now?")
+            .setMessage(action.label + "\n\n" + action.details + "\n\nRun this action now?")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Run") { _, _ ->
                 try {
@@ -180,12 +180,12 @@ class ChatWorkAgentActivity : Activity() {
             UUID.randomUUID().toString(),
             System.currentTimeMillis().toString(),
             type,
-            title.replace("\\n", " ").replace("\\t", " "),
-            details.replace("\\n", " ").replace("\\t", " ")
-        ).joinToString("\\t")
+            title.replace("\n", " ").replace("\t", " "),
+            details.replace("\n", " ").replace("\t", " ")
+        ).joinToString("\t")
         val old = prefs.getString("audit", "").orEmpty()
         val updated = (listOf(record) + old.lines().filter { it.isNotBlank() }).take(100)
-        prefs.edit().putString("audit", updated.joinToString("\\n")).apply()
+        prefs.edit().putString("audit", updated.joinToString("\n")).apply()
     }
 
     private fun showHistory() {
@@ -197,7 +197,7 @@ class ChatWorkAgentActivity : Activity() {
             return
         }
         val labels = records.map { line ->
-            val parts = line.split('\\t')
+            val parts = line.split('\t')
             val time = parts.getOrNull(1)?.toLongOrNull()?.let {
                 DateFormat.getDateTimeInstance().format(Date(it))
             } ?: "Unknown time"
@@ -205,10 +205,10 @@ class ChatWorkAgentActivity : Activity() {
         }
         AlertDialog.Builder(this).setTitle("Local agent audit history")
             .setItems(labels.toTypedArray()) { _, index ->
-                val parts = records[index].split('\\t')
+                val parts = records[index].split('\t')
                 AlertDialog.Builder(this).setTitle(parts.getOrNull(2).orEmpty())
                     .setMessage("Action: " + parts.getOrNull(3).orEmpty() +
-                        "\\n\\nDetails: " + parts.getOrNull(4).orEmpty())
+                        "\n\nDetails: " + parts.getOrNull(4).orEmpty())
                     .setPositiveButton("OK", null).show()
             }
             .setNeutralButton("Clear history") { _, _ ->
