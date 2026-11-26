@@ -178,7 +178,7 @@ class AssistantToolsActivity : Activity() {
                 require(extracted.isNotBlank()) { "No selectable text was found. Scanned/image-only PDFs need OCR, which is not included yet." }
                 require(extracted.length <= 120000) { "Extracted text exceeds the 120 KB chat-context limit." }
                 toolsPrefs.edit()
-                    .putString("pending_file_context", "Chosen document content (user-selected):\\n" + extracted)
+                    .putString("pending_file_context", "Chosen document content (user-selected):\n" + extracted)
                     .apply()
                 runOnUiThread {
                     AlertDialog.Builder(this).setMessage(
