@@ -36,7 +36,10 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) {
+        // Android may recreate a sticky foreground service after reclaiming the app
+        // process. Resume only when the user had explicitly left the assistant enabled.
+        if (intent == null && !getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_ACTIVE, false)) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -67,7 +70,9 @@ class WakeWordAssistantService : Service() {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         acquireCpuWakeLock()
         worker.execute { runAssistantLoop() }
-        return START_NOT_STICKY
+        // Keep the user-enabled foreground assistant eligible for system restart.
+        // A null restart intent is handled above using the persisted opt-in flag.
+        return START_STICKY
     }
 
     private fun runAssistantLoop() {
@@ -278,8 +283,13 @@ class WakeWordAssistantService : Service() {
         return samples.toFloatArray()
     }
 
-    private fun stopAssistant() {
+    private fun stopAssistant(clearUserOptIn: Boolean = true) {
         running.set(false)
+        if (clearUserOptIn) {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_ACTIVE, false)
+                .apply()
+        }
         runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
         releaseCpuWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -338,7 +348,9 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onDestroy() {
-        stopAssistant()
+        // Do not erase the user's opt-in when Android tears down the service
+        // during process reclamation; START_STICKY can then restore listening.
+        stopAssistant(clearUserOptIn = false)
         // Let the worker finish its native unload before publishing isRunning=false in finally.
         worker.shutdown()
         super.onDestroy()
