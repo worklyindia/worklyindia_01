@@ -34,6 +34,8 @@ import android.text.style.BackgroundColorSpan
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.text.TextWatcher
+import android.text.StaticLayout
+import android.text.Layout
 import android.text.Editable
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -59,6 +61,13 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var promptInput: EditText
     private lateinit var sendButton: Button
     private lateinit var micButton: Button
+    private lateinit var composerShell: LinearLayout
+    private lateinit var composer: LinearLayout
+    private lateinit var composerRow: LinearLayout
+    private lateinit var moreButton: ImageView
+    private lateinit var thinkHarderChip: TextView
+    private var composerExpanded = false
+    private var thinkHarderEnabled = false
     private lateinit var status: TextView
     private lateinit var chatScroll: ScrollView
     private val conversationHistory = StringBuilder()
@@ -193,57 +202,153 @@ class OfflineAiChatActivity : Activity() {
 
         // Website chat has no separate welcome/date card.
 
-        val composerShell = LinearLayout(this).apply {
+        composerShell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface)
+                setStroke(dp(1), if (dark) 0xFF3A4658.toInt() else 0xFFD1D5DB.toInt())
+                cornerRadius = dp(28).toFloat()
+            }
+        }
+        thinkHarderChip = TextView(this).apply {
+            text = "✦  Think harder     ×"
+            textSize = 12f
+            setTextColor(accent)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) 0x332D8CFF else 0x1A1769C2)
+                cornerRadius = dp(18).toFloat()
+            }
+            visibility = View.GONE
+            contentDescription = "Think harder enabled. Tap to turn off."
+            setOnClickListener {
+                thinkHarderEnabled = false
+                visibility = View.GONE
+            }
+        }
+        composer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        composerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(3), 0, dp(3))
-            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
         }
-        val composer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val moreButton = ImageView(this).apply {
-            setImageResource(R.drawable.ic_chatwork_add); setColorFilter(secondaryText)
-            contentDescription = "Attach file or more options"; setPadding(dp(8), dp(8), dp(8), dp(8))
+        moreButton = ImageView(this).apply {
+            setImageResource(R.drawable.ic_chatwork_add)
+            setColorFilter(primaryText)
+            contentDescription = "More options and attachments"
+            setPadding(dp(7), dp(7), dp(7), dp(7))
             setOnClickListener { showChatOptions(this) }
         }
-        composer.addView(moreButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         promptInput = EditText(this).apply {
-            hint = "Ask anything…"; textSize = 16f
+            hint = "Message..."
+            textSize = 15f
             typeface = android.graphics.Typeface.DEFAULT
-            minLines = 1; maxLines = 4; setTextColor(primaryText); setHintTextColor(secondaryText)
-            setPadding(dp(4), dp(8), dp(4), dp(8)); background = null
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
-            setOnEditorActionListener { _, actionId, _ -> if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendPrompt(); true } else false }
+            minLines = 1
+            maxLines = 6
+            setTextColor(primaryText)
+            setHintTextColor(secondaryText)
+            setPadding(dp(2), dp(7), dp(2), dp(7))
+            background = null
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_NONE or
+                android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+            isVerticalScrollBarEnabled = true
         }
-        composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
-        promptInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val hasText = !s.isNullOrBlank()
-                sendButton.isEnabled = engine.isLoaded && hasText
-                sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
-                sendButton.contentDescription = if (hasText) "Send message" else "Start voice input"
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
         micButton = Button(this).apply {
-            text = ""; contentDescription = "Voice input"; background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            text = ""
+            contentDescription = "Voice input"
+            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(primaryText)
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
         }
-        composer.addView(micButton, LinearLayout.LayoutParams(dp(48), dp(48)))
-        composerShell.addView(composer, LinearLayout.LayoutParams(0, -2, 1f))
         sendButton = Button(this).apply {
-            text = ""; textSize = 23f; gravity = Gravity.CENTER; setTextColor(0xFFFFFFFF.toInt())
-            background = android.graphics.drawable.GradientDrawable().apply { setColor(accent); shape = android.graphics.drawable.GradientDrawable.OVAL }
+            text = ""
+            gravity = Gravity.CENTER
+            setTextColor(0xFFFFFFFF.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF0A84FF.toInt())
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+            }
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_send, 0, 0, 0)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
-            isEnabled = false; alpha = 0.55f; contentDescription = "Send message"
+            isEnabled = false
+            alpha = 0.55f
+            contentDescription = "Send message"
             setOnClickListener { if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
         }
-        composerShell.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
-        root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); topMargin = dp(4); bottomMargin = dp(4) })
+        promptInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                updateComposerLayout(s?.toString().orEmpty())
+                val hasText = !s.isNullOrBlank()
+                sendButton.isEnabled = engine.isLoaded && hasText
+                sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
+                sendButton.contentDescription = if (hasText) "Send message" else "Send message"
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+        updateComposerLayout("")
+        composerShell.addView(thinkHarderChip, LinearLayout.LayoutParams(-2, -2).apply {
+            bottomMargin = dp(5)
+        })
+        composerShell.addView(composer, LinearLayout.LayoutParams(-1, -2))
+        root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(5); bottomMargin = dp(6)
+        })
         setContentView(root)
+    }
+
+    /** Mirrors the website AI chat composer: inline for short text, stacked once it wraps. */
+    private fun updateComposerLayout(value: String) {
+        val screenWidth = resources.displayMetrics.widthPixels
+        val inlineControls = dp(36 * 3 + 8 + 8 + 4)
+        val availableInlineWidth = (screenWidth - dp(24 + 16) - inlineControls).coerceAtLeast(dp(48))
+        val shouldExpand = if (value.isBlank()) {
+            false
+        } else {
+            val measured = StaticLayout.Builder.obtain(
+                value, 0, value.length, promptInput.paint, availableInlineWidth
+            ).setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false).build()
+            measured.lineCount > 1
+        }
+        if (shouldExpand == composerExpanded && composer.childCount > 0) return
+        composerExpanded = shouldExpand
+
+        (promptInput.parent as? ViewGroup)?.removeView(promptInput)
+        (moreButton.parent as? ViewGroup)?.removeView(moreButton)
+        (micButton.parent as? ViewGroup)?.removeView(micButton)
+        (sendButton.parent as? ViewGroup)?.removeView(sendButton)
+        composer.removeAllViews()
+        composerRow.removeAllViews()
+
+        val controlSize = dp(36)
+        composerRow.addView(moreButton, LinearLayout.LayoutParams(controlSize, controlSize))
+        if (composerExpanded) {
+            composerRow.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+            composerRow.addView(micButton, LinearLayout.LayoutParams(controlSize, controlSize))
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(controlSize, controlSize).apply { marginStart = dp(4) })
+            composer.addView(promptInput, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(3)
+            })
+            composer.addView(composerRow, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            composerRow.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                marginStart = dp(2)
+            })
+            composerRow.addView(micButton, LinearLayout.LayoutParams(controlSize, controlSize))
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(controlSize, controlSize).apply {
+                marginStart = dp(4)
+            })
+            composer.addView(composerRow, LinearLayout.LayoutParams(-1, -2))
+        }
+        promptInput.maxLines = 6
+        promptInput.requestLayout()
     }
 
     private fun startNewConversation() {
@@ -395,6 +500,11 @@ class OfflineAiChatActivity : Activity() {
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
+            menu.add(if (thinkHarderEnabled) "Disable Think harder" else "Think harder").setOnMenuItemClickListener {
+                thinkHarderEnabled = !thinkHarderEnabled
+                thinkHarderChip.visibility = if (thinkHarderEnabled) View.VISIBLE else View.GONE
+                true
+            }
             menu.add("Choose AI model").setOnMenuItemClickListener {
                 qwenModelPicker.visibility = View.VISIBLE
                 qwenModelPicker.post { qwenModelPicker.performClick() }
@@ -729,7 +839,10 @@ class OfflineAiChatActivity : Activity() {
         val chosenFile = importedDocs.ifBlank { legacyFileContext }
         val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\n$memoryItems\n\n" else ""
         val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\n$chosenFile\n\n" else ""
-        val contextPrompt = memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
+        val thinkingInstruction = if (thinkHarderEnabled) {
+            "Think carefully through the problem before answering. Check important details and provide a clear, well-structured answer with a concise summary of the reasoning. Do not expose private internal reasoning.\n\n"
+        } else ""
+        val contextPrompt = thinkingInstruction + memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
             "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
         val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
