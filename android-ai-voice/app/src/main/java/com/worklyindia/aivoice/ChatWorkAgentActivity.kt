@@ -129,8 +129,8 @@ class ChatWorkAgentActivity : Activity() {
             SafeAction("Open Wi-Fi settings", "Opens Android Wi-Fi settings. ChatWork will not toggle Wi-Fi.", Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)),
             SafeAction("Open Bluetooth settings", "Opens Android Bluetooth settings. ChatWork will not toggle Bluetooth.", Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)),
             SafeAction("Open Display settings", "Opens Android Display settings. No setting is changed automatically.", Intent(android.provider.Settings.ACTION_DISPLAY_SETTINGS)),
-            SafeAction("Open this app's notification settings", "Opens notification settings for ChatWork.", Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
-            SafeAction("Create a phone reminder", "Opens ChatWork reminder editor. You choose the reminder title, date, time and repeat mode, then confirm scheduling.", Intent(this, AssistantToolsActivity::class.java).putExtra("open_reminder_editor", true))
+            SafeAction("Open this app's notification settings", "Opens notification settings for ChatWork.", Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)),
+            SafeAction("Create a phone reminder", "Opens ChatWork reminder editor. You choose the reminder title, date, time and repeat mode, then confirm scheduling.", Intent(this, AssistantToolsActivity::class.java).putExtra("open_reminder_editor", true)),
             SafeAction("Create a calendar event", "Opens the event form. You review the title and time, then save in your phone calendar app.", Intent(this, AssistantToolsActivity::class.java).putExtra("open_calendar_editor", true))
         ).filter { it.intent.resolveActivity(packageManager) != null }
         val labels = actions.map { it.label }.toMutableList()
