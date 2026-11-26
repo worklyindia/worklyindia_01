@@ -223,15 +223,21 @@ class OfflineAiChatActivity : Activity() {
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         chatMessages.addView(welcomePanel, LinearLayout.LayoutParams(-1, -2))
 
+        // Website-matched floating composer: rounded surface, expandable text field,
+        // attachment/think controls and circular action buttons.
         val composer = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(5), dp(6), dp(5))
+            setPadding(dp(8), dp(7), dp(8), dp(7))
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(surface)
                 setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
-                cornerRadius = dp(28).toFloat()
+                cornerRadius = dp(26).toFloat()
             }
+        }
+        val composerTopRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
         val moreButton = Button(this).apply {
             text = "＋"
@@ -242,12 +248,14 @@ class OfflineAiChatActivity : Activity() {
             contentDescription = "More chat options"
             setOnClickListener { showChatOptions(this) }
         }
-        composer.addView(moreButton, LinearLayout.LayoutParams(dp(42), dp(48)))
+        composerTopRow.addView(moreButton, LinearLayout.LayoutParams(dp(40), dp(44)))
         promptInput = EditText(this).apply {
             hint = "Message Workly AI…"
             textSize = 16f
             minLines = 1
             maxLines = 6
+            gravity = Gravity.CENTER_VERTICAL
+            isSingleLine = false
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
             setPadding(dp(5), dp(9), dp(5), dp(9))
@@ -257,7 +265,7 @@ class OfflineAiChatActivity : Activity() {
                 if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendPrompt(); true } else false
             }
         }
-        composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
+        composerTopRow.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
         micButton = Button(this).apply {
             text = "⌁"
             textSize = 24f
@@ -267,7 +275,7 @@ class OfflineAiChatActivity : Activity() {
             contentDescription = "Voice input"
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
         }
-        composer.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(48)))
+        composerTopRow.addView(micButton, LinearLayout.LayoutParams(dp(42), dp(44)))
         sendButton = Button(this).apply {
             text = "↑"
             textSize = 25f
@@ -282,10 +290,20 @@ class OfflineAiChatActivity : Activity() {
             contentDescription = "Send message"
             setOnClickListener { sendPrompt() }
         }
-        composer.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
+        composerTopRow.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(3) })
+        composer.addView(composerTopRow, LinearLayout.LayoutParams(-1, -2))
+        val composerHint = TextView(this).apply {
+            text = if (thinkMode) "Think mode enabled" else "ChatWork · On-device AI"
+            textSize = 11f
+            setTextColor(secondaryText)
+            setPadding(dp(10), dp(2), dp(10), 0)
+        }
+        composer.addView(composerHint, LinearLayout.LayoutParams(-1, -2))
         root.addView(composer, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(10)
+            rightMargin = dp(10)
             topMargin = dp(5)
-            bottomMargin = dp(6)
+            bottomMargin = dp(8)
         })
         setContentView(root)
     }
