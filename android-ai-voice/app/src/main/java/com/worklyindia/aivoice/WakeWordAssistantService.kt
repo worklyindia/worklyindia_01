@@ -302,7 +302,7 @@ class WakeWordAssistantService : Service() {
 
     private fun buildNotification(message: String): Notification {
         val openIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, OfflineAiChatActivity::class.java),
+            this, 0, Intent(this, AssistantToolsActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val stopIntent = PendingIntent.getService(
