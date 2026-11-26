@@ -82,8 +82,15 @@ class ChatWorkAgentActivity : Activity() {
         }
         if (plannerRunning) return
         val modelManager = QwenModelManager(this)
+        val modelPrefs = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
+        val selectedModelId = modelPrefs.getString("selected_model_id", null)
         val readyModel = modelManager.models.firstOrNull {
+            it.id == selectedModelId && modelManager.snapshot(it).state == QwenModelManager.State.READY
+        } ?: modelManager.models.firstOrNull {
             modelManager.snapshot(it).state == QwenModelManager.State.READY
+        }
+        if (readyModel != null && readyModel.id != selectedModelId) {
+            modelPrefs.edit().putString("selected_model_id", readyModel.id).apply()
         }
         if (readyModel == null) {
             AlertDialog.Builder(this).setTitle("Offline AI model required")
