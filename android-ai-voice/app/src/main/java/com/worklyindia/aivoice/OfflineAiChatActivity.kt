@@ -447,9 +447,7 @@ class OfflineAiChatActivity : Activity() {
             type = "*/*"
             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
                 "application/pdf", "text/plain", "text/csv", "application/json", "text/markdown",
-                "application/xml", "text/xml", "text/html", "application/rtf",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/msword"
+                "application/xml", "text/xml", "text/html"
             ))
         }
         runCatching { startActivityForResult(intent, REQUEST_ATTACH_DOCUMENT) }
