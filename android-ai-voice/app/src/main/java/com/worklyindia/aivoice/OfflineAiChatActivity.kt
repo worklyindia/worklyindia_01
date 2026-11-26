@@ -530,8 +530,8 @@ class OfflineAiChatActivity : Activity() {
         status.text = "Generating a reply on this phone…"
         val memoryItems = getSharedPreferences("chatwork_user_memory", MODE_PRIVATE).getString("items", "").orEmpty().trim()
         val chosenFile = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE).getString("pending_file_context", "").orEmpty().trim()
-        val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\\n$memoryItems\\n\\n" else ""
-        val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\\n$chosenFile\\n\\n" else ""
+        val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\n$memoryItems\n\n" else ""
+        val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\n$chosenFile\n\n" else ""
         if (chosenFile.isNotBlank()) getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE).edit().remove("pending_file_context").apply()
         val contextPrompt = memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
             "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
