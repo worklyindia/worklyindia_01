@@ -238,3 +238,9 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Added **Export conversation** to the offline chat menu. It uses Android's system document picker (ACTION_CREATE_DOCUMENT) and writes the completed conversation as UTF-8 plain text only to the destination selected by the user.
 - Added **Clear conversation** with a confirmation dialog. It clears the visible chat and in-memory conversation context but does not delete saved memories or pending imported-file context.
 - Export and clear operate locally; no conversation is uploaded.
+
+## AI Agent audit formatting fix — 2026-11-26
+
+- Corrected newline and tab delimiters in the local AI Agent audit store and history display.
+- Audit records now use actual line/tab separators, and action previews render on separate lines rather than showing literal escape characters.
+- This is a source-level correction; Android CI and on-device verification are still required.
