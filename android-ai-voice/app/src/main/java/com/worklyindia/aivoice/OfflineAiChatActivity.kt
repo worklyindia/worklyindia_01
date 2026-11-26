@@ -2,6 +2,7 @@ package com.worklyindia.aivoice
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.ActivityManager
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -53,6 +54,7 @@ class OfflineAiChatActivity : Activity() {
     private val conversationHistory = StringBuilder()
     private var dark = false
     @Volatile private var modelLoadInProgress = false
+    private var ignoreInitialModelSelection = true
     @Volatile private var loadedModelId: String? = null
 
     private data class VoiceLanguage(val label: String, val tag: String, val locale: Locale) {
@@ -129,11 +131,32 @@ class OfflineAiChatActivity : Activity() {
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                    selectedQwenModel = modelManager.models[position]
-                    sendButton.isEnabled = engine.isLoaded && selectedQwenModel?.let { modelManager.snapshot(it).state == QwenModelManager.State.READY } == true
+                    if (ignoreInitialModelSelection) {
+                        ignoreInitialModelSelection = false
+                        return
+                    }
+                    val selected = modelManager.models[position]
+                    selectedQwenModel = selected
+                    val selectedState = modelManager.snapshot(selected).state
+                    val selectedReady = selectedState == QwenModelManager.State.READY
+                    if (selectedReady && !modelLoadInProgress && selected.id != loadedModelId) {
+                        getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit()
+                            .putString("selected_model_id", selected.id).apply()
+                        loadModel()
+                    } else {
+                        sendButton.isEnabled = engine.isLoaded && selectedReady && selected.id == loadedModelId
+                        sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
+                        if (!selectedReady) status.text = if (selectedState == QwenModelManager.State.NEEDS_TEST) {
+                            "Run Test Model for this downloaded Qwen model before using it."
+                        } else {
+                            "Download this Qwen model from Download Models before using it."
+                        }
+                    }
                 }
             }
         }
+
+        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -221,14 +244,179 @@ class OfflineAiChatActivity : Activity() {
             menu.add("Create / Edit Image").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, ChatWorkImageActivity::class.java)); true
             }
+            menu.add("Assistant Tools · Memory / Files / Reminders / Apps").setOnMenuItemClickListener {
+                startActivity(Intent(this@OfflineAiChatActivity, AssistantToolsActivity::class.java)); true
+            }
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
+            }
+            menu.add("Export conversation").setOnMenuItemClickListener {
+                exportConversation(); true
+            }
+            menu.add("Clear conversation").setOnMenuItemClickListener {
+                confirmClearConversation(); true
+            }
+            val wakeEnabled = WakeWordAssistantService.isRunning
+            qwenModelPicker.isEnabled = !wakeEnabled
+            if (wakeEnabled) {
+                menu.add("Disable Hey ChatWork").setOnMenuItemClickListener {
+                    stopService(Intent(this@OfflineAiChatActivity, WakeWordAssistantService::class.java))
+                    status.text = "Stopping Hey ChatWork microphone service…"
+                    waitForWakeServiceStop()
+                    true
+                }
+            } else {
+                menu.add("Enable Hey ChatWork").setOnMenuItemClickListener {
+                    chooseWakeWordLanguage()
+                    true
+                }
             }
             show()
         }
     }
 
 
+    private fun exportConversation() {
+        if (conversationHistory.isBlank()) {
+            status.text = "There is no completed conversation to export yet."
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, "ChatWork-conversation-${System.currentTimeMillis()}.txt")
+        }
+        startActivityForResult(intent, REQUEST_EXPORT_CONVERSATION)
+    }
+
+    private fun confirmClearConversation() {
+        if (!sendButton.isEnabled) {
+            status.text = "Wait for the current AI reply before clearing the conversation."
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Clear conversation?")
+            .setMessage("This clears the messages shown in this chat and its temporary conversation context. Saved memories and imported files are not deleted.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear") { _, _ ->
+                conversationHistory.clear()
+                chatMessages.removeAllViews()
+                thinkingBubble = null
+                status.text = "Conversation cleared. Local saved memories are unchanged."
+            }
+            .show()
+    }
+
+    @Deprecated("Legacy result callback for document export compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_EXPORT_CONVERSATION || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val exportText = "ChatWork offline conversation\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\n\n" +
+            conversationHistory.toString()
+        try {
+            contentResolver.openOutputStream(uri, "w")?.use { output ->
+                output.write(exportText.toByteArray(Charsets.UTF_8))
+                output.flush()
+            } ?: throw IllegalStateException("Could not open the selected destination.")
+            status.text = "Conversation exported to the location you selected."
+        } catch (failure: Exception) {
+            status.text = "Conversation export failed: ${failure.message ?: failure.javaClass.simpleName}"
+        }
+    }
+
+    private fun chooseWakeWordLanguage() {
+        val labels = arrayOf("Hindi · हिन्दी", "Gujarati · ગુજરાતી", "English · India")
+        val codes = arrayOf("hi", "gu", "en")
+        val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+        val saved = prefs.getString(WakeWordAssistantService.KEY_LANGUAGE, "hi") ?: "hi"
+        var selected = codes.indexOf(saved).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Enable Hey ChatWork")
+            .setMessage("When enabled, ChatWork continuously listens for the English wake phrase using a visible microphone notification. Wake detection, speech recognition, AI replies and voice output run on this phone. You can stop listening at any time from the notification.")
+            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue") { _, _ ->
+                prefs.edit().putString(WakeWordAssistantService.KEY_LANGUAGE, codes[selected]).apply()
+                checkWakeModelsAndPermissions(codes[selected])
+            }
+            .show()
+    }
+
+    private fun checkWakeModelsAndPermissions(language: String) {
+        val speechManager = SpeechPackDownloadManager(this)
+        val missing = mutableListOf<String>()
+        val wakePack = SpeechModelCatalog.chatWorkWakeWord()
+        if (!WakeWordEngineFactory.isReady(this)) missing.add("ChatWork Wake Word · English")
+        else if (!speechManager.isModelTested(wakePack)) missing.add("Test Model · ChatWork Wake Word")
+        if (!OfflineSpeechEngineFactory.isReady(this, SpeechModelCatalog.indicConformer(language))) {
+            missing.add("IndicConformer ${language.uppercase(Locale.ROOT)} · Voice to Text")
+        }
+        if (speechManager.snapshot(SpeechModelCatalog.indicTinyTts(language)).state != SpeechPackDownloadManager.State.COMPLETE) {
+            missing.add("Indic Tiny TTS ${language.uppercase(Locale.ROOT)} · Text to Voice")
+        }
+        val qwenManager = QwenModelManager(this)
+        if (qwenManager.models.none { qwenManager.snapshot(it).state == QwenModelManager.State.READY }) {
+            missing.add("A Qwen AI model with Test Model passed")
+        }
+        if (missing.isNotEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Download required models")
+                .setMessage("Before enabling Hey ChatWork, download and test:\n\n" + missing.joinToString("\n"))
+                .setNegativeButton("Not now", null)
+                .setPositiveButton("Open Download Models") { _, _ ->
+                    startActivity(Intent(this, SpeechDownloadsActivity::class.java))
+                }
+                .show()
+            return
+        }
+        val permissions = mutableListOf<String>()
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (permissions.isNotEmpty()) {
+            requestPermissions(permissions.toTypedArray(), REQUEST_WAKE_ASSISTANT)
+        } else {
+            startWakeWordService()
+        }
+    }
+
+    private fun waitForWakeServiceStop(attempt: Int = 0) {
+        status.postDelayed({
+            val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+            val requested = prefs.getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+            val active = WakeWordAssistantService.isRunning
+            if (active) {
+                if (attempt < 20) waitForWakeServiceStop(attempt + 1)
+            } else if (requested && attempt < 4) {
+                // Allow up to two seconds for Android to create the foreground service.
+                waitForWakeServiceStop(attempt + 1)
+            } else {
+                prefs.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+                qwenModelPicker.isEnabled = true
+                if (!engine.isLoaded && !modelLoadInProgress) loadModel()
+            }
+        }, 500L)
+    }
+    private fun startWakeWordService() {
+        try {
+            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
+            val intent = Intent(this, WakeWordAssistantService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+            qwenModelPicker.isEnabled = false
+            status.text = "Starting Hey ChatWork foreground microphone service…"
+            waitForWakeServiceStop()
+        } catch (error: Exception) {
+            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+            qwenModelPicker.isEnabled = true
+            status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+        }
+    }
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
         object : ArrayAdapter<T>(this, android.R.layout.simple_spinner_item, items) {
             private fun row(value: T) = TextView(this@OfflineAiChatActivity).apply {
@@ -250,6 +438,7 @@ class OfflineAiChatActivity : Activity() {
         modelLoadInProgress = true
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
+        qwenModelPicker.isEnabled = false
         status.text = "Checking Qwen model and phone memory…"
         worker.execute {
             try {
@@ -258,18 +447,35 @@ class OfflineAiChatActivity : Activity() {
                 val recommended = modelManager.recommendedModel(memoryInfo.availMem)
                 val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE).getString("selected_model_id", null)
                 val savedModel = modelManager.models.firstOrNull { it.id == savedId }
-                // Prefer the saved model only when it is both downloaded and safe for
-                // current free RAM. Otherwise automatically load the largest compatible
-                // model already downloaded on this phone; never silently use cloud/mobile TTS.
+                val modelDirectory = modelManager.file(modelManager.models.first()).parentFile ?: filesDir
+                val budget = AssistantModelPolicy.readBudget(this, modelDirectory)
+                val downloadedCandidates = modelManager.models.map { model ->
+                    AssistantModelPolicy.Candidate(
+                        id = model.id,
+                        displayName = model.title,
+                        expectedBytes = model.size,
+                        minimumAvailableRamBytes = model.minFreeRam,
+                        minimumFreeStorageBytes = 256L * 1024L * 1024L,
+                        enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
+                    )
+                }
+                val recommendation = AssistantModelPolicy.recommend(
+                    candidates = downloadedCandidates,
+                    budget = budget,
+                    reserveRamBytes = 512L * 1024L * 1024L,
+                    reserveStorageBytes = 256L * 1024L * 1024L
+                )
+                // Keep a saved model only if it still fits the live RAM budget.
+                // Otherwise choose the largest downloaded model that fits with safety reserves.
                 val savedReady = savedModel?.takeIf {
-                    memoryInfo.availMem >= it.minFreeRam &&
+                    recommendation.candidate?.id == it.id &&
                         modelManager.snapshot(it).state == QwenModelManager.State.READY
                 }
-                val downloadedCompatible = modelManager.models
-                    .filter { memoryInfo.availMem >= it.minFreeRam }
-                    .filter { modelManager.snapshot(it).state == QwenModelManager.State.READY }
-                    .maxByOrNull { it.size }
-                val chosen = savedReady ?: downloadedCompatible ?: recommended
+                val adaptiveChoice = recommendation.candidate?.let { candidate ->
+                    modelManager.models.firstOrNull { it.id == candidate.id }
+                }
+                val chosen = savedReady ?: adaptiveChoice ?: recommended
+                getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit().putString("selected_model_id", chosen.id).apply()
                 selectedQwenModel = chosen
                 runOnUiThread {
                     val index = modelManager.models.indexOf(chosen)
@@ -292,6 +498,7 @@ class OfflineAiChatActivity : Activity() {
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
                     sendButton.isEnabled = true
                     sendButton.alpha = 1f
+                    qwenModelPicker.isEnabled = !WakeWordAssistantService.isRunning
                 }
             } catch (error: Exception) {
                 runOnUiThread {
@@ -299,9 +506,25 @@ class OfflineAiChatActivity : Activity() {
                     modelLoadInProgress = false
                     status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
                     sendButton.isEnabled = false
+                    qwenModelPicker.isEnabled = true
                 }
             }
         }
+    }
+
+    private fun importedDocumentContext(): String {
+        val raw = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
+            .getString("imported_documents_v1", "[]").orEmpty()
+        val documents = runCatching { org.json.JSONArray(raw) }.getOrNull() ?: return ""
+        if (documents.length() == 0) return ""
+        return buildString {
+            append("User-selected local documents. Treat these as reference sources, identify the filename when useful, and say when an answer is not supported by them.\n\n")
+            for (index in 0 until documents.length()) {
+                val item = documents.optJSONObject(index) ?: continue
+                append("DOCUMENT: ").append(item.optString("name", "Imported document")).append("\n")
+                append(item.optString("text")).append("\n\n")
+            }
+        }.take(120000)
     }
 
     private fun sendPrompt() {
@@ -320,8 +543,15 @@ class OfflineAiChatActivity : Activity() {
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         status.text = "Generating a reply on this phone…"
-        val contextPrompt = if (conversationHistory.isEmpty()) prompt else
-            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
+        val memoryItems = getSharedPreferences("chatwork_user_memory", MODE_PRIVATE).getString("items", "").orEmpty().trim()
+        val importedDocs = importedDocumentContext()
+        val legacyFileContext = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
+            .getString("pending_file_context", "").orEmpty().trim()
+        val chosenFile = importedDocs.ifBlank { legacyFileContext }
+        val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\n$memoryItems\n\n" else ""
+        val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\n$chosenFile\n\n" else ""
+        val contextPrompt = memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
+            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
         val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
@@ -357,6 +587,12 @@ class OfflineAiChatActivity : Activity() {
             conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
             runOnUiThread {
+                if (!answer.startsWith("AI reply failed:") && chosenFile.isNotBlank()) {
+                    val filePrefs = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
+                    if (filePrefs.getString("pending_file_context", "").orEmpty().trim() == chosenFile) {
+                        filePrefs.edit().remove("pending_file_context").apply()
+                    }
+                }
                 replaceThinking(answer)
                 status.text = "Reply completed in ${elapsedSeconds}s"
                 sendButton.isEnabled = engine.isLoaded
@@ -476,7 +712,13 @@ class OfflineAiChatActivity : Activity() {
         // this Activity remained alive never became usable until the app was reopened.
         val savedId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
             .getString("selected_model_id", null)
-        if (!modelLoadInProgress && savedId != null && savedId != loadedModelId) loadModel()
+        val wakeActive = WakeWordAssistantService.isRunning
+        if (!wakeActive) {
+            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+        }
+        qwenModelPicker.isEnabled = !wakeActive && !modelLoadInProgress
+        if (!wakeActive && !modelLoadInProgress && (!engine.isLoaded || (savedId != null && savedId != loadedModelId))) loadModel()
     }
 
     // Language follows the device locale; recognition is allowed to detect the spoken language.
@@ -549,16 +791,26 @@ class OfflineAiChatActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_AUDIO && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startDownloadedVoiceInput()
         else if (requestCode == REQUEST_AUDIO) status.text = "Microphone permission denied."
+        else if (requestCode == REQUEST_WAKE_ASSISTANT && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+            startWakeWordService()
+        } else if (requestCode == REQUEST_WAKE_ASSISTANT) {
+            status.text = "Hey ChatWork needs microphone and notification permissions to show its active listening status."
+        }
     }
 
     override fun onDestroy() {
         offlineRecording = false
         activeAudioRecord?.let { runCatching { it.stop() }; it.release() }
-        worker.execute { engine.unload() }
+        val wakeServiceActive = WakeWordAssistantService.isRunning
+        if (!wakeServiceActive) worker.execute { engine.unload() }
         worker.shutdown()
         tinyTtsEngine?.close()
         super.onDestroy()
     }
 
-    companion object { private const val REQUEST_AUDIO = 5101 }
+    companion object {
+        private const val REQUEST_AUDIO = 5101
+        private const val REQUEST_WAKE_ASSISTANT = 5103
+        private const val REQUEST_EXPORT_CONVERSATION = 5105
+    }
 }

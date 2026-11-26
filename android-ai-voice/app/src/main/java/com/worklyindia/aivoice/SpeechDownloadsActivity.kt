@@ -75,7 +75,9 @@ class SpeechDownloadsActivity : Activity() {
         val list=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(12), dp(14), dp(12), dp(28)) }
         scroll.addView(list)
         page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-        list.addView(label("OFFLINE AI CHAT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
+        list.addView(label("WAKE WORD · CHATWORK ASSISTANT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
+        addSpeechPack(list,"Hey ChatWork · English Wake Word","Offline keyword spotting model · downloaded separately · requires microphone permission and a visible foreground notification when listening",SpeechModelCatalog.chatWorkWakeWord())
+        list.addView(label("OFFLINE AI CHAT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         qwenManager.models.forEach { addQwenCard(list,it) }
         list.addView(label("VOICE TO TEXT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         val recognitionLanguages = listOf(
@@ -161,9 +163,11 @@ class SpeechDownloadsActivity : Activity() {
             visibility = View.GONE
         }
         val action = Button(this).apply { isAllCaps = false; minHeight = dp(46) }
+        val test = Button(this).apply { text = "Test Model"; isAllCaps = false; minHeight = dp(42); visibility = View.GONE }
         modelCard.addView(status)
         modelCard.addView(progress)
         modelCard.addView(action)
+        modelCard.addView(test)
         val row = DownloadRow(status, progress, action) {
             val snapshot = runCatching { qwenManager.snapshot(model) }.getOrNull() ?: return@DownloadRow
             val storageOk = availableStorageBytes() >= model.size + 512L * 1024L * 1024L
@@ -171,12 +175,17 @@ class SpeechDownloadsActivity : Activity() {
             val supported = storageOk && ramOk
             progress.progress = snapshot.progressPercent
             progress.visibility = if (snapshot.state == QwenModelManager.State.RUNNING) View.VISIBLE else View.GONE
+            test.visibility = if (snapshot.state == QwenModelManager.State.READY) View.VISIBLE else View.GONE
             when (snapshot.state) {
                 QwenModelManager.State.READY -> {
                     status.visibility = View.GONE
                     action.text = "Delete"
                     action.isEnabled = true
                     action.setOnClickListener {
+                        if (WakeWordAssistantService.isRunning) {
+                            Toast.makeText(this, "Stop Hey ChatWork before deleting an AI model.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
                         AlertDialog.Builder(this).setTitle("Delete ${model.title}?")
                             .setMessage("This removes the downloaded model file from this phone.")
                             .setNegativeButton("Cancel", null)
@@ -187,6 +196,14 @@ class SpeechDownloadsActivity : Activity() {
                             }
                             .show()
                     }
+                    test.setOnClickListener { runQwenModelTest(model, status, test, action) }
+                }
+                QwenModelManager.State.NEEDS_TEST -> {
+                    status.visibility = View.VISIBLE
+                    status.text = "Download complete · Run the local inference test before this model can be used."
+                    action.text = "Test Model"
+                    action.isEnabled = true
+                    action.setOnClickListener { runQwenModelTest(model, status, action, test) }
                 }
                 QwenModelManager.State.RUNNING, QwenModelManager.State.PENDING, QwenModelManager.State.PAUSED -> {
                     status.visibility = View.VISIBLE
@@ -227,6 +244,40 @@ class SpeechDownloadsActivity : Activity() {
         row.refresh()
     }
 
+    private fun runQwenModelTest(model: QwenModelManager.Model, status: TextView, trigger: Button, other: Button) {
+        if (getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+            Toast.makeText(this, "Stop Hey ChatWork before testing another AI model.", Toast.LENGTH_LONG).show()
+            return
+        }
+        trigger.isEnabled = false
+        other.isEnabled = false
+        status.visibility = View.VISIBLE
+        status.text = "Loading model and running a local inference smoke test…"
+        ttsExecutor.execute {
+            val engine = OfflineAiEngine()
+            val result = runCatching {
+                check(engine.loadModel(qwenManager.file(model))) { "Native engine could not load this model." }
+                engine.generate("Reply with a short greeting and confirm that the offline model is working.")
+            }
+            runCatching { engine.unload() }
+            if (result.isSuccess && !result.getOrNull().isNullOrBlank()) {
+                qwenManager.markTested(model, true)
+                runOnUiThread {
+                    status.text = "Test passed · Local model load and inference succeeded."
+                    refreshAll()
+                }
+            } else {
+                qwenManager.markTested(model, false)
+                runOnUiThread {
+                    status.text = "Test failed · ${result.exceptionOrNull()?.message ?: "The model returned an empty response."}"
+                    trigger.isEnabled = true
+                    other.isEnabled = true
+                    refreshAll()
+                }
+            }
+        }
+    }
+
     private fun addSpeechPack(parent: LinearLayout, title: String, subtitle: String, pack: SpeechModelCatalog.Pack) {
         val modelCard = card(parent, title, "")
         val status = label("", 12, secondary, false).apply {
@@ -241,6 +292,7 @@ class SpeechDownloadsActivity : Activity() {
         val isTts = pack.id.startsWith("indic-tiny-tts-")
         val isSherpaVits = pack.id.startsWith("itantra-vits-")
         val isKokoro = pack.id == "kokoro-82m"
+        val isWakeWord = pack.id == "chatwork-wake-word-en"
         val test = Button(this).apply {
             text = "Test Model"
             isAllCaps = false
@@ -255,6 +307,7 @@ class SpeechDownloadsActivity : Activity() {
             when {
                 isKokoro -> showKokoroTest(pack)
                 isSherpaVits -> showSherpaVitsTest(pack)
+                isWakeWord -> showWakeWordTest()
                 else -> showTtsTest(pack)
             }
         }
@@ -264,17 +317,22 @@ class SpeechDownloadsActivity : Activity() {
             val installed = snapshot.state == SpeechPackDownloadManager.State.COMPLETE
             progress.progress = snapshot.percent
             progress.visibility = if (snapshot.state == SpeechPackDownloadManager.State.RUNNING) View.VISIBLE else View.GONE
-            test.visibility = if (installed && (isTts || isSherpaVits || isKokoro)) View.VISIBLE else View.GONE
+            test.visibility = if (installed && (isTts || isSherpaVits || isKokoro || isWakeWord)) View.VISIBLE else View.GONE
             if (installed) {
                 status.visibility = View.GONE
                 action.text = "Delete"
                 action.isEnabled = true
                 action.setOnClickListener {
+                    if (getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+                        Toast.makeText(this, "Stop Hey ChatWork before deleting a speech model.", Toast.LENGTH_LONG).show()
+                        return@setOnClickListener
+                    }
                     AlertDialog.Builder(this).setTitle("Delete ${pack.title}?")
                         .setMessage("This removes the downloaded model files from this phone.")
                         .setNegativeButton("Cancel", null)
                         .setPositiveButton("Delete") { _, _ ->
                             speechManager.delete(pack)
+                            if (isWakeWord) File(speechManager.modelDirectory(pack), "model").deleteRecursively()
                             ModelUsageTracker.clear(this, pack.id)
                             refreshAll()
                         }
@@ -351,6 +409,30 @@ class SpeechDownloadsActivity : Activity() {
         "%.0f MB".format(Locale.US, bytes / 1_000_000.0)
     }
 
+    private fun showWakeWordTest() {
+        Toast.makeText(this, "Loading the offline Hey ChatWork keyword model…", Toast.LENGTH_SHORT).show()
+        ttsExecutor.execute {
+            val result = runCatching {
+                WakeWordEngineFactory.open(this).use { }
+            }
+            SpeechPackDownloadManager(this).markModelTested(SpeechModelCatalog.chatWorkWakeWord(), result.isSuccess)
+            runOnUiThread {
+                if (result.isSuccess) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Wake Word Model Ready")
+                        .setMessage("The offline English keyword model and Hey ChatWork phrase loaded successfully. Enable listening from AI Assistant to start the microphone foreground service.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("Wake Word Test Failed")
+                        .setMessage(result.exceptionOrNull()?.message ?: "Could not initialize the wake-word model.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+    }
     private fun showSherpaVitsTest(pack: SpeechModelCatalog.Pack) {
         val language = pack.languageCode
         val sample = when (language) {

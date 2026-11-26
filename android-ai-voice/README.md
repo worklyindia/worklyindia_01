@@ -22,7 +22,7 @@ Speech recognition is not yet guaranteed to work offline. Gujarati neural TTS is
 
 ## Offline Workly AI models (Wi-Fi or user-approved mobile-data download)
 
-Three Qwen 2.5 Q4_K_M choices are available: 0.5B (~491 MB), 1.5B (~1.12 GB), and 3B (~2.1 GB, labelled Premium). The downloads screen checks currently available RAM, disables models that do not meet the app's minimum free-RAM estimate, and displays transferred size, percentage and live network speed. Only the model selected with **Use this model in Chat** is loaded by Offline AI Chat; it is not a multi-model simultaneous session.
+Qwen model downloads include Qwen 2.5 Q4_K_M choices (0.5B, 1.5B and 3B) plus the official Qwen3 0.6B Q8_0 GGUF (~639 MB). The Qwen3 option requires the newer llama.cpp runtime and remains subject to device inference smoke tests. The downloads screen checks currently available RAM, disables models that do not meet the app's minimum free-RAM estimate, and displays transferred size, percentage and live network speed. Only the model selected with **Use this model in Chat** is loaded by Offline AI Chat; it is not a multi-model simultaneous session.
 
 The Android app now includes an on-demand downloader for the official
 `Qwen/Qwen2.5-3B-Instruct-GGUF` model using the `Q4_K_M` quantization:
@@ -38,7 +38,7 @@ The Android app now includes an on-demand downloader for the official
 
 The Android project now also contains a pinned llama.cpp native runtime build and a local Qwen chat screen:
 
-- The `llama.cpp` runtime is pinned to release tag `b5046` and built with Android NDK/CMake; the model is loaded from the app-private model file at runtime.
+- The `llama.cpp` runtime is pinned to release tag `b5092` (Qwen3-compatible) and built with Android NDK/CMake; the model is loaded from the app-private model file at runtime.
 - After download, the user can open **Offline AI Chat** from the main screen. The chat runs locally and keeps a limited recent conversation context on the phone.
 - The chat screen provides microphone input and spoken replies for Hindi, Indian English and Gujarati. Android speech recognition is asked to prefer offline mode; this is only a preference, not a guarantee. Offline recognition and TTS require compatible language packs/voices installed on the phone.
 - Qwen loading is blocked on devices reporting less than 6 GB total RAM. Actual performance still depends on the phone's chipset, free RAM and thermal limits.
@@ -98,3 +98,10 @@ The ChatWork Download Model page lists every integrated local TTS pack. Each dow
 - **Kokoro-82M:** 54 selectable voices grouped across 9 locales: American/British English, Hindi, Spanish, French, Italian, Brazilian Portuguese, Mandarin Chinese and Japanese.
 
 Every model card shows its language/voice capability. The test screen lets users enter custom text and play generated audio. These integrations still require Android CI success and physical-device inference verification; language choices are not a claim that every accent or text input has been validated on every phone.
+
+
+## ChatWork assistant integration status
+
+The home screen exposes **AI Assistant** and opens the existing `OfflineAiChatActivity`; the feature does not create a second chat implementation. Adaptive selection uses current available RAM and free storage with safety reserves. Qwen3 GGUF support is implemented using the Qwen3-compatible llama.cpp runtime, and downloaded Qwen models require a local inference smoke test before becoming `READY`.
+
+The branch also includes the English Sherpa-ONNX `Hey ChatWork` keyword model, custom BPE wake phrase, a manually enabled microphone foreground service with a persistent Stop notification and CPU wake lock, and an offline wake → STT → Qwen → TTS pipeline. The service does not auto-start after process death or at boot. CI, real-voice wake-word accuracy, Qwen3 inference and physical Android/Realme lock-screen and battery tests are still required; do not treat this as a release-ready JARVIS build until those gates pass.

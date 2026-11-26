@@ -39,6 +39,7 @@ class SpeechPackDownloadManager(context: Context) {
     private val prefs = appContext.getSharedPreferences("speech_pack_downloads", Context.MODE_PRIVATE)
 
     fun start(pack: SpeechModelCatalog.Pack, allowMobileData: Boolean): Snapshot {
+        prefs.edit().remove(testedKey(pack.id)).apply()
         pack.files.forEachIndexed { index, modelFile ->
             val target = targetFile(pack, modelFile.relativePath)
             if (isCompleteFile(target, modelFile)) return@forEachIndexed
@@ -133,10 +134,17 @@ class SpeechPackDownloadManager(context: Context) {
     }
 
     /** Explicitly delete saved model files when the user chooses Delete. */
+    fun markModelTested(pack: SpeechModelCatalog.Pack, passed: Boolean) {
+        prefs.edit().putBoolean(testedKey(pack.id), passed).apply()
+    }
+
+    fun isModelTested(pack: SpeechModelCatalog.Pack): Boolean =
+        prefs.getBoolean(testedKey(pack.id), false)
+
     fun delete(pack: SpeechModelCatalog.Pack) {
         cancel(pack)
         pack.files.forEach { file -> targetFile(pack, file.relativePath).delete() }
-        prefs.edit().remove(installedAtKey(pack.id)).apply()
+        prefs.edit().remove(installedAtKey(pack.id)).remove(testedKey(pack.id)).apply()
     }
 
     fun modelDirectory(pack: SpeechModelCatalog.Pack): File =
@@ -178,4 +186,5 @@ class SpeechPackDownloadManager(context: Context) {
 
     private fun fileKey(packId: String, relativePath: String) = "download_id_${packId}_${relativePath}"
     private fun installedAtKey(packId: String) = "installed_at_${packId}"
+    private fun testedKey(packId: String) = "tested_${packId}"
 }

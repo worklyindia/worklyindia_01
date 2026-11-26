@@ -7,11 +7,16 @@ import java.io.File
  * Call loadModel/generate from a background executor, never the Android main thread.
  */
 class OfflineAiEngine {
-    companion object { const val MIN_VALID_MODEL_BYTES = 400_000_000L }
-    @Volatile
-    var isLoaded: Boolean = false
-        private set
+    companion object {
+        const val MIN_VALID_MODEL_BYTES = 400_000_000L
+        // The JNI runtime owns one process-wide llama model. Keep Kotlin state and
+        // lifecycle operations process-wide too, so a model test cannot leave a
+        // different Activity believing that an unloaded native model is still ready.
+        private val processLock = Any()
+        @Volatile private var loadedModelPath: String? = null
+    }
 
+    val isLoaded: Boolean get() = loadedModelPath != null
     private val nativeAvailable = runCatching { System.loadLibrary("worklyllama") }.isSuccess
     @Volatile private var partialResponseListener: ((String) -> Unit)? = null
 
@@ -20,22 +25,21 @@ class OfflineAiEngine {
         partialResponseListener?.invoke(value)
     }
 
-    @Synchronized
-    fun loadModel(file: File): Boolean {
+    fun loadModel(file: File): Boolean = synchronized(processLock) {
         check(nativeAvailable) { "The offline AI native engine is not available in this app build." }
         if (!file.isFile || file.length() < MIN_VALID_MODEL_BYTES) {
             throw IllegalStateException("The offline AI model file is missing or incomplete.")
         }
-        isLoaded = nativeLoadModel(file.absolutePath)
-        return isLoaded
+        val loaded = nativeLoadModel(file.absolutePath)
+        loadedModelPath = if (loaded) file.absolutePath else null
+        loaded
     }
 
-    @Synchronized
-    fun generate(prompt: String, onPartial: (String) -> Unit = {}): String {
-        check(isLoaded) { "Load the offline AI model first." }
+    fun generate(prompt: String, onPartial: (String) -> Unit = {}): String = synchronized(processLock) {
+        check(loadedModelPath != null) { "Load the offline AI model first." }
         require(prompt.isNotBlank()) { "Enter a message first." }
         partialResponseListener = onPartial
-        return try {
+        try {
             // 160 tokens gives the small on-device models room to answer fully,
             // while keeping replies bounded for mobile latency and memory.
             val result = nativeGenerate(prompt.trim().take(4000), 160).trim()
@@ -46,10 +50,9 @@ class OfflineAiEngine {
         }
     }
 
-    @Synchronized
-    fun unload() {
-        if (isLoaded) nativeUnloadModel()
-        isLoaded = false
+    fun unload() = synchronized(processLock) {
+        if (loadedModelPath != null) nativeUnloadModel()
+        loadedModelPath = null
     }
 
     private external fun nativeLoadModel(modelPath: String): Boolean
