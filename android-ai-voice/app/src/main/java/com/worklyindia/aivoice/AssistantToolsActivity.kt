@@ -47,6 +47,7 @@ class AssistantToolsActivity : Activity() {
         addButton("AI Agent - Plan & Approval History") { startActivity(Intent(this, ChatWorkAgentActivity::class.java)) }
         addButton("Schedule phone reminder") { scheduleReminder() }
         addButton("Manage / cancel reminders") { manageReminders() }
+        addButton("Add event to phone calendar") { addCalendarEvent() }
         addButton("Mobile Control") { startActivity(Intent(this, MobileControlActivity::class.java)) }
         addButton("Open an installed app") { showApps() }
         addButton("Back") { finish() }
@@ -357,6 +358,53 @@ class AssistantToolsActivity : Activity() {
                     .putString("reminder_repeat_" + id, repeatMode).apply()
                 Toast.makeText(this, "Reminder updated.", Toast.LENGTH_SHORT).show()
                 manageReminders()
+            }.show()
+    }
+
+
+    /** Opens the calendar editor; no calendar read/write permission is requested. */
+    private fun addCalendarEvent() {
+        val title = EditText(this).apply { hint = "Event title" }
+        val date = DatePicker(this)
+        val time = TimePicker(this).apply { setIs24HourView(true) }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(title)
+            addView(date)
+            addView(time)
+        }
+        AlertDialog.Builder(this).setTitle("Add calendar event").setView(layout)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue") { _, _ ->
+                val start = Calendar.getInstance().apply {
+                    set(date.year, date.month, date.dayOfMonth, time.hour, time.minute, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                if (start.timeInMillis <= System.currentTimeMillis()) {
+                    Toast.makeText(this, "Choose a future date and time.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                val eventTitle = title.text.toString().trim().take(160)
+                if (eventTitle.isBlank()) {
+                    Toast.makeText(this, "Enter an event title.", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val end = start.timeInMillis + 60L * 60L * 1000L
+                val insert = Intent(Intent.ACTION_INSERT).apply {
+                    data = android.provider.CalendarContract.Events.CONTENT_URI
+                    putExtra(android.provider.CalendarContract.Events.TITLE, eventTitle)
+                    putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, start.timeInMillis)
+                    putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, end)
+                    putExtra(android.provider.CalendarContract.Events.AVAILABILITY,
+                        android.provider.CalendarContract.Events.AVAILABILITY_BUSY)
+                }
+                try {
+                    if (insert.resolveActivity(packageManager) != null) startActivity(insert)
+                    else Toast.makeText(this, "No calendar app is available on this phone.", Toast.LENGTH_LONG).show()
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Unable to open calendar app.", Toast.LENGTH_LONG).show()
+                }
             }.show()
     }
 
