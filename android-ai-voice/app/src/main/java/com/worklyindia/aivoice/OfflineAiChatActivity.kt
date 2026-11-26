@@ -819,18 +819,35 @@ class OfflineAiChatActivity : Activity() {
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text))
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(R.drawable.ic_chat_thumb_up, "Like response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(R.drawable.ic_chat_thumb_down, "Dislike response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            actions.addView(actionIcon(R.drawable.ic_chat_thumb_up, "Like response") {
+                val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
+                prefs.edit().putString("last_feedback", "positive").putLong("last_feedback_at", System.currentTimeMillis()).apply()
+                android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            actions.addView(actionIcon(R.drawable.ic_chat_thumb_down, "Dislike response") {
+                val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
+                prefs.edit().putString("last_feedback", "negative").putLong("last_feedback_at", System.currentTimeMillis()).apply()
+                android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(R.drawable.ic_chatwork_mic, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(android.R.drawable.ic_menu_share, "Share response") {
                 val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }
                 startActivity(Intent.createChooser(share, "Share ChatWork response"))
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(R.drawable.ic_chat_translate, "Translate response") {
-                AlertDialog.Builder(this@OfflineAiChatActivity).setTitle("Translate response").setMessage("Translation is available in the Workly India website chat.").setPositiveButton("OK", null).show()
+                startActivity(Intent(this@OfflineAiChatActivity, ChatWorkTranslatorActivity::class.java)
+                    .putExtra("chatwork.translate.text", bubble.text.toString()))
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(R.drawable.ic_chatwork_more, "More actions") { showChatOptions(actions) }, LinearLayout.LayoutParams(dp(42), dp(34)))
             meta.addView(actions, LinearLayout.LayoutParams(-1, -2)); messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            messageColumn.addView(TextView(this).apply {
+                text = java.text.SimpleDateFormat("hh:mm a", Locale.getDefault()).format(java.util.Date())
+                textSize = 12f
+                setTextColor(secondaryText)
+                gravity = Gravity.END
+                setPadding(0, dp(4), dp(5), 0)
+            }, LinearLayout.LayoutParams(-1, -2))
         }
         chatMessages.addView(messageColumn, LinearLayout.LayoutParams(-1, -2))
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
