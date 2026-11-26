@@ -219,7 +219,7 @@ class OfflineAiChatActivity : Activity() {
         composer.addView(micButton, LinearLayout.LayoutParams(dp(42), dp(44)))
         composerShell.addView(composer, LinearLayout.LayoutParams(0, -2, 1f))
         sendButton = Button(this).apply {
-            text = "➤"
+            text = "≋"
             textSize = 22f
             gravity = Gravity.CENTER
             setTextColor(0xFFFFFFFF.toInt())
@@ -230,7 +230,7 @@ class OfflineAiChatActivity : Activity() {
             isEnabled = false
             alpha = 0.55f
             contentDescription = "Send message"
-            setOnClickListener { sendPrompt() }
+            setOnClickListener { if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
         }
         composerShell.addView(sendButton, LinearLayout.LayoutParams(dp(46), dp(46)).apply { leftMargin = dp(4) })
 
@@ -743,120 +743,58 @@ class OfflineAiChatActivity : Activity() {
     }
 
     private fun addMessage(value: String, fromUser: Boolean): TextView {
-        val messageColumn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = if (fromUser) Gravity.END else Gravity.START
-            setPadding(dp(1), dp(4), dp(1), dp(7))
-        }
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = if (fromUser) Gravity.END else Gravity.START
-        }
-        if (!fromUser) {
-            row.addView(TextView(this).apply {
-                text = "W"
-                textSize = 17f
-                gravity = Gravity.CENTER
-                setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-                setTextColor(0xFF1769C2.toInt())
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.OVAL
-                    setColor(0xFFFFFFFF.toInt())
-                }
-                contentDescription = "ChatWork assistant"
-            }, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginEnd = dp(8) })
-        }
+        val messageColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = if (fromUser) Gravity.END else Gravity.START; setPadding(dp(1), dp(5), dp(1), dp(5)) }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = if (fromUser) Gravity.END else Gravity.START }
         val bubble = TextView(this).apply {
-            text = value
-            textSize = 16f
-            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
-            setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
-            setPadding(dp(15), dp(11), dp(15), dp(11))
-            maxWidth = (resources.displayMetrics.widthPixels * 0.80f).toInt()
-            setLineSpacing(dp(3).toFloat(), 1.05f)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (fromUser) {
-                    if (dark) 0xFF203B65.toInt() else 0xFFE8EDF4.toInt()
-                } else surface)
-                cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), if (dark && !fromUser) 0xFF27364B.toInt() else android.graphics.Color.TRANSPARENT)
-            }
-            if (fromUser) setTextColor(if (dark) 0xFFEAF1FA.toInt() else 0xFF142033.toInt())
+            text = value; textSize = 17f
+            typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
+            setTextColor(primaryText)
+            setPadding(if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1), if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1))
+            maxWidth = (resources.displayMetrics.widthPixels * 0.92f).toInt()
+            setLineSpacing(dp(5).toFloat(), 1.04f)
+            if (fromUser) {
+                setTextColor(if (dark) 0xFFE8EDF5.toInt() else 0xFF172033.toInt())
+                background = android.graphics.drawable.GradientDrawable().apply { setColor(if (dark) 0xFF202B3F.toInt() else 0xFFF0F0F0.toInt()); cornerRadius = dp(28).toFloat() }
+            } else background = null
         }
-        val bubbleParams = LinearLayout.LayoutParams(-2, -2).apply {
-            if (fromUser) marginStart = dp(48) else marginEnd = dp(18)
-        }
+        val bubbleParams = LinearLayout.LayoutParams(-2, -2).apply { if (fromUser) marginStart = dp(44) else marginEnd = dp(2) }
         row.addView(bubble, bubbleParams)
         messageColumn.addView(row, LinearLayout.LayoutParams(-1, -2))
-
-        val meta = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = if (fromUser) Gravity.END else Gravity.START
-            setPadding(if (fromUser) 0 else dp(42), dp(3), dp(3), 0)
-        }
-        val time = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date())
-        meta.addView(TextView(this).apply {
-            text = if (fromUser) "$time  ✓✓" else time
-            textSize = 11f
-            setTextColor(secondaryText)
-        }, LinearLayout.LayoutParams(-2, -2))
         if (!fromUser) {
-            val actions = listOf(
-                "▢" to "Copy message",
-                "👍" to "Like response",
-                "👎" to "Dislike response",
-                "◖" to "Speak response",
-                "↗" to "Share response",
-                "⋮" to "More message actions"
-            )
-            actions.forEachIndexed { index, item ->
+            val meta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.START; setPadding(0, dp(5), 0, 0) }
+            val timestamp = java.text.SimpleDateFormat("dd MMMM yyyy hh:mm:ss a", Locale.getDefault()).format(java.util.Date())
+            meta.addView(TextView(this).apply { text = timestamp; textSize = 12f; typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL); setTextColor(secondaryText) }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(5) })
+            val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val actionItems = listOf("▢" to "Copy message", "👍︎" to "Like response", "👎︎" to "Dislike response", "◖" to "Read aloud", "↗" to "Share response", "文A" to "Translate response", "•••" to "More actions")
+            actionItems.forEachIndexed { index, item ->
                 val action = TextView(this).apply {
-                    text = item.first
-                    textSize = 16f
-                    gravity = Gravity.CENTER
-                    setTextColor(secondaryText)
-                    contentDescription = item.second
-                    setPadding(dp(5), 0, dp(5), 0)
+                    text = item.first; textSize = if (index == 5) 13f else 17f; gravity = Gravity.CENTER
+                    setTextColor(secondaryText); contentDescription = item.second; setPadding(dp(6), dp(2), dp(6), dp(2)); minWidth = dp(30)
                     setOnClickListener {
                         when (index) {
-                            0 -> {
-                                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text))
-                                android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                            1 -> android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
+                            0 -> { val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager; clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text)); android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show() }
+                            1 -> android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show()
                             2 -> android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show()
                             3 -> speakAnswer(bubble.text.toString())
-                            4 -> {
-                                val share = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString())
-                                }
-                                startActivity(Intent.createChooser(share, "Share ChatWork response"))
-                            }
+                            4 -> { val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }; startActivity(Intent.createChooser(share, "Share ChatWork response")) }
+                            5 -> AlertDialog.Builder(this@OfflineAiChatActivity).setTitle("Translate response").setMessage("Translation is available in the Workly India website chat.").setPositiveButton("OK", null).show()
                             else -> PopupMenu(this@OfflineAiChatActivity, this).apply {
-                                menu.add("Copy").setOnMenuItemClickListener {
-                                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text)); true
-                                }
+                                menu.add("Copy").setOnMenuItemClickListener { val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager; clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text)); true }
                                 menu.add("Speak").setOnMenuItemClickListener { speakAnswer(bubble.text.toString()); true }
-                                menu.add("Share").setOnMenuItemClickListener {
-                                    val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }
-                                    startActivity(Intent.createChooser(share, "Share response")); true
-                                }
+                                menu.add("Share").setOnMenuItemClickListener { val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }; startActivity(Intent.createChooser(share, "Share response")); true }
                                 show()
                             }
                         }
                     }
                 }
-                meta.addView(action, LinearLayout.LayoutParams(dp(28), dp(25)))
+                actions.addView(action, LinearLayout.LayoutParams(-2, dp(29)))
             }
+            meta.addView(actions, LinearLayout.LayoutParams(-1, -2)); messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
         }
-        messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
         chatMessages.addView(messageColumn, LinearLayout.LayoutParams(-1, -2))
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
         return bubble
     }
-
     private fun replaceThinking(answer: String) {
         val bubble = thinkingBubble
         if (bubble != null) bubble.text = answer else addMessage(answer, false)
