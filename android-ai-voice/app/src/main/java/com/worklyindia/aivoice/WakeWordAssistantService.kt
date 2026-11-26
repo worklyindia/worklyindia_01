@@ -55,9 +55,13 @@ class WakeWordAssistantService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (error: Exception) {
+            val reason = error.message ?: error.javaClass.simpleName
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_ACTIVE, false)
+                .putString(KEY_LAST_ERROR, reason)
+                .apply()
             running.set(false)
             isRunning = false
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             stopSelf()
             throw error
         }
@@ -213,11 +217,15 @@ class WakeWordAssistantService : Service() {
                 .putString(KEY_LAST_ERROR, failureMessage)
                 .putBoolean(KEY_ACTIVE, false)
                 .apply()
-            if (running.get()) updateNotification("Assistant stopped · $failureMessage")
+            updateNotification("Assistant needs attention · $failureMessage")
             running.set(false)
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_ACTIVE, false)
+                .putString(KEY_LAST_ERROR, failureMessage)
+                .apply()
             isRunning = false
-            stopSelf()
+            // Keep the foreground notification visible with the failure reason.
+            // The user can stop it or retry from Assistant Tools.
         } finally {
             running.set(false)
             recorder = null
