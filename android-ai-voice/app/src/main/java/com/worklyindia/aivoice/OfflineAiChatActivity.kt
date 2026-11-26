@@ -53,7 +53,8 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var chatScroll: ScrollView
     private val conversationHistory = StringBuilder()
-    private var dark = false\n    private var thinkMode = false
+    private var dark = false
+    private var thinkMode = false
     @Volatile private var modelLoadInProgress = false
     private var ignoreInitialModelSelection = true
     @Volatile private var loadedModelId: String? = null
@@ -291,7 +292,12 @@ class OfflineAiChatActivity : Activity() {
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
-            menu.add(if (thinkMode) "✓ Think mode · On" else "Think mode · Off").setOnMenuItemClickListener {\n                thinkMode = !thinkMode\n                status.text = if (thinkMode) "Think mode enabled · more deliberate responses" else "Think mode disabled"\n                true\n            }\n            menu.add("Create / Edit Image").setOnMenuItemClickListener {
+            menu.add(if (thinkMode) "✓ Think mode · On" else "Think mode · Off").setOnMenuItemClickListener {
+                thinkMode = !thinkMode
+                status.text = if (thinkMode) "Think mode enabled · more deliberate responses" else "Think mode disabled"
+                true
+            }
+            menu.add("Create / Edit Image").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, ChatWorkImageActivity::class.java)); true
             }
             menu.add("Assistant Tools · Memory / Files / Reminders / Apps").setOnMenuItemClickListener {
