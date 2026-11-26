@@ -62,6 +62,7 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var chatScroll: ScrollView
     private val conversationHistory = StringBuilder()
     private var greetingPane: View? = null
+    private var currentConversationId: String = java.util.UUID.randomUUID().toString()
     private var dark = false
     @Volatile private var modelLoadInProgress = false
     private var ignoreInitialModelSelection = true
@@ -79,6 +80,7 @@ class OfflineAiChatActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         buildUi()
+        restoreLastConversation()
         loadModel()
     }
 
@@ -241,6 +243,104 @@ class OfflineAiChatActivity : Activity() {
         setContentView(root)
     }
 
+    private fun startNewConversation() {
+        conversationHistory.clear()
+        currentConversationId = java.util.UUID.randomUUID().toString()
+        chatMessages.removeAllViews()
+        thinkingBubble = null
+        greetingPane = null
+        showGreetingPane()
+        promptInput.setText("")
+        status.text = "New chat"
+    }
+
+    private fun saveCurrentConversation() {
+        val history = conversationHistory.toString()
+        if (history.isBlank()) return
+        val prefs = getSharedPreferences("chatwork_conversations_v1", MODE_PRIVATE)
+        val sessions = runCatching { org.json.JSONArray(prefs.getString("sessions", "[]")) }
+            .getOrElse { org.json.JSONArray() }
+        val title = Regex("(?m)^User: (.+)$").find(history)?.groupValues?.get(1)
+            ?.take(48) ?: "ChatWork conversation"
+        val item = org.json.JSONObject()
+            .put("id", currentConversationId)
+            .put("title", title)
+            .put("history", history)
+            .put("updatedAt", System.currentTimeMillis())
+        var replaced = false
+        for (i in 0 until sessions.length()) {
+            if (sessions.optJSONObject(i)?.optString("id") == currentConversationId) {
+                sessions.put(i, item)
+                replaced = true
+                break
+            }
+        }
+        if (!replaced) sessions.put(item)
+        val bounded = org.json.JSONArray()
+        val start = (sessions.length() - 40).coerceAtLeast(0)
+        for (i in start until sessions.length()) bounded.put(sessions.getJSONObject(i))
+        prefs.edit().putString("sessions", bounded.toString())
+            .putString("last_session_id", currentConversationId).apply()
+    }
+
+    private fun restoreLastConversation() {
+        val prefs = getSharedPreferences("chatwork_conversations_v1", MODE_PRIVATE)
+        val id = prefs.getString("last_session_id", null) ?: return
+        val sessions = runCatching { org.json.JSONArray(prefs.getString("sessions", "[]")) }
+            .getOrElse { return }
+        val item = (0 until sessions.length()).mapNotNull { sessions.optJSONObject(it) }
+            .firstOrNull { it.optString("id") == id } ?: return
+        currentConversationId = id
+        conversationHistory.clear()
+        conversationHistory.append(item.optString("history"))
+        renderSavedConversation(conversationHistory.toString())
+    }
+
+    private fun renderSavedConversation(history: String) {
+        chatMessages.removeAllViews()
+        greetingPane = null
+        val markers = Regex("(?m)^(User|Assistant): ")
+        val matches = markers.findAll(history).toList()
+        matches.forEachIndexed { index, match ->
+            val start = match.range.last + 1
+            val end = matches.getOrNull(index + 1)?.range?.first ?: history.length
+            val content = history.substring(start, end).trimEnd()
+            if (content.isNotBlank()) addMessage(content, match.groupValues[1] == "User")
+        }
+        if (matches.isEmpty()) showGreetingPane()
+    }
+
+    private fun showConversationHistory(anchor: View) {
+        val prefs = getSharedPreferences("chatwork_conversations_v1", MODE_PRIVATE)
+        val sessions = runCatching { org.json.JSONArray(prefs.getString("sessions", "[]")) }
+            .getOrElse { org.json.JSONArray() }
+        val items = (0 until sessions.length()).mapNotNull { sessions.optJSONObject(it) }
+            .sortedByDescending { it.optLong("updatedAt") }
+        if (items.isEmpty()) {
+            android.widget.Toast.makeText(this, "No saved conversations yet", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = items.map { item ->
+            val date = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                .format(java.util.Date(item.optLong("updatedAt")))
+            "${item.optString("title", "Conversation")}  ·  $date"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Recent chats")
+            .setItems(labels) { _, which ->
+                saveCurrentConversation()
+                val selected = items[which]
+                currentConversationId = selected.optString("id")
+                conversationHistory.clear()
+                conversationHistory.append(selected.optString("history"))
+                renderSavedConversation(conversationHistory.toString())
+                prefs.edit().putString("last_session_id", currentConversationId).apply()
+                status.text = "Conversation opened"
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun showGreetingPane() {
         if (chatMessages.childCount > 0) return
         val pane = LinearLayout(this).apply {
@@ -309,6 +409,15 @@ class OfflineAiChatActivity : Activity() {
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
+            menu.add("New chat").setOnMenuItemClickListener {
+                saveCurrentConversation()
+                startNewConversation()
+                true
+            }
+            menu.add("Chat history").setOnMenuItemClickListener {
+                showConversationHistory(anchor)
+                true
+            }
             menu.add("Export conversation").setOnMenuItemClickListener {
                 exportConversation(); true
             }
@@ -361,6 +470,7 @@ class OfflineAiChatActivity : Activity() {
                 conversationHistory.clear()
                 chatMessages.removeAllViews()
                 thinkingBubble = null
+                currentConversationId = java.util.UUID.randomUUID().toString()
                 showGreetingPane()
                 status.text = "Conversation cleared. Local saved memories are unchanged."
             }
@@ -648,6 +758,7 @@ class OfflineAiChatActivity : Activity() {
             }
             conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
+            saveCurrentConversation()
             runOnUiThread {
                 if (!answer.startsWith("AI reply failed:") && chosenFile.isNotBlank()) {
                     val filePrefs = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
