@@ -269,3 +269,12 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Fixed boot recovery so overdue daily and weekly reminders advance to their next future occurrence instead of being silently skipped after the device was powered off.
 - Expired one-time reminders are removed from local reminder metadata during boot recovery, and the remaining reminder ID set is saved without dropping unrelated reminders.
 - Android CI and physical-device reboot/notification checks are still required.
+
+## AI Agent local planning update — 2026-11-26
+
+- Replaced the generic fixed task-plan template with local LLM-generated decomposition using a downloaded Qwen model that has passed the app's Test Model check.
+- Planning runs on a background executor and displays a progress state; the executor is stopped with the Activity lifecycle.
+- The prompt requests 3–6 bounded steps, follows the user's language/style, and prohibits credential collection, destructive commands, shell execution and claims that actions have already run.
+- The user reviews and explicitly approves or discards the generated plan. Approval records the plan only; it does not execute arbitrary model output.
+- This completes the LLM-generated planning foundation, not autonomous multi-step execution. Typed action adapters, per-action destination/result verification and safe undo remain incomplete.
+- The change is committed on PR #251 and awaits latest-head Android CI and physical-device validation.
