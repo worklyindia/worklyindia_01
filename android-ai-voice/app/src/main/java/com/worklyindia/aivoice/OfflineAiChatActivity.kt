@@ -560,8 +560,20 @@ class OfflineAiChatActivity : Activity() {
         val chosenFile = importedDocs.ifBlank { legacyFileContext }
         val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\n$memoryItems\n\n" else ""
         val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\n$chosenFile\n\n" else ""
-        val contextPrompt = memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
-            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
+        val replyLanguage = selectedLanguage(prompt).label.substringBefore(" ·")
+        val systemInstructions = """
+            You are Workly India AI, a capable, thoughtful assistant. Understand the user's actual question before answering.
+            Give a direct, accurate, useful answer; explain steps when needed; ask one short clarification only when essential.
+            Use the user's language naturally: $replyLanguage. If the user writes Gujarati or Hindi, reply in that script, not English transliteration.
+            Keep relevant conversation context, do not repeat greetings, do not invent facts, links, prices, live data, or completed actions.
+            If unsure or lacking current information, say so clearly. For Workly India website/app questions, stay focused on Workly India and give practical guidance.
+            Format longer answers with short headings or numbered steps. Avoid generic filler and answer the exact question.
+        """.trimIndent()
+        val contextPrompt = systemInstructions + "\n\n" + memoryContext + fileContext + (if (conversationHistory.isEmpty()) {
+            "User: $prompt\nAssistant:"
+        } else {
+            "Previous conversation:\n$conversationHistory\nUser: $prompt\nAssistant:"
+        })
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
         val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
