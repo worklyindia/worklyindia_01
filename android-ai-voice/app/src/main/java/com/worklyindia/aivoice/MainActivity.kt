@@ -107,7 +107,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
         root.addView(TextView(this).apply {
-            text = "AI Assistant"
+            text = "ChatWork Assistant Tools"
             textSize = 19f
             gravity = Gravity.CENTER
             setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
@@ -117,7 +117,7 @@ class MainActivity : Activity() {
             isFocusable = true
             background = null
             setOnClickListener {
-                startActivity(Intent(this@MainActivity, OfflineAiChatActivity::class.java))
+                startActivity(Intent(this@MainActivity, AssistantToolsActivity::class.java))
             }
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
