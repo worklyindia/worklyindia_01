@@ -43,6 +43,7 @@
             android:name=".VoiceRelayNotificationRestoreReceiver"
             android:exported="false" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
+        <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
         <activity android:name=".OfflineAiChatActivity" android:exported="false" />
         <activity android:name=".AssistantToolsActivity" android:exported="false" />
