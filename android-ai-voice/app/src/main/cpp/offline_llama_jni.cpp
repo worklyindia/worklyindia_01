@@ -189,7 +189,10 @@ Java_com_worklyindia_aivoice_OfflineAiEngine_nativeGenerate(
     llama_sampler_free(sampler);
     llama_free(context);
     if (output.empty()) output = "I could not generate a response. Please try again.";
-    return env->NewStringUTF(output.c_str());
+    // Model output is standard UTF-8; NewStringUTF expects JNI modified UTF-8.
+    // Use the same validated UTF-8 → UTF-16 conversion as streaming tokens so
+    // Hindi/Gujarati and supplementary Unicode characters survive final replies.
+    return to_java_string(env, output);
 }
 
 extern "C" JNIEXPORT void JNICALL
