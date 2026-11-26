@@ -31,7 +31,7 @@ class MobileControlActivity : Activity() {
         button(root,"Back to Assistant Tools") { finish() }
         setContentView(root)
     }
-    private fun button(root:LinearLayout,label:String,action:()->Unit){root.addView(Button(this).apply{text=text=label;setOnClickListener{action()}})}
+    private fun button(root:LinearLayout,label:String,action:()->Unit){root.addView(Button(this).apply{text=label;setOnClickListener{action()}})}
     private fun statusText()=if(ChatWorkMobileControlService.enabled(this)) "Accessibility control: enabled" else "Accessibility control: disabled"
     private fun performGlobal(action:Int):Boolean {
         val service=MobileControlServiceRegistry.service ?: return false
