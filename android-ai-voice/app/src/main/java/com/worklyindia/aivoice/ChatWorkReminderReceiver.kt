@@ -66,9 +66,23 @@ class ChatWorkReminderReceiver : BroadcastReceiver() {
         val now = System.currentTimeMillis()
         ids.forEach { rawId ->
             val id = rawId.toIntOrNull() ?: return@forEach
-            val at = prefs.getLong("reminder_at_$id", 0L)
+            var at = prefs.getLong("reminder_at_$id", 0L)
             val title = prefs.getString("reminder_title_$id", "ChatWork reminder") ?: "ChatWork reminder"
-            if (at <= now) return@forEach
+            val repeat = prefs.getString("reminder_repeat_$id", "none") ?: "none"
+            if (at <= now && (repeat == "daily" || repeat == "weekly")) {
+                val next = java.util.Calendar.getInstance().apply {
+                    timeInMillis = at
+                    val field = if (repeat == "daily") java.util.Calendar.DAY_OF_YEAR else java.util.Calendar.WEEK_OF_YEAR
+                    do { add(field, 1) } while (timeInMillis <= now)
+                }.timeInMillis
+                at = next
+                prefs.edit().putLong("reminder_at_$id", at).apply()
+            } else if (at <= now) {
+                val updatedIds = ids.toMutableSet().apply { remove(rawId) }
+                prefs.edit().remove("reminder_title_$id").remove("reminder_at_$id")
+                    .remove("reminder_repeat_$id").putStringSet("reminder_ids", updatedIds).apply()
+                return@forEach
+            }
             val pending = PendingIntent.getBroadcast(
                 context, id,
                 Intent(context, ChatWorkReminderReceiver::class.java).putExtra("id", id).putExtra("title", title),
