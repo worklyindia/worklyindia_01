@@ -42,6 +42,8 @@ class MobileControlActivity : Activity() {
         button(root, "Wi-Fi settings") { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
         button(root, "Bluetooth settings") { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
         button(root, "Display settings") { startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }
+        button(root, "Notification settings") { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)) }
+        button(root, "Launch an installed app") { showInstalledApps() }
         button(root, "Back to Assistant Tools") { finish() }
         setContentView(root)
         refreshStatus()
@@ -58,6 +60,27 @@ class MobileControlActivity : Activity() {
             isAllCaps = false
             setOnClickListener { action() }
         })
+    }
+
+    private fun showInstalledApps() {
+        val pm = packageManager
+        val apps = pm.queryIntentActivities(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+        ).sortedBy { it.loadLabel(pm).toString().lowercase() }
+        if (apps.isEmpty()) {
+            Toast.makeText(this, "No launchable apps found.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = apps.map { it.loadLabel(pm).toString() }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Choose an app to open")
+            .setItems(labels) { _, index ->
+                val packageName = apps[index].activityInfo.packageName
+                val launch = pm.getLaunchIntentForPackage(packageName)
+                if (launch != null) {
+                    try { startActivity(launch) }
+                    catch (_: Exception) { Toast.makeText(this, "Unable to open this app.", Toast.LENGTH_SHORT).show() }
+                }
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun refreshStatus() {
