@@ -117,23 +117,6 @@ class OfflineAiChatActivity : Activity() {
 
         root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(5), dp(8), dp(5))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(bg)
-            }
-        }
-        header.addView(TextView(this).apply {
-            text = "‹"
-            textSize = 38f
-            gravity = Gravity.CENTER
-            setTextColor(primaryText)
-            contentDescription = "Back"
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(42), dp(52)))
-
         status = TextView(this).apply { text = "Offline AI"; textSize = 12f; setTextColor(secondaryText); visibility = View.GONE }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
         fun headerAction(label: String, description: String, onTap: () -> Unit): TextView = TextView(this).apply {
