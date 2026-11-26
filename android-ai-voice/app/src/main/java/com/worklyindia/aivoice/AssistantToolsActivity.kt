@@ -69,8 +69,20 @@ $value").apply(); reviewMemory() }
         val uri=data?.data ?: return
         try {
             contentResolver.openInputStream(uri)?.use { stream ->
-                val text=BufferedReader(InputStreamReader(stream)).use{it.readText()}
-                if(text.length>120000) throw IllegalArgumentException("File is too large for chat context (limit 120 KB of text).")
+                // Read at most one character beyond the limit so a huge document cannot
+                // exhaust memory before the size guard is applied.
+                val text = BufferedReader(InputStreamReader(stream)).use { reader ->
+                    val buffer = CharArray(8192)
+                    val result = StringBuilder()
+                    while (result.length <= 120000) {
+                        val remaining = (120001 - result.length).coerceAtMost(buffer.size)
+                        val count = reader.read(buffer, 0, remaining)
+                        if (count < 0) break
+                        result.append(buffer, 0, count)
+                    }
+                    result.toString()
+                }
+                if (text.length > 120000) throw IllegalArgumentException("File is too large for chat context (limit 120 KB of text).")
                 toolsPrefs.edit().putString("pending_file_context","Chosen document content (user-selected):
 $text").apply()
                 AlertDialog.Builder(this).setMessage("Text read (${text.length} characters). It will be included in your next offline AI chat prompt.").setPositiveButton("OK",null).show()
