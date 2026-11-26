@@ -43,7 +43,7 @@ class AssistantToolsActivity : Activity() {
         })
         addButton("Add memory") { addMemory() }
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
-        addButton("Choose a text file for AI chat") { chooseFile() }
+        addButton("Choose a text file or PDF for AI chat") { chooseFile() }
         addButton("AI Agent - Plan & Approval History") { startActivity(Intent(this, ChatWorkAgentActivity::class.java)) }
         addButton("Schedule phone reminder") { scheduleReminder() }
         addButton("Manage / cancel reminders") { manageReminders() }
@@ -118,7 +118,8 @@ class AssistantToolsActivity : Activity() {
     private fun chooseFile() {
         startActivityForResult(
             Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                type = "text/*"
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "application/pdf"))
                 addCategory(Intent.CATEGORY_OPENABLE)
             }, 7201
         )
@@ -129,34 +130,67 @@ class AssistantToolsActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != 7201 || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
-        try {
-            contentResolver.openInputStream(uri)?.use { stream ->
-                // Read only up to one character beyond the cap; never load an unbounded file.
-                val text = BufferedReader(InputStreamReader(stream)).use { reader ->
-                    val buffer = CharArray(8192)
-                    val result = StringBuilder()
-                    while (result.length <= 120000) {
-                        val remaining = (120001 - result.length).coerceAtMost(buffer.size)
-                        val count = reader.read(buffer, 0, remaining)
-                        if (count < 0) break
-                        result.append(buffer, 0, count)
+        val mimeType = contentResolver.getType(uri).orEmpty().lowercase()
+        Thread {
+            try {
+                val extracted = if (mimeType == "application/pdf" || uri.toString().lowercase().endsWith(".pdf")) {
+                    val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                        val output = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        var total = 0
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            require(total <= 20 * 1024 * 1024) { "PDF exceeds the 20 MB import limit." }
+                            output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    } ?: throw IllegalStateException("Unable to read selected PDF.")
+                    com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
+                    val document = com.tom_roush.pdfbox.pdmodel.PDDocument.load(bytes)
+                    try {
+                        require(document.numberOfPages <= 40) { "PDF exceeds the 40-page import limit." }
+                        val stripper = com.tom_roush.pdfbox.text.PDFTextStripper().apply {
+                            startPage = 1
+                            endPage = document.numberOfPages
+                        }
+                        stripper.getText(document).take(120001)
+                    } finally {
+                        document.close()
                     }
-                    result.toString()
+                } else {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        BufferedReader(InputStreamReader(stream)).use { reader ->
+                            val buffer = CharArray(8192)
+                            val result = StringBuilder()
+                            while (result.length <= 120000) {
+                                val remaining = (120001 - result.length).coerceAtMost(buffer.size)
+                                val count = reader.read(buffer, 0, remaining)
+                                if (count < 0) break
+                                result.append(buffer, 0, count)
+                            }
+                            result.toString()
+                        }
+                    } ?: throw IllegalStateException("Unable to read selected text file.")
                 }
-                if (text.length > 120000) {
-                    throw IllegalArgumentException("File is too large for chat context (limit 120 KB of text).")
-                }
+                require(extracted.isNotBlank()) { "No selectable text was found. Scanned/image-only PDFs need OCR, which is not included yet." }
+                require(extracted.length <= 120000) { "Extracted text exceeds the 120 KB chat-context limit." }
                 toolsPrefs.edit()
-                    .putString("pending_file_context", "Chosen document content (user-selected):\n" + text)
+                    .putString("pending_file_context", "Chosen document content (user-selected):\\n" + extracted)
                     .apply()
-                AlertDialog.Builder(this)
-                    .setMessage("Text read (" + text.length + " characters). It will be included in your next offline AI chat prompt.")
-                    .setPositiveButton("OK", null).show()
-            } ?: throw IllegalStateException("Unable to read selected document.")
-        } catch (failure: Exception) {
-            AlertDialog.Builder(this).setMessage("Could not read text: " + failure.message)
-                .setPositiveButton("OK", null).show()
-        }
+                runOnUiThread {
+                    AlertDialog.Builder(this).setMessage(
+                        "Document text extracted (" + extracted.length + " characters). It will be included in your next offline AI chat prompt."
+                    ).setPositiveButton("OK", null).show()
+                }
+            } catch (failure: Exception) {
+                runOnUiThread {
+                    AlertDialog.Builder(this).setMessage("Could not read document: " + (failure.message ?: "Unknown error"))
+                        .setPositiveButton("OK", null).show()
+                }
+            }
+        }.start()
     }
 
     private fun scheduleReminder() {
