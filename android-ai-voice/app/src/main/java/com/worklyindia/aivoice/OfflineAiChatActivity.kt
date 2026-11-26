@@ -100,6 +100,7 @@ class OfflineAiChatActivity : Activity() {
                         return
                     }
                     val selected = modelManager.models[position]
+                    qwenModelPicker.visibility = View.GONE
                     selectedQwenModel = selected
                     val selectedReady = modelManager.snapshot(selected).state == QwenModelManager.State.READY
                     if (selectedReady && !modelLoadInProgress && selected.id != loadedModelId) {
@@ -313,6 +314,14 @@ class OfflineAiChatActivity : Activity() {
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
+            menu.add("Choose AI model").setOnMenuItemClickListener {
+                qwenModelPicker.visibility = View.VISIBLE
+                qwenModelPicker.post { qwenModelPicker.performClick() }
+                true
+            }
+            menu.add("Download / test models").setOnMenuItemClickListener {
+                startActivity(Intent(this@OfflineAiChatActivity, SpeechDownloadsActivity::class.java)); true
+            }
             menu.add("Create / Edit Image").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, ChatWorkImageActivity::class.java)); true
             }
