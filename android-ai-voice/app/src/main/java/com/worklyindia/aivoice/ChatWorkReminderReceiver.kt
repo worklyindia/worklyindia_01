@@ -62,6 +62,7 @@ class ChatWorkReminderReceiver : BroadcastReceiver() {
     private fun rescheduleAfterBoot(context: Context) {
         val prefs = context.getSharedPreferences("chatwork_assistant_tools", Context.MODE_PRIVATE)
         val ids = prefs.getStringSet("reminder_ids", emptySet()).orEmpty()
+        val remainingIds = ids.toMutableSet()
         val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val now = System.currentTimeMillis()
         ids.forEach { rawId ->
@@ -78,9 +79,9 @@ class ChatWorkReminderReceiver : BroadcastReceiver() {
                 at = next
                 prefs.edit().putLong("reminder_at_$id", at).apply()
             } else if (at <= now) {
-                val updatedIds = ids.toMutableSet().apply { remove(rawId) }
+                remainingIds.remove(rawId)
                 prefs.edit().remove("reminder_title_$id").remove("reminder_at_$id")
-                    .remove("reminder_repeat_$id").putStringSet("reminder_ids", updatedIds).apply()
+                    .remove("reminder_repeat_$id").apply()
                 return@forEach
             }
             val pending = PendingIntent.getBroadcast(
@@ -90,6 +91,7 @@ class ChatWorkReminderReceiver : BroadcastReceiver() {
             )
             alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending)
         }
+        if (remainingIds != ids) prefs.edit().putStringSet("reminder_ids", remainingIds).apply()
     }
 
 }
