@@ -997,7 +997,7 @@ class OfflineAiChatActivity : Activity() {
     /** Lightweight native Markdown styling for headings, bold text and inline code. */
     private fun formatAssistantMarkdown(raw: String): SpannableStringBuilder {
         val result = SpannableStringBuilder(raw)
-        val lines = raw.split("\\n")
+        val lines = raw.split("\n")
         var offset = 0
         lines.forEach { line ->
             val heading = Regex("^#{1,3}\\s+(.+)$").find(line)
