@@ -7,7 +7,7 @@ import android.app.PendingIntent
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Bundle
+import android.os.Bundle\nimport android.os.Build\nimport java.util.Locale
 import android.widget.Button
 import android.widget.DatePicker
 import android.widget.TimePicker
@@ -75,7 +75,73 @@ class AssistantToolsActivity : Activity() {
             return
         }
         // The existing setup flow checks language, downloaded/tested models and microphone permissions.
-        startActivity(Intent(this, OfflineAiChatActivity::class.java).putExtra("assistant_tools_setup", true))
+        chooseAssistantLanguage()
+    }
+\n
+    private fun chooseAssistantLanguage() {
+        val labels = arrayOf("Hindi · हिन्दी", "Gujarati · ગુજરાતી", "English · India")
+        val codes = arrayOf("hi", "gu", "en")
+        val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+        var selected = codes.indexOf(prefs.getString(WakeWordAssistantService.KEY_LANGUAGE, "hi")).coerceAtLeast(0)
+        AlertDialog.Builder(this).setTitle("Enable Hey ChatWork")
+            .setMessage("Listening uses the microphone with a visible foreground notification. Processing stays on this phone.")
+            .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue") { _, _ -> checkAssistantReady(codes[selected]) }.show()
+    }
+
+    private fun checkAssistantReady(language: String) {
+        val packs = SpeechPackDownloadManager(this)
+        val missing = mutableListOf<String>()
+        val wakePack = SpeechModelCatalog.chatWorkWakeWord()
+        if (!WakeWordEngineFactory.isReady(this)) missing.add("ChatWork Wake Word · English")
+        else if (!packs.isModelTested(wakePack)) missing.add("Test Model · ChatWork Wake Word")
+        if (!OfflineSpeechEngineFactory.isReady(this, SpeechModelCatalog.indicConformer(language)))
+            missing.add("IndicConformer ${language.uppercase(Locale.ROOT)} · Voice to Text")
+        if (packs.snapshot(SpeechModelCatalog.indicTinyTts(language)).state != SpeechPackDownloadManager.State.COMPLETE)
+            missing.add("Indic Tiny TTS ${language.uppercase(Locale.ROOT)} · Text to Voice")
+        val qwen = QwenModelManager(this)
+        if (qwen.models.none { qwen.snapshot(it).state == QwenModelManager.State.READY })
+            missing.add("A downloaded and tested Qwen AI model")
+        if (missing.isNotEmpty()) {
+            AlertDialog.Builder(this).setTitle("Models required")
+                .setMessage("Download and test these first:\n\n" + missing.joinToString("\n"))
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Open Download Models") { _, _ ->
+                    startActivity(Intent(this, SpeechDownloadsActivity::class.java))
+                }.show()
+            return
+        }
+        getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+            .putString(WakeWordAssistantService.KEY_LANGUAGE, language).apply()
+        val requested = mutableListOf<String>()
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+            requested.add(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+            requested.add(Manifest.permission.POST_NOTIFICATIONS)
+        if (requested.isNotEmpty()) requestPermissions(requested.toTypedArray(), 6104)
+        else startWakeAssistant()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 6104) return
+        if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) startWakeAssistant()
+        else Toast.makeText(this, "Microphone and notification permissions are required to enable the assistant.", Toast.LENGTH_LONG).show()
+    }
+
+    private fun startWakeAssistant() {
+        val pref = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+        pref.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
+        try {
+            val intent = Intent(this, WakeWordAssistantService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+            Toast.makeText(this, "Starting Hey ChatWork…", Toast.LENGTH_SHORT).show()
+            root.postDelayed({ recreate() }, 1000)
+        } catch (e: Exception) {
+            pref.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+            Toast.makeText(this, "Could not start assistant: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 \n    private fun addButton(label: String, action: () -> Unit) {
         root.addView(Button(this).apply {
