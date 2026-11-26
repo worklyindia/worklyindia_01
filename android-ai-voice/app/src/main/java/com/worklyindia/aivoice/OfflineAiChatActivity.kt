@@ -532,7 +532,6 @@ class OfflineAiChatActivity : Activity() {
         val chosenFile = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE).getString("pending_file_context", "").orEmpty().trim()
         val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\n$memoryItems\n\n" else ""
         val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\n$chosenFile\n\n" else ""
-        if (chosenFile.isNotBlank()) getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE).edit().remove("pending_file_context").apply()
         val contextPrompt = memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
             "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
@@ -570,6 +569,12 @@ class OfflineAiChatActivity : Activity() {
             conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
             runOnUiThread {
+                if (!answer.startsWith("AI reply failed:") && chosenFile.isNotBlank()) {
+                    val filePrefs = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
+                    if (filePrefs.getString("pending_file_context", "").orEmpty().trim() == chosenFile) {
+                        filePrefs.edit().remove("pending_file_context").apply()
+                    }
+                }
                 replaceThinking(answer)
                 status.text = "Reply completed in ${elapsedSeconds}s"
                 sendButton.isEnabled = engine.isLoaded
