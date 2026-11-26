@@ -42,7 +42,7 @@ class OfflineAiEngine {
         try {
             // 160 tokens gives the small on-device models room to answer fully,
             // while keeping replies bounded for mobile latency and memory.
-            val result = nativeGenerate(prompt.trim().take(4000), 160).trim()
+            val result = nativeGenerate(prompt.trim().take(4000), 220).trim()
             check(result.isNotEmpty()) { "The model returned an empty response. Try a shorter message or reload the model." }
             result
         } finally {
