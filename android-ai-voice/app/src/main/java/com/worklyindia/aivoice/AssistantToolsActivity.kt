@@ -52,7 +52,10 @@ class AssistantToolsActivity : Activity() {
         addButton("Open an installed app") { showApps() }
         addButton("Back") { finish() }
         setContentView(root)
-        if (intent.getBooleanExtra("open_reminder_editor", false)) scheduleReminder()
+        when {
+            intent.getBooleanExtra("open_reminder_editor", false) -> scheduleReminder()
+            intent.getBooleanExtra("open_calendar_editor", false) -> addCalendarEvent()
+        }
     }
 
     private fun addButton(label: String, action: () -> Unit) {
