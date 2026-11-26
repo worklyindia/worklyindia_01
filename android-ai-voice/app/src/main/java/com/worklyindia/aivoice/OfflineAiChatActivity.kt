@@ -472,8 +472,10 @@ class OfflineAiChatActivity : Activity() {
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         status.text = "Generating a reply on this phone…"
-        val contextPrompt = if (conversationHistory.isEmpty()) prompt else
-            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt"
+        val memoryItems = getSharedPreferences("chatwork_user_memory", MODE_PRIVATE).getString("items", "").orEmpty().trim()
+        val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\\n$memoryItems\\n\\n" else ""
+        val contextPrompt = memoryContext + (if (conversationHistory.isEmpty()) prompt else
+            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
         val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
