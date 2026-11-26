@@ -140,7 +140,7 @@ class OfflineAiChatActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(4), 0, dp(4), 0)
-            background = android.graphics.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
         }
         fun headerIcon(drawable: Int, description: String, action: () -> Unit) = ImageView(this).apply {
             setImageResource(drawable)
