@@ -14,6 +14,8 @@ import android.widget.TimePicker
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Spinner
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -167,11 +169,16 @@ class AssistantToolsActivity : Activity() {
         val title = EditText(this).apply { hint = "Reminder title" }
         val date = DatePicker(this)
         val time = TimePicker(this).apply { setIs24HourView(true) }
+        val repeat = Spinner(this).apply {
+            adapter = ArrayAdapter(this@AssistantToolsActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Does not repeat", "Every day", "Every week"))
+        }
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(title)
             addView(date)
             addView(time)
+            addView(TextView(this@AssistantToolsActivity).apply { text = "Repeat" })
+            addView(repeat)
         }
         AlertDialog.Builder(this).setTitle("Schedule reminder").setView(layout)
             .setNegativeButton("Cancel", null)
@@ -186,6 +193,7 @@ class AssistantToolsActivity : Activity() {
                 }
                 val id = (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
                 val reminderTitle = title.text.toString().ifBlank { "ChatWork reminder" }
+                val repeatMode = when (repeat.selectedItemPosition) { 1 -> "daily"; 2 -> "weekly"; else -> "none" }
                 val intent = Intent(this, ChatWorkReminderReceiver::class.java)
                     .putExtra("title", reminderTitle).putExtra("id", id)
                 val pending = PendingIntent.getBroadcast(
@@ -195,6 +203,7 @@ class AssistantToolsActivity : Activity() {
                 alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pending)
                 val ids = reminderIds().apply { add(id.toString()) }
                 toolsPrefs.edit().putString("reminder_title_" + id, reminderTitle)
+                    .putString("reminder_repeat_" + id, repeatMode)
                     .putLong("reminder_at_" + id, calendar.timeInMillis)
                     .putStringSet("reminder_ids", ids).apply()
                 Toast.makeText(this, "Reminder scheduled.", Toast.LENGTH_LONG).show()
@@ -207,7 +216,9 @@ class AssistantToolsActivity : Activity() {
     private fun manageReminders() {
         val entries = reminderIds().mapNotNull { id ->
             val title = toolsPrefs.getString("reminder_title_" + id, null) ?: return@mapNotNull null
-            Triple(id, title, toolsPrefs.getLong("reminder_at_" + id, 0L))
+            val at = toolsPrefs.getLong("reminder_at_" + id, 0L)
+            val repeat = toolsPrefs.getString("reminder_repeat_" + id, "none") ?: "none"
+            Triple(id, title + if (repeat == "none") "" else " (" + repeat + ")", at)
         }.sortedBy { it.third }
         if (entries.isEmpty()) {
             AlertDialog.Builder(this).setTitle("Scheduled reminders")
@@ -239,7 +250,7 @@ class AssistantToolsActivity : Activity() {
                 (getSystemService(ALARM_SERVICE) as AlarmManager).cancel(pending)
                 pending.cancel()
                 val ids = reminderIds().apply { remove(item.first) }
-                toolsPrefs.edit().remove("reminder_title_" + id).remove("reminder_at_" + id)
+                toolsPrefs.edit().remove("reminder_title_" + id).remove("reminder_at_" + id).remove("reminder_repeat_" + id)
                     .putStringSet("reminder_ids", ids).apply()
                 Toast.makeText(this, "Reminder cancelled.", Toast.LENGTH_SHORT).show()
                 manageReminders()
