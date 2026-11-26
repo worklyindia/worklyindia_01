@@ -44,7 +44,7 @@
             android:exported="false" />
         <activity android:name=".WorklyAccountActivity" android:exported="false" />
         <activity android:name=".SpeechDownloadsActivity" android:exported="false" />
-        <activity android:name=".OfflineAiChatActivity" android:exported="false" />
+
         <activity android:name=".AssistantToolsActivity" android:exported="false" />
         <activity android:name=".ChatWorkAgentActivity" android:exported="false" />
         <activity android:name=".MobileControlActivity" android:exported="false" />
