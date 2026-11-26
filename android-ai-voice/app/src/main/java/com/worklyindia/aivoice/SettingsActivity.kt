@@ -104,8 +104,7 @@ class SettingsActivity : Activity() {
         val notificationsAllowed = Build.VERSION.SDK_INT < 33 || checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
         aiDashboard.addView(label("Microphone permission: " + if (micAllowed) "Allowed" else "Not allowed yet", 13, if (micAllowed) 0xFF22A06B.toInt() else 0xFFD97706.toInt(), true))
         aiDashboard.addView(label("Notifications permission: " + if (notificationsAllowed) "Allowed" else "Not allowed yet", 13, if (notificationsAllowed) 0xFF22A06B.toInt() else 0xFFD97706.toInt(), true))
-        content.addView(aiDashboard)
-
+        // card() attaches the dashboard card to content; do not add it a second time.
         content.addView(label("Connection & Diagnostics", 22, primary, true))
 
         val prefs = getSharedPreferences(VoiceRelayService.STATUS_PREFS, MODE_PRIVATE)
