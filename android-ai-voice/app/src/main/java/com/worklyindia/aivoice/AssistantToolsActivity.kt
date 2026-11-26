@@ -26,7 +26,7 @@ class AssistantToolsActivity : Activity() {
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
         addButton("Choose a text file for AI chat") { chooseFile() }
         addButton("Schedule phone reminder") { scheduleReminder() }
-        addButton("Open an installed app") { showApps() }
+        addButton("Mobile Control") { startActivity(Intent(this, MobileControlActivity::class.java)) }\n        addButton("Open an installed app") { showApps() }
         addButton("Back") { finish() }
         setContentView(root)
     }
