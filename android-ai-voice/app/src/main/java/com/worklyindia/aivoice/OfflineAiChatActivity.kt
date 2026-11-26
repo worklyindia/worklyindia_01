@@ -114,6 +114,8 @@ class OfflineAiChatActivity : Activity() {
             }
         }
 
+        root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
+
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -276,17 +278,17 @@ class OfflineAiChatActivity : Activity() {
             }
         }
         composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
-        micButton = TextView(this).apply {
+        micButton = Button(this).apply {
             text = "♩"
             textSize = 24f
             gravity = Gravity.CENTER
             setTextColor(primaryText)
             contentDescription = "Voice input"
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
-        } as Button
+        }
         composer.addView(micButton, LinearLayout.LayoutParams(dp(42), dp(44)))
         composerShell.addView(composer, LinearLayout.LayoutParams(0, -2, 1f))
-        sendButton = TextView(this).apply {
+        sendButton = Button(this).apply {
             text = "➤"
             textSize = 22f
             gravity = Gravity.CENTER
@@ -299,7 +301,7 @@ class OfflineAiChatActivity : Activity() {
             alpha = 0.55f
             contentDescription = "Send message"
             setOnClickListener { sendPrompt() }
-        } as Button
+        }
         composerShell.addView(sendButton, LinearLayout.LayoutParams(dp(46), dp(46)).apply { leftMargin = dp(4) })
 
         root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply {
