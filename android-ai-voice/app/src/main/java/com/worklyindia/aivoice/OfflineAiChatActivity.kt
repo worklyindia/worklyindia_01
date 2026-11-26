@@ -5,6 +5,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.ActivityManager
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -20,6 +22,11 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.StyleSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.TypefaceSpan
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -932,35 +939,104 @@ class OfflineAiChatActivity : Activity() {
 
     private fun addMessage(value: String, fromUser: Boolean): TextView {
         val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             gravity = if (fromUser) Gravity.END else Gravity.START
             setPadding(dp(2), dp(3), dp(2), dp(3))
         }
         val bubble = TextView(this).apply {
-            text = value
+            text = if (fromUser) value else formatAssistantMarkdown(value)
             textSize = 16f
             typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
             setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
             setPadding(dp(16), dp(12), dp(16), dp(12))
-            maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
-            setLineSpacing(dp(2).toFloat(), 1.04f)
+            maxWidth = (resources.displayMetrics.widthPixels * 0.88f).toInt()
+            setLineSpacing(dp(3).toFloat(), 1.05f)
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (fromUser) 0xFF1769C2.toInt() else bg)
-                cornerRadius = dp(22).toFloat()
+                setColor(if (fromUser) 0xFF1769C2.toInt() else surface)
+                cornerRadius = dp(20).toFloat()
             }
+            textIsSelectable = true
         }
         val params = LinearLayout.LayoutParams(-2, -2).apply {
             if (fromUser) marginStart = dp(36) else marginEnd = dp(8)
         }
         row.addView(bubble, params)
+        if (!fromUser) {
+            val actions = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setPadding(dp(5), dp(1), 0, 0)
+            }
+            actions.addView(Button(this).apply {
+                text = "Copy"
+                textSize = 11f
+                isAllCaps = false
+                minHeight = dp(34)
+                setPadding(dp(8), 0, dp(8), 0)
+                setTextColor(secondaryText)
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setOnClickListener { copyAssistantText(bubble.text.toString()) }
+            }, LinearLayout.LayoutParams(-2, dp(34)))
+            actions.addView(Button(this).apply {
+                text = "Share"
+                textSize = 11f
+                isAllCaps = false
+                minHeight = dp(34)
+                setPadding(dp(8), 0, dp(8), 0)
+                setTextColor(secondaryText)
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setOnClickListener { shareAssistantText(bubble.text.toString()) }
+            }, LinearLayout.LayoutParams(-2, dp(34)))
+            row.addView(actions)
+        }
         chatMessages.addView(row, LinearLayout.LayoutParams(-1, -2))
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
         return bubble
     }
 
+    /** Lightweight native Markdown styling for headings, bold text and inline code. */
+    private fun formatAssistantMarkdown(raw: String): SpannableStringBuilder {
+        val result = SpannableStringBuilder(raw)
+        val lines = raw.split("\\n")
+        var offset = 0
+        lines.forEach { line ->
+            val heading = Regex("^#{1,3}\\s+(.+)$").find(line)
+            if (heading != null) {
+                val start = offset + heading.range.first
+                val end = offset + line.length
+                if (start < end) {
+                    result.setSpan(StyleSpan(android.graphics.Typeface.BOLD), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    result.setSpan(RelativeSizeSpan(1.12f), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+            offset += line.length + 1
+        }
+        Regex("\\*\\*(.+?)\\*\\*").findAll(raw).forEach { match ->
+            result.setSpan(StyleSpan(android.graphics.Typeface.BOLD), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        Regex("`([^`]+)`").findAll(raw).forEach { match ->
+            result.setSpan(TypefaceSpan("monospace"), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return result
+    }
+
+    private fun copyAssistantText(value: String) {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("ChatWork AI reply", value))
+        status.text = "AI reply copied to clipboard."
+    }
+
+    private fun shareAssistantText(value: String) {
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, value)
+        }
+        startActivity(Intent.createChooser(share, "Share AI reply"))
+    }
+
     private fun replaceThinking(answer: String) {
         val bubble = thinkingBubble
-        if (bubble != null) bubble.text = answer else addMessage(answer, false)
+        if (bubble != null) bubble.text = formatAssistantMarkdown(answer) else addMessage(answer, false)
         thinkingBubble = null
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
     }
