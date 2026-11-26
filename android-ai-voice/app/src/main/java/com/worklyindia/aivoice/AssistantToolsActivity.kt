@@ -1,6 +1,8 @@
 package com.worklyindia.aivoice
 
 import android.app.*
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.*
 import android.net.Uri
 import android.os.Bundle
@@ -70,6 +72,11 @@ class AssistantToolsActivity : Activity() {
         } catch(e:Exception) { AlertDialog.Builder(this).setMessage("Could not read text: ${e.message}").setPositiveButton("OK",null).show() }
     }
     private fun scheduleReminder() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7202)
+            Toast.makeText(this, "Allow notifications, then schedule your reminder again.", Toast.LENGTH_LONG).show()
+            return
+        }
         val title=EditText(this).apply{hint="Reminder title"}
         val now=Calendar.getInstance()
         val date=DatePicker(this); val time=TimePicker(this).apply{setIs24HourView(true)}
