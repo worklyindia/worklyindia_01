@@ -231,3 +231,10 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - The implementation uses Android intents only; it does not toggle system settings, read other apps' screens, enter credentials, or execute free-form model-generated commands.
 - Local audit history records plan approvals, launch requests and caught launch failures (up to 100 records). A launch request is not represented as proof that the destination completed its task.
 - The planner remains a generic offline template, not an LLM task decomposition engine. This is a safe first execution slice, not full autonomous agent capability.
+
+
+## Conversation file controls — 2026-11-26
+
+- Added **Export conversation** to the offline chat menu. It uses Android's system document picker (ACTION_CREATE_DOCUMENT) and writes the completed conversation as UTF-8 plain text only to the destination selected by the user.
+- Added **Clear conversation** with a confirmation dialog. It clears the visible chat and in-memory conversation context but does not delete saved memories or pending imported-file context.
+- Export and clear operate locally; no conversation is uploaded.
