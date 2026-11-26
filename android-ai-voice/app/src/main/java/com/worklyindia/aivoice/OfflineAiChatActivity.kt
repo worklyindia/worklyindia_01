@@ -150,7 +150,7 @@ class OfflineAiChatActivity : Activity() {
         header.addView(usage, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(3); marginEnd = dp(5) })
         header.addView(headerAction("↗", "Connect") { AlertDialog.Builder(this).setTitle("AI Connect").setMessage("AI Connect is available from the Workly India website.").setPositiveButton("OK", null).show() }, LinearLayout.LayoutParams(dp(38), dp(44)))
         header.addView(headerAction("♛", "Settings") { startActivity(Intent(this, SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(38), dp(44)))
-        header.addView(headerAction("⋮", "More options") { showChatOptions(it) }, LinearLayout.LayoutParams(dp(38), dp(44)))
+        header.addView(headerAction("⋮", "More options") { showChatOptions(header) }, LinearLayout.LayoutParams(dp(38), dp(44)))
         root.addView(header, LinearLayout.LayoutParams(-1, dp(48)))
 
         chatScroll = ScrollView(this).apply {
