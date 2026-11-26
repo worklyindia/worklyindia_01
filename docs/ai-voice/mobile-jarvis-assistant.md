@@ -205,3 +205,12 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 
 
 - Added reminder editing: users can update an existing reminder's title, local date/time and repeat mode. The previous PendingIntent/alarm is cancelled and replaced using the same reminder ID to avoid creating a duplicate.
+
+
+## Document import update — 2026-11-26
+
+- Assistant Tools can now import user-selected plain-text files and PDFs into the next offline chat context.
+- PDF extraction uses PDFBox locally on a background thread; the app does not upload document bytes.
+- Safety limits: 20 MB PDF input, 40 pages, and 120,000 extracted characters.
+- Image-only/scanned PDFs are explicitly reported as unsupported because OCR is not included.
+- Import uses Android's document picker and only reads the file the user selects.
