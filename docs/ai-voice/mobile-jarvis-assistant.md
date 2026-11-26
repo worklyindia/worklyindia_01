@@ -188,7 +188,7 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 ### Remaining work is still substantial
 
 - Reminder editing and recurring schedules are not implemented.
-- File assistant currently supports user-selected bounded plain-text files; PDF extraction, indexing and document search are not implemented.
+- File assistant supports up to five user-selected plain-text/PDF documents in one bounded local context. Scanned-PDF OCR and semantic document indexing/search are not implemented.
 - AI Agent uses local Qwen task-plan generation and user-approved audit records; autonomous execution, typed action adapters, per-action result verification and safe undo remain incomplete.
 - Full Hindi/Gujarati/English live STT→LLM→TTS round-trip, voice interruption and audio quality require test evidence.
 - No online AI/research connector is wired into this offline chat. Do not imply it is available.
@@ -209,7 +209,8 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 
 ## Document import update — 2026-11-26
 
-- Assistant Tools can now import user-selected plain-text files and PDFs into the next offline chat context.
+- Assistant Tools can import up to five user-selected plain-text files and PDFs into the next offline chat context, with combined 120,000-character limit.
+- Imported documents are listed by filename and can be removed individually or cleared as a group; the next chat prompt identifies each document separately.
 - PDF extraction uses PDFBox locally on a background thread; the app does not upload document bytes.
 - Safety limits: 20 MB PDF input, 40 pages, and 120,000 extracted characters.
 - Image-only/scanned PDFs are explicitly reported as unsupported because OCR is not included.
