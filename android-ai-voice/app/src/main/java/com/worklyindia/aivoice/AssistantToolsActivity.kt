@@ -44,6 +44,7 @@ class AssistantToolsActivity : Activity() {
         addButton("Add memory") { addMemory() }
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
         addButton("Choose a text file for AI chat") { chooseFile() }
+        addButton("AI Agent - Plan & Approval History") { startActivity(Intent(this, ChatWorkAgentActivity::class.java)) }
         addButton("Schedule phone reminder") { scheduleReminder() }
         addButton("Manage / cancel reminders") { manageReminders() }
         addButton("Mobile Control") { startActivity(Intent(this, MobileControlActivity::class.java)) }
