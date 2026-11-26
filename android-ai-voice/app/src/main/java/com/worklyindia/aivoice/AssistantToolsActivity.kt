@@ -134,14 +134,32 @@ class AssistantToolsActivity : Activity() {
 
     private fun startWakeAssistant() {
         val pref = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
-        pref.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
+        pref.edit()
+            .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true)
+            .putString(WakeWordAssistantService.KEY_LAST_ERROR, "")
+            .apply()
         try {
             val intent = Intent(this, WakeWordAssistantService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
             Toast.makeText(this, "Starting Hey ChatWork…", Toast.LENGTH_SHORT).show()
-            root.postDelayed({ recreate() }, 1000)
+            root.postDelayed({
+                recreate()
+                root.postDelayed({
+                    if (!pref.getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)) {
+                        val reason = pref.getString(WakeWordAssistantService.KEY_LAST_ERROR, "").orEmpty()
+                        AlertDialog.Builder(this)
+                            .setTitle("Hey ChatWork could not start")
+                            .setMessage(reason.ifBlank { "The microphone service stopped before listening started. Check model readiness and permissions, then try again." })
+                            .setPositiveButton("OK", null)
+                            .setNeutralButton("Open Model Downloads") { _, _ -> startActivity(Intent(this, SpeechDownloadsActivity::class.java)) }
+                            .show()
+                    }
+                }, 2500)
+            }, 1000)
         } catch (e: Exception) {
-            pref.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+            pref.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+                .putString(WakeWordAssistantService.KEY_LAST_ERROR, e.message ?: "Could not start the foreground service.")
+                .apply()
             Toast.makeText(this, "Could not start assistant: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
