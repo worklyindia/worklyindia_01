@@ -250,6 +250,12 @@ class OfflineAiChatActivity : Activity() {
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
+            menu.add("Export conversation").setOnMenuItemClickListener {
+                exportConversation(); true
+            }
+            menu.add("Clear conversation").setOnMenuItemClickListener {
+                confirmClearConversation(); true
+            }
             val wakeEnabled = WakeWordAssistantService.isRunning
             qwenModelPicker.isEnabled = !wakeEnabled
             if (wakeEnabled) {
@@ -269,6 +275,55 @@ class OfflineAiChatActivity : Activity() {
         }
     }
 
+
+    private fun exportConversation() {
+        if (conversationHistory.isBlank()) {
+            status.text = "There is no completed conversation to export yet."
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, "ChatWork-conversation-${System.currentTimeMillis()}.txt")
+        }
+        startActivityForResult(intent, REQUEST_EXPORT_CONVERSATION)
+    }
+
+    private fun confirmClearConversation() {
+        if (!sendButton.isEnabled) {
+            status.text = "Wait for the current AI reply before clearing the conversation."
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Clear conversation?")
+            .setMessage("This clears the messages shown in this chat and its temporary conversation context. Saved memories and imported files are not deleted.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear") { _, _ ->
+                conversationHistory.clear()
+                chatMessages.removeAllViews()
+                thinkingBubble = null
+                status.text = "Conversation cleared. Local saved memories are unchanged."
+            }
+            .show()
+    }
+
+    @Deprecated("Legacy result callback for document export compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_EXPORT_CONVERSATION || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val exportText = "ChatWork offline conversation\\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\\n\\n" +
+            conversationHistory.toString()
+        try {
+            contentResolver.openOutputStream(uri, "w")?.use { output ->
+                output.write(exportText.toByteArray(Charsets.UTF_8))
+                output.flush()
+            } ?: throw IllegalStateException("Could not open the selected destination.")
+            status.text = "Conversation exported to the location you selected."
+        } catch (failure: Exception) {
+            status.text = "Conversation export failed: ${failure.message ?: failure.javaClass.simpleName}"
+        }
+    }
 
     private fun chooseWakeWordLanguage() {
         val labels = arrayOf("Hindi · हिन्दी", "Gujarati · ગુજરાતી", "English · India")
@@ -733,5 +788,6 @@ class OfflineAiChatActivity : Activity() {
     companion object {
         private const val REQUEST_AUDIO = 5101
         private const val REQUEST_WAKE_ASSISTANT = 5103
+        private const val REQUEST_EXPORT_CONVERSATION = 5105
     }
 }
