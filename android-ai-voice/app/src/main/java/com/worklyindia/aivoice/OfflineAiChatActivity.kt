@@ -118,18 +118,50 @@ class OfflineAiChatActivity : Activity() {
 
         root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
 
-        status = TextView(this).apply { text = "Offline AI"; textSize = 12f; setTextColor(secondaryText); visibility = View.GONE }
-        status = TextView(this).apply { text = "Offline AI"; textSize = 12f; setTextColor(secondaryText); visibility = View.GONE }
-        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), 0, dp(4), 0) }
+        status = TextView(this).apply {
+            text = "Offline AI"
+            textSize = 12f
+            setTextColor(secondaryText)
+            visibility = View.GONE
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), 0)
+            background = android.graphics.ColorDrawable(android.graphics.Color.TRANSPARENT)
+        }
         fun headerIcon(drawable: Int, description: String, action: () -> Unit) = ImageView(this).apply {
-            setImageResource(drawable); setColorFilter(primaryText); contentDescription = description
-            scaleType = ImageView.ScaleType.CENTER; setPadding(dp(10), dp(10), dp(10), dp(10))
+            setImageResource(drawable)
+            setColorFilter(primaryText)
+            contentDescription = description
+            scaleType = ImageView.ScaleType.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
             setOnClickListener { action() }
         }
-        header.addView(headerIcon(android.R.drawable.ic_media_previous, "Back") { finish() }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(View(this), LinearLayout.LayoutParams(0, dp(48), 1f))
-        header.addView(headerIcon(android.R.drawable.ic_menu_more, "More options") { showChatOptions(header) }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(48)))
+        header.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
+            LinearLayout.LayoutParams(dp(48), dp(56)))
+        val titleBlock = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleBlock.addView(TextView(this).apply {
+            text = "ChatWork"
+            textSize = 20f
+            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            setTextColor(primaryText)
+        })
+        titleBlock.addView(TextView(this).apply {
+            text = "AI Assistant"
+            textSize = 12f
+            setTextColor(secondaryText)
+        })
+        header.addView(titleBlock, LinearLayout.LayoutParams(0, dp(56), 1f).apply {
+            marginStart = dp(4)
+        })
+        header.addView(headerIcon(R.drawable.ic_chatwork_more, "More options") {
+            showChatOptions(header)
+        }, LinearLayout.LayoutParams(dp(48), dp(56)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -154,14 +186,14 @@ class OfflineAiChatActivity : Activity() {
         }
         val composer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val moreButton = ImageView(this).apply {
-            setImageResource(android.R.drawable.ic_menu_add); setColorFilter(secondaryText)
+            setImageResource(R.drawable.ic_chatwork_add); setColorFilter(secondaryText)
             contentDescription = "Attach file or more options"; setPadding(dp(8), dp(8), dp(8), dp(8))
             setOnClickListener { showChatOptions(this) }
         }
         composer.addView(moreButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         promptInput = EditText(this).apply {
-            hint = "Message…"; textSize = 17f
-            typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
+            hint = "Ask anything…"; textSize = 16f
+            typeface = android.graphics.Typeface.DEFAULT
             minLines = 1; maxLines = 4; setTextColor(primaryText); setHintTextColor(secondaryText)
             setPadding(dp(4), dp(8), dp(4), dp(8)); background = null
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
@@ -170,20 +202,22 @@ class OfflineAiChatActivity : Activity() {
         composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
         micButton = Button(this).apply {
             text = ""; contentDescription = "Voice input"; background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-            setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_btn_speak_now, 0, 0, 0)
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(primaryText)
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
         }
         composer.addView(micButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         composerShell.addView(composer, LinearLayout.LayoutParams(0, -2, 1f))
         sendButton = Button(this).apply {
-            text = "➤"; textSize = 23f; gravity = Gravity.CENTER; setTextColor(0xFFFFFFFF.toInt())
+            text = ""; textSize = 23f; gravity = Gravity.CENTER; setTextColor(0xFFFFFFFF.toInt())
             background = android.graphics.drawable.GradientDrawable().apply { setColor(accent); shape = android.graphics.drawable.GradientDrawable.OVAL }
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_send, 0, 0, 0)
+            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
             isEnabled = false; alpha = 0.55f; contentDescription = "Send message"
             setOnClickListener { if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
         }
         composerShell.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
-        root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(5); bottomMargin = dp(5) })
+        root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = dp(8); rightMargin = dp(8); topMargin = dp(4); bottomMargin = dp(4) })
         setContentView(root)
     }
 
@@ -692,7 +726,7 @@ class OfflineAiChatActivity : Activity() {
         val messageColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = if (fromUser) Gravity.END else Gravity.START; setPadding(dp(1), dp(5), dp(1), dp(5)) }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = if (fromUser) Gravity.END else Gravity.START }
         val bubble = TextView(this).apply {
-            text = value; textSize = 17f; typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
+            text = value; textSize = 16f; typeface = android.graphics.Typeface.DEFAULT
             setTextColor(primaryText); setPadding(if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1), if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1))
             maxWidth = (resources.displayMetrics.widthPixels * 0.92f).toInt(); setLineSpacing(dp(5).toFloat(), 1.04f)
             if (fromUser) { setTextColor(if (dark) 0xFFE8EDF5.toInt() else 0xFF172033.toInt()); background = android.graphics.drawable.GradientDrawable().apply { setColor(if (dark) 0xFF202B3F.toInt() else 0xFFF0F0F0.toInt()); cornerRadius = dp(28).toFloat() } } else background = null
@@ -702,7 +736,7 @@ class OfflineAiChatActivity : Activity() {
         if (!fromUser) {
             val meta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.START; setPadding(0, dp(5), 0, 0) }
             val timestamp = java.text.SimpleDateFormat("dd MMMM yyyy hh:mm:ss a", Locale.getDefault()).format(java.util.Date())
-            meta.addView(TextView(this).apply { text = timestamp; textSize = 12f; typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL); setTextColor(secondaryText) }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(5) })
+            meta.addView(TextView(this).apply { text = timestamp; textSize = 12f; typeface = android.graphics.Typeface.DEFAULT; setTextColor(secondaryText) }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(5) })
             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             fun actionIcon(drawable: Int, label: String, onTap: () -> Unit) = ImageView(this).apply {
                 setImageResource(drawable); setColorFilter(secondaryText); contentDescription = label; scaleType = ImageView.ScaleType.CENTER
