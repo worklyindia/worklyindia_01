@@ -173,6 +173,8 @@ class OfflineAiChatActivity : Activity() {
             showChatOptions(header)
         }, LinearLayout.LayoutParams(dp(48), dp(56)))
         root.addView(header, LinearLayout.LayoutParams(-1, dp(56)))
+        status.setPadding(dp(16), dp(4), dp(16), dp(4))
+        root.addView(status, LinearLayout.LayoutParams(-1, -2))
 
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -610,6 +612,7 @@ class OfflineAiChatActivity : Activity() {
         sendButton.alpha = 0.55f
         qwenModelPicker.isEnabled = false
         status.text = "Checking Qwen model and phone memory…"
+        status.visibility = View.VISIBLE
         worker.execute {
             try {
                 val memoryInfo = ActivityManager.MemoryInfo()
@@ -666,8 +669,9 @@ class OfflineAiChatActivity : Activity() {
                     loadedModelId = chosen.id
                     modelLoadInProgress = false
                     status.text = "Ready · ${chosen.title} · local AI replies enabled"
-                    sendButton.isEnabled = true
-                    sendButton.alpha = 1f
+                    status.visibility = View.GONE
+                    sendButton.isEnabled = engine.isLoaded && !promptInput.text.isNullOrBlank()
+                    sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
                     qwenModelPicker.isEnabled = !WakeWordAssistantService.isRunning
                 }
             } catch (error: Exception) {
@@ -675,6 +679,7 @@ class OfflineAiChatActivity : Activity() {
                     loadedModelId = null
                     modelLoadInProgress = false
                     status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
+                    status.visibility = View.VISIBLE
                     sendButton.isEnabled = false
                     qwenModelPicker.isEnabled = true
                 }
@@ -715,6 +720,7 @@ class OfflineAiChatActivity : Activity() {
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         status.text = "Generating a reply on this phone…"
+        status.visibility = View.VISIBLE
         val memoryItems = getSharedPreferences("chatwork_user_memory", MODE_PRIVATE).getString("items", "").orEmpty().trim()
         val importedDocs = importedDocumentContext()
         val legacyFileContext = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
@@ -768,6 +774,7 @@ class OfflineAiChatActivity : Activity() {
                 }
                 replaceThinking(answer)
                 status.text = "Reply completed in ${elapsedSeconds}s"
+                status.visibility = View.GONE
                 sendButton.isEnabled = engine.isLoaded
                 sendButton.alpha = if (engine.isLoaded) 1f else 0.55f
                 if (!answer.startsWith("AI reply failed:")) speakAnswer(answer)
