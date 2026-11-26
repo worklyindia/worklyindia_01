@@ -244,7 +244,7 @@ class OfflineAiChatActivity : Activity() {
             menu.add("Create / Edit Image").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, ChatWorkImageActivity::class.java)); true
             }
-            menu.add("Settings").setOnMenuItemClickListener {
+            menu.add("Assistant Tools · Memory / Files / Reminders / Apps").setOnMenuItemClickListener {\n                startActivity(Intent(this@OfflineAiChatActivity, AssistantToolsActivity::class.java)); true\n            }\n            menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
             val wakeEnabled = WakeWordAssistantService.isRunning
