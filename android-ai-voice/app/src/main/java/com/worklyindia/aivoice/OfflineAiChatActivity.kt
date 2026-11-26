@@ -72,7 +72,7 @@ class OfflineAiChatActivity : Activity() {
         loadModel()
     }
 
-    private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
+    private val bg get() = if (dark) 0xFF0B1222.toInt() else 0xFFFFFFFF.toInt()
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
     private val primaryText get() = if (dark) 0xFFE8EEF7.toInt() else 0xFF142033.toInt()
     private val secondaryText get() = if (dark) 0xFFB5C1D1.toInt() else 0xFF65748B.toInt()
@@ -137,7 +137,7 @@ class OfflineAiChatActivity : Activity() {
         status = TextView(this).apply { text = "Offline AI"; textSize = 12f; setTextColor(secondaryText); visibility = View.GONE }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(8), dp(4)) }
         fun headerAction(label: String, description: String, onTap: () -> Unit): TextView = TextView(this).apply {
-            text = label; textSize = 21f; gravity = Gravity.CENTER; setTextColor(primaryText); contentDescription = description
+            text = label; textSize = 21f; gravity = Gravity.CENTER; setTextColor(when (label) { "🔗" -> 0xFF1685E8.toInt(); "♛" -> 0xFFE3A52B.toInt(); else -> primaryText }); contentDescription = description
             setPadding(dp(5), 0, dp(5), 0); setOnClickListener { onTap() }
         }
         header.addView(headerAction("‹", "Back") { finish() }, LinearLayout.LayoutParams(dp(42), dp(44)))
@@ -148,7 +148,7 @@ class OfflineAiChatActivity : Activity() {
             setOnClickListener { AlertDialog.Builder(this@OfflineAiChatActivity).setTitle("ChatWork · Usage").setMessage(status.text?.toString() ?: "Offline AI").setPositiveButton("OK", null).show() }
         }
         header.addView(usage, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(3); marginEnd = dp(5) })
-        header.addView(headerAction("↗", "Connect") { AlertDialog.Builder(this).setTitle("AI Connect").setMessage("AI Connect is available from the Workly India website.").setPositiveButton("OK", null).show() }, LinearLayout.LayoutParams(dp(38), dp(44)))
+        header.addView(headerAction("🔗", "Connect") { AlertDialog.Builder(this).setTitle("AI Connect").setMessage("AI Connect is available from the Workly India website.").setPositiveButton("OK", null).show() }, LinearLayout.LayoutParams(dp(38), dp(44)))
         header.addView(headerAction("♛", "Settings") { startActivity(Intent(this, SettingsActivity::class.java)) }, LinearLayout.LayoutParams(dp(38), dp(44)))
         header.addView(headerAction("⋮", "More options") { showChatOptions(header) }, LinearLayout.LayoutParams(dp(38), dp(44)))
         root.addView(header, LinearLayout.LayoutParams(-1, dp(48)))
@@ -195,6 +195,7 @@ class OfflineAiChatActivity : Activity() {
         promptInput = EditText(this).apply {
             hint = "Message…"
             textSize = 16f
+            typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
             minLines = 1
             maxLines = 4
             setTextColor(primaryText)
