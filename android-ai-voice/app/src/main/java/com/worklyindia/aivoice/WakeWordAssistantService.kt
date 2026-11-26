@@ -29,6 +29,7 @@ class WakeWordAssistantService : Service() {
     @Volatile private var recorder: AudioRecord? = null
     @Volatile private var activeAi: OfflineAiEngine? = null
     @Volatile private var cpuWakeLock: PowerManager.WakeLock? = null
+    @Volatile private var preserveUserOptInOnDestroy = false
 
     override fun onCreate() {
         super.onCreate()
@@ -239,7 +240,9 @@ class WakeWordAssistantService : Service() {
             runCatching { ai?.unload() }
             activeAi = null
             releaseCpuWakeLock()
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            if (!preserveUserOptInOnDestroy) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            }
             isRunning = false
         }
     }
@@ -350,6 +353,7 @@ class WakeWordAssistantService : Service() {
     override fun onDestroy() {
         // Do not erase the user's opt-in when Android tears down the service
         // during process reclamation; START_STICKY can then restore listening.
+        preserveUserOptInOnDestroy = true
         stopAssistant(clearUserOptIn = false)
         // Let the worker finish its native unload before publishing isRunning=false in finally.
         worker.shutdown()
