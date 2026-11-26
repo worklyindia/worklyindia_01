@@ -1,6 +1,5 @@
 package com.worklyindia.aivoice
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -104,37 +103,26 @@ class WakeWordAssistantService : Service() {
             }
 
             val modelManager = QwenModelManager(this)
-            val memory = ActivityManager.MemoryInfo()
-            (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
-            val modelDirectory = modelManager.file(modelManager.models.first()).parentFile ?: filesDir
-            val budget = AssistantModelPolicy.readBudget(this, modelDirectory)
-            val candidates = modelManager.models.map { model ->
-                AssistantModelPolicy.Candidate(
-                    id = model.id,
-                    displayName = model.title,
-                    expectedBytes = model.size,
-                    minimumAvailableRamBytes = model.minFreeRam,
-                    minimumFreeStorageBytes = 256L * 1024L * 1024L,
-                    enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
-                )
+            // A READY model has already passed the app's model test. Honour the
+            // user's selected model instead of rejecting it with a second,
+            // overly conservative RAM estimate that differs from normal chat.
+            val readyModels = modelManager.models.filter {
+                modelManager.snapshot(it).state == QwenModelManager.State.READY
             }
-            val recommendation = AssistantModelPolicy.recommend(
-                candidates = candidates,
-                budget = budget,
-                reserveRamBytes = 1_200L * 1024L * 1024L,
-                reserveStorageBytes = 256L * 1024L * 1024L
-            )
+            check(readyModels.isNotEmpty()) {
+                "Download and successfully test a Qwen model in ChatWork before enabling Hey ChatWork."
+            }
             val savedModelId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
                 .getString("selected_model_id", null)
-            val chosenCandidate = recommendation.candidate
             val chosen = if (savedModelId != null) {
-                check(chosenCandidate?.id == savedModelId) {
-                    "The selected Qwen model does not fit the wake assistant memory budget. Choose a smaller tested model in ChatWork first."
-                }
-                modelManager.models.first { it.id == savedModelId }
+                readyModels.firstOrNull { it.id == savedModelId }
+                    ?: throw IllegalStateException("Your selected Qwen model is not downloaded and tested. Select a READY model in ChatWork Model Downloads.")
             } else {
-                chosenCandidate?.let { item -> modelManager.models.firstOrNull { it.id == item.id } }
-                    ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
+                val memory = android.app.ActivityManager.MemoryInfo()
+                (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
+                modelManager.recommendedModel(memory.availMem)
+                    .takeIf { candidate -> readyModels.any { it.id == candidate.id } }
+                    ?: readyModels.minBy { it.size }
             }
             val activeAiEngine = OfflineAiEngine()
             ai = activeAiEngine
@@ -211,6 +199,15 @@ class WakeWordAssistantService : Service() {
                     }
                 }
             }
+        } catch (error: OutOfMemoryError) {
+            val failureMessage = "Not enough free memory to load the selected Qwen model. Close other apps and retry, or select a smaller tested model."
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_LAST_ERROR, failureMessage)
+                .putBoolean(KEY_ACTIVE, false)
+                .apply()
+            updateNotification("Assistant needs attention · $failureMessage")
+            running.set(false)
+            isRunning = false
         } catch (error: Exception) {
             val failureMessage = error.message ?: error.javaClass.simpleName
             getSharedPreferences(PREFS, MODE_PRIVATE).edit()
