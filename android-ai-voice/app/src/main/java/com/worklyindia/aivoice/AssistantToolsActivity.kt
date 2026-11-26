@@ -43,7 +43,8 @@ class AssistantToolsActivity : Activity() {
         })
         addButton("Add memory") { addMemory() }
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
-        addButton("Choose a text file or PDF for AI chat") { chooseFile() }
+        addButton("Import multiple text files / PDFs (up to 5)") { chooseFile() }
+        addButton("Manage imported documents") { manageImportedDocuments() }
         addButton("AI Agent - Plan & Approval History") { startActivity(Intent(this, ChatWorkAgentActivity::class.java)) }
         addButton("Schedule phone reminder") { scheduleReminder() }
         addButton("Manage / cancel reminders") { manageReminders() }
@@ -125,73 +126,158 @@ class AssistantToolsActivity : Activity() {
             Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 type = "*/*"
                 putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "application/pdf"))
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 addCategory(Intent.CATEGORY_OPENABLE)
             }, 7201
         )
     }
 
+    private fun importedDocuments(): org.json.JSONArray {
+        val raw = toolsPrefs.getString("imported_documents_v1", "[]").orEmpty()
+        return runCatching { org.json.JSONArray(raw) }.getOrElse { org.json.JSONArray() }
+    }
+
+    private fun saveImportedDocuments(documents: org.json.JSONArray) {
+        val combined = buildString {
+            for (index in 0 until documents.length()) {
+                val item = documents.optJSONObject(index) ?: continue
+                append("DOCUMENT: ").append(item.optString("name", "Imported document")).append("\\n")
+                append(item.optString("text")).append("\\n\\n")
+            }
+        }
+        toolsPrefs.edit()
+            .putString("imported_documents_v1", documents.toString())
+            .putString("pending_file_context", if (combined.isBlank()) "" else
+                "User-selected local documents. Use relevant documents as sources, distinguish them by filename, and say when information is not present.\\n\\n" + combined.take(120000))
+            .apply()
+    }
+
+    private fun manageImportedDocuments() {
+        val docs = importedDocuments()
+        if (docs.length() == 0) {
+            AlertDialog.Builder(this).setMessage("No imported documents. Choose up to five text files or PDFs.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val labels = Array(docs.length()) { i ->
+            val item = docs.optJSONObject(i)
+            (i + 1).toString() + ". " + item?.optString("name", "Document") +
+                " (" + (item?.optString("text")?.length ?: 0) + " characters)"
+        }
+        AlertDialog.Builder(this).setTitle("Imported local documents")
+            .setItems(labels) { _, index ->
+                val item = docs.optJSONObject(index) ?: return@setItems
+                AlertDialog.Builder(this).setTitle(item.optString("name"))
+                    .setMessage("This document is stored locally and included in the next offline AI chat. Remove it?")
+                    .setNegativeButton("Keep", null)
+                    .setPositiveButton("Remove") { _, _ ->
+                        val remaining = org.json.JSONArray()
+                        for (i in 0 until docs.length()) if (i != index) remaining.put(docs.getJSONObject(i))
+                        saveImportedDocuments(remaining)
+                        Toast.makeText(this, "Document removed from ChatWork context.", Toast.LENGTH_SHORT).show()
+                    }.show()
+            }
+            .setNeutralButton("Remove all") { _, _ ->
+                AlertDialog.Builder(this).setMessage("Remove all imported document context?")
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Remove") { _, _ ->
+                        saveImportedDocuments(org.json.JSONArray())
+                        Toast.makeText(this, "All imported documents removed.", Toast.LENGTH_SHORT).show()
+                    }.show()
+            }
+            .setNegativeButton("Close", null).show()
+    }
+
     @Deprecated("Legacy result callback for compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != 7201 || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        val mimeType = contentResolver.getType(uri).orEmpty().lowercase()
+        if (requestCode != 7201 || resultCode != RESULT_OK || data == null) return
+        val selectedUris = buildList {
+            val clip = data.clipData
+            if (clip != null) {
+                for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let(::add)
+            } else data.data?.let(::add)
+        }.distinct()
+        if (selectedUris.isEmpty()) return
+        val existing = importedDocuments()
+        if (existing.length() + selectedUris.size > 5) {
+            AlertDialog.Builder(this).setMessage("ChatWork supports up to five imported documents. Remove an existing document before adding more.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
         Thread {
             try {
-                val extracted = if (mimeType == "application/pdf" || uri.toString().lowercase().endsWith(".pdf")) {
-                    val bytes = contentResolver.openInputStream(uri)?.use { input ->
-                        val output = java.io.ByteArrayOutputStream()
-                        val buffer = ByteArray(8192)
-                        var total = 0
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            total += count
-                            require(total <= 20 * 1024 * 1024) { "PDF exceeds the 20 MB import limit." }
-                            output.write(buffer, 0, count)
-                        }
-                        output.toByteArray()
-                    } ?: throw IllegalStateException("Unable to read selected PDF.")
-                    com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
-                    val document = com.tom_roush.pdfbox.pdmodel.PDDocument.load(bytes)
-                    try {
-                        require(document.numberOfPages <= 40) { "PDF exceeds the 40-page import limit." }
-                        val stripper = com.tom_roush.pdfbox.text.PDFTextStripper().apply {
-                            startPage = 1
-                            endPage = document.numberOfPages
-                        }
-                        stripper.getText(document).take(120001)
-                    } finally {
-                        document.close()
-                    }
-                } else {
-                    contentResolver.openInputStream(uri)?.use { stream ->
-                        BufferedReader(InputStreamReader(stream)).use { reader ->
-                            val buffer = CharArray(8192)
-                            val result = StringBuilder()
-                            while (result.length <= 120000) {
-                                val remaining = (120001 - result.length).coerceAtMost(buffer.size)
-                                val count = reader.read(buffer, 0, remaining)
-                                if (count < 0) break
-                                result.append(buffer, 0, count)
-                            }
-                            result.toString()
-                        }
-                    } ?: throw IllegalStateException("Unable to read selected text file.")
+                val imported = mutableListOf<Pair<String, String>>()
+                var totalChars = (0 until existing.length()).sumOf {
+                    existing.optJSONObject(it)?.optString("text")?.length ?: 0
                 }
-                require(extracted.isNotBlank()) { "No selectable text was found. Scanned/image-only PDFs need OCR, which is not included yet." }
-                require(extracted.length <= 120000) { "Extracted text exceeds the 120 KB chat-context limit." }
-                toolsPrefs.edit()
-                    .putString("pending_file_context", "Chosen document content (user-selected):\n" + extracted)
-                    .apply()
+                for (uri in selectedUris) {
+                    val mimeType = contentResolver.getType(uri).orEmpty().lowercase()
+                    val isPdf = mimeType == "application/pdf" || uri.toString().lowercase().endsWith(".pdf")
+                    val extracted = if (isPdf) {
+                        val bytes = contentResolver.openInputStream(uri)?.use { input ->
+                            val output = java.io.ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            var total = 0
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                require(total <= 20 * 1024 * 1024) { "A PDF exceeds the 20 MB import limit." }
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        } ?: throw IllegalStateException("Unable to read selected PDF.")
+                        com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(applicationContext)
+                        val document = com.tom_roush.pdfbox.pdmodel.PDDocument.load(bytes)
+                        try {
+                            require(document.numberOfPages <= 40) { "A PDF exceeds the 40-page limit." }
+                            com.tom_roush.pdfbox.text.PDFTextStripper().apply {
+                                startPage = 1
+                                endPage = document.numberOfPages
+                            }.getText(document).take(120001)
+                        } finally {
+                            document.close()
+                        }
+                    } else {
+                        contentResolver.openInputStream(uri)?.use { stream ->
+                            BufferedReader(InputStreamReader(stream)).use { reader ->
+                                val buffer = CharArray(8192)
+                                val result = StringBuilder()
+                                while (result.length <= 120000) {
+                                    val count = reader.read(buffer, 0, (120001 - result.length).coerceAtMost(buffer.size))
+                                    if (count < 0) break
+                                    result.append(buffer, 0, count)
+                                }
+                                result.toString()
+                            }
+                        } ?: throw IllegalStateException("Unable to read selected text file.")
+                    }
+                    require(extracted.isNotBlank()) { "No selectable text was found. Scanned/image-only PDFs still need OCR." }
+                    val name = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                        val column = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+                    } ?: if (isPdf) "Imported PDF" else "Imported text file"
+                    totalChars += extracted.length
+                    require(totalChars <= 120000) { "Combined imported documents exceed the 120,000-character chat-context limit." }
+                    imported.add(name to extracted)
+                }
+                val merged = org.json.JSONArray()
+                for (i in 0 until existing.length()) merged.put(existing.getJSONObject(i))
+                imported.forEach { (name, text) ->
+                    merged.put(org.json.JSONObject().put("name", name).put("text", text))
+                }
+                saveImportedDocuments(merged)
                 runOnUiThread {
                     AlertDialog.Builder(this).setMessage(
-                        "Document text extracted (" + extracted.length + " characters). It will be included in your next offline AI chat prompt."
+                        imported.size.toString() + " document(s) imported. Total stored text: " + totalChars +
+                            " characters. They will be included in your next offline AI chat. Manage or remove them anytime in Assistant Tools."
                     ).setPositiveButton("OK", null).show()
                 }
             } catch (failure: Exception) {
                 runOnUiThread {
-                    AlertDialog.Builder(this).setMessage("Could not read document: " + (failure.message ?: "Unknown error"))
+                    AlertDialog.Builder(this).setMessage("Could not import documents: " +
+                        (failure.message ?: failure.javaClass.simpleName))
                         .setPositiveButton("OK", null).show()
                 }
             }
