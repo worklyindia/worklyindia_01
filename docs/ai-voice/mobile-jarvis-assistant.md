@@ -193,3 +193,12 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Full Hindi/Gujarati/English live STT→LLM→TTS round-trip, voice interruption and audio quality require test evidence.
 - No online AI/research connector is wired into this offline chat. Do not imply it is available.
 - Android CI for the newest commit and physical-device tests remain release blockers.
+
+
+## Reminder recurrence implementation — 2026-11-26
+
+- Reminder creation now offers one-shot, daily and weekly schedules.
+- Daily/weekly reminders schedule their next occurrence after notification delivery and retain the next timestamp for reboot recovery.
+- One-shot reminders continue to remove their saved record after firing.
+- The reminder manager labels recurring entries and cancellation removes the stored repeat mode as well as the alarm metadata.
+- Recurrence is based on local calendar days/weeks and Android's inexact idle-allowed alarm API; delivery can be delayed by Android battery policies. Exact-alarm permission is not requested.
