@@ -708,13 +708,13 @@ class OfflineAiChatActivity : Activity() {
                 setImageResource(drawable); setColorFilter(secondaryText); contentDescription = label; scaleType = ImageView.ScaleType.CENTER
                 setPadding(dp(6), dp(5), dp(6), dp(5)); setOnClickListener { onTap() }
             }
-            actions.addView(actionIcon(android.R.drawable.ic_menu_edit, "Copy message") {
+            actions.addView(actionIcon(R.drawable.ic_chat_copy, "Copy message") {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text))
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(android.R.drawable.btn_star_big_on, "Like response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(android.R.drawable.btn_star_big_off, "Dislike response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            actions.addView(actionIcon(R.drawable.ic_chat_thumb_up, "Like response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
+            actions.addView(actionIcon(R.drawable.ic_chat_thumb_down, "Dislike response") { android.widget.Toast.makeText(this@OfflineAiChatActivity, "Feedback noted", android.widget.Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(android.R.drawable.ic_btn_speak_now, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(android.R.drawable.ic_menu_share, "Share response") {
                 val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }
