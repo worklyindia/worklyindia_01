@@ -101,7 +101,7 @@ class OfflineAiChatActivity : Activity() {
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(TextView(this).apply {
-            text = "⚡  Usage"
+            text = if (intent.getBooleanExtra(EXTRA_VOICE_TEST_MODE, false)) "🎙  AI Chat · Voice Test" else "⚡  AI Chat"
             textSize = 19f
             setTextColor(primaryText)
         }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -170,7 +170,7 @@ class OfflineAiChatActivity : Activity() {
             addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
+        addMessage(if (intent.getBooleanExtra(EXTRA_VOICE_TEST_MODE, false)) "Voice test: tap 🎙 and speak, tap Stop recording, then tap Send. ChatWork AI will answer aloud. Status messages show each stage." else "Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
 
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -809,6 +809,7 @@ class OfflineAiChatActivity : Activity() {
     }
 
     companion object {
+        const val EXTRA_VOICE_TEST_MODE = "com.worklyindia.aivoice.EXTRA_VOICE_TEST_MODE"
         private const val REQUEST_AUDIO = 5101
         private const val REQUEST_WAKE_ASSISTANT = 5103
         private const val REQUEST_EXPORT_CONVERSATION = 5105
