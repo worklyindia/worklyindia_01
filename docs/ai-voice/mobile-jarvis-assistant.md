@@ -156,3 +156,23 @@ These are targets and are **not yet implemented/verified** unless listed above a
 - **Phase C (agents + online):** task planner/executor with confirmation and audit log, online research opt-in, source attribution and privacy controls.
 - **Phase D (Mobile Control):** implement scoped Android action service, explicit Accessibility enablement only for UI automation, user-visible action logs, confirmations and test cases; never silently operate apps or handle credentials.
 - Each feature must have a UI, permission/consent flow, tests and documented limits. Mark it complete only after CI and device validation. Do not merge this draft PR or claim production readiness solely from code changes.
+
+
+## Implementation update — 2026-11-26
+
+- Added the first Mobile Control screen with explicit, user-triggered Back, Home, Recents and scroll actions, plus direct Wi-Fi, Bluetooth and Display settings shortcuts.
+- The Accessibility service is opt-in, protected by Android's `BIND_ACCESSIBILITY_SERVICE` permission and configured to retrieve the active window only for the requested scroll operation. Its event callback deliberately does not inspect or retain events; no screen text is uploaded.
+- Fixed Kotlin source formatting in the chat menu and Mobile Control service, corrected the accessibility service manifest binding declaration, and refresh the permission/connection status when returning from Android Accessibility settings.
+- Limited text-file import to 120,000 characters while reading, rather than loading an arbitrarily large file before applying the limit.
+
+### Next implementation targets (not yet complete)
+
+1. **AI Agent and approvals:** structured action proposals, visible plan preview, per-action confirmation, cancel/undo where Android supports it, and a local audit history. No autonomous destructive actions.
+2. **Mobile Control expansion:** user-selected app launch, notification/settings shortcuts and supported accessibility actions only; no hidden input capture, credential entry or security bypass.
+3. **File Assistant:** bounded PDF/text extraction, explicit file selection, document summaries and search over files the user has selected.
+4. **Smart Tasks:** recurring reminders, reminder list/edit/cancel, calendar event creation only after confirmation, and reliable reboot/permission handling.
+5. **Multilingual voice:** end-to-end Hindi, Gujarati and English STT/LLM/TTS validation, language selection, interruption and playback stop.
+6. **Offline/online modes:** visible offline readiness checks and an optional, separately consented online research mode. Offline conversations must not silently upload content.
+7. **Release validation:** automated tests, clean signed APK/AAB build, artifact inspection and physical Android testing across supported Android/OEM versions.
+
+These are roadmap items, not implemented or validated functionality. Keep the PR draft until CI for the latest head and device acceptance tests pass.
