@@ -158,6 +158,8 @@ dependencies {
     }
     implementation(files("libs/onnxruntime-android-1.28.2.aar"))
     implementation("org.apache.commons:commons-compress:1.27.1")
+    // Local PDF text extraction; no document bytes are uploaded.
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 }
 
 
