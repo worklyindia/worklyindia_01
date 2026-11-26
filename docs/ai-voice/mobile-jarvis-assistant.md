@@ -214,3 +214,11 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - Safety limits: 20 MB PDF input, 40 pages, and 120,000 extracted characters.
 - Image-only/scanned PDFs are explicitly reported as unsupported because OCR is not included.
 - Import uses Android's document picker and only reads the file the user selects.
+
+
+## Calendar handoff update — 2026-11-26
+
+- Assistant Tools now offers a user-triggered phone calendar event handoff.
+- User enters title/date/time; ChatWork opens the installed calendar app's event editor prefilled for a one-hour event.
+- The user reviews and saves the event in the calendar app.
+- No calendar read/write permission is requested and ChatWork does not read calendar contents.
