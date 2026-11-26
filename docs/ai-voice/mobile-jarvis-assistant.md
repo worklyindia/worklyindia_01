@@ -263,3 +263,9 @@ These are roadmap items, not implemented or validated functionality. Keep the PR
 - The action opens the existing reminder editor. The user must enter/review the title, date, time and recurrence and explicitly press Schedule; the Agent does not silently create alarms.
 - This is a user-confirmed handoff to the existing reminder feature, not autonomous task execution.
 - Also added a confirmed **Create a calendar event** Agent handoff. It opens the existing event form; the user reviews the details and saves in the phone's calendar app. ChatWork still does not read calendar contents or silently write events.
+
+## Reminder reboot recovery hardening — 2026-11-26
+
+- Fixed boot recovery so overdue daily and weekly reminders advance to their next future occurrence instead of being silently skipped after the device was powered off.
+- Expired one-time reminders are removed from local reminder metadata during boot recovery, and the remaining reminder ID set is saved without dropping unrelated reminders.
+- Android CI and physical-device reboot/notification checks are still required.
