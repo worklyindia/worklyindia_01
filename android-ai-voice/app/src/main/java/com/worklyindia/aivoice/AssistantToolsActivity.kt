@@ -141,14 +141,14 @@ class AssistantToolsActivity : Activity() {
         val combined = buildString {
             for (index in 0 until documents.length()) {
                 val item = documents.optJSONObject(index) ?: continue
-                append("DOCUMENT: ").append(item.optString("name", "Imported document")).append("\\n")
-                append(item.optString("text")).append("\\n\\n")
+                append("DOCUMENT: ").append(item.optString("name", "Imported document")).append("\n")
+                append(item.optString("text")).append("\n\n")
             }
         }
         toolsPrefs.edit()
             .putString("imported_documents_v1", documents.toString())
             .putString("pending_file_context", if (combined.isBlank()) "" else
-                "User-selected local documents. Use relevant documents as sources, distinguish them by filename, and say when information is not present.\\n\\n" + combined.take(120000))
+                "User-selected local documents. Use relevant documents as sources, distinguish them by filename, and say when information is not present.\n\n" + combined.take(120000))
             .apply()
     }
 
