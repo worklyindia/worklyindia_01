@@ -238,7 +238,7 @@ class OfflineAiChatActivity : Activity() {
             gravity = Gravity.CENTER
             bottomMargin = dp(14)
         })
-        addMessage("Welcome to ChatWork! 👋\\nAsk me anything. Your AI chat runs locally on this phone.", false)
+        addMessage("Welcome to ChatWork! 👋\nAsk me anything. Your AI chat runs locally on this phone.", false)
 
         val composerShell = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -284,6 +284,7 @@ class OfflineAiChatActivity : Activity() {
             textSize = 24f
             gravity = Gravity.CENTER
             setTextColor(primaryText)
+            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
             contentDescription = "Voice input"
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
         }
@@ -874,8 +875,8 @@ class OfflineAiChatActivity : Activity() {
         if (!fromUser) {
             val actions = listOf(
                 "▢" to "Copy message",
-                "♧" to "Like response",
-                "♧" to "Dislike response",
+                "👍" to "Like response",
+                "👎" to "Dislike response",
                 "◖" to "Speak response",
                 "↗" to "Share response",
                 "⋮" to "More message actions"
