@@ -720,7 +720,7 @@ class OfflineAiChatActivity : Activity() {
                 val share = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, bubble.text.toString()) }
                 startActivity(Intent.createChooser(share, "Share ChatWork response"))
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
-            actions.addView(actionIcon(android.R.drawable.ic_menu_info_details, "Translate response") {
+            actions.addView(actionIcon(R.drawable.ic_chat_translate, "Translate response") {
                 AlertDialog.Builder(this@OfflineAiChatActivity).setTitle("Translate response").setMessage("Translation is available in the Workly India website chat.").setPositiveButton("OK", null).show()
             }, LinearLayout.LayoutParams(dp(42), dp(34)))
             actions.addView(actionIcon(android.R.drawable.ic_menu_more, "More actions") { showChatOptions(actions) }, LinearLayout.LayoutParams(dp(42), dp(34)))
