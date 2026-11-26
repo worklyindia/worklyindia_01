@@ -139,7 +139,7 @@ These are targets and are **not yet implemented/verified** unless listed above a
 1. **Voice assistant** — hands-free speech interaction; wake-word opt-in, tap-to-talk fallback, interruption and silence handling.
 2. **User memory** — explicit opt-in, local structured memory, user review/edit/delete/clear, retrieval in context; avoid sensitive details by default and never upload without consent.
 3. **AI agents** — task planning, bounded step execution, approval gates for consequential actions, execution log and result verification; safe failure/undo where feasible.
-4. **Windows PC control** — separate Windows companion, paired/authenticated connection, scoped permissions and approval before risky actions; phone alone cannot control Windows.
+4. **Mobile Control** — control this Android phone through user-approved Android APIs and a separately enabled Accessibility service when needed; scoped actions, visible consent, confirmation for risky actions, and stop/disable controls. No root or security bypass.
 5. **File assistant** — user-granted Android document access (SAF), search/read/summarize and organize with confirmation before moving/deleting; never scan private files without grant.
 6. **Hindi/Gujarati/English** — language-aware STT, LLM prompt and TTS, language switching and mixed-language testing.
 7. **Offline AI** — local-only features when compatible packs are installed; model selection must use only verified/test-passed downloads, live RAM/storage budget and fallback to smaller models; explicitly report unsupported offline tasks.
@@ -154,5 +154,5 @@ These are targets and are **not yet implemented/verified** unless listed above a
 - **Phase A (foundation):** stable build, model auto-selection/fallback, unified language and audio pipeline, model and device tests.
 - **Phase B (mobile assistant):** memory controls, file assistant (SAF), reminders, app launching, permission-aware system actions. Test each action and recovery.
 - **Phase C (agents + online):** task planner/executor with confirmation and audit log, online research opt-in, source attribution and privacy controls.
-- **Phase D (Windows):** separate companion and secure pairing; phone-to-PC tasks are not represented as available until companion is installed and connected.
+- **Phase D (Mobile Control):** implement scoped Android action service, explicit Accessibility enablement only for UI automation, user-visible action logs, confirmations and test cases; never silently operate apps or handle credentials.
 - Each feature must have a UI, permission/consent flow, tests and documented limits. Mark it complete only after CI and device validation. Do not merge this draft PR or claim production readiness solely from code changes.
