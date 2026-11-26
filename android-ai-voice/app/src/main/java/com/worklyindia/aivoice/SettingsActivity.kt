@@ -24,7 +24,8 @@ class SettingsActivity : Activity() {
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
     private val primary get() = if (dark) 0xFFE8EEF7.toInt() else 0xFF142033.toInt()
     private val secondary get() = if (dark) 0xFFB5C1D1.toInt() else 0xFF65748B.toInt()
-    private lateinit var content: LinearLayout\n    private var updateCheckStarted = false
+    private lateinit var content: LinearLayout
+    private var updateCheckStarted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,7 +52,15 @@ class SettingsActivity : Activity() {
         render()
     }
 
-    override fun onResume() {\n        super.onResume()\n        if (::content.isInitialized) render()\n        if (!updateCheckStarted && BuildConfig.FLAVOR == "direct") {\n            updateCheckStarted = true\n            runCatching { ChatWorkAppUpdater(this).checkForUpdate() }\n                .onFailure { android.util.Log.e("ChatWorkSettings", "Update check could not start", it) }\n        }\n    }
+    override fun onResume() {
+        super.onResume()
+        if (::content.isInitialized) render()
+        if (!updateCheckStarted && BuildConfig.FLAVOR == "direct") {
+            updateCheckStarted = true
+            runCatching { ChatWorkAppUpdater(this).checkForUpdate() }
+                .onFailure { android.util.Log.e("ChatWorkSettings", "Update check could not start", it) }
+        }
+    }
 
     private fun render() {
         content.removeAllViews()
