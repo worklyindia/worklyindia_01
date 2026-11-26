@@ -302,6 +302,7 @@ class OfflineAiChatActivity : Activity() {
             override fun afterTextChanged(s: Editable?) {}
         })
         updateComposerLayout("")
+        updateComposerAction(false)
         composerShell.addView(thinkHarderChip, LinearLayout.LayoutParams(-2, -2).apply {
             bottomMargin = dp(5)
         })
