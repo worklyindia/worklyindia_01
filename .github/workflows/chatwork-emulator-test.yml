@@ -26,7 +26,7 @@ concurrency:
 jobs:
   build-and-emulator-smoke:
     name: Build APK and test on Android Emulator
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(uname -m)" = "aarch64"
+          test "$(uname -m)" = "x86_64"
           echo "Runner architecture: $(uname -m)"
           export ANDROID_HOME="$RUNNER_TEMP/android-sdk"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
@@ -72,22 +72,29 @@ jobs:
           "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           sudo apt-get update
           sudo apt-get install -y flatbuffers-compiler unzip curl
-          PROTOC_ZIP="$RUNNER_TEMP/protoc-36.2-linux-aarch_64.zip"
-          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-aarch_64.zip" -o "$PROTOC_ZIP"
-          echo "8b8f18bd2b30346efbc698dd5a73dd7c805f3ef8380f6dfc95c768f3f1852f6a  $PROTOC_ZIP" | sha256sum --check
+          PROTOC_ZIP="$RUNNER_TEMP/protoc-36.2-linux-x86_64.zip"
+          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-x86_64.zip" -o "$PROTOC_ZIP"
+          echo "121f6c7afe1d4d0e3ea6aab9432038599250134cbf4474cb1167d2c7decd4278  $PROTOC_ZIP" | sha256sum --check
           mkdir -p "$RUNNER_TEMP/protoc-36.2"
           unzip -q "$PROTOC_ZIP" -d "$RUNNER_TEMP/protoc-36.2"
           echo "$RUNNER_TEMP/protoc-36.2/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/protoc-36.2/bin/protoc" --version | grep -Fx "libprotoc 36.2"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "9.5.1"
 
+      - name: Prepare diagnostic evidence directory
+        shell: bash
+        run: mkdir -p "$GITHUB_WORKSPACE/chatwork-emulator-evidence"
+
       - name: Build ChatWork direct debug APK
         working-directory: android-ai-voice
-        run: gradle --no-daemon assembleDirectDebug --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon assembleDirectDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/chatwork-emulator-evidence/gradle-build.log"
 
       - name: Verify APK and package metadata
         id: apk
@@ -103,7 +110,7 @@ jobs:
           echo "APK size: $(stat -c%s "$APK") bytes"
 
       - name: Upload APK for test evidence
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: chatwork-emulator-test-apk
           path: android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk
@@ -115,10 +122,11 @@ jobs:
         with:
           api-level: 35
           target: google_apis
-          arch: arm64-v8a
-          profile: pixel_2
+          # API 35 x86_64 emulator supports ARM64 ABI translation for this ARM64-only app.
+          arch: x86_64
+          profile: pixel_5
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           emulator-boot-timeout: 900
           script: |
             set -euo pipefail
@@ -132,14 +140,14 @@ jobs:
             adb shell monkey -p com.worklyindia.chatwork -c android.intent.category.LAUNCHER 1
             sleep 25
             if ! adb shell pidof com.worklyindia.chatwork >/dev/null; then
-              adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-logcat.txt"
+              adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-evidence/chatwork-emulator-logcat.txt"
               echo "::error::ChatWork did not remain running after launch. See logcat artifact."
               exit 1
             fi
             adb shell screencap -p /sdcard/chatwork-home.png
-            adb pull /sdcard/chatwork-home.png "$GITHUB_WORKSPACE/chatwork-home.png"
+            adb pull /sdcard/chatwork-home.png "$GITHUB_WORKSPACE/chatwork-emulator-evidence/chatwork-home.png"
             adb shell uiautomator dump /sdcard/chatwork-window.xml >/dev/null
-            adb pull /sdcard/chatwork-window.xml "$GITHUB_WORKSPACE/chatwork-window.xml"
+            adb pull /sdcard/chatwork-window.xml "$GITHUB_WORKSPACE/chatwork-emulator-evidence/chatwork-window.xml"
             adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-logcat.txt"
             echo "ChatWork launch smoke test passed; screenshot and UI hierarchy captured."
 
@@ -148,11 +156,8 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: chatwork-emulator-evidence
-          path: |
-            chatwork-home.png
-            chatwork-window.xml
-            chatwork-emulator-logcat.txt
-          if-no-files-found: warn
+          path: chatwork-emulator-evidence/
+          if-no-files-found: error
           retention-days: 14
 
       - name: Publish test summary
