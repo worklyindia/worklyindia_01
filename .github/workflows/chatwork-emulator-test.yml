@@ -26,7 +26,7 @@ concurrency:
 jobs:
   build-and-emulator-smoke:
     name: Build APK and test on Android Emulator
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -44,6 +44,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test "$(uname -m)" = "aarch64"
+          echo "Runner architecture: $(uname -m)"
           test -n "${ANDROID_HOME:-}"
           test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" || find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -name sdkmanager -type f -print
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -name sdkmanager -type f | sort | tail -n 1)"
@@ -60,9 +62,9 @@ jobs:
           "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
           sudo apt-get update
           sudo apt-get install -y flatbuffers-compiler unzip curl
-          PROTOC_ZIP="$RUNNER_TEMP/protoc-36.2-linux-x86_64.zip"
-          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-x86_64.zip" -o "$PROTOC_ZIP"
-          echo "121f6c7afe1d4d0e3ea6aab9432038599250134cbf4474cb1167d2c7decd4278  $PROTOC_ZIP" | sha256sum --check
+          PROTOC_ZIP="$RUNNER_TEMP/protoc-36.2-linux-aarch_64.zip"
+          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-aarch_64.zip" -o "$PROTOC_ZIP"
+          echo "8b8f18bd2b30346efbc698dd5a73dd7c805f3ef8380f6dfc95c768f3f1852f6a  $PROTOC_ZIP" | sha256sum --check
           mkdir -p "$RUNNER_TEMP/protoc-36.2"
           unzip -q "$PROTOC_ZIP" -d "$RUNNER_TEMP/protoc-36.2"
           echo "$RUNNER_TEMP/protoc-36.2/bin" >> "$GITHUB_PATH"
@@ -133,7 +135,7 @@ jobs:
 
       - name: Upload emulator screenshots and logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: chatwork-emulator-evidence
           path: |
