@@ -46,6 +46,8 @@ import androidx.core.view.WindowInsetsCompat
 import java.util.concurrent.Executors
 
 class OfflineAiChatActivity : Activity() {
+    private val JARVIS_PREFS = "chatwork_jarvis_settings"
+    private val KEY_JARVIS_VOICE_REPLIES = "voice_replies_enabled"
     private val worker = Executors.newSingleThreadExecutor()
     private val modelManager by lazy { QwenModelManager(this) }
     private lateinit var qwenModelPicker: Spinner
