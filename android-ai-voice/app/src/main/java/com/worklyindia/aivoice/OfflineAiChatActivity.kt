@@ -412,9 +412,8 @@ class OfflineAiChatActivity : Activity() {
             moreButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
             moreButton.contentDescription = "Cancel recording"
             composerRow.addView(moreButton, LinearLayout.LayoutParams(dp(36), dp(36)))
+            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(4) })
             composerRow.addView(recordingWaveform, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(8) })
-            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(36), dp(36)))
-            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(4) })
             composer.addView(composerRow)
             micButton.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_media_pause, 0, 0, 0)
             micButton.contentDescription = "Stop recording"
@@ -1027,8 +1026,11 @@ class OfflineAiChatActivity : Activity() {
         cancelOfflineRecording = false
         stopOfflineRecordingRequested = false
         offlineRecording = true
-        runOnUiThread { setRecordingUi(true) }
-        status.text = "Recording offline with downloaded ${pack.title} · ${pack.languageCode}. Tap Stop when finished."
+        runOnUiThread {
+            status.text = "Preparing voice recognition…"
+            micButton.isEnabled = false
+            sendButton.isEnabled = false
+        }
         worker.execute {
             var recorder: AudioRecord? = null
             var speech: OfflineSpeechRecognizer? = null
@@ -1040,15 +1042,27 @@ class OfflineAiChatActivity : Activity() {
                 check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize microphone." }
                 activeAudioRecord = audio
                 audio.startRecording()
-                if (stopOfflineRecordingRequested) offlineRecording = false
+                check(audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone did not enter recording state." }
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        setRecordingUi(true)
+                        micButton.isEnabled = true
+                        sendButton.isEnabled = true
+                        status.text = "Listening… Tap Stop when you finish speaking."
+                    }
+                }
                 val buffer = ShortArray(4096)
                 val samples = ArrayList<Float>(OfflineSpeechRecognizer.SAMPLE_RATE * 15)
                 val maxSamples = OfflineSpeechRecognizer.SAMPLE_RATE * 60
                 while (offlineRecording && samples.size < maxSamples) {
-                    val count = audio.read(buffer, 0, buffer.size)
-                    if (count > 0) for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
-                    else if (count < 0 && offlineRecording) throw IllegalStateException("Microphone read failed ($count).")
-                    else if (count < 0) break
+                    val count = audio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                    if (count > 0) {
+                        for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
+                    } else if (count < 0 && offlineRecording) {
+                        throw IllegalStateException("Microphone read failed ($count).")
+                    } else if (count < 0) {
+                        break
+                    }
                 }
                 val wasCancelled = cancelOfflineRecording
                 offlineRecording = false
@@ -1084,9 +1098,8 @@ class OfflineAiChatActivity : Activity() {
         cancelOfflineRecording = false
         stopOfflineRecordingRequested = true
         offlineRecording = false
-        runCatching {
-            activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
-        }
+        // Do not stop AudioRecord from the UI thread: that can abort a blocking read
+        // before the worker has collected the buffered PCM samples. Let the read loop exit.
         status.text = "Stopping microphone and transcribing…"
     }
 
