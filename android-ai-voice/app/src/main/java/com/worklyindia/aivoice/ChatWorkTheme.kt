@@ -58,6 +58,7 @@ internal object ChatWorkTheme {
         val content = activity.findViewById<View>(android.R.id.content) ?: return
         fun hideHorizontalScrollbars(view: View) {
             view.isHorizontalScrollBarEnabled = false
+            view.isVerticalScrollBarEnabled = false
             if (view is ViewGroup) {
                 for (index in 0 until view.childCount) hideHorizontalScrollbars(view.getChildAt(index))
             }
