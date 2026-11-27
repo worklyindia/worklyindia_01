@@ -153,7 +153,9 @@ jobs:
           emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           emulator-boot-timeout: 900
           script: |
-            set -euo pipefail
+            # android-emulator-runner executes this script with /usr/bin/sh (POSIX sh).
+            # pipefail is a Bash-only option and makes dash exit with code 2.
+            set -eu
             APK="$GITHUB_WORKSPACE/android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
             adb wait-for-device
             trap 'adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-evidence/chatwork-emulator-logcat.txt" 2>/dev/null || true' EXIT
