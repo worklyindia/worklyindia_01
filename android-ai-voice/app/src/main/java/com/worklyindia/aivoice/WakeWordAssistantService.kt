@@ -168,6 +168,7 @@ class WakeWordAssistantService : Service() {
             updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
 
             val history = StringBuilder()
+            history.append("System: You are JARVIS, ChatWork’s calm, concise voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers clear and brief, and ask before any consequential action. You cannot control phone settings, read private device data, or perform actions outside this conversation.\\n")
             val buffer = ShortArray(1600)
             val session = activeWakeSession
             while (running.get()) {
