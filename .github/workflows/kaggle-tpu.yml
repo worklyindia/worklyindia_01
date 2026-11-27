@@ -7,7 +7,7 @@ on:
         description: "Run the Kaggle notebook on TPU (otherwise save a new version only)"
         required: true
         type: boolean
-        default: true
+        default: false
   push:
     branches:
       - feature/chatwork-chat-page-messenger-ui
@@ -85,7 +85,7 @@ jobs:
         working-directory: kaggle/workly-tpu
         shell: bash
         env:
-          RUN_TPU: ${{ github.event_name == 'push' && 'true' || inputs.run_tpu }}
+          RUN_TPU: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tpu }}
         run: |
           set -euo pipefail
           if [[ "$RUN_TPU" == "true" ]]; then
