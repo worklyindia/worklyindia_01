@@ -156,6 +156,8 @@ class OfflineAiChatActivity : Activity() {
             setTextColor(secondaryText)
             visibility = View.GONE
         }
+        // Keep model status available internally without rendering a title/header label.
+        modelLabel = TextView(this).apply { visibility = View.GONE }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
