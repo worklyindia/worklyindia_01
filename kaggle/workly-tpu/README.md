@@ -1,6 +1,6 @@
 # Workly India Kaggle TPU Lab
 
-This folder contains a private Kaggle notebook entry point and a GitHub Actions publisher with a machine-readable TPU benchmark report.
+This folder contains a private Kaggle notebook entry point and a GitHub Actions publisher with a machine-readable TPU and Qwen inference benchmark report.
 
 ## One-time GitHub setup
 
@@ -33,12 +33,12 @@ After a successful TPU run, the GitHub Actions run summary and downloadable arti
 - Elapsed notebook execution time (not a guaranteed billable/quota-minute figure)
 - Small BF16 matrix benchmark duration, operations/second and approximate TFLOP/s
 - XLA memory information when the Kaggle runtime exposes it
-- Explicit model status and Qwen tokens/second field
+- Qwen3-4B-Instruct-2507 BF16 inference status, generated-token count, short output preview, and measured tokens/second (only when inference succeeds)
 
-**Important:** the current benchmark does not load Qwen3.6-27B. Model tokens/second is intentionally reported as not measured, and remaining Kaggle quota is not inferred or fabricated. A compatible Qwen TPU inference pipeline and a real model benchmark must be implemented before those model metrics can be reported.
+**Model under test:** `Qwen/Qwen3-4B-Instruct-2507` (BF16, Transformers). This is a practical first TPU test target: 4B parameters, instruction-tuned, multilingual, and Apache-2.0 licensed. The notebook now attempts a short real generation after the TPU matrix smoke test. A successful smoke test does not guarantee the Qwen inference path will work; model load/generation errors are captured separately in the JSON report. Actual TPU compatibility and tokens/second must be confirmed by running the notebook on your Kaggle account. See the official [Qwen model card](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) and [Qwen repository](https://github.com/QwenLM/Qwen3).
 
 ## ChatWork compatibility
 
 ChatWork's current Android offline models are GGUF files executed by llama.cpp. They cannot be assumed to run on TPU as-is. A separate compatible model pipeline (for example Transformers/PyTorch-XLA or JAX), model-format/export checks, and quality/performance evaluation are required before connecting a TPU-trained/inferred model back to Android. Kaggle notebook execution is an on-demand job, not a permanently hosted inference API.
 
-The notebook is private by default. Do not add personal data or secrets to notebook output.
+The notebook is private by default. Do not add personal data or secrets to notebook output. The first model run downloads several GB of weights and may take longer than the hardware-only smoke test.
