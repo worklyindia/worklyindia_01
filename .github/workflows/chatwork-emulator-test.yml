@@ -144,7 +144,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
-          disable-linux-hardware-acceleration: false
+          disable-linux-hw-accel: false
           target: google_apis
           # Keep x86_64 AVD and require KVM; software emulation is disabled on hosted runners.
           arch: x86_64
