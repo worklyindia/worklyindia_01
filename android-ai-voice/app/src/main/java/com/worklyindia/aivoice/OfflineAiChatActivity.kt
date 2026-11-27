@@ -825,14 +825,32 @@ class OfflineAiChatActivity : Activity() {
             val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
             val requested = prefs.getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
             val active = WakeWordAssistantService.isRunning
+            val state = prefs.getString(WakeWordAssistantService.KEY_STATUS, WakeWordAssistantService.STATUS_STARTING)
+            val message = prefs.getString(WakeWordAssistantService.KEY_STATUS_MESSAGE, "Starting Hey ChatWork…")
+            val error = prefs.getString(WakeWordAssistantService.KEY_ERROR, null)
             if (active) {
-                if (attempt < 20) waitForWakeServiceStop(attempt + 1)
-            } else if (requested && attempt < 4) {
-                // Allow up to two seconds for Android to create the foreground service.
+                qwenModelPicker.isEnabled = false
+                status.text = if (state == WakeWordAssistantService.STATUS_LISTENING) "Hey ChatWork is active · ${message ?: "Listening for the wake phrase."}" else message ?: "Preparing offline voice models…"
+                status.visibility = View.VISIBLE
+                waitForWakeServiceStop(attempt + 1)
+            } else if (state == WakeWordAssistantService.STATUS_ERROR) {
+                prefs.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+                qwenModelPicker.isEnabled = true
+                status.text = "Hey ChatWork could not start: ${error ?: message ?: "Check microphone permission and downloaded models."}"
+                status.visibility = View.VISIBLE
+                if (!engine.isLoaded && !modelLoadInProgress) loadModel()
+            } else if (requested && attempt < 20) {
                 waitForWakeServiceStop(attempt + 1)
             } else {
                 prefs.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
                 qwenModelPicker.isEnabled = true
+                if (state == WakeWordAssistantService.STATUS_STOPPED) {
+                    status.text = "Hey ChatWork is stopped."
+                    status.visibility = View.VISIBLE
+                } else if (requested) {
+                    status.text = "Android did not start the Hey ChatWork microphone service. Check Microphone and Notifications permissions, then try again."
+                    status.visibility = View.VISIBLE
+                }
                 if (!engine.isLoaded && !modelLoadInProgress) loadModel()
             }
         }, 500L)
@@ -840,7 +858,10 @@ class OfflineAiChatActivity : Activity() {
     private fun startWakeWordService() {
         try {
             getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
-                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
+                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true)
+                .putString(WakeWordAssistantService.KEY_STATUS, WakeWordAssistantService.STATUS_STARTING)
+                .putString(WakeWordAssistantService.KEY_STATUS_MESSAGE, "Starting Android microphone service…")
+                .remove(WakeWordAssistantService.KEY_ERROR).apply()
             val intent = Intent(this, WakeWordAssistantService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
             qwenModelPicker.isEnabled = false
