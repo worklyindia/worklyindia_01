@@ -20,7 +20,7 @@ Do not commit API tokens or kaggle.json files.
 4. The workflow creates/updates the private notebook and asks Kaggle to execute it with `TpuV5E8` (TPU v5e-8).
 5. Check the Kaggle notebook's version, logs and output for the actual execution result. Kaggle may queue or deny TPU access depending on account quota and accelerator availability.
 
-A push changing this folder also publishes and runs the notebook on Kaggle TPU. Use workflow_dispatch with the toggle disabled to save a version without running it.
+A push changing this folder only publishes a new private notebook version; it does not start a TPU session. To conserve limited accelerator quota, TPU execution is manual and opt-in: open Actions → Workly India Kaggle TPU → Run workflow, then explicitly enable **Run the Kaggle notebook on TPU** only when a real TPU test/training/inference job is needed. Leave it disabled for code-only updates.
 
 ## Current scope and ChatWork compatibility
 
