@@ -119,23 +119,25 @@ class WakeWordAssistantService : Service() {
                     enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
                 )
             }
+            // The catalog's minFreeRam is the runtime threshold used by the
+            // regular ChatWork model picker. Do not subtract another global reserve
+            // here: that double-counted memory and rejected small verified models.
+            // Model weights are already downloaded, so free storage is not a load-time
+            // requirement. Native load/generation below remains the final safety test.
+            val runtimeCandidates = candidates.map { it.copy(minimumFreeStorageBytes = 0L) }
             val recommendation = AssistantModelPolicy.recommend(
-                candidates = candidates,
+                candidates = runtimeCandidates,
                 budget = budget,
-                reserveRamBytes = 1_200L * 1024L * 1024L,
-                reserveStorageBytes = 256L * 1024L * 1024L
+                reserveRamBytes = 0L,
+                reserveStorageBytes = 0L
             )
             val modelPrefs = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
             val savedModelId = modelPrefs.getString("selected_model_id", null)
-            val usableRam = (budget.availableRamBytes - 1_200L * 1024L * 1024L).coerceAtLeast(0L)
-            val usableStorage = (budget.freeStorageBytes - 256L * 1024L * 1024L).coerceAtLeast(0L)
-            // Respect the user's selected model whenever it is tested and fits.
-            // If it no longer fits current live memory, fall back to the largest
-            // tested model that does fit, and persist that safe choice for next start.
-            val savedCandidate = candidates.firstOrNull { it.id == savedModelId }
+            // Respect the selected model only when it has passed the real Qwen
+            // generation smoke test and still meets its catalog RAM threshold.
+            val savedCandidate = runtimeCandidates.firstOrNull { it.id == savedModelId }
                 ?.takeIf { !budget.lowMemory && it.enabled &&
-                    it.minimumAvailableRamBytes <= usableRam &&
-                    it.minimumFreeStorageBytes <= usableStorage }
+                    it.minimumAvailableRamBytes <= budget.availableRamBytes }
             val chosenCandidate = savedCandidate ?: recommendation.candidate
                 ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
             val chosen = modelManager.models.firstOrNull { it.id == chosenCandidate.id }
