@@ -1,0 +1,107 @@
+name: Workly India Kaggle TPU
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tpu:
+        description: "Run the Kaggle notebook on TPU (otherwise save a new version only)"
+        required: true
+        type: boolean
+        default: true
+  push:
+    branches:
+      - feature/chatwork-chat-page-messenger-ui
+    paths:
+      - "kaggle/workly-tpu/**"
+      - ".github/workflows/kaggle-tpu.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workly-kaggle-tpu
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish Workly TPU notebook to Kaggle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+      KAGGLE_KERNEL_SLUG: ${{ secrets.KAGGLE_KERNEL_SLUG }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Kaggle secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN" || { echo "::error::Add KAGGLE_API_TOKEN in GitHub Actions secrets."; exit 1; }
+          test -n "$KAGGLE_USERNAME" || { echo "::error::Add KAGGLE_USERNAME in GitHub Actions secrets."; exit 1; }
+          test -n "$KAGGLE_KERNEL_SLUG" || { echo "::error::Add KAGGLE_KERNEL_SLUG in GitHub Actions secrets."; exit 1; }
+          echo "Kaggle secret names are present (values are never printed)."
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --upgrade kaggle
+
+      - name: Generate Kaggle kernel metadata
+        working-directory: kaggle/workly-tpu
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          username = os.environ["KAGGLE_USERNAME"].strip()
+          slug = os.environ["KAGGLE_KERNEL_SLUG"].strip()
+          if not username or not slug or "/" in slug:
+              raise SystemExit("KAGGLE_USERNAME or KAGGLE_KERNEL_SLUG is invalid.")
+          metadata = {
+              "id": f"{username}/{slug}",
+              "title": "Workly India TPU Lab",
+              "code_file": "workly_tpu.py",
+              "language": "python",
+              "kernel_type": "script",
+              "is_private": True,
+              "enable_gpu": False,
+              "enable_internet": True,
+              "machine_shape": "TpuV5E8",
+              "dataset_sources": [],
+              "kernel_sources": [],
+              "competition_sources": [],
+              "model_sources": []
+          }
+          with open("kernel-metadata.json", "w", encoding="utf-8") as f:
+              json.dump(metadata, f, indent=2)
+          PY
+
+      - name: Publish and optionally run on Kaggle TPU
+        working-directory: kaggle/workly-tpu
+        shell: bash
+        env:
+          RUN_TPU: ${{ github.event_name == 'push' && 'true' || inputs.run_tpu }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUN_TPU" == "true" ]]; then
+            kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8
+          else
+            kaggle kernels push --path . --no-run
+          fi
+
+      - name: Report Kaggle notebook
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Workly India Kaggle TPU"
+            echo "- Notebook target: ${KAGGLE_USERNAME}/${KAGGLE_KERNEL_SLUG}"
+            echo "- Accelerator requested: TPU v5e-8"
+            echo "- Kaggle run status must be checked in Kaggle; GitHub success means the publish command completed."
+            echo "- Private notebook by default."
+          } >> "$GITHUB_STEP_SUMMARY"
