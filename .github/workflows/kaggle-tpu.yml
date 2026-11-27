@@ -141,14 +141,46 @@ jobs:
               f.write(json.dumps(result, indent=2))
           PY
 
-      - name: Report Kaggle notebook
+      - name: Build TPU benchmark summary
         if: always()
         shell: bash
+        env:
+          KERNEL_REF: ${{ secrets.KAGGLE_USERNAME }}/${{ secrets.KAGGLE_KERNEL_SLUG }}
         run: |
           {
-            echo "## Workly India Kaggle TPU"
-            echo "- Notebook target: ${KAGGLE_USERNAME}/${KAGGLE_KERNEL_SLUG}"
+            echo "## Workly India Kaggle TPU report"
+            echo "- Notebook target: ${KERNEL_REF}"
             echo "- Accelerator requested: TPU v5e-8"
-            echo "- TPU run: the preceding job step polls Kaggle status and verifies workly-tpu-result.json."
-            echo "- Private notebook by default."
+            echo "- Kaggle quota remaining: not available from this notebook/CLI report; check Kaggle account settings."
+            echo "- Qwen model tokens/sec: not measured until a compatible Qwen TPU inference pipeline is added."
           } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f kaggle-tpu-result-summary.txt ]]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          r = json.loads(Path("kaggle-tpu-result-summary.txt").read_text())
+          def show(label, key, suffix=""):
+              value = r.get(key)
+              print(f"- {label}: {value if value is not None else 'not reported'}{suffix if value is not None else ''}")
+          print("\n### TPU execution")
+          show("Result", "status")
+          show("Device", "device")
+          show("Elapsed time", "elapsed_minutes", " minutes")
+          show("Benchmark duration", "benchmark_seconds", " seconds")
+          show("Matrix operations/sec", "matrix_operations_per_second")
+          show("Approx. matrix throughput", "approx_matrix_tflops", " TFLOP/s")
+          show("XLA memory info (bytes)", "xla_memory_info_bytes")
+          show("Model inference", "model_inference_status")
+          show("Model tokens/sec", "model_inference_tokens_per_second")
+          PY
+          else
+            echo "- TPU result: no result JSON was downloaded (not run, queued, or failed)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload TPU report artifact
+        if: always() && hashFiles('kaggle-tpu-result-summary.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: workly-kaggle-tpu-report
+          path: kaggle-tpu-result-summary.txt
+          if-no-files-found: warn
