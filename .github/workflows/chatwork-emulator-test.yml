@@ -117,12 +117,27 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Verify Linux KVM acceleration is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -e /dev/kvm ]]; then
+            echo "::error::GitHub runner does not expose /dev/kvm; Android Emulator hardware acceleration is unavailable."
+            exit 1
+          fi
+          ls -l /dev/kvm
+          if ! (test -r /dev/kvm && test -w /dev/kvm); then
+            echo "::error::Runner cannot read/write /dev/kvm; check KVM permissions."
+            exit 1
+          fi
+
       - name: Run ChatWork on Android Emulator (ARM64 app compatibility)
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
+          disable-linux-hardware-acceleration: false
           target: google_apis
-          # API 35 x86_64 emulator supports ARM64 ABI translation for this ARM64-only app.
+          # Keep x86_64 AVD and require KVM; software emulation is disabled on hosted runners.
           arch: x86_64
           profile: pixel_5
           disable-animations: true
