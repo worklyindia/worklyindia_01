@@ -819,13 +819,15 @@ class OfflineAiChatActivity : Activity() {
             val intent = Intent(this, WakeWordAssistantService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
             qwenModelPicker.isEnabled = false
-            status.text = "Starting Hey ChatWork foreground microphone service…"
+            status.text = "Starting Hey ChatWork… Keep ChatWork open while Android starts the microphone service. Check the notification for the listening status."
+            status.visibility = View.VISIBLE
             waitForWakeServiceStop()
         } catch (error: Exception) {
             getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
                 .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
             qwenModelPicker.isEnabled = true
             status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+            status.visibility = View.VISIBLE
         }
     }
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
@@ -1384,7 +1386,12 @@ class OfflineAiChatActivity : Activity() {
         else if (requestCode == REQUEST_WAKE_ASSISTANT && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
             startWakeWordService()
         } else if (requestCode == REQUEST_WAKE_ASSISTANT) {
-            status.text = "Hey ChatWork needs microphone and notification permissions to show its active listening status."
+            status.text = if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                "Microphone permission is required. Allow it in Android Settings → Apps → ChatWork → Permissions, then try again."
+            } else {
+                "Notification permission is required to show when Hey ChatWork is listening. Allow notifications for ChatWork, then try again."
+            }
+            status.visibility = View.VISIBLE
         }
     }
 
