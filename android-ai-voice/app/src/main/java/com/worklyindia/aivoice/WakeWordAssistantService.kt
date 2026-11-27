@@ -47,6 +47,9 @@ class WakeWordAssistantService : Service() {
         }
         if (!running.compareAndSet(false, true)) return START_NOT_STICKY
         isRunning = true
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true)
+            .putString(KEY_STATUS, STATUS_STARTING).putString(KEY_STATUS_MESSAGE, "Starting Hey ChatWork…")
+            .remove(KEY_ERROR).apply()
         val notification = buildNotification("Preparing offline voice models…")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -57,6 +60,7 @@ class WakeWordAssistantService : Service() {
         } catch (error: Exception) {
             running.set(false)
             isRunning = false
+            publishStatus(STATUS_ERROR, "Could not start microphone service.", error.message)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             stopSelf()
             throw error
@@ -74,6 +78,7 @@ class WakeWordAssistantService : Service() {
         var ai: OfflineAiEngine? = null
         var audio: AudioRecord? = null
         try {
+            publishStatus(STATUS_LOADING, "Checking downloaded voice and AI models…")
             check(running.get()) { "Hey ChatWork listening was stopped." }
             check(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 "Microphone permission is missing. Open ChatWork and enable Hey ChatWork again."
@@ -132,18 +137,22 @@ class WakeWordAssistantService : Service() {
                 chosenCandidate?.let { item -> modelManager.models.firstOrNull { it.id == item.id } }
                     ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
             }
+            publishStatus(STATUS_LOADING, "Loading " + chosen.title + " into memory…")
             val activeAiEngine = OfflineAiEngine()
             ai = activeAiEngine
             activeAi = activeAiEngine
             check(activeAiEngine.loadModel(modelManager.file(chosen))) { "Could not load ${chosen.title}." }
             check(running.get()) { "Hey ChatWork listening was stopped." }
 
+            publishStatus(STATUS_LOADING, "Loading offline speech recognition…")
             val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
             speech = activeSpeechRecognizer
             check(running.get()) { "Hey ChatWork listening was stopped." }
+            publishStatus(STATUS_LOADING, "Loading offline voice output…")
             val activeTtsEngine = IndicTinyTtsEngine.create(this, language)
             tts = activeTtsEngine
             check(running.get()) { "Hey ChatWork listening was stopped." }
+            publishStatus(STATUS_LOADING, "Loading Hey ChatWork wake-word model…")
             val activeWakeSession = WakeWordEngineFactory.open(this)
             wakeSession = activeWakeSession
             check(running.get()) { "Hey ChatWork listening was stopped." }
@@ -165,7 +174,7 @@ class WakeWordAssistantService : Service() {
             check(activeAudio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
             recorder = activeAudio
             activeAudio.startRecording()
-            updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
+            publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
 
             val history = StringBuilder()
             history.append("System: You are JARVIS, ChatWork’s calm, concise voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers clear and brief, and ask before any consequential action. You cannot control phone settings, read private device data, or perform actions outside this conversation.\n")
@@ -209,7 +218,9 @@ class WakeWordAssistantService : Service() {
                 }
             }
         } catch (error: Exception) {
-            if (running.get()) updateNotification("Assistant stopped · ${error.message ?: "Model or microphone error"}")
+            if (running.get()) publishStatus(STATUS_ERROR,
+                "Assistant stopped · ${error.message ?: "Model or microphone error"}",
+                error.message ?: error.javaClass.simpleName)
             running.set(false)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             isRunning = false
@@ -226,6 +237,9 @@ class WakeWordAssistantService : Service() {
             activeAi = null
             releaseCpuWakeLock()
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            if (getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_STATUS, null) != STATUS_ERROR) {
+                publishStatus(STATUS_STOPPED, "Hey ChatWork is stopped.")
+            }
             isRunning = false
         }
     }
@@ -323,7 +337,17 @@ class WakeWordAssistantService : Service() {
             .build()
     }
 
+    private fun publishStatus(state: String, message: String, error: String? = null) {
+        val editor = getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putString(KEY_STATUS, state).putString(KEY_STATUS_MESSAGE, message)
+        if (error != null) editor.putString(KEY_ERROR, error)
+        else if (state != STATUS_ERROR) editor.remove(KEY_ERROR)
+        editor.apply()
+        runCatching { updateNotification(message) }
+    }
+
     private fun updateNotification(message: String) {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_STATUS_MESSAGE, message).apply()
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, buildNotification(message))
     }
@@ -342,6 +366,14 @@ class WakeWordAssistantService : Service() {
         const val PREFS = "chatwork_wake_word"
         const val KEY_ACTIVE = "active"
         const val KEY_LANGUAGE = "language"
+        const val KEY_STATUS = "assistant_status"
+        const val KEY_STATUS_MESSAGE = "assistant_status_message"
+        const val KEY_ERROR = "assistant_last_error"
+        const val STATUS_STARTING = "STARTING"
+        const val STATUS_LOADING = "LOADING_MODELS"
+        const val STATUS_LISTENING = "LISTENING"
+        const val STATUS_ERROR = "ERROR"
+        const val STATUS_STOPPED = "STOPPED"
         @Volatile var isRunning: Boolean = false
             private set
         private const val CHANNEL_ID = "chatwork_wake_assistant"
