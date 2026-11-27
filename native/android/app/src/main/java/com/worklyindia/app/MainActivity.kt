@@ -329,6 +329,10 @@ class MainActivity : FragmentActivity() {
             FrameLayout.LayoutParams.MATCH_PARENT
         )
         webView.setBackgroundColor(android.graphics.Color.WHITE)
+        // Hide both scrollbar directions; keep touch and programmatic scrolling enabled.
+        webView.isVerticalScrollBarEnabled = false
+        webView.isHorizontalScrollBarEnabled = false
+        webView.isScrollbarFadingEnabled = true
         // Keep the visible WebView renderer at foreground importance to reduce
         // renderer eviction while users navigate the app. Allow Android to
         // lower its priority when the WebView is not visible.
