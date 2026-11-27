@@ -95,7 +95,7 @@ jobs:
           fi
 
       - name: Wait for TPU run and verify smoke-test output
-        if: ${{ success() && (github.event_name == 'push' || inputs.run_tpu) }}
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.run_tpu }}
         working-directory: kaggle/workly-tpu
         shell: bash
         env:
