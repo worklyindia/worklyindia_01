@@ -169,13 +169,13 @@ class OfflineAiChatActivity : Activity() {
             setColorFilter(primaryText)
             contentDescription = description
             scaleType = ImageView.ScaleType.CENTER
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             setOnClickListener { action() }
         }
         // Minimal transparent top bar: only the back arrow remains.
         header.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
             LinearLayout.LayoutParams(dp(48), dp(48)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = -dp(14) })
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(44)))
         status.setPadding(dp(16), dp(4), dp(16), dp(4))
         root.addView(status, LinearLayout.LayoutParams(-1, -2))
 
@@ -183,7 +183,7 @@ class OfflineAiChatActivity : Activity() {
             isFillViewport = true
             clipToPadding = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            setPadding(dp(10), dp(8), dp(10), dp(12))
+            setPadding(dp(10), dp(2), dp(10), dp(12))
             chatMessages = LinearLayout(this@OfflineAiChatActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(1), dp(4), dp(1), dp(8))
@@ -197,8 +197,12 @@ class OfflineAiChatActivity : Activity() {
 
         composerShell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            setPadding(dp(7), dp(5), dp(7), dp(5))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(bg)
+                setStroke(dp(1), if (dark) 0xFF40516B.toInt() else 0xFFCBD5E1.toInt())
+                cornerRadius = dp(26).toFloat()
+            }
         }
         thinkHarderChip = TextView(this).apply {
             text = "✦  Think harder     ×"
@@ -267,11 +271,12 @@ class OfflineAiChatActivity : Activity() {
                     setColor(0xFF0A84FF.toInt())
                     shape = android.graphics.drawable.GradientDrawable.OVAL
                 },
-                android.graphics.drawable.InsetDrawable(
-                    androidx.core.content.ContextCompat.getDrawable(this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up)!!,
-                    dp(10)
-                )
-            )).apply { setLayerInset(1, dp(10), dp(10), dp(10), dp(10)) }
+                androidx.core.content.ContextCompat.getDrawable(this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up)!!
+            )).apply {
+                setLayerGravity(1, Gravity.CENTER)
+                setLayerWidth(1, dp(25))
+                setLayerHeight(1, dp(25))
+            }
             textAlignment = View.TEXT_ALIGNMENT_CENTER
             includeFontPadding = false
             isEnabled = false
