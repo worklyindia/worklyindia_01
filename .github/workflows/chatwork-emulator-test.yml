@@ -117,19 +117,28 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Verify Linux KVM acceleration is available
+      - name: Prepare Linux KVM permissions
         shell: bash
         run: |
           set -euo pipefail
           if [[ ! -e /dev/kvm ]]; then
-            echo "::error::GitHub runner does not expose /dev/kvm; Android Emulator hardware acceleration is unavailable."
+            echo "::error::GitHub runner does not expose /dev/kvm; hardware-accelerated Android Emulator is unavailable on this runner."
             exit 1
           fi
+          echo "KVM device before permission setup:"
           ls -l /dev/kvm
-          if ! (test -r /dev/kvm && test -w /dev/kvm); then
-            echo "::error::Runner cannot read/write /dev/kvm; check KVM permissions."
+          # GitHub-hosted runners may expose KVM to root/the kvm group but not
+          # the unprivileged Actions user. This runner is ephemeral, so grant
+          # read/write access for the emulator job only.
+          sudo chmod a+rw /dev/kvm
+          echo "KVM device after permission setup:"
+          ls -l /dev/kvm
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo "::error::KVM is present but remains inaccessible after permission setup."
+            id
             exit 1
           fi
+          echo "KVM read/write access verified for $(id -un)."
 
       - name: Run ChatWork on Android Emulator (ARM64 app compatibility)
         uses: reactivecircus/android-emulator-runner@v2
