@@ -90,6 +90,7 @@ jobs:
         run: kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8
 
       - name: Wait for Kaggle execution and verify Qwen result
+        if: success()
         working-directory: kaggle/workly-tpu
         env:
           KERNEL_REF: ${{ secrets.KAGGLE_USERNAME }}/${{ secrets.KAGGLE_KERNEL_SLUG }}
