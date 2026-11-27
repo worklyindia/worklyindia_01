@@ -303,7 +303,6 @@ class OfflineAiChatActivity : Activity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 updateComposerLayout(s?.toString().orEmpty())
                 val hasText = !s.isNullOrBlank()
-                if (!offlineRecording) updateComposerAction(hasText)
                 updateComposerAction(hasText)
             }
             override fun afterTextChanged(s: Editable?) {}
@@ -343,7 +342,7 @@ class OfflineAiChatActivity : Activity() {
             sendButton.isEnabled = true; sendButton.alpha = 1f
         } else {
             sendButton.setCompoundDrawablesWithIntrinsicBounds(
-                if (hasText) R.drawable.ic_chatwork_send else R.drawable.ic_chatwork_waveform, 0, 0, 0
+                if (hasText) R.drawable.ic_chatwork_send_up else R.drawable.ic_chatwork_waveform, 0, 0, 0
             )
             sendButton.background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xFF0A84FF.toInt()); shape = android.graphics.drawable.GradientDrawable.OVAL
@@ -1203,7 +1202,7 @@ class OfflineAiChatActivity : Activity() {
                 val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
                 prefs.edit().putString("last_feedback", "positive").putLong("last_feedback_at", System.currentTimeMillis()).apply()
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(36), dp(30)))
+            }, LinearLayout.LayoutParams(dp(32), dp(28)))
             actions.addView(actionIcon(R.drawable.ic_chat_thumb_down, "Dislike response") {
                 val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
                 prefs.edit().putString("last_feedback", "negative").putLong("last_feedback_at", System.currentTimeMillis()).apply()
