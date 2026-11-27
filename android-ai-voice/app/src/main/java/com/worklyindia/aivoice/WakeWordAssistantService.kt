@@ -229,10 +229,12 @@ class WakeWordAssistantService : Service() {
             if (running.get()) publishStatus(STATUS_ERROR,
                 "Assistant stopped · ${error.message ?: "Model or microphone error"}",
                 error.message ?: error.javaClass.simpleName)
+            // Keep the foreground notification visible on startup/runtime failure.
+            // The notification reports the real error and offers an explicit Stop action;
+            // never leave a failed microphone session looking like active listening.
             running.set(false)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             isRunning = false
-            stopSelf()
         } finally {
             running.set(false)
             recorder = null
