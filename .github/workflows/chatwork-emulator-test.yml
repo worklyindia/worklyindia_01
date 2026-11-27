@@ -1,0 +1,149 @@
+name: ChatWork Android Emulator Test
+
+on:
+  push:
+    branches:
+      - main
+      - feature/chatwork-chat-page-messenger-ui
+    paths:
+      - "android-ai-voice/**"
+      - ".github/workflows/chatwork-emulator-test.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "android-ai-voice/**"
+      - ".github/workflows/chatwork-emulator-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chatwork-emulator-${{ github.event.pull_request.number || github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-emulator-smoke:
+    name: Build APK and test on Android Emulator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Install Android and native build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          sudo apt-get update
+          sudo apt-get install -y flatbuffers-compiler unzip curl
+          PROTOC_ZIP="$RUNNER_TEMP/protoc-36.2-linux-x86_64.zip"
+          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-linux-x86_64.zip" -o "$PROTOC_ZIP"
+          echo "121f6c7afe1d4d0e3ea6aab9432038599250134cbf4474cb1167d2c7decd4278  $PROTOC_ZIP" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/protoc-36.2"
+          unzip -q "$PROTOC_ZIP" -d "$RUNNER_TEMP/protoc-36.2"
+          echo "$RUNNER_TEMP/protoc-36.2/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/protoc-36.2/bin/protoc" --version | grep -Fx "libprotoc 36.2"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.1"
+
+      - name: Build ChatWork direct debug APK
+        working-directory: android-ai-voice
+        run: gradle --no-daemon assembleDirectDebug --stacktrace
+
+      - name: Verify APK and package metadata
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
+          test -s "$APK"
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          "$AAPT" dump badging "$APK" | tee "$RUNNER_TEMP/apk-badging.txt"
+          grep -q "package: name='com.worklyindia.chatwork'" "$RUNNER_TEMP/apk-badging.txt"
+          echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
+          echo "APK size: $(stat -c%s "$APK") bytes"
+
+      - name: Upload APK for test evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatwork-emulator-test-apk
+          path: android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Run ChatWork on ARM64 Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: arm64-v8a
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -camera-back none
+          emulator-boot-timeout: 900
+          script: |
+            set -euo pipefail
+            APK="$GITHUB_WORKSPACE/android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
+            adb wait-for-device
+            adb shell getprop sys.boot_completed | grep -q 1
+            adb install -r "$APK"
+            adb shell pm grant com.worklyindia.chatwork android.permission.RECORD_AUDIO || true
+            adb shell pm grant com.worklyindia.chatwork android.permission.POST_NOTIFICATIONS || true
+            adb shell am force-stop com.worklyindia.chatwork
+            adb shell monkey -p com.worklyindia.chatwork -c android.intent.category.LAUNCHER 1
+            sleep 25
+            if ! adb shell pidof com.worklyindia.chatwork >/dev/null; then
+              adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-logcat.txt"
+              echo "::error::ChatWork did not remain running after launch. See logcat artifact."
+              exit 1
+            fi
+            adb shell screencap -p /sdcard/chatwork-home.png
+            adb pull /sdcard/chatwork-home.png "$GITHUB_WORKSPACE/chatwork-home.png"
+            adb shell uiautomator dump /sdcard/chatwork-window.xml >/dev/null
+            adb pull /sdcard/chatwork-window.xml "$GITHUB_WORKSPACE/chatwork-window.xml"
+            adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-logcat.txt"
+            echo "ChatWork launch smoke test passed; screenshot and UI hierarchy captured."
+
+      - name: Upload emulator screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatwork-emulator-evidence
+          path: |
+            chatwork-home.png
+            chatwork-window.xml
+            chatwork-emulator-logcat.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Publish test summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## ChatWork Android Emulator Test"
+            echo ""
+            echo "- APK build: see preceding build and metadata verification steps."
+            echo "- Emulator: Android API 35, ARM64, Pixel 2 profile."
+            echo "- Smoke coverage: install, launcher start, process-alive check, screenshot, UI hierarchy and logcat capture."
+            echo "- This is an automated emulator smoke test; it does not replace physical-device checks for OEM-specific behaviour, microphone hardware, notifications or real model inference."
+          } >> "$GITHUB_STEP_SUMMARY"
