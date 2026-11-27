@@ -125,17 +125,23 @@ class WakeWordAssistantService : Service() {
                 reserveRamBytes = 1_200L * 1024L * 1024L,
                 reserveStorageBytes = 256L * 1024L * 1024L
             )
-            val savedModelId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
-                .getString("selected_model_id", null)
-            val chosenCandidate = recommendation.candidate
-            val chosen = if (savedModelId != null) {
-                check(chosenCandidate?.id == savedModelId) {
-                    "The selected Qwen model does not fit the wake assistant memory budget. Choose a smaller tested model in ChatWork first."
-                }
-                modelManager.models.first { it.id == savedModelId }
-            } else {
-                chosenCandidate?.let { item -> modelManager.models.firstOrNull { it.id == item.id } }
-                    ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
+            val modelPrefs = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
+            val savedModelId = modelPrefs.getString("selected_model_id", null)
+            val usableRam = (budget.availableRamBytes - 1_200L * 1024L * 1024L).coerceAtLeast(0L)
+            val usableStorage = (budget.freeStorageBytes - 256L * 1024L * 1024L).coerceAtLeast(0L)
+            // Respect the user's selected model whenever it is tested and fits.
+            // If it no longer fits current live memory, fall back to the largest
+            // tested model that does fit, and persist that safe choice for next start.
+            val savedCandidate = candidates.firstOrNull { it.id == savedModelId }
+                ?.takeIf { !budget.lowMemory && it.enabled &&
+                    it.minimumAvailableRamBytes <= usableRam &&
+                    it.minimumFreeStorageBytes <= usableStorage }
+            val chosenCandidate = savedCandidate ?: recommendation.candidate
+                ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
+            val chosen = modelManager.models.firstOrNull { it.id == chosenCandidate.id }
+                ?: throw IllegalStateException("The recommended Qwen model is missing from the model catalog.")
+            if (savedCandidate == null && savedModelId != chosen.id) {
+                modelPrefs.edit().putString("selected_model_id", chosen.id).apply()
             }
             publishStatus(STATUS_LOADING, "Loading " + chosen.title + " into memory…")
             val activeAiEngine = OfflineAiEngine()
