@@ -170,33 +170,10 @@ class OfflineAiChatActivity : Activity() {
             setPadding(dp(12), dp(12), dp(12), dp(12))
             setOnClickListener { action() }
         }
+        // Minimal transparent top bar: only the back arrow remains.
         header.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
-            LinearLayout.LayoutParams(dp(48), dp(56)))
-        val titleBlock = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        titleBlock.addView(TextView(this).apply {
-            text = "ChatWork"
-            textSize = 19f
-            setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-            setTextColor(primaryText)
-        })
-        modelLabel = TextView(this).apply {
-            text = "AI Assistant · Checking downloaded model…"
-            textSize = 11f
-            setTextColor(secondaryText)
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-        }
-        titleBlock.addView(modelLabel)
-        header.addView(titleBlock, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
-            marginStart = dp(4)
-        })
-        header.addView(headerIcon(R.drawable.ic_chatwork_more, "More options") {
-            showChatOptions(header)
-        }, LinearLayout.LayoutParams(dp(48), dp(56)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = -dp(14) })
+            LinearLayout.LayoutParams(dp(48), dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = -dp(14) })
         status.setPadding(dp(16), dp(4), dp(16), dp(4))
         root.addView(status, LinearLayout.LayoutParams(-1, -2))
 
@@ -218,12 +195,8 @@ class OfflineAiChatActivity : Activity() {
 
         composerShell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(surface)
-                setStroke(dp(1), if (dark) 0xFF3A4658.toInt() else 0xFFD1D5DB.toInt())
-                cornerRadius = dp(28).toFloat()
-            }
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
         }
         thinkHarderChip = TextView(this).apply {
             text = "✦  Think harder     ×"
@@ -255,7 +228,7 @@ class OfflineAiChatActivity : Activity() {
             contentDescription = "More options and attachments"
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(dp(5), dp(5), dp(5), dp(5))
-            setOnClickListener { if (offlineRecording) cancelOfflineVoiceInput() else showAttachmentSheet() }
+            setOnClickListener { showAttachmentSheet() }
         }
         promptInput = EditText(this).apply {
             hint = "Message..."
@@ -275,16 +248,9 @@ class OfflineAiChatActivity : Activity() {
             isVerticalScrollBarEnabled = true
         }
         micButton = Button(this).apply {
-            text = ""
-            contentDescription = "Voice input"
-            minWidth = 0; minHeight = 0; minimumWidth = 0; minimumHeight = 0
-            setPadding(0, 0, 0, 0)
-            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
-            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(primaryText)
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
+            visibility = View.GONE
+            isEnabled = false
+            contentDescription = "Voice input removed from composer"
         }
         recordingWaveform = VoiceWaveformView()
         sendButton = Button(this).apply {
@@ -304,7 +270,7 @@ class OfflineAiChatActivity : Activity() {
             isEnabled = false
             alpha = 0.55f
             contentDescription = "Send message"
-            setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
+            setOnClickListener { if (promptInput.text.isNotBlank()) sendPrompt() }
         }
         promptInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -344,7 +310,7 @@ class OfflineAiChatActivity : Activity() {
     }
 
     private fun updateComposerAction(hasText: Boolean) {
-        val recording = offlineRecording
+        val recording = false
         if (recording) {
             sendButton.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
             sendButton.background = android.graphics.drawable.GradientDrawable().apply {
@@ -354,13 +320,13 @@ class OfflineAiChatActivity : Activity() {
             sendButton.isEnabled = true; sendButton.alpha = 1f
         } else {
             sendButton.setCompoundDrawablesWithIntrinsicBounds(
-                if (hasText) R.drawable.ic_chatwork_send_up else R.drawable.ic_chatwork_waveform, 0, 0, 0
+                R.drawable.ic_chatwork_send_up, 0, 0, 0
             )
             sendButton.background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xFF0A84FF.toInt()); shape = android.graphics.drawable.GradientDrawable.OVAL
             }
-            sendButton.contentDescription = if (hasText) "Send message" else "Start voice input"
-            sendButton.isEnabled = if (hasText) engine.isLoaded else true
+            sendButton.contentDescription = "Send message"
+            sendButton.isEnabled = hasText && engine.isLoaded
             sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
         }
     }
@@ -476,8 +442,7 @@ class OfflineAiChatActivity : Activity() {
         composerRow.addView(moreButton, LinearLayout.LayoutParams(dp(40), dp(44)))
         if (composerExpanded) {
             composerRow.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
-            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(44)))
-            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(4) })
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(4) })
             composer.addView(promptInput, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(3)
             })
@@ -486,8 +451,7 @@ class OfflineAiChatActivity : Activity() {
             composerRow.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f).apply {
                 marginStart = dp(2)
             })
-            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(44)))
-            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply {
                 marginStart = dp(4)
             })
             composer.addView(composerRow, LinearLayout.LayoutParams(-1, -2))
@@ -1252,27 +1216,24 @@ class OfflineAiChatActivity : Activity() {
                 if (fromUser) dp(17) else dp(15), if (fromUser) dp(12) else dp(13))
             maxWidth = (resources.displayMetrics.widthPixels * if (fromUser) 0.88f else 0.96f).toInt()
             setLineSpacing(dp(5).toFloat(), 1.04f)
-            background = android.graphics.drawable.GradientDrawable(
-                if (fromUser) android.graphics.drawable.GradientDrawable.Orientation.TL_BR
-                else android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-                if (fromUser) intArrayOf(0xFF2878F0.toInt(), 0xFF6658D9.toInt())
-                else if (dark) intArrayOf(0xFF17263A.toInt(), 0xFF172238.toInt())
-                else intArrayOf(0xFFF0F6FF.toInt(), 0xFFF7F3FF.toInt())
+            background = if (fromUser) android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xFF2878F0.toInt(), 0xFF6658D9.toInt())
             ).apply {
-                cornerRadii = if (fromUser) floatArrayOf(
+                cornerRadii = floatArrayOf(
                     dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(),
                     dp(7).toFloat(), dp(7).toFloat(), dp(22).toFloat(), dp(22).toFloat()
-                ) else floatArrayOf(
-                    dp(19).toFloat(), dp(19).toFloat(), dp(19).toFloat(), dp(19).toFloat(),
-                    dp(19).toFloat(), dp(19).toFloat(), dp(7).toFloat(), dp(7).toFloat()
                 )
-                setStroke(dp(1), 0x223B82F6)
-            }
+                setStroke(dp(1), 0x557DBBFF)
+            } else null
             if (fromUser) setTextColor(0xFFFFFFFF.toInt())
+            else setPadding(0, dp(5), 0, dp(5))
         }
         row.addView(bubble, LinearLayout.LayoutParams(-2, -2).apply { if (fromUser) marginStart = dp(44) else marginEnd = dp(2) })
         messageColumn.addView(row, LinearLayout.LayoutParams(-1, -2))
         if (!fromUser) {
+            // AI replies are plain page text: no timestamp, feedback or share toolbar.
+            /*
             val meta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.START; setPadding(0, dp(5), 0, 0) }
             val timestamp = java.text.SimpleDateFormat("dd MMMM yyyy hh:mm:ss a", Locale.getDefault()).format(java.util.Date())
             meta.addView(TextView(this).apply { text = timestamp; textSize = 12f; typeface = android.graphics.Typeface.DEFAULT; setTextColor(secondaryText) }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(5) })
@@ -1312,6 +1273,7 @@ class OfflineAiChatActivity : Activity() {
                 startActivity(Intent.createChooser(share, "Share ChatWork response"))
             }, LinearLayout.LayoutParams(dp(32), dp(28)))
             meta.addView(actions, LinearLayout.LayoutParams(-1, -2)); messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
+            */
         } else {
             messageColumn.addView(TextView(this).apply {
                 text = java.text.SimpleDateFormat("hh:mm a", Locale.getDefault()).format(java.util.Date())
