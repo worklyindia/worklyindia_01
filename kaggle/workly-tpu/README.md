@@ -14,14 +14,14 @@ Do not commit API tokens or kaggle.json files.
 
 ## Publish without spending TPU quota
 
-A push changing this folder only publishes a new private notebook version; it does not start a TPU session. This is the default and recommended path for code-only updates.
+A push changing this folder or its workflow only publishes a new private notebook version; it does not start a TPU session. CI converts the maintained `workly_tpu.py` source into a validated Jupyter `.ipynb` file before publishing. This avoids submitting raw Python source where Kaggle expects notebook JSON and is the default path for code-only updates.
 
 ## Run a TPU benchmark only when needed
 
 1. Open **Actions → Workly India Kaggle TPU**.
 2. Select **Run workflow**.
 3. Enable **Run the Kaggle notebook on TPU** only when you are ready to use accelerator quota.
-4. The workflow requests `TpuV5E8` (TPU v5e-8), waits for Kaggle completion, downloads the result JSON, and verifies the smoke-test status.
+4. The workflow requests `TpuV5E8` (TPU v5e-8), waits for Kaggle completion, downloads the result JSON, and verifies the smoke-test status. TPU execution is manual/on-demand so ordinary commits do not consume accelerator quota.
 
 Kaggle may queue or deny TPU access depending on account quota and accelerator availability. Remaining account quota is not exposed by this notebook report; check your Kaggle account settings for quota.
 
