@@ -78,6 +78,7 @@ class OfflineAiChatActivity : Activity() {
     private var composerExpanded = false
     private var thinkHarderEnabled = false
     private lateinit var status: TextView
+    private lateinit var modelLabel: TextView
     private lateinit var chatScroll: ScrollView
     private val conversationHistory = StringBuilder()
     private var greetingPane: View? = null
@@ -180,11 +181,14 @@ class OfflineAiChatActivity : Activity() {
             setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
             setTextColor(primaryText)
         })
-        titleBlock.addView(TextView(this).apply {
-            text = "AI Assistant"
+        modelLabel = TextView(this).apply {
+            text = "AI Assistant · Checking downloaded model…"
             textSize = 11f
             setTextColor(secondaryText)
-        })
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        titleBlock.addView(modelLabel)
         header.addView(titleBlock, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
             marginStart = dp(4)
         })
@@ -277,6 +281,8 @@ class OfflineAiChatActivity : Activity() {
             background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(primaryText)
+            gravity = Gravity.CENTER
+            includeFontPadding = false
             setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
         }
         recordingWaveform = VoiceWaveformView()
@@ -293,6 +299,7 @@ class OfflineAiChatActivity : Activity() {
             }
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_send_up, 0, 0, 0)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
+            includeFontPadding = false
             isEnabled = false
             alpha = 0.55f
             contentDescription = "Send message"
@@ -321,7 +328,10 @@ class OfflineAiChatActivity : Activity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            // ChatWorkTheme.applyContentInsets() already applies the status-bar top inset
+            // to the Activity content host. Applying bars.top here again pushed the
+            // conversation header too far down; only own the IME/bottom inset here.
+            view.setPadding(bars.left, 0, bars.right, maxOf(bars.bottom, ime.bottom))
             if (ime.bottom > 0) chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
             insets
         }
@@ -843,7 +853,9 @@ class OfflineAiChatActivity : Activity() {
                         expectedBytes = model.size,
                         minimumAvailableRamBytes = model.minFreeRam,
                         minimumFreeStorageBytes = 256L * 1024L * 1024L,
-                        enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
+                        enabled = modelManager.snapshot(model).state in setOf(
+                            QwenModelManager.State.READY, QwenModelManager.State.NEEDS_TEST
+                        )
                     )
                 }
                 val recommendation = AssistantModelPolicy.recommend(
@@ -856,7 +868,9 @@ class OfflineAiChatActivity : Activity() {
                 // Otherwise choose the largest downloaded model that fits with safety reserves.
                 val savedReady = savedModel?.takeIf {
                     recommendation.candidate?.id == it.id &&
-                        modelManager.snapshot(it).state == QwenModelManager.State.READY
+                        modelManager.snapshot(it).state in setOf(
+                            QwenModelManager.State.READY, QwenModelManager.State.NEEDS_TEST
+                        )
                 }
                 val adaptiveChoice = recommendation.candidate?.let { candidate ->
                     modelManager.models.firstOrNull { it.id == candidate.id }
@@ -871,20 +885,23 @@ class OfflineAiChatActivity : Activity() {
                     status.text = "Available RAM: %.1f GB · Recommended: ${recommended.title}".format(java.util.Locale.US, memoryInfo.availMem / 1_000_000_000.0)
                 }
                 val modelState = modelManager.snapshot(chosen).state
-                check(modelState == QwenModelManager.State.READY) {
-                    "${chosen.title} download is not verified. Open Downloads and wait until it shows Ready."
+                check(modelState == QwenModelManager.State.READY || modelState == QwenModelManager.State.NEEDS_TEST) {
+                    "${chosen.title} is not fully downloaded. Open Downloads and finish the download."
                 }
                 check(memoryInfo.availMem >= chosen.minFreeRam) {
                     "Not enough free RAM for ${chosen.title}. Choose a smaller Qwen model or close other apps."
                 }
                 check(engine.loadModel(modelManager.file(chosen))) {
-                    "Qwen could not load. Free memory may be insufficient; try a smaller model."
+                    "${chosen.title} could not load. Free memory may be insufficient; try a smaller model."
                 }
+                // A successful native engine load is the definitive on-device model test.
+                modelManager.markTested(chosen, true)
                 runOnUiThread {
                     loadedModelId = chosen.id
                     modelLoadInProgress = false
-                    status.text = "Ready · ${chosen.title} · local AI replies enabled"
+                    status.text = ""
                     status.visibility = View.GONE
+                    modelLabel.text = "AI Assistant · ${chosen.title} · Ready"
                     sendButton.isEnabled = engine.isLoaded && !promptInput.text.isNullOrBlank()
                     sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
                     qwenModelPicker.isEnabled = !WakeWordAssistantService.isRunning
@@ -895,8 +912,14 @@ class OfflineAiChatActivity : Activity() {
                     modelLoadInProgress = false
                     status.text = ""
                     status.visibility = View.GONE
+                    modelLabel.text = "AI Assistant · Model unavailable — check Downloads"
                     sendButton.isEnabled = false
                     qwenModelPicker.isEnabled = true
+                    android.widget.Toast.makeText(
+                        this@OfflineAiChatActivity,
+                        error.message ?: "Downloaded AI model could not be loaded",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }
