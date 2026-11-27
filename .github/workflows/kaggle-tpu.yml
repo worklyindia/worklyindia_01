@@ -18,8 +18,10 @@ on:
 permissions:
   contents: read
 
+# Keep notebook publishing separate from long-running TPU verification.
+# A TPU run must not block normal code pushes from publishing the latest notebook.
 concurrency:
-  group: workly-kaggle-tpu
+  group: workly-kaggle-tpu-${{ github.event_name == 'workflow_dispatch' && inputs.run_tpu && 'execute' || 'publish' }}
   cancel-in-progress: false
 
 jobs:
