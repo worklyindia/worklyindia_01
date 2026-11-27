@@ -94,6 +94,63 @@ jobs:
             kaggle kernels push --path . --no-run
           fi
 
+      - name: Wait for TPU run and verify smoke-test output
+        if: ${{ success() && (github.event_name == 'push' || inputs.run_tpu) }}
+        working-directory: kaggle/workly-tpu
+        shell: bash
+        env:
+          KERNEL_REF: ${{ secrets.KAGGLE_USERNAME }}/${{ secrets.KAGGLE_KERNEL_SLUG }}
+        run: |
+          set -euo pipefail
+          echo "Waiting up to 30 minutes for Kaggle TPU execution..."
+          completed=false
+          for attempt in $(seq 1 60); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "Kaggle status check $attempt/60: $status"
+            if grep -Eiq '(^|[^A-Z])COMPLETE([^A-Z]|$)' <<<"$status"; then
+              completed=true
+              break
+            fi
+            if grep -Eiq 'ERROR|FAILED|CANCELLED' <<<"$status"; then
+              echo "::error::Kaggle reported a failed TPU kernel run."
+              kaggle kernels logs "$KERNEL_REF" || true
+              exit 1
+            fi
+            sleep 30
+          done
+          if [[ "$completed" != "true" ]]; then
+            echo "::error::Timed out waiting for Kaggle TPU execution. Check Kaggle kernel status and logs."
+            kaggle kernels logs "$KERNEL_REF" || true
+            exit 1
+          fi
+
+          kaggle kernels logs "$KERNEL_REF"
+          mkdir -p ../../kaggle-tpu-output
+          kaggle kernels output "$KERNEL_REF" --path ../../kaggle-tpu-output --force --file-pattern 'workly-tpu-result\.json        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Workly India Kaggle TPU"
+            echo "- Notebook target: ${KAGGLE_USERNAME}/${KAGGLE_KERNEL_SLUG}"
+            echo "- Accelerator requested: TPU v5e-8"
+            echo "- TPU run: the preceding job step polls Kaggle status and verifies workly-tpu-result.json."
+            echo "- Private notebook by default."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          candidates = list(Path("../../kaggle-tpu-output").rglob("workly-tpu-result.json"))
+          if not candidates:
+              raise SystemExit("Kaggle run completed but workly-tpu-result.json was not found.")
+          result = json.loads(candidates[0].read_text(encoding="utf-8"))
+          if result.get("status") != "TPU_SMOKE_TEST_PASSED":
+              raise SystemExit(f"Unexpected TPU result status: {result.get('status')!r}")
+          print("Verified TPU smoke test:", json.dumps(result, indent=2))
+          with open("../../kaggle-tpu-result-summary.txt", "w", encoding="utf-8") as f:
+              f.write(json.dumps(result, indent=2))
+          PY
+
       - name: Report Kaggle notebook
         if: always()
         shell: bash
