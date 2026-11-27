@@ -87,7 +87,22 @@ jobs:
 
       - name: Push notebook and request Kaggle TPU execution
         working-directory: kaggle/workly-tpu
-        run: kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          push_output="$(kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8 2>&1)"
+          push_status=$?
+          set -e
+          printf '%s\\n' "$push_output"
+          if [[ "$push_status" -ne 0 ]] || grep -Eiq 'Kernel push error|Maximum batch TPU session count|KernelWorkerStatus\\.(ERROR|CANCELLED)' <<<"$push_output"; then
+            echo "::error::Kaggle did not accept a new TPU execution. Refusing to inspect stale kernel status."
+            exit 1
+          fi
+          if ! grep -Eiq 'Kernel version .* pushed|Kernel pushed|Kernel started|KernelWorkerStatus\\.(QUEUED|RUNNING)' <<<"$push_output"; then
+            echo "::error::Kaggle push response did not confirm a new execution. Refusing to inspect stale kernel status."
+            exit 1
+          fi
 
       - name: Wait for Kaggle execution and verify Qwen result
         if: success()
