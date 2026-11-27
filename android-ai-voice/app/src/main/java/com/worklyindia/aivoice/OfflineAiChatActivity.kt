@@ -76,6 +76,7 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var moreButton: ImageView
     private lateinit var thinkHarderChip: TextView
     private var composerExpanded = false
+    private var composerImeVisible = false
     private var thinkHarderEnabled = false
     private lateinit var status: TextView
     private lateinit var modelLabel: TextView
@@ -328,6 +329,7 @@ class OfflineAiChatActivity : Activity() {
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            composerImeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
             // ChatWorkTheme.applyContentInsets() already applies the status-bar top inset
             // to the Activity content host. Applying bars.top here again pushed the
             // conversation header too far down; only own the IME/bottom inset here.
@@ -454,6 +456,13 @@ class OfflineAiChatActivity : Activity() {
             measured.lineCount > 1
         }
         if (shouldExpand == composerExpanded && composer.childCount > 0) return
+
+        // Reparenting EditText between inline/stacked layouts can clear focus and
+        // dismiss the soft keyboard while the user is typing. Preserve both the
+        // cursor and the visible-IME state across the layout change.
+        val keepInputFocus = promptInput.hasFocus()
+        val keepKeyboardOpen = keepInputFocus && composerImeVisible
+        val cursorPosition = promptInput.selectionStart.coerceAtLeast(0)
         composerExpanded = shouldExpand
 
         (promptInput.parent as? ViewGroup)?.removeView(promptInput)
@@ -485,6 +494,18 @@ class OfflineAiChatActivity : Activity() {
         }
         promptInput.maxLines = 6
         promptInput.requestLayout()
+
+        if (keepInputFocus) {
+            promptInput.requestFocus()
+            promptInput.post {
+                val safeCursor = cursorPosition.coerceAtMost(promptInput.text?.length ?: 0)
+                runCatching { promptInput.setSelection(safeCursor) }
+                if (keepKeyboardOpen) {
+                    val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                    imm?.showSoftInput(promptInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
+            }
+        }
     }
 
     private fun startNewConversation() {
