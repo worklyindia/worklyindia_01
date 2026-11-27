@@ -635,6 +635,21 @@ class OfflineAiChatActivity : Activity() {
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
             }
+            val voiceRepliesEnabled = getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_JARVIS_VOICE_REPLIES, true)
+            menu.add(if (voiceRepliesEnabled) "JARVIS voice replies · On" else "JARVIS voice replies · Off")
+                .setOnMenuItemClickListener {
+                    val next = !getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE)
+                        .getBoolean(KEY_JARVIS_VOICE_REPLIES, true)
+                    getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(KEY_JARVIS_VOICE_REPLIES, next).apply()
+                    android.widget.Toast.makeText(
+                        this@OfflineAiChatActivity,
+                        if (next) "JARVIS voice replies enabled." else "JARVIS voice replies disabled.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    true
+                }
             menu.add("New chat").setOnMenuItemClickListener {
                 saveCurrentConversation()
                 startNewConversation()
@@ -653,14 +668,14 @@ class OfflineAiChatActivity : Activity() {
             val wakeEnabled = WakeWordAssistantService.isRunning
             qwenModelPicker.isEnabled = !wakeEnabled
             if (wakeEnabled) {
-                menu.add("Disable Hey ChatWork").setOnMenuItemClickListener {
+                menu.add("Disable JARVIS hands-free · Hey ChatWork").setOnMenuItemClickListener {
                     stopService(Intent(this@OfflineAiChatActivity, WakeWordAssistantService::class.java))
                     status.text = "Stopping Hey ChatWork microphone service…"
                     waitForWakeServiceStop()
                     true
                 }
             } else {
-                menu.add("Enable Hey ChatWork").setOnMenuItemClickListener {
+                menu.add("Enable JARVIS hands-free · Hey ChatWork").setOnMenuItemClickListener {
                     chooseWakeWordLanguage()
                     true
                 }
@@ -710,8 +725,8 @@ class OfflineAiChatActivity : Activity() {
         val saved = prefs.getString(WakeWordAssistantService.KEY_LANGUAGE, "hi") ?: "hi"
         var selected = codes.indexOf(saved).coerceAtLeast(0)
         AlertDialog.Builder(this)
-            .setTitle("Enable Hey ChatWork")
-            .setMessage("When enabled, ChatWork continuously listens for the English wake phrase using a visible microphone notification. Wake detection, speech recognition, AI replies and voice output run on this phone. You can stop listening at any time from the notification.")
+            .setTitle("Enable JARVIS hands-free mode")
+            .setMessage("When enabled, JARVIS listens for the trained “Hey ChatWork” wake phrase using a visible microphone notification. Speech recognition, AI replies and voice output run on this phone. This is optional, uses the microphone only while enabled, and can be stopped from the notification at any time.")
             .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Continue") { _, _ ->
@@ -1123,6 +1138,7 @@ class OfflineAiChatActivity : Activity() {
 
     /** Uses downloaded Indic Tiny TTS only; never Android/mobile TTS. */
     private fun speakAnswer(value: String) {
+        if (!getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE).getBoolean(KEY_JARVIS_VOICE_REPLIES, true)) return
         val language = selectedLanguage(value)
         val code = when { language.tag.startsWith("hi") -> "hi"; language.tag.startsWith("gu") -> "gu"; else -> "en" }
         val pack = SpeechModelCatalog.indicTinyTts(code)
