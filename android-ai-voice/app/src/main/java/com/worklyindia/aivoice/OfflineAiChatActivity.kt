@@ -839,10 +839,15 @@ class OfflineAiChatActivity : Activity() {
                 status.text = "Hey ChatWork could not start: ${error ?: message ?: "Check microphone permission and downloaded models."}"
                 status.visibility = View.VISIBLE
                 if (!engine.isLoaded && !modelLoadInProgress) loadModel()
-            } else if (requested && attempt < 20) {
+            } else if (requested) {
+                // Model downloads/loading can take longer than 10 seconds on-device.
+                // Keep observing the foreground service instead of clearing its request
+                // while STT/TTS/Qwen initialization is still running.
+                qwenModelPicker.isEnabled = false
+                status.text = message ?: "Preparing offline voice models…"
+                status.visibility = View.VISIBLE
                 waitForWakeServiceStop(attempt + 1)
             } else {
-                prefs.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
                 qwenModelPicker.isEnabled = true
                 if (state == WakeWordAssistantService.STATUS_STOPPED) {
                     status.text = "Hey ChatWork is stopped."
