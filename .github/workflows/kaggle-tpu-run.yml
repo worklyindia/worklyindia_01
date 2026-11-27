@@ -90,17 +90,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          set +e
-          push_output="$(kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8 2>&1)"
-          push_status=$?
-          set -e
-          printf '%s\\n' "$push_output"
-          if [[ "$push_status" -ne 0 ]] || grep -Eiq 'Kernel push error|Maximum batch TPU session count|KernelWorkerStatus\\.(ERROR|CANCELLED)' <<<"$push_output"; then
-            echo "::error::Kaggle did not accept a new TPU execution. Refusing to inspect stale kernel status."
+          accepted=false
+          max_attempts=9
+          for attempt in $(seq 1 "$max_attempts"); do
+            set +e
+            push_output="$(kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8 2>&1)"
+            push_status=$?
+            set -e
+            printf '%s\n' "$push_output"
+
+            if [[ "$push_status" -eq 0 ]] && ! grep -Eiq 'Kernel push error|KernelWorkerStatus\.(ERROR|CANCELLED)' <<<"$push_output"; then
+              if grep -Eiq 'Kernel version .* pushed|Kernel pushed|Kernel started|KernelWorkerStatus\.(QUEUED|RUNNING)' <<<"$push_output"; then
+                accepted=true
+                break
+              fi
+              echo "::error::Kaggle response did not confirm that a new TPU execution was accepted."
+              exit 1
+            fi
+
+            if grep -Eiq 'Maximum batch TPU session count of 1 reached' <<<"$push_output"; then
+              if [[ "$attempt" -lt "$max_attempts" ]]; then
+                echo "::warning::Kaggle TPU session capacity is full (attempt $attempt/$max_attempts). Waiting 5 minutes before retrying."
+                sleep 300
+                continue
+              fi
+              echo "::error::Kaggle TPU capacity remained full after $max_attempts attempts. No TPU session was started."
+              exit 1
+            fi
+
+            echo "::error::Kaggle rejected the TPU execution for a reason other than temporary session capacity."
             exit 1
-          fi
-          if ! grep -Eiq 'Kernel version .* pushed|Kernel pushed|Kernel started|KernelWorkerStatus\\.(QUEUED|RUNNING)' <<<"$push_output"; then
-            echo "::error::Kaggle push response did not confirm a new execution. Refusing to inspect stale kernel status."
+          done
+
+          if [[ "$accepted" != "true" ]]; then
+            echo "::error::No new Kaggle TPU execution was accepted."
             exit 1
           fi
 
