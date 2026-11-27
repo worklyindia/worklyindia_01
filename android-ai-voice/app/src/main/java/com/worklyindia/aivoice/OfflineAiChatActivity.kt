@@ -262,12 +262,17 @@ class OfflineAiChatActivity : Activity() {
             setPadding(0, 0, 0, 0)
             compoundDrawablePadding = 0
             setTextColor(0xFFFFFFFF.toInt())
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFF0A84FF.toInt())
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-            }
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_send_up, 0, 0, 0)
-            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
+            background = android.graphics.drawable.LayerDrawable(arrayOf(
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(0xFF0A84FF.toInt())
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                },
+                android.graphics.drawable.InsetDrawable(
+                    androidx.core.content.ContextCompat.getDrawable(this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up)!!,
+                    dp(10)
+                )
+            )).apply { setLayerInset(1, dp(10), dp(10), dp(10), dp(10)) }
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
             includeFontPadding = false
             isEnabled = false
             alpha = 0.55f
@@ -321,12 +326,17 @@ class OfflineAiChatActivity : Activity() {
             sendButton.contentDescription = "Stop recording"
             sendButton.isEnabled = true; sendButton.alpha = 1f
         } else {
-            sendButton.setCompoundDrawablesWithIntrinsicBounds(
-                R.drawable.ic_chatwork_send_up, 0, 0, 0
-            )
-            sendButton.background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFF0A84FF.toInt()); shape = android.graphics.drawable.GradientDrawable.OVAL
-            }
+            sendButton.setCompoundDrawables(null, null, null, null)
+            sendButton.background = android.graphics.drawable.LayerDrawable(arrayOf(
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(0xFF0A84FF.toInt())
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                },
+                android.graphics.drawable.InsetDrawable(
+                    androidx.core.content.ContextCompat.getDrawable(this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up)!!,
+                    dp(10)
+                )
+            )).apply { setLayerInset(1, dp(10), dp(10), dp(10), dp(10)) }
             sendButton.contentDescription = "Send message"
             sendButton.isEnabled = hasText && engine.isLoaded
             sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
