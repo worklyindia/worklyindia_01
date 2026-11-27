@@ -978,7 +978,10 @@ class OfflineAiChatActivity : Activity() {
         conversationHistory.append("User: ").append(prompt).append("\n")
         if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
         saveCurrentConversation()
-        thinkingBubble = addMessage("Thinking…", false)
+        thinkingBubble = addMessage("✦  Thinking…", false)
+        thinkingBubble?.animate()?.alpha(0.72f)?.setDuration(650)?.withEndAction {
+            thinkingBubble?.animate()?.alpha(1f)?.setDuration(650)?.start()
+        }?.start()
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         status.text = "Generating a reply on this phone…"
@@ -1003,7 +1006,7 @@ class OfflineAiChatActivity : Activity() {
             val answer = try {
                 engine.generate(contextPrompt) { partial ->
                     runOnUiThread {
-                        thinkingBubble?.text = partial
+                        thinkingBubble?.text = if (partial.isNotBlank()) "$partial  ▍" else "✦  Thinking…"
                         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
                     }
                 }.trim().ifBlank {
@@ -1231,13 +1234,41 @@ class OfflineAiChatActivity : Activity() {
     }
 
     private fun addMessage(value: String, fromUser: Boolean): TextView {
-        val messageColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = if (fromUser) Gravity.END else Gravity.START; setPadding(dp(1), dp(5), dp(1), dp(5)) }
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = if (fromUser) Gravity.END else Gravity.START }
+        val messageColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (fromUser) Gravity.END else Gravity.START
+            setPadding(dp(2), dp(7), dp(2), dp(7))
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (fromUser) Gravity.END else Gravity.START
+        }
         val bubble = TextView(this).apply {
-            text = if (fromUser) value else formatMarkdown(value); textSize = 16f; typeface = android.graphics.Typeface.DEFAULT
-            setTextColor(primaryText); setPadding(if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1), if (fromUser) dp(16) else 0, if (fromUser) dp(10) else dp(1))
-            maxWidth = (resources.displayMetrics.widthPixels * 0.92f).toInt(); setLineSpacing(dp(5).toFloat(), 1.04f)
-            if (fromUser) { setTextColor(if (dark) 0xFFE8EDF5.toInt() else 0xFF172033.toInt()); background = android.graphics.drawable.GradientDrawable().apply { setColor(if (dark) 0xFF202B3F.toInt() else 0xFFF0F0F0.toInt()); cornerRadius = dp(28).toFloat() } } else background = null
+            text = if (fromUser) value else formatMarkdown(value)
+            textSize = if (fromUser) 15.5f else 16f
+            typeface = android.graphics.Typeface.DEFAULT
+            setTextColor(primaryText)
+            setPadding(if (fromUser) dp(17) else dp(15), if (fromUser) dp(12) else dp(13),
+                if (fromUser) dp(17) else dp(15), if (fromUser) dp(12) else dp(13))
+            maxWidth = (resources.displayMetrics.widthPixels * if (fromUser) 0.88f else 0.96f).toInt()
+            setLineSpacing(dp(5).toFloat(), 1.04f)
+            background = android.graphics.drawable.GradientDrawable(
+                if (fromUser) android.graphics.drawable.GradientDrawable.Orientation.TL_BR
+                else android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                if (fromUser) intArrayOf(0xFF2878F0.toInt(), 0xFF6658D9.toInt())
+                else if (dark) intArrayOf(0xFF17263A.toInt(), 0xFF172238.toInt())
+                else intArrayOf(0xFFF0F6FF.toInt(), 0xFFF7F3FF.toInt())
+            ).apply {
+                cornerRadii = if (fromUser) floatArrayOf(
+                    dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(),
+                    dp(7).toFloat(), dp(7).toFloat(), dp(22).toFloat(), dp(22).toFloat()
+                ) else floatArrayOf(
+                    dp(19).toFloat(), dp(19).toFloat(), dp(19).toFloat(), dp(19).toFloat(),
+                    dp(19).toFloat(), dp(19).toFloat(), dp(7).toFloat(), dp(7).toFloat()
+                )
+                setStroke(dp(1), 0x223B82F6)
+            }
+            if (fromUser) setTextColor(0xFFFFFFFF.toInt())
         }
         row.addView(bubble, LinearLayout.LayoutParams(-2, -2).apply { if (fromUser) marginStart = dp(44) else marginEnd = dp(2) })
         messageColumn.addView(row, LinearLayout.LayoutParams(-1, -2))
@@ -1248,7 +1279,14 @@ class OfflineAiChatActivity : Activity() {
             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             fun actionIcon(drawable: Int, label: String, onTap: () -> Unit) = ImageView(this).apply {
                 setImageResource(drawable); setColorFilter(secondaryText); contentDescription = label; scaleType = ImageView.ScaleType.CENTER
-                setPadding(dp(3), dp(4), dp(3), dp(4)); setOnClickListener { onTap() }
+                setPadding(dp(3), dp(4), dp(3), dp(4))
+                alpha = 0.88f
+                setOnClickListener {
+                    animate().scaleX(0.92f).scaleY(0.92f).setDuration(80L).withEndAction {
+                        animate().scaleX(1f).scaleY(1f).setDuration(100L).start()
+                    }.start()
+                    onTap()
+                }
             }
             actions.addView(actionIcon(R.drawable.ic_chat_copy, "Copy message") {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -1284,6 +1322,9 @@ class OfflineAiChatActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, -2))
         }
         chatMessages.addView(messageColumn, LinearLayout.LayoutParams(-1, -2))
+        messageColumn.alpha = 0f
+        messageColumn.translationY = dp(8).toFloat()
+        messageColumn.animate().alpha(1f).translationY(0f).setDuration(230L).start()
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
         return bubble
     }
