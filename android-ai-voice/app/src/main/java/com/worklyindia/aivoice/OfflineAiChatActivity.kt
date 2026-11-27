@@ -13,6 +13,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.os.SystemClock
 import android.os.Build
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -789,10 +790,34 @@ class OfflineAiChatActivity : Activity() {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         if (permissions.isNotEmpty()) {
-            requestPermissions(permissions.toTypedArray(), REQUEST_WAKE_ASSISTANT)
+            val permissionPrefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+            val alreadyRequested = permissionPrefs.getBoolean("wake_permissions_requested", false)
+            val permanentlyDenied = alreadyRequested && permissions.any {
+                !shouldShowRequestPermissionRationale(it)
+            }
+            if (permanentlyDenied) {
+                showWakePermissionSettingsDialog()
+            } else {
+                permissionPrefs.edit().putBoolean("wake_permissions_requested", true).apply()
+                requestPermissions(permissions.toTypedArray(), REQUEST_WAKE_ASSISTANT)
+            }
         } else {
             startWakeWordService()
         }
+    }
+
+    private fun showWakePermissionSettingsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Allow permissions for Hey ChatWork")
+            .setMessage("Android is not showing the permission popup because microphone or notification access was previously blocked. Open ChatWork app settings, allow Microphone and Notifications, then return and enable Hey ChatWork again.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Open App Settings") { _, _ ->
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.fromParts("package", packageName, null)
+                }
+                startActivity(intent)
+            }
+            .show()
     }
 
     private fun waitForWakeServiceStop(attempt: Int = 0) {
@@ -1387,11 +1412,15 @@ class OfflineAiChatActivity : Activity() {
             startWakeWordService()
         } else if (requestCode == REQUEST_WAKE_ASSISTANT) {
             status.text = if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                "Microphone permission is required. Allow it in Android Settings → Apps → ChatWork → Permissions, then try again."
+                "Microphone permission is required for Hey ChatWork."
             } else {
-                "Notification permission is required to show when Hey ChatWork is listening. Allow notifications for ChatWork, then try again."
+                "Notification permission is required to show when Hey ChatWork is listening."
             }
             status.visibility = View.VISIBLE
+            val stillDenied = mutableListOf<String>()
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) stillDenied.add(Manifest.permission.RECORD_AUDIO)
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) stillDenied.add(Manifest.permission.POST_NOTIFICATIONS)
+            if (stillDenied.any { !shouldShowRequestPermissionRationale(it) }) showWakePermissionSettingsDialog()
         }
     }
 
