@@ -26,7 +26,7 @@ jobs:
   publish:
     name: Publish Workly TPU notebook to Kaggle
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
@@ -126,17 +126,7 @@ jobs:
 
           kaggle kernels logs "$KERNEL_REF"
           mkdir -p ../../kaggle-tpu-output
-          kaggle kernels output "$KERNEL_REF" --path ../../kaggle-tpu-output --force --file-pattern 'workly-tpu-result\.json        if: always()
-        shell: bash
-        run: |
-          {
-            echo "## Workly India Kaggle TPU"
-            echo "- Notebook target: ${KAGGLE_USERNAME}/${KAGGLE_KERNEL_SLUG}"
-            echo "- Accelerator requested: TPU v5e-8"
-            echo "- TPU run: the preceding job step polls Kaggle status and verifies workly-tpu-result.json."
-            echo "- Private notebook by default."
-          } >> "$GITHUB_STEP_SUMMARY"
-
+          kaggle kernels output "$KERNEL_REF" --path ../../kaggle-tpu-output --force --file-pattern 'workly-tpu-result\.json$'
           python - <<'PY'
           import json
           from pathlib import Path
@@ -159,6 +149,6 @@ jobs:
             echo "## Workly India Kaggle TPU"
             echo "- Notebook target: ${KAGGLE_USERNAME}/${KAGGLE_KERNEL_SLUG}"
             echo "- Accelerator requested: TPU v5e-8"
-            echo "- Kaggle run status must be checked in Kaggle; GitHub success means the publish command completed."
+            echo "- TPU run: the preceding job step polls Kaggle status and verifies workly-tpu-result.json."
             echo "- Private notebook by default."
           } >> "$GITHUB_STEP_SUMMARY"
