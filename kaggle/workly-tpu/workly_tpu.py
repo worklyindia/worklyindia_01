@@ -1,9 +1,8 @@
-"""Workly India TPU runtime and benchmark report.
+"""Workly India Kaggle TPU smoke test and optional Qwen inference benchmark.
 
-This validates Kaggle TPU availability with a small matrix benchmark. It does
-not load Qwen3.6-27B or claim model tokens/second. ChatWork GGUF/llama.cpp
-models are not directly runnable on TPU; a separate XLA/JAX model pipeline is
-required.
+The TPU smoke test is always run. Qwen inference is attempted on the TPU after
+the smoke test. A model failure is reported separately so hardware validation
+remains distinguishable from model compatibility.
 """
 from __future__ import annotations
 
@@ -12,17 +11,21 @@ import os
 import platform
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
+
+
+MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
 
 
 def main() -> None:
     started = time.perf_counter()
     report = {
         "project": "Workly India",
-        "purpose": "Kaggle TPU runtime smoke test and hardware benchmark",
-        "model_tested": None,
+        "purpose": "Kaggle TPU smoke test and Qwen inference benchmark",
+        "model_tested": MODEL_ID,
         "model_inference_tokens_per_second": None,
-        "model_inference_status": "NOT_RUN_MODEL_NOT_CONFIGURED",
+        "model_inference_status": "NOT_RUN",
         "kaggle_remaining_quota": "NOT_EXPOSED_BY_THIS_NOTEBOOK",
         "python": sys.version,
         "platform": platform.platform(),
@@ -38,7 +41,7 @@ def main() -> None:
     except Exception as exc:
         raise RuntimeError(
             "PyTorch/XLA is not available in this Kaggle TPU image. "
-            "Select a TPU accelerator in Kaggle and use a compatible Kaggle image."
+            "Select a TPU accelerator and use a compatible Kaggle image."
         ) from exc
 
     device = xm.xla_device()
@@ -49,11 +52,9 @@ def main() -> None:
     n = 1024
     a = torch.randn((n, n), device=device, dtype=torch.bfloat16)
     b = torch.randn((n, n), device=device, dtype=torch.bfloat16)
-    # Warm up compilation separately so measured time reflects execution after
-    # the initial XLA compile as closely as this short smoke test allows.
-    _ = a @ b
+    warmup = a @ b
     xm.mark_step()
-    _ = _.float().mean().cpu().item()
+    _ = warmup.float().mean().cpu().item()
 
     iterations = 5
     t0 = time.perf_counter()
@@ -64,13 +65,11 @@ def main() -> None:
         checksum += float(c.float().mean().cpu().item())
     benchmark_seconds = time.perf_counter() - t0
     total_flops = 2 * (n ** 3) * iterations
-    memory_info = None
     try:
         memory_info = xm.get_memory_info(device)
     except Exception as exc:
         memory_info = {"unavailable_reason": str(exc)[:240]}
 
-    elapsed = time.perf_counter() - started
     result = {
         **report,
         "status": "TPU_SMOKE_TEST_PASSED",
@@ -85,18 +84,88 @@ def main() -> None:
         "approx_matrix_tflops": round(total_flops / benchmark_seconds / 1e12, 4) if benchmark_seconds else None,
         "xla_memory_info_bytes": memory_info,
         "mean_checksum": checksum / iterations,
-        "elapsed_seconds": round(elapsed, 3),
-        "elapsed_minutes": round(elapsed / 60, 3),
         "model_inference_tokens_per_second": None,
-        "model_inference_status": "NOT_RUN_MODEL_NOT_CONFIGURED",
+        "model_inference_status": "NOT_RUN",
         "kaggle_remaining_quota": "NOT_EXPOSED_BY_THIS_NOTEBOOK",
     }
+
+    # Keep model inference isolated from the hardware smoke test. Kaggle's
+    # preinstalled Transformers may be old, so install a Qwen3-capable version.
+    try:
+        import subprocess
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet",
+             "--upgrade", "transformers>=4.52.4", "accelerate", "safetensors"],
+            check=True,
+        )
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        print(f"Loading {MODEL_ID} in BF16 on {device}...")
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            MODEL_ID,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            attn_implementation="eager",
+            trust_remote_code=True,
+        )
+        model.to(device)
+        model.eval()
+
+        messages = [
+            {"role": "system", "content": "You are Workly India AI. Reply clearly and helpfully in the user's language."},
+            {"role": "user", "content": "Namaste! Explain in two short sentences how you can help a student find a job in India."},
+        ]
+        prompt = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = tokenizer(prompt, return_tensors="pt")
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+
+        # Warm up once, then measure a short deterministic generation.
+        with torch.inference_mode():
+            warm = model.generate(**inputs, max_new_tokens=4, do_sample=False, use_cache=True)
+            xm.mark_step()
+            _ = warm.cpu()
+            gen_start = time.perf_counter()
+            output = model.generate(
+                **inputs, max_new_tokens=48, do_sample=False, use_cache=True
+            )
+            xm.mark_step()
+            output_ids = output.cpu()
+        generation_seconds = time.perf_counter() - gen_start
+        prompt_tokens = int(inputs["input_ids"].shape[-1])
+        generated_tokens = max(0, int(output_ids.shape[-1]) - prompt_tokens)
+        result.update({
+            "model_inference_status": "QWEN_INFERENCE_PASSED",
+            "model_output_preview": tokenizer.decode(
+                output_ids[0, prompt_tokens:], skip_special_tokens=True
+            )[:1200],
+            "model_prompt_tokens": prompt_tokens,
+            "model_generated_tokens": generated_tokens,
+            "model_generation_seconds": round(generation_seconds, 3),
+            "model_inference_tokens_per_second": round(
+                generated_tokens / generation_seconds, 3
+            ) if generation_seconds > 0 else None,
+            "model_dtype": "bfloat16",
+        })
+        print("Qwen inference passed.")
+    except Exception as exc:
+        result.update({
+            "model_inference_status": "QWEN_INFERENCE_FAILED",
+            "model_inference_error": f"{type(exc).__name__}: {str(exc)[:1000]}",
+            "model_inference_traceback": traceback.format_exc()[-3000:],
+        })
+        print("Qwen inference failed; TPU smoke test result remains available.")
+        print(result["model_inference_error"])
+
+    result["elapsed_seconds"] = round(time.perf_counter() - started, 3)
+    result["elapsed_minutes"] = round(result["elapsed_seconds"] / 60, 3)
     os.makedirs("/kaggle/working", exist_ok=True)
     with open("/kaggle/working/workly-tpu-result.json", "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
     print("=== MACHINE-READABLE RESULT ===")
     print(json.dumps(result, indent=2))
-    print("TPU smoke test passed. No Qwen model was loaded or benchmarked.")
 
 
 if __name__ == "__main__":
