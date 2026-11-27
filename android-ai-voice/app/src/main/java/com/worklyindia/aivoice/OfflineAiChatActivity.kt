@@ -76,6 +76,7 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var composer: LinearLayout
     private lateinit var composerRow: LinearLayout
     private lateinit var moreButton: ImageView
+    private lateinit var headerMoreButton: ImageView
     private lateinit var thinkHarderChip: TextView
     private var composerExpanded = false
     private var composerImeVisible = false
@@ -170,9 +171,24 @@ class OfflineAiChatActivity : Activity() {
             elevation = 0f
             setOnClickListener { action() }
         }
-        // A standalone back control only: no toolbar container, title, divider or header background.
-        root.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
+        // Transparent, same-canvas header: back on the left and overflow on the right.
+        val chatHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        chatHeader.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
             LinearLayout.LayoutParams(dp(48), dp(48)))
+        headerMoreButton = headerIcon(android.R.drawable.ic_menu_more, "More chat options") {
+            showChatOptions(headerMoreButton)
+        }.apply {
+            scaleType = ImageView.ScaleType.CENTER
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }
+        chatHeader.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+        chatHeader.addView(headerMoreButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        root.addView(chatHeader, LinearLayout.LayoutParams(-1, dp(48)))
         status.setPadding(dp(16), dp(4), dp(16), dp(4))
         root.addView(status, LinearLayout.LayoutParams(-1, -2))
 
