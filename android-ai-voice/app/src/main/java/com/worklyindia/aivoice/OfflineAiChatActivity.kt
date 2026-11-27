@@ -158,24 +158,19 @@ class OfflineAiChatActivity : Activity() {
         }
         // Keep model status available internally without rendering a title/header label.
         modelLabel = TextView(this).apply { visibility = View.GONE }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), 0, dp(4), 0)
-            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-        }
         fun headerIcon(drawable: Int, description: String, action: () -> Unit) = ImageView(this).apply {
             setImageResource(drawable)
             setColorFilter(primaryText)
             contentDescription = description
             scaleType = ImageView.ScaleType.CENTER
             setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            elevation = 0f
             setOnClickListener { action() }
         }
-        // Minimal transparent top bar: only the back arrow remains.
-        header.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
+        // A standalone back control only: no toolbar container, title, divider or header background.
+        root.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
             LinearLayout.LayoutParams(dp(48), dp(48)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(44)))
         status.setPadding(dp(16), dp(4), dp(16), dp(4))
         root.addView(status, LinearLayout.LayoutParams(-1, -2))
 
@@ -199,7 +194,7 @@ class OfflineAiChatActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(7), dp(5), dp(7), dp(5))
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(bg)
+                setColor(android.graphics.Color.TRANSPARENT)
                 setStroke(dp(1), if (dark) 0xFF40516B.toInt() else 0xFFCBD5E1.toInt())
                 cornerRadius = dp(26).toFloat()
             }
@@ -266,17 +261,7 @@ class OfflineAiChatActivity : Activity() {
             setPadding(0, 0, 0, 0)
             compoundDrawablePadding = 0
             setTextColor(0xFFFFFFFF.toInt())
-            background = android.graphics.drawable.LayerDrawable(arrayOf(
-                android.graphics.drawable.GradientDrawable().apply {
-                    setColor(0xFF0A84FF.toInt())
-                    shape = android.graphics.drawable.GradientDrawable.OVAL
-                },
-                androidx.core.content.ContextCompat.getDrawable(this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up)!!
-            )).apply {
-                setLayerGravity(1, Gravity.CENTER)
-                setLayerWidth(1, dp(25))
-                setLayerHeight(1, dp(25))
-            }
+            background = createSendButtonBackground()
             textAlignment = View.TEXT_ALIGNMENT_CENTER
             includeFontPadding = false
             isEnabled = false
@@ -321,31 +306,26 @@ class OfflineAiChatActivity : Activity() {
         }
     }
 
-    private fun updateComposerAction(hasText: Boolean) {
-        val recording = false
-        if (recording) {
-            sendButton.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
-            sendButton.background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFFEF4444.toInt()); shape = android.graphics.drawable.GradientDrawable.OVAL
-            }
-            sendButton.contentDescription = "Stop recording"
-            sendButton.isEnabled = true; sendButton.alpha = 1f
-        } else {
-            sendButton.setCompoundDrawables(null, null, null, null)
-            sendButton.background = android.graphics.drawable.LayerDrawable(arrayOf(
-                android.graphics.drawable.GradientDrawable().apply {
-                    setColor(0xFF0A84FF.toInt())
-                    shape = android.graphics.drawable.GradientDrawable.OVAL
-                },
-                android.graphics.drawable.InsetDrawable(
-                    androidx.core.content.ContextCompat.getDrawable(this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up)!!,
-                    dp(10)
-                )
-            )).apply { setLayerInset(1, dp(10), dp(10), dp(10), dp(10)) }
-            sendButton.contentDescription = "Send message"
-            sendButton.isEnabled = hasText && engine.isLoaded
-            sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
+    private fun createSendButtonBackground(): android.graphics.drawable.LayerDrawable {
+        val circle = android.graphics.drawable.GradientDrawable().apply {
+            setColor(0xFF0A84FF.toInt())
+            shape = android.graphics.drawable.GradientDrawable.OVAL
         }
+        val arrow = androidx.core.content.ContextCompat.getDrawable(
+            this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up
+        )!!.mutate()
+        return android.graphics.drawable.LayerDrawable(arrayOf(circle, arrow)).apply {
+            setLayerGravity(1, Gravity.CENTER)
+            setLayerWidth(1, dp(22))
+            setLayerHeight(1, dp(22))
+        }
+    }
+
+    private fun updateComposerAction(hasText: Boolean) {
+        sendButton.background = createSendButtonBackground()
+        sendButton.contentDescription = "Send message"
+        sendButton.isEnabled = hasText && engine.isLoaded
+        sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
     }
 
     private fun showAttachmentSheet() {
@@ -854,7 +834,9 @@ class OfflineAiChatActivity : Activity() {
                         displayName = model.title,
                         expectedBytes = model.size,
                         minimumAvailableRamBytes = model.minFreeRam,
-                        minimumFreeStorageBytes = 256L * 1024L * 1024L,
+                        // The model is already downloaded; runtime selection must not
+                        // reject it because of a post-download free-storage reserve.
+                        minimumFreeStorageBytes = 0L,
                         enabled = modelManager.snapshot(model).state in setOf(
                             QwenModelManager.State.READY, QwenModelManager.State.NEEDS_TEST
                         )
@@ -863,8 +845,10 @@ class OfflineAiChatActivity : Activity() {
                 val recommendation = AssistantModelPolicy.recommend(
                     candidates = downloadedCandidates,
                     budget = budget,
-                    reserveRamBytes = 512L * 1024L * 1024L,
-                    reserveStorageBytes = 256L * 1024L * 1024L
+                    // minFreeRam is the per-model runtime threshold. Avoid a second
+                    // global reserve that can reject the only installed model.
+                    reserveRamBytes = 0L,
+                    reserveStorageBytes = 0L
                 )
                 // Keep a saved model only if it still fits the live RAM budget.
                 // Otherwise choose the largest downloaded model that fits with safety reserves.
@@ -896,7 +880,13 @@ class OfflineAiChatActivity : Activity() {
                 check(engine.loadModel(modelManager.file(chosen))) {
                     "${chosen.title} could not load. Free memory may be insufficient; try a smaller model."
                 }
-                // A successful native engine load is the definitive on-device model test.
+                // Confirm actual generation before enabling the composer. A file that
+                // merely opens in llama.cpp is not enough to prove chat will work.
+                val smokeReply = engine.generate("Reply with exactly: ChatWork is ready.")
+                check(smokeReply.isNotBlank() &&
+                    !smokeReply.contains("could not generate a response", ignoreCase = true)) {
+                    "${chosen.title} loaded but could not generate a chat reply. Test another downloaded model."
+                }
                 modelManager.markTested(chosen, true)
                 runOnUiThread {
                     loadedModelId = chosen.id
@@ -912,8 +902,8 @@ class OfflineAiChatActivity : Activity() {
                 runOnUiThread {
                     loadedModelId = null
                     modelLoadInProgress = false
-                    status.text = ""
-                    status.visibility = View.GONE
+                    status.text = error.message ?: "Downloaded AI model could not be loaded."
+                    status.visibility = View.VISIBLE
                     modelLabel.text = "AI Assistant · Model unavailable — check Downloads"
                     sendButton.isEnabled = false
                     qwenModelPicker.isEnabled = true
