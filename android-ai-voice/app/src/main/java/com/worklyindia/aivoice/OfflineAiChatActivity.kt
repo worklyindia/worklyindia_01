@@ -191,7 +191,7 @@ class OfflineAiChatActivity : Activity() {
         header.addView(headerIcon(R.drawable.ic_chatwork_more, "More options") {
             showChatOptions(header)
         }, LinearLayout.LayoutParams(dp(48), dp(56)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(48)))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = -dp(14) })
         status.setPadding(dp(16), dp(4), dp(16), dp(4))
         root.addView(status, LinearLayout.LayoutParams(-1, -2))
 
@@ -248,7 +248,8 @@ class OfflineAiChatActivity : Activity() {
             setImageResource(R.drawable.ic_chatwork_add)
             setColorFilter(primaryText)
             contentDescription = "More options and attachments"
-            setPadding(dp(7), dp(7), dp(7), dp(7))
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(5), dp(5), dp(5), dp(5))
             setOnClickListener { if (offlineRecording) cancelOfflineVoiceInput() else showAttachmentSheet() }
         }
         promptInput = EditText(this).apply {
@@ -271,6 +272,8 @@ class OfflineAiChatActivity : Activity() {
         micButton = Button(this).apply {
             text = ""
             contentDescription = "Voice input"
+            minWidth = 0; minHeight = 0; minimumWidth = 0; minimumHeight = 0
+            setPadding(0, 0, 0, 0)
             background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
             setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(primaryText)
@@ -280,12 +283,15 @@ class OfflineAiChatActivity : Activity() {
         sendButton = Button(this).apply {
             text = ""
             gravity = Gravity.CENTER
+            minWidth = 0; minHeight = 0; minimumWidth = 0; minimumHeight = 0
+            setPadding(0, 0, 0, 0)
+            compoundDrawablePadding = 0
             setTextColor(0xFFFFFFFF.toInt())
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xFF0A84FF.toInt())
                 shape = android.graphics.drawable.GradientDrawable.OVAL
             }
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_send, 0, 0, 0)
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_send_up, 0, 0, 0)
             compoundDrawableTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
             isEnabled = false
             alpha = 0.55f
@@ -450,11 +456,11 @@ class OfflineAiChatActivity : Activity() {
         composerRow.removeAllViews()
 
         val controlSize = dp(36)
-        composerRow.addView(moreButton, LinearLayout.LayoutParams(controlSize, controlSize))
+        composerRow.addView(moreButton, LinearLayout.LayoutParams(dp(40), dp(44)))
         if (composerExpanded) {
             composerRow.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
-            composerRow.addView(micButton, LinearLayout.LayoutParams(controlSize, controlSize))
-            composerRow.addView(sendButton, LinearLayout.LayoutParams(controlSize, controlSize).apply { marginStart = dp(4) })
+            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(44)))
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(4) })
             composer.addView(promptInput, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(3)
             })
@@ -463,8 +469,8 @@ class OfflineAiChatActivity : Activity() {
             composerRow.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f).apply {
                 marginStart = dp(2)
             })
-            composerRow.addView(micButton, LinearLayout.LayoutParams(controlSize, controlSize))
-            composerRow.addView(sendButton, LinearLayout.LayoutParams(controlSize, controlSize).apply {
+            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(44)))
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
                 marginStart = dp(4)
             })
             composer.addView(composerRow, LinearLayout.LayoutParams(-1, -2))
@@ -821,8 +827,8 @@ class OfflineAiChatActivity : Activity() {
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         qwenModelPicker.isEnabled = false
-        status.text = "Checking Qwen model and phone memory…"
-        status.visibility = View.VISIBLE
+        status.text = ""
+        status.visibility = View.GONE
         worker.execute {
             try {
                 val memoryInfo = ActivityManager.MemoryInfo()
@@ -889,8 +895,8 @@ class OfflineAiChatActivity : Activity() {
                 runOnUiThread {
                     loadedModelId = null
                     modelLoadInProgress = false
-                    status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
-                    status.visibility = View.VISIBLE
+                    status.text = ""
+                    status.visibility = View.GONE
                     sendButton.isEnabled = false
                     qwenModelPicker.isEnabled = true
                 }
@@ -1192,7 +1198,7 @@ class OfflineAiChatActivity : Activity() {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text))
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(dp(36), dp(30)))
+            }, LinearLayout.LayoutParams(dp(32), dp(28)))
             actions.addView(actionIcon(R.drawable.ic_chat_thumb_up, "Like response") {
                 val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
                 prefs.edit().putString("last_feedback", "positive").putLong("last_feedback_at", System.currentTimeMillis()).apply()
@@ -1203,7 +1209,14 @@ class OfflineAiChatActivity : Activity() {
                 prefs.edit().putString("last_feedback", "negative").putLong("last_feedback_at", System.currentTimeMillis()).apply()
                 android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
             }, LinearLayout.LayoutParams(dp(36), dp(30)))
-            actions.addView(actionIcon(R.drawable.ic_chatwork_mic, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(36), dp(30)))
+            actions.addView(actionIcon(R.drawable.ic_chatwork_mic, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(32), dp(28)))
+            actions.addView(actionIcon(android.R.drawable.ic_menu_share, "Share response") {
+                val share = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, bubble.text.toString())
+                }
+                startActivity(Intent.createChooser(share, "Share ChatWork response"))
+            }, LinearLayout.LayoutParams(dp(32), dp(28)))
             meta.addView(actions, LinearLayout.LayoutParams(-1, -2)); messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
         } else {
             messageColumn.addView(TextView(this).apply {
