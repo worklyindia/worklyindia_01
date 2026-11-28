@@ -87,14 +87,15 @@ class WakeWordAssistantService : Service() {
             val ttsLanguages = jarvisConfig.ttsLanguages
             val sttLanguage = sttLanguages.first()
             val ttsLanguage = ttsLanguages.first()
+            val ttsModel = jarvisConfig.ttsModel
             val speechManager = SpeechPackDownloadManager(this)
             sttLanguages.forEach { code ->
                 val pack = SpeechModelCatalog.indicConformer(code)
                 check(OfflineSpeechEngineFactory.isReady(this, pack)) { "Download AI4Bharat IndicConformer ${code.uppercase(Locale.ROOT)} first." }
             }
             ttsLanguages.forEach { code ->
-                val pack = SpeechModelCatalog.itantraVits(code)
-                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) { "Download iTantra VITS ${code.uppercase(Locale.ROOT)} first." }
+                val pack = when(ttsModel) { "indic" -> SpeechModelCatalog.indicTinyTts(code); "kokoro" -> SpeechModelCatalog.kokoro82m(); else -> SpeechModelCatalog.itantraVits(code) }
+                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) { "Download ${pack.title} first." }
             }
             val wakePack = SpeechModelCatalog.chatWorkWakeWord()
             check(WakeWordEngineFactory.isReady(this)) { "Download the Hey ChatWork wake-word model first." }
@@ -168,8 +169,8 @@ class WakeWordAssistantService : Service() {
                                 val answer = JarvisSettingsStore.generateReply(this, history.toString(), jarvisConfig)
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
-                                updateNotification("Speaking with selected iTantra VITS voice…")
-                                speakWithSelectedLanguage(answer, ttsLanguages)
+                                updateNotification("Speaking with selected ${ttsModel.uppercase(Locale.ROOT)} voice…")
+                                speakWithSelectedLanguage(answer, ttsLanguages, ttsModel)
                                 discardPlaybackAudio(activeAudio, buffer)
                             } else {
                                 updateNotification("No speech recognized · Listening for Hey ChatWork")
@@ -246,15 +247,47 @@ class WakeWordAssistantService : Service() {
     }
 
     /** Select a downloaded voice matching the script of the AI response. */
-    private fun speakWithSelectedLanguage(text: String, languages: List<String>) {
+    private fun speakWithSelectedLanguage(text: String, languages: List<String>, model: String) {
         val preferred = when {
             text.any { it.code in 0x0A80..0x0AFF } -> "gu"
             text.any { it.code in 0x0900..0x097F } -> "hi"
             else -> "en"
         }
         val language = preferred.takeIf { it in languages } ?: languages.first()
-        val engine = SherpaVitsTtsEngine.create(this, SpeechModelCatalog.itantraVits(language))
-        try { engine.speak(text) } finally { engine.close() }
+        when(model) {
+            "indic" -> {
+                val pack=SpeechModelCatalog.indicTinyTts(language)
+                val output=java.io.File(cacheDir,"jarvis_indic_tts.wav")
+                IndicTinyTtsEngine.create(this,language).use { it.synthesizeToWav(text,output,"female") }
+                playJarvisWav(output)
+            }
+            "kokoro" -> {
+                val pack=SpeechModelCatalog.kokoro82m()
+                val voice=if(language=="hi") "hf_alpha" else "af_heart"
+                val output=java.io.File(cacheDir,"jarvis_kokoro_tts.wav")
+                KokoroTtsEngine(this).use { it.synthesizeToWav(pack,SpeechPackDownloadManager(this).modelDirectory(pack),text,voice,output) }
+                playJarvisWav(output)
+            }
+            else -> {
+                val engine = SherpaVitsTtsEngine.create(this, SpeechModelCatalog.itantraVits(language))
+                try { engine.speak(text) } finally { engine.close() }
+            }
+        }
+    }
+
+    private fun playJarvisWav(file: java.io.File) {
+        check(file.isFile && file.length()>44L) { "Selected TTS model did not generate audio." }
+        val latch=java.util.concurrent.CountDownLatch(1)
+        val player=android.media.MediaPlayer()
+        try {
+            player.setDataSource(file.absolutePath)
+            player.setOnCompletionListener { latch.countDown() }
+            player.setOnErrorListener { _,_,_ -> latch.countDown(); true }
+            player.prepare()
+            player.start()
+            check(latch.await(180,java.util.concurrent.TimeUnit.SECONDS)) { "Voice playback timed out." }
+        } finally { runCatching{player.stop()};player.release();file.delete() }
+    }
     }
 
     /** Create and start a fresh 16 kHz voice-recognition recorder. */
