@@ -30,6 +30,7 @@ class WakeWordAssistantService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var recorder: AudioRecord? = null
     @Volatile private var cpuWakeLock: PowerManager.WakeLock? = null
+    @Volatile private var stopRequested = false
 
     override fun onCreate() {
         super.onCreate()
@@ -47,7 +48,8 @@ class WakeWordAssistantService : Service() {
             stopAssistant()
             return START_NOT_STICKY
         }
-        if (!running.compareAndSet(false, true)) return START_NOT_STICKY
+        stopRequested = false
+        if (!running.compareAndSet(false, true)) return START_STICKY
         isRunning = true
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true)
             .putString(KEY_STATUS, STATUS_STARTING).putString(KEY_STATUS_MESSAGE, "Starting Hey ChatWork…")
@@ -200,7 +202,7 @@ class WakeWordAssistantService : Service() {
             runCatching { if (audio?.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
             runCatching { audio?.release() }
             runCatching { wakeSession?.close() }
-            val shouldRetry = JarvisSettingsStore.read(this).active && !isDestroyed
+            val shouldRetry = JarvisSettingsStore.read(this).active && !stopRequested
             if (shouldRetry) {
                 isRunning = true
                 running.set(true)
@@ -379,6 +381,7 @@ class WakeWordAssistantService : Service() {
     }
 
     private fun stopAssistant() {
+        stopRequested = true
         JarvisSettingsStore.setActive(this, false)
         running.set(false)
         runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
