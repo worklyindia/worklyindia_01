@@ -72,7 +72,7 @@ class WakeWordAssistantService : Service() {
             publishStatus(STATUS_ERROR, "Could not start microphone service.", error.message)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             stopSelf()
-            throw error
+            return START_NOT_STICKY
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         acquireCpuWakeLock()
