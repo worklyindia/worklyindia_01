@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Account-scoped settings; API keys are encrypted with Android Keystore. */
 object JarvisSettingsStore {
- data class Config(val provider:String,val apiKey:String,val sttLanguage:String,val ttsLanguage:String,val active:Boolean,val sttLanguages:List<String> = listOf(sttLanguage),val ttsLanguages:List<String> = listOf(ttsLanguage))
+ data class Config(val provider:String,val apiKey:String,val sttLanguage:String,val ttsLanguage:String,val active:Boolean,val sttLanguages:List<String> = listOf(sttLanguage),val ttsLanguages:List<String> = listOf(ttsLanguage),val ttsModel:String = "itantra")
  private const val PREFS="chatwork_jarvis_account_settings"; private const val ALIAS="chatwork_jarvis_api_key_v1"
  private fun scope(c:Context):String {
   val token=SecureDeviceTokenStore.readAccessToken(c)?:return "signed_in"
@@ -27,10 +27,11 @@ object JarvisSettingsStore {
   val p=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE);val encrypted=p.getString(k(c,"key"),null)
   val stt=p.getString(k(c,"stt"),"hi")?:"hi";val tts=p.getString(k(c,"tts"),"hi")?:"hi"
   fun list(name:String,fallback:String):List<String> = runCatching { val a=JSONArray(p.getString(k(c,name),"[]")?:"[]");(0 until a.length()).map{a.getString(it)}.distinct() }.getOrDefault(emptyList()).ifEmpty{listOf(fallback)}
-  return Config(p.getString(k(c,"provider"),"groq")?:"groq",encrypted?.let{runCatching{decrypt(it)}.getOrNull()}.orEmpty(),stt,tts,p.getBoolean(k(c,"active"),false),list("stt_languages",stt),list("tts_languages",tts))
+  return Config(p.getString(k(c,"provider"),"groq")?:"groq",encrypted?.let{runCatching{decrypt(it)}.getOrNull()}.orEmpty(),stt,tts,p.getBoolean(k(c,"active"),false),list("stt_languages",stt),list("tts_languages",tts),p.getString(k(c,"tts_model"),"itantra")?: "itantra")
  }
- fun save(c:Context,provider:String,key:String,sttLanguages:List<String>,ttsLanguages:List<String>) {
+ fun save(c:Context,provider:String,key:String,sttLanguages:List<String>,ttsLanguages:List<String>,ttsModel:String = "itantra") {
   require(provider in setOf("groq","gemini"))
+   require(ttsModel in setOf("itantra","indic","kokoro")) { "Unsupported JARVIS Text To Voice model." }
   require(sttLanguages.isNotEmpty() && sttLanguages.all{it in STT_CODES})
   require(ttsLanguages.isNotEmpty() && ttsLanguages.all{it in TTS_CODES})
   val old=read(c)
@@ -38,7 +39,7 @@ object JarvisSettingsStore {
   val stt=sttLanguages.distinct();val tts=ttsLanguages.distinct()
   val e=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
    .putString(k(c,"provider"),provider).putString(k(c,"stt"),stt.first()).putString(k(c,"tts"),tts.first())
-   .putString(k(c,"stt_languages"),JSONArray(stt).toString()).putString(k(c,"tts_languages"),JSONArray(tts).toString())
+   .putString(k(c,"stt_languages"),JSONArray(stt).toString()).putString(k(c,"tts_languages"),JSONArray(tts).toString()).putString(k(c,"tts_model"),ttsModel)
   if(key.isNotBlank())e.putString(k(c,"key"),encrypt(key.trim()))
   check(e.commit()) { "Could not persist JARVIS settings to app storage." }
  }
