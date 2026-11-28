@@ -114,8 +114,8 @@ class JarvisCrashReportUploadWorker(context: Context, params: WorkerParameters) 
                 readTimeout = 20_000
                 doOutput = true
                 setRequestProperty("apikey", BuildConfig.SUPABASE_PUBLISHABLE_KEY)
-                // The anon JWT is a public client key; RLS validates payload shape and a DB trigger rate-limits.
-                setRequestProperty("Authorization", "Bearer " + BuildConfig.SUPABASE_ANON_KEY)
+                // Supabase publishable keys are not JWTs. Send only apikey so the gateway
+                // assigns the anon role; a Bearer publishable/obsolete JWT causes PGRST301.
                 setRequestProperty("Content-Type", "application/json")
                 setRequestProperty("Prefer", "resolution=ignore-duplicates,return=minimal")
             }
