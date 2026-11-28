@@ -77,8 +77,6 @@ class SpeechDownloadsActivity : Activity() {
         page.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         list.addView(label("WAKE WORD · CHATWORK ASSISTANT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(16),dp(2),dp(8)) })
         addSpeechPack(list,"Hey ChatWork · English Wake Word","Offline keyword spotting model · downloaded separately · requires microphone permission and a visible foreground notification when listening",SpeechModelCatalog.chatWorkWakeWord())
-        list.addView(label("OFFLINE AI CHAT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
-        qwenManager.models.forEach { addQwenCard(list,it) }
         list.addView(label("VOICE TO TEXT",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(18),dp(2),dp(8)) })
         val recognitionLanguages = listOf(
             "as" to "Assamese", "bn" to "Bengali", "brx" to "Bodo", "doi" to "Dogri",

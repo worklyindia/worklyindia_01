@@ -51,7 +51,7 @@ class WakeWordAssistantService : Service() {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true)
             .putString(KEY_STATUS, STATUS_STARTING).putString(KEY_STATUS_MESSAGE, "Starting Hey ChatWork…")
             .remove(KEY_ERROR).apply()
-        val notification = buildNotification("Preparing offline voice models…")
+        val notification = buildNotification("Preparing JARVIS AI and speech models…")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
@@ -108,96 +108,28 @@ class WakeWordAssistantService : Service() {
                 "Run Test Model for the ChatWork Wake Word pack before enabling listening."
             }
 
-            val modelManager = QwenModelManager(this)
-            val memory = ActivityManager.MemoryInfo()
-            (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
-            val modelDirectory = modelManager.file(modelManager.models.first()).parentFile ?: filesDir
-            val budget = AssistantModelPolicy.readBudget(this, modelDirectory)
-            val candidates = modelManager.models.map { model ->
-                AssistantModelPolicy.Candidate(
-                    id = model.id,
-                    displayName = model.title,
-                    expectedBytes = model.size,
-                    minimumAvailableRamBytes = model.minFreeRam,
-                    minimumFreeStorageBytes = 256L * 1024L * 1024L,
-                    enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
-                )
-            }
-            // The catalog's minFreeRam is the runtime threshold used by the
-            // regular ChatWork model picker. Do not subtract another global reserve
-            // here: that double-counted memory and rejected small verified models.
-            // Model weights are already downloaded, so free storage is not a load-time
-            // requirement. Native load/generation below remains the final safety test.
-            val runtimeCandidates = candidates.map { it.copy(minimumFreeStorageBytes = 0L) }
-            val recommendation = AssistantModelPolicy.recommend(
-                candidates = runtimeCandidates,
-                budget = budget,
-                reserveRamBytes = 0L,
-                reserveStorageBytes = 0L
-            )
-            val modelPrefs = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
-            val savedModelId = modelPrefs.getString("selected_model_id", null)
-            // Respect the selected model only when it has passed the real Qwen
-            // generation smoke test and still meets its catalog RAM threshold.
-            val savedCandidate = runtimeCandidates.firstOrNull { it.id == savedModelId }
-                ?.takeIf { !budget.lowMemory && it.enabled &&
-                    it.minimumAvailableRamBytes <= budget.availableRamBytes }
-            val chosenCandidate = savedCandidate ?: recommendation.candidate
-            var activeAiEngine: OfflineAiEngine? = null
-            if (chosenCandidate != null) {
-                val chosen = modelManager.models.firstOrNull { it.id == chosenCandidate.id }
-                if (chosen != null) {
-                    if (savedCandidate == null && savedModelId != chosen.id) {
-                        modelPrefs.edit().putString("selected_model_id", chosen.id).apply()
-                    }
-                    publishStatus(STATUS_LOADING, "Trying on-device " + chosen.title + "…")
-                    val localEngine = OfflineAiEngine()
-                    try {
-                        if (localEngine.loadModel(modelManager.file(chosen))) {
-                            val smokeReply = localEngine.generate("Reply with exactly: READY.")
-                            if (smokeReply.isNotBlank()) {
-                                activeAiEngine = localEngine
-                                ai = localEngine
-                                activeAi = localEngine
-                            } else {
-                                localEngine.unload()
-                            }
-                        } else {
-                            localEngine.unload()
-                        }
-                    } catch (_: Exception) {
-                        runCatching { localEngine.unload() }
-                    }
-                }
-            }
-
-            // Local Qwen stays first choice. If it is absent, out of memory, or
-            // fails its startup smoke test, use the authenticated Supabase voice
-            // endpoint. Its server-side free-only chain tries configured providers
-            // (including Groq) without ever shipping provider keys in the APK.
-            val deviceToken = SecureDeviceTokenStore.read(this)
-            if (activeAiEngine == null) {
-                check(!deviceToken.isNullOrBlank()) {
-                    "No tested Qwen model fits this phone (" + recommendation.reason + "). Pair your Workly India account to use the Supabase/Groq fallback."
-                }
-                publishStatus(STATUS_LOADING, "Checking Supabase/Groq AI fallback…")
-                val languageTag = when (language) { "hi" -> "hi-IN"; "gu" -> "gu-IN"; else -> "en-IN" }
-                val probe = VoiceRelayApi.post(
-                    "ai-voice-chat",
-                    JSONObject().put("text", "Reply with exactly READY.").put("languageTag", languageTag),
-                    deviceToken = deviceToken
-                )
-                check(probe.statusCode in 200..299 && probe.body.optString("reply").isNotBlank()) {
-                    probe.body.optString("error").ifBlank { "Supabase/Groq AI fallback is not ready. Check the Workly AI provider keys and internet connection." }
-                }
-            }
+            val jarvisConfig = JarvisSettingsStore.read(this)
+            check(jarvisConfig.active) { "JARVIS is deactivated. Open JARVIS Active · Setup to activate it." }
+            check(jarvisConfig.apiKey.isNotBlank()) { "Save a Groq or Google AI Studio (Gemini) API key in JARVIS Setup." }
+            val sttLanguage = jarvisConfig.sttLanguage
+            val ttsLanguage = jarvisConfig.ttsLanguage
+            val speechManager = SpeechPackDownloadManager(this)
+            val sttPack = SpeechModelCatalog.indicConformer(sttLanguage)
+            val ttsPack = SpeechModelCatalog.itantraVits(ttsLanguage)
+            check(OfflineSpeechEngineFactory.isReady(this, sttPack)) { "Download AI4Bharat IndicConformer ${sttLanguage.uppercase(Locale.ROOT)} first." }
+            check(speechManager.snapshot(ttsPack).state == SpeechPackDownloadManager.State.COMPLETE) { "Download iTantra VITS ${ttsLanguage.uppercase(Locale.ROOT)} first." }
+            check(speechManager.isModelTested(ttsPack)) { "Test iTantra VITS ${ttsLanguage.uppercase(Locale.ROOT)} before activation." }
+            val wakePack = SpeechModelCatalog.chatWorkWakeWord()
+            check(WakeWordEngineFactory.isReady(this) && speechManager.isModelTested(wakePack)) { "Download and test the Hey ChatWork wake-word model first." }
+            publishStatus(STATUS_LOADING, "Testing ${jarvisConfig.provider.uppercase(Locale.ROOT)} AI connection…")
+            JarvisSettingsStore.generateReply(this, "Reply with exactly READY.", jarvisConfig)
             check(running.get()) { "Hey ChatWork listening was stopped." }
 
-            publishStatus(STATUS_LOADING, "Loading offline speech recognition…")
-            val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
+            publishStatus(STATUS_LOADING, "Loading AI4Bharat IndicConformer ${sttLanguage.uppercase(Locale.ROOT)}…")
+            val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, sttLanguage)
             speech = activeSpeechRecognizer
             check(running.get()) { "Hey ChatWork listening was stopped." }
-            publishStatus(STATUS_LOADING, "Loading iTantra VITS voice output…")
+            publishStatus(STATUS_LOADING, "Loading iTantra VITS ${ttsLanguage.uppercase(Locale.ROOT)} voice output…")
             val activeTtsEngine = SherpaVitsTtsEngine.create(this, ttsPack)
             tts = activeTtsEngine
             check(running.get()) { "Hey ChatWork listening was stopped." }
@@ -208,7 +140,7 @@ class WakeWordAssistantService : Service() {
 
             var activeAudio = createWakeWordRecorder()
             audio = activeAudio
-            publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
+            publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · STT ${sttLanguage.uppercase(Locale.ROOT)} · TTS ${ttsLanguage.uppercase(Locale.ROOT)}")
 
             val history = StringBuilder()
             history.append("System: You are JARVIS, ChatWork’s calm, concise voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers clear and brief, and ask before any consequential action. You cannot control phone settings, read private device data, or perform actions outside this conversation.\n")
@@ -260,25 +192,11 @@ class WakeWordAssistantService : Service() {
                             if (userText.isNotBlank()) {
                                 history.append("User: ").append(userText).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
-                                val localEngine = activeAiEngine
-                                updateNotification(if (localEngine != null) "ChatWork is thinking on this phone…" else "ChatWork is thinking with Supabase/Groq…")
-                                val answer = if (localEngine != null) {
-                                    try {
-                                        localEngine.generate(history.toString())
-                                    } catch (localError: Exception) {
-                                        runCatching { localEngine.unload() }
-                                        ai = null
-                                        activeAi = null
-                                        activeAiEngine = null
-                                        updateNotification("Local Qwen unavailable · switching to Supabase/Groq…")
-                                        cloudAiReply(history.toString(), deviceToken, language)
-                                    }
-                                } else {
-                                    cloudAiReply(history.toString(), deviceToken, language)
-                                }
+                                updateNotification("JARVIS is thinking with ${jarvisConfig.provider.uppercase(Locale.ROOT)}…")
+                                val answer = JarvisSettingsStore.generateReply(this, history.toString(), jarvisConfig)
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
-                                updateNotification("Speaking with iTantra VITS · ${language.uppercase(Locale.ROOT)}")
+                                updateNotification("Speaking with iTantra VITS · ${ttsLanguage.uppercase(Locale.ROOT)}")
                                 activeTtsEngine.speak(answer)
                                 discardPlaybackAudio(activeAudio, buffer)
                             } else {
@@ -318,26 +236,6 @@ class WakeWordAssistantService : Service() {
                 publishStatus(STATUS_STOPPED, "Hey ChatWork is stopped.")
             }
             isRunning = false
-        }
-    }
-
-    private fun cloudAiReply(prompt: String, deviceToken: String?, language: String): String {
-        check(!deviceToken.isNullOrBlank()) {
-            "Supabase/Groq fallback needs a paired Workly India account. Sign in from ChatWork and try again."
-        }
-        val languageTag = when (language) { "hi" -> "hi-IN"; "gu" -> "gu-IN"; else -> "en-IN" }
-        val response = VoiceRelayApi.post(
-            "ai-voice-chat",
-            JSONObject().put("text", prompt.take(12_000)).put("languageTag", languageTag),
-            deviceToken = deviceToken
-        )
-        if (response.statusCode !in 200..299) {
-            throw IllegalStateException(
-                response.body.optString("error").ifBlank { "Supabase/Groq AI request failed (HTTP " + response.statusCode + ")." }
-            )
-        }
-        return response.body.optString("reply").trim().ifBlank {
-            throw IllegalStateException("Supabase/Groq AI returned an empty reply.")
         }
     }
 

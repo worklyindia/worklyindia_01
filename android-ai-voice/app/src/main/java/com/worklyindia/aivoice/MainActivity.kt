@@ -55,6 +55,13 @@ class MainActivity : Activity() {
             setBackgroundColor(bg)
         }
 
+        root.addView(TextView(this).apply {
+            text = "JARVIS Active · Setup"; textSize = 18f; gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFFFFFFFF.toInt() else 0xFF2878F0.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(dp(12), dp(12), dp(12), dp(12))
+            isClickable = true; isFocusable = true
+            setOnClickListener { startActivity(Intent(this@MainActivity, JarvisSetupActivity::class.java)) }
+        }, LinearLayout.LayoutParams(-1, dp(58)))
         // Center animation occupies the free space between system bars and bottom action.
         val signalAnimation = LottieAnimationView(this).apply {
             setAnimation("Signals.json")
