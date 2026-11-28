@@ -72,8 +72,11 @@ object JarvisDiagnostics {
                      exit.reason == ApplicationExitInfo.REASON_ANR)) {
                     runCatching {
                         exit.traceInputStream?.use { stream ->
-                            val trace = stream.readBytes().toString(Charsets.UTF_8).take(12000)
-                            if (trace.isNotBlank()) details.append("; trace=").append(trace)
+                            // Android native tombstones are protobuf/binary, not UTF-8 text.
+                            // Keep the shared report readable and record whether a trace exists.
+                            val byteCount = stream.readBytes().size
+                            details.append("; nativeTraceBytes=").append(byteCount)
+                            details.append("; nativeTraceFormat=binary-tombstone")
                         }
                     }
                 }
