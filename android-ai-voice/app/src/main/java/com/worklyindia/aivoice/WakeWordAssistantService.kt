@@ -165,23 +165,8 @@ class WakeWordAssistantService : Service() {
             wakeSession = activeWakeSession
             check(running.get()) { "Hey ChatWork listening was stopped." }
 
-            val minBuffer = AudioRecord.getMinBufferSize(
-                WakeWordEngineFactory.SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            )
-            check(minBuffer > 0) { "This phone does not support 16 kHz microphone input." }
-            val activeAudio = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                WakeWordEngineFactory.SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                maxOf(minBuffer * 2, 6400)
-            )
+            var activeAudio = createWakeWordRecorder()
             audio = activeAudio
-            check(activeAudio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone." }
-            recorder = activeAudio
-            activeAudio.startRecording()
             publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
 
             val history = StringBuilder()
@@ -189,8 +174,35 @@ class WakeWordAssistantService : Service() {
             val buffer = ShortArray(1600)
             val session = activeWakeSession
             while (running.get()) {
-                val count = activeAudio.read(buffer, 0, buffer.size)
-                if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
+                val count = activeAudio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                if (count < 0) {
+                    // Android can invalidate AudioRecord after an input-route change,
+                    // Bluetooth handoff or temporary microphone interruption. Recover
+                    // the recorder in-place instead of ending the always-on assistant.
+                    updateNotification("Microphone interrupted · reconnecting…")
+                    publishStatus(STATUS_LOADING, "Reconnecting the microphone…")
+                    runCatching { if (activeAudio.recordingState == AudioRecord.RECORDSTATE_RECORDING) activeAudio.stop() }
+                    runCatching { activeAudio.release() }
+                    recorder = null
+                    var replacement: AudioRecord? = null
+                    var lastFailure: Exception? = null
+                    for (attempt in 1..5) {
+                        if (!running.get()) break
+                        try {
+                            Thread.sleep(350L * attempt)
+                            replacement = createWakeWordRecorder()
+                            break
+                        } catch (failure: Exception) {
+                            lastFailure = failure
+                        }
+                    }
+                    activeAudio = replacement ?: throw IllegalStateException(
+                        "Microphone could not reconnect after 5 attempts: ${lastFailure?.message ?: "recording was interrupted"}"
+                    )
+                    audio = activeAudio
+                    publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
+                    continue
+                }
                 if (count == 0) continue
                 val samples = FloatArray(count) { buffer[it] / 32768.0f }
                 session.stream.acceptWaveform(samples, sampleRate = WakeWordEngineFactory.SAMPLE_RATE)
@@ -251,6 +263,37 @@ class WakeWordAssistantService : Service() {
                 publishStatus(STATUS_STOPPED, "Hey ChatWork is stopped.")
             }
             isRunning = false
+        }
+    }
+
+    /** Create and start a fresh 16 kHz voice-recognition recorder. */
+    private fun createWakeWordRecorder(): AudioRecord {
+        check(running.get()) { "Hey ChatWork listening was stopped." }
+        check(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            "Microphone permission was revoked while Hey ChatWork was active."
+        }
+        val minBuffer = AudioRecord.getMinBufferSize(
+            WakeWordEngineFactory.SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        check(minBuffer > 0) { "This phone does not support 16 kHz microphone input (AudioRecord=$minBuffer)." }
+        val next = AudioRecord(
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            WakeWordEngineFactory.SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            maxOf(minBuffer * 2, 6400)
+        )
+        try {
+            check(next.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize the microphone (state=${next.state})." }
+            next.startRecording()
+            check(next.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Android did not start microphone recording." }
+            recorder = next
+            return next
+        } catch (failure: Exception) {
+            runCatching { next.release() }
+            throw failure
         }
     }
 
