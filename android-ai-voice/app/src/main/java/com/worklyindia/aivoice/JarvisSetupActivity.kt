@@ -28,7 +28,38 @@ class JarvisSetupActivity:Activity(){
  private val packs by lazy{SpeechPackDownloadManager(this)}
  private val ink get()=ChatWorkTheme.color(this,0xFF142033.toInt());private val muted get()=ChatWorkTheme.color(this,0xFF65748B.toInt());private val bg get()=ChatWorkTheme.color(this,0xFFF4F7FB.toInt());private val surface get()=ChatWorkTheme.color(this,0xFFFFFFFF.toInt())
  override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);ChatWorkTheme.applyWindow(this);render()}
- override fun onResume(){super.onResume();if(::status.isInitialized)refreshAvailability()}
+ override fun onResume(){
+  super.onResume()
+  if(::status.isInitialized){
+   refreshAvailability()
+   showPendingJarvisError()
+  }
+ }
+ private fun showPendingJarvisError(){
+  val prefs=getSharedPreferences(WakeWordAssistantService.PREFS,MODE_PRIVATE)
+  if(prefs.getString(WakeWordAssistantService.KEY_STATUS,null)!=WakeWordAssistantService.STATUS_ERROR)return
+  val error=prefs.getString(WakeWordAssistantService.KEY_ERROR,null).orEmpty()
+  if(error.isBlank())return
+  if(isFinishing||isDestroyed)return
+  AlertDialog.Builder(this)
+   .setTitle("JARVIS Error")
+   .setMessage(error)
+   .setPositiveButton("Copy Error"){_,_->copyJarvisError()}
+   .setNegativeButton("Share Error"){_,_->shareJarvisError()}
+   .setNeutralButton("OK",null)
+   .show()
+ }
+ private fun copyJarvisError(){
+  val report=JarvisDiagnostics.buildReport(this)
+  val clipboard=getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+  clipboard.setPrimaryClip(android.content.ClipData.newPlainText("JARVIS Error",report))
+  Toast.makeText(this,"JARVIS error report copied.",Toast.LENGTH_SHORT).show()
+ }
+ private fun shareJarvisError(){
+  val report=JarvisDiagnostics.buildReport(this)
+  val send=Intent(Intent.ACTION_SEND).apply{type="text/plain";putExtra(Intent.EXTRA_SUBJECT,"ChatWork · JARVIS Error Report");putExtra(Intent.EXTRA_TEXT,report)}
+  startActivity(Intent.createChooser(send,"Share JARVIS error"))
+ }
  private fun render(){
   val cfg=JarvisSettingsStore.read(this);selectedStt=cfg.sttLanguages.toCollection(linkedSetOf());selectedTts=cfg.ttsLanguages.toCollection(linkedSetOf());selectedTtsModel=cfg.ttsModel
   val root=LinearLayout(this).apply{orientation=1;setBackgroundColor(bg)}
