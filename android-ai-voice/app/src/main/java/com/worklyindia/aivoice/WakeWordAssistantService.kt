@@ -452,8 +452,18 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onDestroy() {
-        stopAssistant()
-        // Let the worker finish its native unload before publishing isRunning=false in finally.
+        // Android can destroy a service while reclaiming process resources. Do not
+        // interpret that lifecycle callback as the user's Deactivate action:
+        // preserve the saved active choice so START_STICKY can recreate the service.
+        stopRequested = stopRequested || !JarvisSettingsStore.read(this).active
+        running.set(false)
+        runCatching {
+            recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
+        }
+        recorder = null
+        releaseCpuWakeLock()
+        // Let native sessions close on the worker; explicit Deactivate already clears
+        // the saved active flag inside stopAssistant().
         worker.shutdown()
         super.onDestroy()
     }
