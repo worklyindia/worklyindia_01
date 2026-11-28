@@ -108,6 +108,7 @@ class WakeWordAssistantService : Service() {
         JarvisDiagnostics.record(this, "ASSISTANT_LOOP_ENTERED")
         var wakeSession: WakeWordEngineFactory.Session? = null
                 var audio: AudioRecord? = null
+        var assistantFailed = false
         try {
             publishStatus(STATUS_LOADING, "Checking downloaded voice and AI models…")
             check(running.get()) { "Hey ChatWork listening was stopped." }
@@ -232,6 +233,7 @@ class WakeWordAssistantService : Service() {
                 firstAudioFrame = false
             }
         } catch (error: Exception) {
+            assistantFailed = running.get()
             JarvisDiagnostics.recordNonFatal(this, "ASSISTANT_LOOP_EXCEPTION", error)
             JarvisDiagnostics.record(this, "ASSISTANT_LOOP_EXCEPTION", error.stackTraceToString())
             if (running.get()) publishStatus(STATUS_ERROR,
@@ -256,6 +258,16 @@ class WakeWordAssistantService : Service() {
                 running.set(false)
                 releaseCpuWakeLock()
                 isRunning = false
+            } else if (shouldRetry && assistantFailed) {
+                // Keep the user's JARVIS preference and the foreground error
+                // notification visible for Copy/Share. Do not erase the error by
+                // immediately retrying a failed microphone/model session.
+                running.set(false)
+                isRunning = false
+                releaseCpuWakeLock()
+                val errorText = getSharedPreferences(PREFS, MODE_PRIVATE)
+                    .getString(KEY_ERROR, "JARVIS stopped because of an error.").orEmpty()
+                runCatching { updateNotification(errorText) }
             } else if (shouldRetry) {
                 isRunning = true
                 running.set(true)
