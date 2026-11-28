@@ -160,7 +160,8 @@ jobs:
         run: |
           set -euo pipefail
           completed=false
-          for attempt in $(seq 1 60); do
+          saw_active=false
+          for attempt in $(seq 1 360); do
             status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
             echo "Kaggle status check $attempt/360: $status"
             if grep -Eiq 'KernelWorkerStatus\.(QUEUED|RUNNING)' <<<"$status"; then
