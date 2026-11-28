@@ -15,7 +15,7 @@ import traceback
 from datetime import datetime, timezone
 
 
-MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507"
+MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"
 
 
 def main() -> None:
