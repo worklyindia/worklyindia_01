@@ -42,6 +42,7 @@ android {
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
         buildConfigField("String", "SUPABASE_URL", "\"https://jubwzelupbntbetpajqb.supabase.co\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"sb_publishable_T8RX2Ow8JaudpytTYl0jZg_aWZeYR2o\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1Ynd6ZWx1cGJudGJldHBhanFiIiwiaWF0IjoxNzU0OTA3NzYyLCJleHAiOjIwNzA0ODM3NjJ9.YsA13ya6S-ogDW59wVQ-n1JhVzDSwAuErfG0WZLTqI4\"")
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++17")
@@ -151,6 +152,7 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 }
 dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("androidx.work:work-runtime:2.10.1")
     implementation("com.google.mediapipe:tasks-audio:1.2.2")
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("com.google.mlkit:translate:17.0.3")
