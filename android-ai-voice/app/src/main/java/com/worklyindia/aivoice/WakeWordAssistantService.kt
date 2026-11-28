@@ -29,7 +29,6 @@ class WakeWordAssistantService : Service() {
     private val running = AtomicBoolean(false)
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var recorder: AudioRecord? = null
-    @Volatile private var activeAi: OfflineAiEngine? = null
     @Volatile private var cpuWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
@@ -76,7 +75,6 @@ class WakeWordAssistantService : Service() {
         var wakeSession: WakeWordEngineFactory.Session? = null
         var speech: OfflineSpeechRecognizer? = null
         var tts: SherpaVitsTtsEngine? = null
-        var ai: OfflineAiEngine? = null
         var audio: AudioRecord? = null
         try {
             publishStatus(STATUS_LOADING, "Checking downloaded voice and AI models…")
@@ -84,30 +82,6 @@ class WakeWordAssistantService : Service() {
             check(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 "Microphone permission is missing. Open ChatWork and enable Hey ChatWork again."
             }
-            val language = getSharedPreferences(PREFS, MODE_PRIVATE)
-                .getString(KEY_LANGUAGE, "hi")?.lowercase(Locale.ROOT) ?: "hi"
-            check(language in setOf("hi", "gu", "en")) { "Choose Hindi, Gujarati or English in the assistant settings." }
-
-            val speechManager = SpeechPackDownloadManager(this)
-            val sttPack = SpeechModelCatalog.indicConformer(language)
-            val ttsPack = SpeechModelCatalog.itantraVits(language)
-            check(OfflineSpeechEngineFactory.isReady(this, sttPack)) {
-                "Download IndicConformer ${language.uppercase(Locale.ROOT)} from Download Models first."
-            }
-            check(speechManager.snapshot(ttsPack).state == SpeechPackDownloadManager.State.COMPLETE) {
-                "Download iTantra VITS ${language.uppercase(Locale.ROOT)} from Download Models first."
-            }
-            check(speechManager.isModelTested(ttsPack)) {
-                "Run Test Model for iTantra VITS ${language.uppercase(Locale.ROOT)} before enabling JARVIS."
-            }
-            val wakePack = SpeechModelCatalog.chatWorkWakeWord()
-            check(WakeWordEngineFactory.isReady(this)) {
-                "Download the ChatWork Wake Word model from Download Models first."
-            }
-            check(speechManager.isModelTested(wakePack)) {
-                "Run Test Model for the ChatWork Wake Word pack before enabling listening."
-            }
-
             val jarvisConfig = JarvisSettingsStore.read(this)
             check(jarvisConfig.active) { "JARVIS is deactivated. Open JARVIS Active · Setup to activate it." }
             check(jarvisConfig.apiKey.isNotBlank()) { "Save a Groq or Google AI Studio (Gemini) API key in JARVIS Setup." }
@@ -219,6 +193,7 @@ class WakeWordAssistantService : Service() {
             // never leave a failed microphone session looking like active listening.
             running.set(false)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            JarvisSettingsStore.setActive(this, false)
             isRunning = false
         } finally {
             running.set(false)
@@ -228,9 +203,8 @@ class WakeWordAssistantService : Service() {
             runCatching { wakeSession?.close() }
             runCatching { speech?.close() }
             runCatching { tts?.close() }
-            runCatching { ai?.unload() }
-            activeAi = null
             releaseCpuWakeLock()
+            JarvisSettingsStore.setActive(this, false)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             if (getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_STATUS, null) != STATUS_ERROR) {
                 publishStatus(STATUS_STOPPED, "Hey ChatWork is stopped.")
@@ -310,6 +284,7 @@ class WakeWordAssistantService : Service() {
     }
 
     private fun stopAssistant() {
+        JarvisSettingsStore.setActive(this, false)
         running.set(false)
         runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
         releaseCpuWakeLock()
