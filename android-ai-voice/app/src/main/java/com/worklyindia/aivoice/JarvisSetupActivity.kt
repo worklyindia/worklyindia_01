@@ -66,13 +66,13 @@ class JarvisSetupActivity:Activity(){
   private fun availableTts()=ttsLanguagesForModel().filter{isTtsPackReady(selectedTtsModel,it.code)}
  private fun refreshAvailability(){
   if(!::status.isInitialized)return
-  val a=availableStt();val b=availableTts()
+  val a=availableStt();val modelChoices=availableTtsModels();if(selectedTtsModel !in modelChoices && modelChoices.isNotEmpty())selectedTtsModel=modelChoices.first();val b=availableTts()
   selectedStt.retainAll(a.map{it.code}.toSet());selectedTts.retainAll(b.map{it.code}.toSet())
   if(selectedStt.isEmpty()&&a.isNotEmpty())selectedStt.add(a.first().code)
   if(selectedTts.isEmpty()&&b.isNotEmpty())selectedTts.add(b.first().code)
   bindModelSpinner(sttModel,if(a.isEmpty()) emptyList() else listOf("AI4Bharat IndicConformer INT8 · Downloaded"))
   val labels=mapOf("itantra" to "iTantra VITS","indic" to "Indic Tiny TTS","kokoro" to "Kokoro-82M")
-  val choices=availableTtsModels()
+  val choices=modelChoices
   if(selectedTtsModel !in choices && choices.isNotEmpty())selectedTtsModel=choices.first()
   ttsModel.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,if(choices.isEmpty())listOf("No downloaded TTS model") else choices.map{labels[it]?:it})
   ttsModel.isEnabled=choices.isNotEmpty()
