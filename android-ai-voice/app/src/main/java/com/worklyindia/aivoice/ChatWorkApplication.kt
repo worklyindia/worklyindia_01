@@ -12,6 +12,9 @@ class ChatWorkApplication : Application(), Application.ActivityLifecycleCallback
     override fun onCreate() {
         super.onCreate()
         JarvisDiagnostics.installUncaughtHandler(this)
+        // Retry durable crash reports before scanning historical process exits.
+        // This recovers reports whose previous WorkManager enqueue failed.
+        JarvisCrashReportOutbox.schedulePending(this)
         JarvisDiagnostics.recordPreviousProcessExit(this)
         JarvisDiagnostics.record(this, "APP_PROCESS_CREATED")
         registerActivityLifecycleCallbacks(this)
