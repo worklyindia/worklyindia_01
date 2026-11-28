@@ -24,6 +24,7 @@ class JarvisSetupActivity:Activity(){
  private val sttCatalog=listOf(Language("as","Assamese"),Language("bn","Bengali"),Language("brx","Bodo"),Language("doi","Dogri"),Language("gu","Gujarati"),Language("hi","Hindi"),Language("kn","Kannada"),Language("kok","Konkani"),Language("ks","Kashmiri"),Language("mai","Maithili"),Language("ml","Malayalam"),Language("mni","Manipuri"),Language("mr","Marathi"),Language("ne","Nepali"),Language("or","Odia"),Language("pa","Punjabi"),Language("sa","Sanskrit"),Language("sat","Santali"),Language("sd","Sindhi"),Language("ta","Tamil"),Language("te","Telugu"),Language("ur","Urdu"),Language("en","English"))
  private val ttsCatalog=listOf(Language("gu","Gujarati · ગુજરાતી"),Language("hi","Hindi · हिन्दी"),Language("en","English · India"))
  private lateinit var provider:Spinner;private lateinit var api:EditText;private lateinit var apiStatus:TextView;private lateinit var sttSummary:TextView;private lateinit var ttsSummary:TextView;private lateinit var status:TextView;private lateinit var active:Button;private lateinit var sttModel:Spinner;private lateinit var ttsModel:Spinner
+ private var jarvisErrorDialogShown=false
  private var selectedStt=linkedSetOf<String>();private var selectedTts=linkedSetOf<String>();private var selectedTtsModel="itantra"
  private val packs by lazy{SpeechPackDownloadManager(this)}
  private val ink get()=ChatWorkTheme.color(this,0xFF142033.toInt());private val muted get()=ChatWorkTheme.color(this,0xFF65748B.toInt());private val bg get()=ChatWorkTheme.color(this,0xFFF4F7FB.toInt());private val surface get()=ChatWorkTheme.color(this,0xFFFFFFFF.toInt())
@@ -39,8 +40,9 @@ class JarvisSetupActivity:Activity(){
   val prefs=getSharedPreferences(WakeWordAssistantService.PREFS,MODE_PRIVATE)
   if(prefs.getString(WakeWordAssistantService.KEY_STATUS,null)!=WakeWordAssistantService.STATUS_ERROR)return
   val error=prefs.getString(WakeWordAssistantService.KEY_ERROR,null).orEmpty()
-  if(error.isBlank())return
+  if(error.isBlank()||jarvisErrorDialogShown)return
   if(isFinishing||isDestroyed)return
+  jarvisErrorDialogShown=true
   AlertDialog.Builder(this)
    .setTitle("JARVIS Error")
    .setMessage(error)
