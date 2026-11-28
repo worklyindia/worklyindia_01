@@ -55,6 +55,7 @@ class WakeWordAssistantService : Service() {
         }
         stopRequested = false
         if (!running.compareAndSet(false, true)) return START_STICKY
+        JarvisCrashBreadcrumbs.recordStage(this, "service_started")
         isRunning = true
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true)
             .putString(KEY_STATUS, STATUS_STARTING).putString(KEY_STATUS_MESSAGE, "Starting Hey ChatWork…")
@@ -76,7 +77,10 @@ class WakeWordAssistantService : Service() {
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         acquireCpuWakeLock()
-        worker.execute { runAssistantLoop() }
+        worker.execute {
+            JarvisCrashBreadcrumbs.recordStage(this, "worker_started")
+            runAssistantLoop()
+        }
         return START_STICKY
     }
 
@@ -115,18 +119,25 @@ class WakeWordAssistantService : Service() {
             publishStatus(STATUS_LOADING, "Preparing selected speech languages…")
             check(running.get()) { "Hey ChatWork listening was stopped." }
             publishStatus(STATUS_LOADING, "Loading Hey ChatWork wake-word model…")
+            JarvisCrashBreadcrumbs.recordStage(this, "wakeword_engine_open_entered")
             val activeWakeSession = WakeWordEngineFactory.open(this)
             wakeSession = activeWakeSession
+            JarvisCrashBreadcrumbs.recordStage(this, "wakeword_engine_open_returned")
             check(running.get()) { "Hey ChatWork listening was stopped." }
 
+            JarvisCrashBreadcrumbs.recordStage(this, "microphone_start_entered")
             var activeAudio = createWakeWordRecorder()
             audio = activeAudio
+            JarvisCrashBreadcrumbs.recordStage(this, "microphone_recording_started")
             publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · STT ${sttLanguages.joinToString()} · TTS ${ttsLanguages.joinToString()}")
 
             val history = StringBuilder()
             history.append("System: You are JARVIS, ChatWork’s calm, concise voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers clear and brief, and ask before any consequential action. You cannot control phone settings, read private device data, or perform actions outside this conversation.\n")
             val buffer = ShortArray(1600)
             val session = activeWakeSession
+            JarvisCrashBreadcrumbs.recordStage(this, "audio_loop_started")
+            var firstNativeInput = true
+            var firstNativeDecode = true
             while (running.get()) {
                 val count = activeAudio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                 if (count < 0) {
@@ -159,9 +170,19 @@ class WakeWordAssistantService : Service() {
                 }
                 if (count == 0) continue
                 val samples = FloatArray(count) { buffer[it] / 32768.0f }
+                if (firstNativeInput) JarvisCrashBreadcrumbs.recordStage(this, "native_accept_waveform_first_call")
                 session.stream.acceptWaveform(samples, sampleRate = WakeWordEngineFactory.SAMPLE_RATE)
+                if (firstNativeInput) {
+                    firstNativeInput = false
+                    JarvisCrashBreadcrumbs.recordStage(this, "native_accept_waveform_returned")
+                }
                 while (session.spotter.isReady(session.stream)) {
+                    if (firstNativeDecode) JarvisCrashBreadcrumbs.recordStage(this, "native_keyword_decode_first_call")
                     session.spotter.decode(session.stream)
+                    if (firstNativeDecode) {
+                        firstNativeDecode = false
+                        JarvisCrashBreadcrumbs.recordStage(this, "native_keyword_decode_returned")
+                    }
                     val detected = session.spotter.getResult(session.stream).keyword
                     if (detected.isNotBlank()) {
                         session.spotter.reset(session.stream)
@@ -193,6 +214,7 @@ class WakeWordAssistantService : Service() {
                 }
             }
         } catch (error: Exception) {
+            JarvisCrashBreadcrumbs.recordStage(this, "handled_kotlin_exception", error.javaClass.simpleName + ": " + (error.message ?: ""))
             if (running.get()) publishStatus(STATUS_ERROR,
                 "Assistant stopped · ${error.message ?: "Model or microphone error"}",
                 error.message ?: error.javaClass.simpleName)
@@ -393,6 +415,7 @@ class WakeWordAssistantService : Service() {
 
     private fun stopAssistant() {
         stopRequested = true
+        JarvisCrashBreadcrumbs.markCleanStop(this)
         JarvisSettingsStore.setActive(this, false)
         running.set(false)
         runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
@@ -463,6 +486,8 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onDestroy() {
+        val userRequestedStop = stopRequested
+        if (userRequestedStop) JarvisCrashBreadcrumbs.markCleanStop(this)
         // Android can destroy a service while reclaiming process resources. Do not
         // interpret that lifecycle callback as the user's Deactivate action:
         // preserve the saved active choice so START_STICKY can recreate the service.
@@ -509,5 +534,69 @@ class WakeWordAssistantService : Service() {
         private const val SILENCE_AFTER_SPEECH_MS = 1_200L
         private const val VOICE_RMS_THRESHOLD = 0.012
         private const val PLAYBACK_COOLDOWN_MS = 700L
+    }
+}
+
+
+/**
+ * Durable, privacy-safe breadcrumbs for diagnosing native process termination.
+ * No microphone samples, transcripts, API keys or conversation text are stored.
+ */
+internal object JarvisCrashBreadcrumbs {
+    private const val PREFS = "chatwork_jarvis_crash_breadcrumbs"
+    private const val KEY_ACTIVE = "session_active"
+    private const val KEY_STAGE = "last_stage"
+    private const val KEY_DETAIL = "last_detail"
+    private const val KEY_AT = "last_stage_at"
+    private const val KEY_REPORTED_AT = "reported_stage_at"
+
+    fun recordStage(context: android.content.Context, stage: String, detail: String = "") {
+        val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        val previous = prefs.getString(KEY_STAGE, null)
+        // Avoid synchronous disk writes on every audio frame.
+        if (previous == stage) return
+        prefs.edit()
+            .putBoolean(KEY_ACTIVE, true)
+            .putString(KEY_STAGE, stage.take(100))
+            .putString(KEY_DETAIL, detail.take(300))
+            .putLong(KEY_AT, System.currentTimeMillis())
+            .commit()
+    }
+
+    fun markCleanStop(context: android.content.Context) {
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_ACTIVE, false)
+            .putString(KEY_STAGE, "clean_stop")
+            .putLong(KEY_AT, System.currentTimeMillis())
+            .commit()
+    }
+
+    fun reportIfUnclean(context: android.content.Context) {
+        val app = context.applicationContext
+        if (WakeWordAssistantService.isRunning) return
+        val prefs = app.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        if (!prefs.getBoolean(KEY_ACTIVE, false)) return
+        val stageAt = prefs.getLong(KEY_AT, 0L)
+        if (stageAt <= 0L || System.currentTimeMillis() - stageAt < 20_000L) return
+        if (prefs.getLong(KEY_REPORTED_AT, 0L) == stageAt) return
+        val token = SecureDeviceTokenStore.read(app) ?: return
+        val stage = prefs.getString(KEY_STAGE, "unknown") ?: "unknown"
+        val detail = prefs.getString(KEY_DETAIL, "").orEmpty()
+        val device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
+        val reportDetail = "last_stage=$stage; stage_time_ms=$stageAt; device=$device; app_version=${BuildConfig.VERSION_NAME}; detail=$detail"
+        Thread {
+            try {
+                VoiceRelayApi.reportDiagnostic(
+                    token,
+                    "jarvis_unexpected_termination",
+                    "JARVIS service ended without a clean stop. Last recorded stage: $stage",
+                    reportDetail,
+                    "sherpa-onnx-wake-word"
+                )
+                prefs.edit().putLong(KEY_REPORTED_AT, stageAt).commit()
+            } catch (_: Exception) {
+                // Keep the breadcrumb pending so a later app launch can retry.
+            }
+        }.start()
     }
 }
