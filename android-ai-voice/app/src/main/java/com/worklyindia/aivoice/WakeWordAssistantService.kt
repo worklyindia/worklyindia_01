@@ -492,9 +492,6 @@ class WakeWordAssistantService : Service() {
             .setCategory(Notification.CATEGORY_SERVICE)
         // FLAG_NO_CLEAR + FLAG_ONGOING_EVENT keep the foreground notification
         // from being dismissed by a horizontal swipe while JARVIS is enabled.
-        val notification = builderWithCore.build().apply {
-            flags = flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT
-        }
         return if (isError) {
             val copyIntent = PendingIntent.getService(
                 this, 2, Intent(this, WakeWordAssistantService::class.java).setAction(ACTION_COPY_ERROR),
