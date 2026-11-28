@@ -211,6 +211,7 @@ class WakeWordAssistantService : Service() {
                 firstAudioFrame = false
             }
         } catch (error: Exception) {
+            JarvisDiagnostics.recordNonFatal(this, "ASSISTANT_LOOP_EXCEPTION", error)
             JarvisDiagnostics.record(this, "ASSISTANT_LOOP_EXCEPTION", error.stackTraceToString())
             if (running.get()) publishStatus(STATUS_ERROR,
                 "Assistant stopped · ${error.message ?: "Model or microphone error"}",
@@ -245,6 +246,7 @@ class WakeWordAssistantService : Service() {
                         if (running.get() && JarvisSettingsStore.read(this).active) runAssistantLoop()
                     }
                 }.onFailure {
+                    JarvisDiagnostics.recordNonFatal(this, "ASSISTANT_RESTART_SCHEDULE_FAILED", it)
                     running.set(false)
                     isRunning = false
                     releaseCpuWakeLock()
