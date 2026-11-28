@@ -147,7 +147,7 @@ class WakeWordAssistantService : Service() {
                         "Microphone could not reconnect after 5 attempts: ${lastFailure?.message ?: "recording was interrupted"}"
                     )
                     audio = activeAudio
-                    publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
+                    publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${sttLanguage.uppercase(Locale.ROOT)} · On-device")
                     continue
                 }
                 if (count == 0) continue
@@ -180,7 +180,7 @@ class WakeWordAssistantService : Service() {
                             updateNotification("No command heard · Listening for Hey ChatWork")
                         }
                         session.spotter.reset(session.stream)
-                        updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${language.uppercase(Locale.ROOT)} · On-device")
+                        updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${sttLanguage.uppercase(Locale.ROOT)} · On-device")
                     }
                 }
             }
