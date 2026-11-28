@@ -8,6 +8,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 val releaseStoreFile = System.getenv("WORKLY_VOICE_KEYSTORE_PATH")
@@ -61,6 +62,9 @@ android {
         getByName("release") {
             isMinifyEnabled = false
             if (releaseSigningReady) signingConfig = signingConfigs.getByName("release")
+            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                nativeSymbolUploadEnabled = true
+            }
         }
     }
     compileOptions {
@@ -149,6 +153,9 @@ dependencies {
     implementation("com.google.mediapipe:tasks-audio:1.2.2")
     implementation("com.airbnb.android:lottie:6.7.1")
     implementation("com.google.mlkit:translate:17.0.3")
+    implementation(platform("com.google.firebase:firebase-bom:35.2.0"))
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-crashlytics-ndk")
     implementation("com.google.firebase:firebase-messaging:24.1.2")
     // Keep the ORT Java API for Indic Tiny and Moss; Sherpa supplies the matching native ORT runtime.
     // Official Sherpa Android text frontend; embeds its own espeak-ng data.
