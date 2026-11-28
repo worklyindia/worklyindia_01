@@ -8,9 +8,6 @@ import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
-import com.k2fsa.sherpa.onnx.GenerationConfig
-import com.github.csukuangfj.piper.phonemize.piperPhonemizeInitialize
-import com.github.csukuangfj.piper.phonemize.piperPhonemizeText
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.File
@@ -25,7 +22,6 @@ import kotlin.math.max
  */
 class SherpaVitsTtsEngine private constructor(
     private val tts: OfflineTts,
-    private val packLanguageFallback: String
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     @Volatile private var activeTrack: AudioTrack? = null
@@ -34,11 +30,7 @@ class SherpaVitsTtsEngine private constructor(
         check(!closed.get()) { "VITS voice engine is closed." }
         require(text.isNotBlank()) { "Enter text to speak." }
         require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
-        val voice = tts.lang().takeIf { it.isNotBlank() } ?: packLanguageFallback
-        val phonemes = phonemize(text, voice)
-        val generationConfig = GenerationConfig(sid = 0, speed = speed)
-        generationConfig.phonemeCodepoints = phonemes
-        val audio = tts.generateWithConfig(text = "", config = generationConfig)
+        val audio = tts.generate(text = text, sid = 0, speed = speed)
         require(audio.samples.isNotEmpty() && audio.sampleRate > 0) { "The VITS model returned empty audio." }
         writeWav(output, audio.samples, audio.sampleRate)
         return output
@@ -50,10 +42,7 @@ class SherpaVitsTtsEngine private constructor(
         check(!closed.get()) { "VITS voice engine is closed." }
         require(text.isNotBlank()) { "Enter text to speak." }
         require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
-        val voice = tts.lang().takeIf { it.isNotBlank() } ?: packLanguageFallback
-        val generationConfig = GenerationConfig(sid = 0, speed = speed)
-        generationConfig.phonemeCodepoints = phonemize(text, voice)
-        val audio = tts.generateWithConfig(text = "", config = generationConfig)
+        val audio = tts.generate(text = text, sid = 0, speed = speed)
         require(audio.samples.isNotEmpty() && audio.sampleRate > 0) { "The VITS model returned empty audio." }
         playAudio(audio.samples, audio.sampleRate)
     }
@@ -125,22 +114,6 @@ class SherpaVitsTtsEngine private constructor(
     }
 
     companion object {
-        private val phonemizerLock = Any()
-        private val phonemizerInitialized = AtomicBoolean(false)
-
-        private fun phonemize(text: String, voice: String): Array<IntArray> {
-            val result = piperPhonemizeText(text, voice)
-                ?: throw IllegalArgumentException("Could not convert text into $voice phonemes.")
-            try {
-                val sentences = Array(result.numSentences) { index -> result.getPhonemes(index) }
-                    .filter { it.isNotEmpty() }
-                    .toTypedArray()
-                require(sentences.isNotEmpty()) { "No speech phonemes were produced for this text and language." }
-                return sentences
-            } finally {
-                result.close()
-            }
-        }
         fun create(context: Context, pack: SpeechModelCatalog.Pack): SherpaVitsTtsEngine {
             val root = SpeechPackDownloadManager(context).modelDirectory(pack)
             val archives = File(root, "archives")
@@ -149,34 +122,35 @@ class SherpaVitsTtsEngine private constructor(
 
             val voiceDir = File(root, "voice")
             if (!File(voiceDir, "model.onnx").isFile || !File(voiceDir, "tokens.txt").isFile) {
-                extractTarBz2(voiceArchive, voiceDir, listOf("espeak-ng-data/"))
+                extractTarBz2(voiceArchive, voiceDir)
+            }
+            val espeakArchive = File(archives, "espeak-ng-data.tar.bz2")
+            check(espeakArchive.isFile) { "Download the shared Sherpa-ONNX espeak-ng data pack first." }
+            val espeakDir = File(root, "espeak-ng-data")
+            if (!File(espeakDir, "phontab").isFile && !File(espeakDir, "phontab").exists()) {
+                extractTarBz2(espeakArchive, espeakDir)
             }
             val model = File(voiceDir, "model.onnx").takeIf { it.isFile }
                 ?: voiceDir.walkTopDown().firstOrNull { it.isFile && it.extension.equals("onnx", ignoreCase = true) }
             val tokens = File(voiceDir, "tokens.txt").takeIf { it.isFile }
                 ?: voiceDir.walkTopDown().firstOrNull { it.isFile && it.name == "tokens.txt" }
             check(model?.isFile == true && tokens?.isFile == true) { "VITS archive is missing its ONNX model or tokens.txt." }
+            check(espeakDir.isDirectory && espeakDir.walkTopDown().any { it.isFile }) {
+                "Sherpa-ONNX espeak-ng language data is missing or incomplete."
+            }
             val config = OfflineTtsConfig(
                 model = OfflineTtsModelConfig(
                     vits = OfflineTtsVitsModelConfig(
                         model = model!!.absolutePath,
                         tokens = tokens!!.absolutePath,
+                        dataDir = espeakDir.absolutePath
                     ),
                     numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
                     debug = false,
                     provider = "cpu"
                 )
             )
-            synchronized(phonemizerLock) {
-                if (!phonemizerInitialized.get()) {
-                    piperPhonemizeInitialize(context.applicationContext)
-                    phonemizerInitialized.set(true)
-                }
-            }
-            return SherpaVitsTtsEngine(
-                OfflineTts(assetManager = null, config = config),
-                when (pack.languageCode) { "gu" -> "gu"; "hi" -> "hi"; else -> "en-us" }
-            )
+            return SherpaVitsTtsEngine(OfflineTts(assetManager = null, config = config))
         }
 
         private fun extractTarBz2(archive: File, destination: File, excludePrefixes: List<String> = emptyList()) {

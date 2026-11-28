@@ -244,7 +244,14 @@ object SpeechModelCatalog {
             license = if (code == "gu") "Mimic3/CMU-Indic model; see upstream model card and sherpa-onnx notices" else "Piper voice model; see upstream model card and sherpa-onnx notices",
             repository = "k2-fsa/sherpa-onnx · tts-models release",
             files = listOf(
-                ModelFile("archives/voice.tar.bz2", "$SHERPA_TTS_BASE/$voice", size, sha)
+                ModelFile("archives/voice.tar.bz2", "$SHERPA_TTS_BASE/$voice", size, sha),
+                // Sherpa-ONNX's VITS runtime needs its shared espeak-ng data directory
+                // for the Piper/Mimic3 language frontend.
+                ModelFile(
+                    "archives/espeak-ng-data.tar.bz2",
+                    "$SHERPA_TTS_BASE/espeak-ng-data.tar.bz2",
+                    7_252_012L
+                )
             )
         )
     }
