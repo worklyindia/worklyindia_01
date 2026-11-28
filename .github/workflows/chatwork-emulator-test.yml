@@ -165,10 +165,30 @@ jobs:
             # android-emulator-runner executes this script with /usr/bin/sh (POSIX sh).
             # pipefail is a Bash-only option and makes dash exit with code 2.
             set -eu
-            APK="$GITHUB_WORKSPACE/android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
+            APK="android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
+            EVIDENCE="$GITHUB_WORKSPACE/chatwork-emulator-evidence"
+            test -s "$APK" || { echo "::error::Built ChatWork APK is missing or empty: $APK"; exit 1; }
             adb wait-for-device
-            trap 'adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-evidence/chatwork-emulator-logcat.txt" 2>/dev/null || true' EXIT
-            adb shell getprop sys.boot_completed | grep -q 1
+            trap 'adb logcat -d -t 5000 > "$EVIDENCE/chatwork-emulator-logcat.txt" 2>/dev/null || true' EXIT
+            # ADB can report the emulator transport as present while Android is still
+            # booting/offline. Wait for an online device and completed system boot.
+            boot_deadline=$(( $(date +%s) + 900 ))
+            until adb get-state 2>/dev/null | grep -qx device; do
+              if [ "$(date +%s)" -ge "$boot_deadline" ]; then
+                echo "::error::Android Emulator did not become online before timeout."
+                adb devices -l || true
+                exit 1
+              fi
+              sleep 3
+            done
+            until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+              if [ "$(date +%s)" -ge "$boot_deadline" ]; then
+                echo "::error::Android Emulator did not finish booting before timeout."
+                adb devices -l || true
+                exit 1
+              fi
+              sleep 3
+            done
             adb install -r "$APK"
             adb shell pm grant com.worklyindia.chatwork android.permission.RECORD_AUDIO || true
             adb shell pm grant com.worklyindia.chatwork android.permission.POST_NOTIFICATIONS || true
