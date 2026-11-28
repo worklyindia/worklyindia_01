@@ -23,7 +23,7 @@ class JarvisSetupActivity:Activity(){
  private data class Language(val code:String,val label:String)
  private val sttCatalog=listOf(Language("as","Assamese"),Language("bn","Bengali"),Language("brx","Bodo"),Language("doi","Dogri"),Language("gu","Gujarati"),Language("hi","Hindi"),Language("kn","Kannada"),Language("kok","Konkani"),Language("ks","Kashmiri"),Language("mai","Maithili"),Language("ml","Malayalam"),Language("mni","Manipuri"),Language("mr","Marathi"),Language("ne","Nepali"),Language("or","Odia"),Language("pa","Punjabi"),Language("sa","Sanskrit"),Language("sat","Santali"),Language("sd","Sindhi"),Language("ta","Tamil"),Language("te","Telugu"),Language("ur","Urdu"),Language("en","English"))
  private val ttsCatalog=listOf(Language("gu","Gujarati · ગુજરાતી"),Language("hi","Hindi · हिन्दी"),Language("en","English · India"))
- private lateinit var provider:Spinner;private lateinit var api:EditText;private lateinit var sttSummary:TextView;private lateinit var ttsSummary:TextView;private lateinit var status:TextView;private lateinit var active:Button;private lateinit var sttModel:Spinner;private lateinit var ttsModel:Spinner
+ private lateinit var provider:Spinner;private lateinit var api:EditText;private lateinit var apiStatus:TextView;private lateinit var sttSummary:TextView;private lateinit var ttsSummary:TextView;private lateinit var status:TextView;private lateinit var active:Button;private lateinit var sttModel:Spinner;private lateinit var ttsModel:Spinner
  private var selectedStt=linkedSetOf<String>();private var selectedTts=linkedSetOf<String>();private var selectedTtsModel="itantra"
  private val packs by lazy{SpeechPackDownloadManager(this)}
  private val ink get()=ChatWorkTheme.color(this,0xFF142033.toInt());private val muted get()=ChatWorkTheme.color(this,0xFF65748B.toInt());private val bg get()=ChatWorkTheme.color(this,0xFFF4F7FB.toInt());private val surface get()=ChatWorkTheme.color(this,0xFFFFFFFF.toInt())
@@ -38,8 +38,9 @@ class JarvisSetupActivity:Activity(){
   val scroll=ScrollView(this);val c=LinearLayout(this).apply{orientation=1;setPadding(dp(16),dp(12),dp(16),dp(28))};scroll.addView(c);root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
   c.addView(section("1. AI Reply"));c.addView(hint("Local Qwen is disabled for JARVIS. Choose Groq or Google AI Studio · Gemini and save your own API key."))
   provider=spinner(listOf("Groq" to "groq","Google AI Studio · Gemini" to "gemini"),cfg.provider);c.addView(provider,match())
-  api=EditText(this).apply{hint=if(cfg.apiKey.isBlank())"Enter API key" else "API key saved · enter a new key only to replace";inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;setSingleLine(true);setTextColor(ink);setHintTextColor(muted)};c.addView(api,match())
-  c.addView(hint(if(cfg.apiKey.isBlank())"No API key saved." else "Saved securely with Android Keystore. The key is hidden; leave blank to keep it."))
+  api=EditText(this).apply{hint=if(cfg.apiKey.isBlank())"Enter API key" else "Enter a new API key only to replace";inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;setSingleLine(true);setTextColor(ink);setHintTextColor(muted)};c.addView(api,match())
+  apiStatus=TextView(this).apply{text=if(cfg.apiKey.isBlank())"No API key saved." else "API key saved securely · ${cfg.provider.uppercase()} · ••••••••••••";setTextColor(if(cfg.apiKey.isBlank())muted else ink);textSize=13f};c.addView(apiStatus,match())
+  c.addView(hint("Saved keys stay encrypted in Android Keystore. Leave the field blank to keep the saved key; enter a new key to replace it."))
   c.addView(section("2. Text To Voice"))
   c.addView(hint("Choose a downloaded JARVIS-compatible model: iTantra VITS, Indic Tiny TTS or Kokoro-82M."))
   ttsModel=Spinner(this);c.addView(ttsModel,match())
@@ -61,7 +62,7 @@ class JarvisSetupActivity:Activity(){
  private fun availableStt()=sttCatalog.filter{runCatching{val p=SpeechModelCatalog.indicConformer(it.code);packs.snapshot(p).files.all{f->f.state==SpeechPackDownloadManager.State.COMPLETE}&&OfflineSpeechEngineFactory.isReady(this,p)}.getOrDefault(false)}
  private fun ttsPack(code:String)=when(selectedTtsModel){"indic"->SpeechModelCatalog.indicTinyTts(code);"kokoro"->SpeechModelCatalog.kokoro82m();else->SpeechModelCatalog.itantraVits(code)}
  private fun ttsLanguagesForModel()=if(selectedTtsModel=="kokoro")listOf(Language("hi","Hindi · हिन्दी"),Language("en","English")) else ttsCatalog
- private fun isTtsPackReady(model:String,code:String)=runCatching{val p=when(model){"indic"->SpeechModelCatalog.indicTinyTts(code);"kokoro"->SpeechModelCatalog.kokoro82m();else->SpeechModelCatalog.itantraVits(code)};packs.snapshot(p).files.all{it.state==SpeechPackDownloadManager.State.COMPLETE}}.getOrDefault(false)
+ private fun isTtsPackReady(model:String,code:String)=runCatching{val p=when(model){"indic"->SpeechModelCatalog.indicTinyTts(code);"kokoro"->SpeechModelCatalog.kokoro82m();else->SpeechModelCatalog.itantraVits(code)};val snapshot=packs.snapshot(p);snapshot.files.isNotEmpty()&&snapshot.files.all{it.state==SpeechPackDownloadManager.State.COMPLETE}&&snapshot.state==SpeechPackDownloadManager.State.COMPLETE}.getOrDefault(false)
   private fun availableTtsModels()=listOf("itantra","indic","kokoro").filter{model->(if(model=="kokoro")listOf("hi","en") else listOf("gu","hi","en")).any{code->isTtsPackReady(model,code)}}
   private fun availableTts()=ttsLanguagesForModel().filter{isTtsPackReady(selectedTtsModel,it.code)}
  private fun refreshAvailability(){
@@ -115,6 +116,7 @@ class JarvisSetupActivity:Activity(){
    JarvisSettingsStore.save(this,providerValue(),key,selectedStt.toList(),selectedTts.toList(),selectedTtsModel)
    api.setText("")
    if(show)Toast.makeText(this,"JARVIS settings saved.",Toast.LENGTH_SHORT).show()
+   apiStatus.text=if(JarvisSettingsStore.read(this).apiKey.isBlank())"No API key saved." else "API key saved securely · ${providerValue().uppercase()} · ••••••••••••"
    refreshAvailability();true
   }.getOrElse{status.text=it.message?: "Save failed";false}
  }
