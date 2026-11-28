@@ -120,17 +120,20 @@ object JarvisDiagnostics {
                     .append("; pssKb=").append(exit.pss)
                     .append("; rssKb=").append(exit.rss)
                     .append("; description=").append(exit.description ?: "none")
+                var nativeTrace: ByteArray? = null
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                    (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
-                     exit.reason == ApplicationExitInfo.REASON_ANR)) {
+                    exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) {
                     runCatching {
                         exit.traceInputStream?.use { stream ->
-                            // Android native tombstones are protobuf/binary, not UTF-8 text.
-                            // Keep the shared report readable and record whether a trace exists.
-                            val byteCount = stream.readBytes().size
-                            details.append("; nativeTraceBytes=").append(byteCount)
+                            // Keep the original binary tombstone so native frames can be symbolicated.
+                            val bytes = stream.readBytes()
+                            details.append("; nativeTraceBytes=").append(bytes.size)
                             details.append("; nativeTraceFormat=binary-tombstone")
+                            if (bytes.isNotEmpty() && bytes.size <= 4_194_304) nativeTrace = bytes
+                            else details.append("; nativeTraceUpload=skipped_size_limit")
                         }
+                    }.onFailure {
+                        details.append("; nativeTraceReadError=").append(it.javaClass.simpleName)
                     }
                 }
                 record(context, "ANDROID_PREVIOUS_PROCESS_EXIT", details.toString())
@@ -169,7 +172,7 @@ object JarvisDiagnostics {
                 if (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
                     exit.reason == ApplicationExitInfo.REASON_ANR ||
                     exit.reason == ApplicationExitInfo.REASON_CRASH) {
-                    JarvisCrashReportOutbox.enqueue(context, exit.timestamp, reason, exit.status, details.toString())
+                    JarvisCrashReportOutbox.enqueue(context, exit.timestamp, reason, exit.status, details.toString(), nativeTrace)
                 }
 
                 // Android reports native crashes after the process has died. Convert each
