@@ -135,6 +135,35 @@ object JarvisDiagnostics {
                 }
                 record(context, "ANDROID_PREVIOUS_PROCESS_EXIT", details.toString())
 
+                // Circuit breaker: a native SIGSEGV/SIGABRT cannot be caught by Kotlin.
+                // Disable auto-restart once for each newly observed native crash so a
+                // broken wake decoder cannot repeatedly kill ChatWork on every launch.
+                // The user can manually re-enable JARVIS after updating the app.
+                if (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE) {
+                    runCatching {
+                        val guardPrefs = context.getSharedPreferences("jarvis_native_crash_guard", Context.MODE_PRIVATE)
+                        val lastGuarded = guardPrefs.getLong("last_guarded_exit_timestamp", 0L)
+                        if (exit.timestamp > lastGuarded) {
+                            JarvisSettingsStore.setActive(context, false)
+                            context.getSharedPreferences(WakeWordAssistantService.PREFS, Context.MODE_PRIVATE)
+                                .edit()
+                                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
+                                .putString(WakeWordAssistantService.KEY_STATUS, WakeWordAssistantService.STATUS_ERROR)
+                                .putString(WakeWordAssistantService.KEY_STATUS_MESSAGE,
+                                    "JARVIS stopped after a native wake-engine crash. Update ChatWork before enabling it again.")
+                                .putString(WakeWordAssistantService.KEY_ERROR,
+                                    "Native wake-word engine crashed (Android exit status ${exit.status}). Auto-restart paused to protect ChatWork.")
+                                .apply()
+                            guardPrefs.edit().putLong("last_guarded_exit_timestamp", exit.timestamp).apply()
+                            record(context, "JARVIS_NATIVE_CRASH_AUTO_RESTART_BLOCKED",
+                                "time=${exit.timestamp}; status=${exit.status}")
+                        }
+                    }.onFailure {
+                        record(context, "JARVIS_NATIVE_CRASH_GUARD_FAILED",
+                            it.javaClass.simpleName + ": " + (it.message ?: "unknown"))
+                    }
+                }
+
                 // Queue fatal process exits for Supabase upload on the next app launch.
                 // WorkManager keeps the report locally until the server acknowledges it.
                 if (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
