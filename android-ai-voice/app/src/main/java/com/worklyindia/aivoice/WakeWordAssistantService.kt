@@ -36,6 +36,7 @@ class WakeWordAssistantService : Service() {
     override fun onCreate() {
         super.onCreate()
         serviceDestroyed = false
+        JarvisDiagnostics.record(this, "SERVICE_CREATED")
         // A sticky service can be recreated after Android destroys its process.
         // Always give the new service instance a live worker executor.
         if (worker.isShutdown || worker.isTerminated) worker = Executors.newSingleThreadExecutor()
@@ -54,6 +55,7 @@ class WakeWordAssistantService : Service() {
             return START_NOT_STICKY
         }
         stopRequested = false
+        JarvisDiagnostics.record(this, "START_COMMAND", "action=" + (intent?.action ?: "null") + "; startId=" + startId)
         if (!running.compareAndSet(false, true)) return START_STICKY
         isRunning = true
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true)
@@ -67,6 +69,7 @@ class WakeWordAssistantService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (error: Exception) {
+            JarvisDiagnostics.record(this, "FOREGROUND_START_FAILED", error.stackTraceToString())
             running.set(false)
             isRunning = false
             publishStatus(STATUS_ERROR, "Could not start microphone service.", error.message)
@@ -81,6 +84,7 @@ class WakeWordAssistantService : Service() {
     }
 
     private fun runAssistantLoop() {
+        JarvisDiagnostics.record(this, "ASSISTANT_LOOP_ENTERED")
         var wakeSession: WakeWordEngineFactory.Session? = null
                 var audio: AudioRecord? = null
         try {
@@ -115,6 +119,7 @@ class WakeWordAssistantService : Service() {
             publishStatus(STATUS_LOADING, "Preparing selected speech languages…")
             check(running.get()) { "Hey ChatWork listening was stopped." }
             publishStatus(STATUS_LOADING, "Loading Hey ChatWork wake-word model…")
+            JarvisDiagnostics.record(this, "WAKE_MODEL_LOADING")
             val activeWakeSession = WakeWordEngineFactory.open(this)
             wakeSession = activeWakeSession
             check(running.get()) { "Hey ChatWork listening was stopped." }
@@ -122,6 +127,7 @@ class WakeWordAssistantService : Service() {
             var activeAudio = createWakeWordRecorder()
             audio = activeAudio
             publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · STT ${sttLanguages.joinToString()} · TTS ${ttsLanguages.joinToString()}")
+            JarvisDiagnostics.record(this, "LISTENING_STARTED", "sampleRate=" + WakeWordEngineFactory.SAMPLE_RATE)
 
             val history = StringBuilder()
             history.append("System: You are JARVIS, ChatWork’s calm, concise voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers clear and brief, and ask before any consequential action. You cannot control phone settings, read private device data, or perform actions outside this conversation.\n")
@@ -193,6 +199,7 @@ class WakeWordAssistantService : Service() {
                 }
             }
         } catch (error: Exception) {
+            JarvisDiagnostics.record(this, "ASSISTANT_LOOP_EXCEPTION", error.stackTraceToString())
             if (running.get()) publishStatus(STATUS_ERROR,
                 "Assistant stopped · ${error.message ?: "Model or microphone error"}",
                 error.message ?: error.javaClass.simpleName)
@@ -203,6 +210,7 @@ class WakeWordAssistantService : Service() {
             // not silently deactivate JARVIS or remove its foreground notification.
             running.set(false)
         } finally {
+            JarvisDiagnostics.record(this, "ASSISTANT_LOOP_FINALLY", "running=" + running.get() + "; destroyed=" + serviceDestroyed + "; stopRequested=" + stopRequested)
             recorder = null
             runCatching { if (audio?.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
             runCatching { audio?.release() }
@@ -463,6 +471,7 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onDestroy() {
+        JarvisDiagnostics.record(this, "SERVICE_DESTROYED", "savedActive=" + JarvisSettingsStore.read(this).active)
         // Android can destroy a service while reclaiming process resources. Do not
         // interpret that lifecycle callback as the user's Deactivate action:
         // preserve the saved active choice so START_STICKY can recreate the service.
