@@ -31,9 +31,11 @@ class WakeWordAssistantService : Service() {
     @Volatile private var recorder: AudioRecord? = null
     @Volatile private var cpuWakeLock: PowerManager.WakeLock? = null
     @Volatile private var stopRequested = false
+    @Volatile private var serviceDestroyed = false
 
     override fun onCreate() {
         super.onCreate()
+        serviceDestroyed = false
         // A sticky service can be recreated after Android destroys its process.
         // Always give the new service instance a live worker executor.
         if (worker.isShutdown || worker.isTerminated) worker = Executors.newSingleThreadExecutor()
@@ -205,8 +207,14 @@ class WakeWordAssistantService : Service() {
             runCatching { if (audio?.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
             runCatching { audio?.release() }
             runCatching { wakeSession?.close() }
-            val shouldRetry = JarvisSettingsStore.read(this).active && !stopRequested
-            if (shouldRetry) {
+            val shouldRetry = JarvisSettingsStore.read(this).active && !stopRequested && !serviceDestroyed
+            if (serviceDestroyed) {
+                // Android is reclaiming this service instance, not the user's JARVIS
+                // preference. Keep the saved active flag for START_STICKY recreation.
+                running.set(false)
+                releaseCpuWakeLock()
+                isRunning = false
+            } else if (shouldRetry) {
                 isRunning = true
                 running.set(true)
                 publishStatus(STATUS_STARTING, "JARVIS reconnecting · microphone and AI service retrying…")
@@ -461,6 +469,7 @@ class WakeWordAssistantService : Service() {
         // This instance is going away. Prevent its worker's finally block from
         // scheduling a retry on a service that Android has already destroyed.
         // Keep the persisted user choice so START_STICKY can create a fresh instance.
+        serviceDestroyed = true
         stopRequested = true
         running.set(false)
         runCatching {
