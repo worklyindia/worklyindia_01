@@ -31,12 +31,57 @@ object JarvisDiagnostics {
                 // Never send prompts, user messages, or API keys.
                 runCatching {
                     val crashlytics = FirebaseCrashlytics.getInstance()
+                    applyCrashContext(context, event)
                     crashlytics.log("JARVIS_EVENT=" + event + (if (safe.isNotBlank()) " · " + safe.take(3000) else ""))
                     crashlytics.setCustomKey("jarvis_last_event", event.take(64))
+                    crashlytics.setCustomKey("jarvis_last_detail", safe.take(500))
                 }
                 file.appendText("[" + stamp + "] " + event + (if (safe.isNotBlank()) " · " + safe else "") + "\n")
             }
         }
+    }
+
+    /** Attach bounded, non-sensitive app/device/JARVIS state to every Crashlytics event. */
+    private fun applyCrashContext(context: Context, event: String) {
+        runCatching {
+            val crashlytics = FirebaseCrashlytics.getInstance()
+            val info = context.packageManager.getPackageInfo(context.packageName, 0)
+            val versionCode = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+            val config = runCatching { JarvisSettingsStore.read(context) }.getOrNull()
+            val prefs = context.getSharedPreferences(WakeWordAssistantService.PREFS, Context.MODE_PRIVATE)
+            crashlytics.setCustomKey("app_version_name", (info.versionName ?: "unknown").take(64))
+            crashlytics.setCustomKey("app_version_code", versionCode.toInt())
+            crashlytics.setCustomKey("device_manufacturer", Build.MANUFACTURER.take(64))
+            crashlytics.setCustomKey("device_model", Build.MODEL.take(96))
+            crashlytics.setCustomKey("android_release", (Build.VERSION.RELEASE ?: "unknown").take(32))
+            crashlytics.setCustomKey("android_sdk", Build.VERSION.SDK_INT)
+            crashlytics.setCustomKey("device_abi", (Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown").take(48))
+            crashlytics.setCustomKey("jarvis_enabled", config?.active ?: prefs.getBoolean(WakeWordAssistantService.KEY_ACTIVE, false))
+            crashlytics.setCustomKey("jarvis_status", (prefs.getString(WakeWordAssistantService.KEY_STATUS, "unknown") ?: "unknown").take(48))
+            crashlytics.setCustomKey("jarvis_provider", (config?.provider ?: "unknown").take(32))
+            crashlytics.setCustomKey("jarvis_api_key_configured", config?.apiKey?.isNotBlank() == true)
+            crashlytics.setCustomKey("jarvis_stt_languages", config?.sttLanguages?.joinToString(",")?.take(120) ?: "unknown")
+            crashlytics.setCustomKey("jarvis_tts_languages", config?.ttsLanguages?.joinToString(",")?.take(120) ?: "unknown")
+            crashlytics.setCustomKey("jarvis_tts_model", (config?.ttsModel ?: "unknown").take(32))
+            crashlytics.setCustomKey("jarvis_wake_engine", "sherpa_onnx_keyword_spotter")
+            crashlytics.setCustomKey("jarvis_last_operation", event.take(64))
+            crashlytics.setCustomKey(
+                "jarvis_microphone_permission",
+                context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            )
+        }
+    }
+
+    /** Report a caught exception as a non-fatal event with the same safe context. */
+    fun recordNonFatal(context: Context, stage: String, error: Throwable) {
+        runCatching {
+            applyCrashContext(context, stage)
+            val crashlytics = FirebaseCrashlytics.getInstance()
+            crashlytics.setCustomKey("jarvis_nonfatal_stage", stage.take(64))
+            crashlytics.log("JARVIS_NON_FATAL=" + stage.take(64))
+            crashlytics.recordException(error)
+        }
+        record(context, "NON_FATAL_RECORDED", "stage=" + stage.take(64) + "; type=" + error.javaClass.simpleName)
     }
 
     /**
