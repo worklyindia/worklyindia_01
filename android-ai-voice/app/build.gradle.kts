@@ -148,6 +148,8 @@ dependencies {
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
     implementation("com.google.mediapipe:tasks-audio:1.2.2")
     implementation("com.airbnb.android:lottie:6.7.1")
+    // Native player for LottieFiles .lottie (dotLottie) URLs.
+    implementation("com.lottiefiles:dotlottie-android:0.5.0")
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.firebase:firebase-messaging:24.1.2")
     // Keep the ORT Java API for Indic Tiny and Moss; Sherpa supplies the matching native ORT runtime.
