@@ -37,6 +37,7 @@ android {
             // Do not ship unused x86/32-bit native libraries in the Play bundle.
             abiFilters += "arm64-v8a"
         }
+        // Each GitHub Actions run gets a unique installable ChatWork version code (e.g. build 899).
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
         buildConfigField("String", "SUPABASE_URL", "\"https://jubwzelupbntbetpajqb.supabase.co\"")
