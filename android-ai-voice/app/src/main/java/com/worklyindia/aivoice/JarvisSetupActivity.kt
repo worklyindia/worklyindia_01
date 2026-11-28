@@ -35,18 +35,18 @@ class JarvisSetupActivity:Activity(){
   c.addView(hint(if(cfg.apiKey.isBlank())"No API key saved for this account yet." else "API key saved securely for ${cfg.provider.uppercase()}. Leave this field blank to keep it."))
   c.addView(section("2. Text To Voice"));tts=spinner(langs,cfg.ttsLanguage);c.addView(tts,match());c.addView(hint("Downloaded voice model: Sherpa-ONNX iTantra-compatible VITS · Hindi / English / Gujarati"))
   c.addView(section("3. Voice To Text"));stt=spinner(langs,cfg.sttLanguage);c.addView(stt,match());c.addView(hint("Downloaded speech model: AI4Bharat IndicConformer INT8 · Hindi / English / Gujarati"))
-  c.addView(hint("Download and test speech models from Download Model on the ChatWork home page. Only completed and tested models can be activated."))
+  c.addView(hint("Only fully downloaded language models can be selected. JARVIS checks the installed files and loads them when activated."))
   c.addView(section("4. JARVIS status"));status=TextView(this).apply{textSize=14f;setTextColor(muted);setPadding(dp(12),dp(12),dp(12),dp(12));text=msg?:if(cfg.active||WakeWordAssistantService.isRunning)"JARVIS is active or starting. Check its persistent notification." else "Not active. Save your key and download the selected models.";setBackgroundColor(surface)};c.addView(status,match())
-  c.addView(button("Save AI & model settings"){save(true)},match())
+  c.addView(button("Save AI & model settings"){if(save(true))render("Settings saved. Your provider and language selections have been restored.")},match())
   active=button(if(cfg.active||WakeWordAssistantService.isRunning)"Deactivate JARVIS" else "Active JARVIS"){if(isActive())deactivateConfirm() else activate()};c.addView(active,match())
-  c.addView(hint("Settings are saved for this signed-in Workly account on this device. The API key is encrypted with Android Keystore; leave its field blank to keep the saved key."))
+  c.addView(hint("Settings are saved on this device for the signed-in Workly account. The API key is encrypted with Android Keystore. Leave the key field blank to keep the saved key."))
   setContentView(root)
  }
  private fun save(show:Boolean):Boolean{val key=api.text?.toString()?.trim().orEmpty();if(key.isBlank()&&JarvisSettingsStore.read(this).apiKey.isBlank()){status.text="Add your ${providerValue().uppercase()} API key first.";return false}
   return runCatching{JarvisSettingsStore.save(this,providerValue(),key,lang(stt),lang(tts));if(show)Toast.makeText(this,"JARVIS settings saved securely.",Toast.LENGTH_SHORT).show();true}.getOrElse{status.text=it.message?:"Save failed";false}}
  private fun activate(){if(!save(false))return;val cfg=JarvisSettingsStore.read(this);val a=SpeechModelCatalog.indicConformer(cfg.sttLanguage);val b=SpeechModelCatalog.itantraVits(cfg.ttsLanguage);val w=SpeechModelCatalog.chatWorkWakeWord();val missing=mutableListOf<String>()
-  if(cfg.apiKey.isBlank())missing.add("API key");if(!OfflineSpeechEngineFactory.isReady(this,a))missing.add("IndicConformer ${cfg.sttLanguage.uppercase()}");if(packs.snapshot(b).state!=SpeechPackDownloadManager.State.COMPLETE||!packs.isModelTested(b))missing.add("Tested iTantra VITS ${cfg.ttsLanguage.uppercase()}");if(!WakeWordEngineFactory.isReady(this)||!packs.isModelTested(w))missing.add("Tested Hey ChatWork wake-word model")
-  if(missing.isNotEmpty()){status.text="Download and test first: ${missing.joinToString(", ")}. Open Download Model page.";return}
+  if(cfg.apiKey.isBlank())missing.add("API key");if(!OfflineSpeechEngineFactory.isReady(this,a))missing.add("IndicConformer ${cfg.sttLanguage.uppercase()}");if(packs.snapshot(b).state!=SpeechPackDownloadManager.State.COMPLETE)missing.add("iTantra VITS ${cfg.ttsLanguage.uppercase()}");if(packs.snapshot(w).state!=SpeechPackDownloadManager.State.COMPLETE)missing.add("Hey ChatWork wake-word model")
+  if(missing.isNotEmpty()){status.text="Missing downloaded model: ${missing.joinToString(", ")}. Download the missing language pack, then retry.";return}
   if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),8101);return}
   if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS),8102);return};startJarvis()
  }
