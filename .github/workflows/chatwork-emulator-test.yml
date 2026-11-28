@@ -165,11 +165,12 @@ jobs:
             # android-emulator-runner executes this script with /usr/bin/sh (POSIX sh).
             # pipefail is a Bash-only option and makes dash exit with code 2.
             set -eu
-            APK="android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
-            EVIDENCE="$GITHUB_WORKSPACE/chatwork-emulator-evidence"
-            test -s "$APK" || { echo "::error::Built ChatWork APK is missing or empty: $APK"; exit 1; }
+            # The emulator action runs script lines in separate POSIX-shell
+            # invocations on some runner versions, so do not rely on shell-local
+            # APK/EVIDENCE variables surviving between commands.
+            test -s "$GITHUB_WORKSPACE/android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk" || { echo "::error::Built ChatWork APK is missing or empty."; exit 1; }
             adb wait-for-device
-            trap 'adb logcat -d -t 5000 > "$EVIDENCE/chatwork-emulator-logcat.txt" 2>/dev/null || true' EXIT
+            trap 'adb logcat -d -t 5000 > "$GITHUB_WORKSPACE/chatwork-emulator-evidence/chatwork-emulator-logcat.txt" 2>/dev/null || true' EXIT
             # ADB can report the emulator transport as present while Android is still
             # booting/offline. Wait for an online device and completed system boot.
             boot_deadline=$(( $(date +%s) + 900 ))
@@ -189,7 +190,7 @@ jobs:
               fi
               sleep 3
             done
-            adb install -r "$APK"
+            adb install -r "$GITHUB_WORKSPACE/android-ai-voice/app/build/outputs/apk/direct/debug/app-direct-debug.apk"
             adb shell pm grant com.worklyindia.chatwork android.permission.RECORD_AUDIO || true
             adb shell pm grant com.worklyindia.chatwork android.permission.POST_NOTIFICATIONS || true
             adb shell am force-stop com.worklyindia.chatwork
