@@ -30,53 +30,68 @@ object JarvisCrashReportOutbox {
         runCatching {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val lastQueued = prefs.getLong("last_queued_exit_timestamp", 0L)
-            if (timestamp <= lastQueued) return
-
             val installationId = prefs.getString("installation_id", null)
                 ?: UUID.randomUUID().toString().also {
                     prefs.edit().putString("installation_id", it).apply()
                 }
             val eventId = UUID.nameUUIDFromBytes((installationId + ":" + timestamp).toByteArray(Charsets.UTF_8)).toString()
+            val directory = File(context.filesDir, OUTBOX_DIR).apply { mkdirs() }
+            val target = File(directory, eventId + ".json")
+            // Older app builds queued only the summary and discarded the binary trace.
+            // If that outbox item is still pending, enrich it on upgrade instead of
+            // skipping it because its timestamp was already queued.
+            if (timestamp <= lastQueued && !target.exists()) return
+
             val info = runCatching { context.packageManager.getPackageInfo(context.packageName, 0) }.getOrNull()
             val versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) info?.longVersionCode
                 else info?.versionCode?.toLong()
             val message = "Previous Android process exit: " + reason + "; status=" + status + "; " + details.take(800)
             val stack = JarvisDiagnostics.buildReport(context).takeLast(10_000)
-            val payload = JSONObject()
-                .put("event_id", eventId)
-                .put("installation_id", installationId)
-                .put("app_version", (info?.versionName ?: "unknown") + " (" + (versionCode ?: -1) + ")")
-                .put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
-                .put("device_model", (android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL).take(120))
-                .put("component", "JARVIS")
-                .put("severity", if (reason == "ANR") "error" else "fatal")
-                .put("error_type", (reason + "_STATUS_" + status).take(120))
-                .put("message", message.take(1200))
-                .put("stack_trace", stack)
-                .put("context", JSONObject().put("source", "chatwork_android_jarvis"))
+            val isNewReport = !target.exists()
+            val payload = if (isNewReport) {
+                JSONObject()
+                    .put("event_id", eventId)
+                    .put("installation_id", installationId)
+                    .put("app_version", (info?.versionName ?: "unknown") + " (" + (versionCode ?: -1) + ")")
+                    .put("android_version", android.os.Build.VERSION.RELEASE ?: "unknown")
+                    .put("device_model", (android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL).take(120))
+                    .put("component", "JARVIS")
+                    .put("severity", if (reason == "ANR") "error" else "fatal")
+                    .put("error_type", (reason + "_STATUS_" + status).take(120))
+                    .put("message", message.take(1200))
+                    .put("stack_trace", stack)
+                    .put("context", JSONObject().put("source", "chatwork_android_jarvis"))
+            } else {
+                JSONObject(target.readText(Charsets.UTF_8))
+            }
 
+            var reportChanged = isNewReport
             // Preserve the actual Android binary tombstone, not only its byte count.
             // Compress before Base64 so the trace can travel safely through PostgREST.
-            nativeTrace?.takeIf { it.isNotEmpty() && it.size <= 4_194_304 }?.let { trace ->
-                val compressed = ByteArrayOutputStream().use { output ->
-                    GZIPOutputStream(output).use { gzip -> gzip.write(trace) }
-                    output.toByteArray()
-                }
-                val encoded = Base64.encodeToString(compressed, Base64.NO_WRAP)
-                if (encoded.length <= 1_800_000) {
-                    payload.put("native_trace_gzip_base64", encoded)
-                    payload.put("native_trace_bytes", trace.size)
+            if (!payload.has("native_trace_gzip_base64")) {
+                nativeTrace?.takeIf { it.isNotEmpty() && it.size <= 4_194_304 }?.let { trace ->
+                    val compressed = ByteArrayOutputStream().use { output ->
+                        GZIPOutputStream(output).use { gzip -> gzip.write(trace) }
+                        output.toByteArray()
+                    }
+                    val encoded = Base64.encodeToString(compressed, Base64.NO_WRAP)
+                    if (encoded.length <= 1_800_000) {
+                        payload.put("native_trace_gzip_base64", encoded)
+                        payload.put("native_trace_bytes", trace.size)
+                        reportChanged = true
+                    }
                 }
             }
 
-            val directory = File(context.filesDir, OUTBOX_DIR).apply { mkdirs() }
-            val target = File(directory, eventId + ".json")
-            if (!target.exists()) {
+            if (reportChanged) {
                 val temporary = File(directory, eventId + ".tmp")
                 temporary.writeText(payload.toString(), Charsets.UTF_8)
+                if (target.exists()) check(target.delete()) { "Could not replace pending JARVIS crash report" }
                 check(temporary.renameTo(target)) { "Could not save pending JARVIS crash report" }
             }
-            prefs.edit().putLong("last_queued_exit_timestamp", timestamp).apply()
+            if (timestamp > lastQueued) {
+                prefs.edit().putLong("last_queued_exit_timestamp", timestamp).apply()
+            }
             JarvisDiagnostics.record(context, "SUPABASE_CRASH_REPORT_QUEUED",
                 "reason=" + reason + "; timestamp=" + timestamp + "; event=" + eventId)
             schedule(context)
