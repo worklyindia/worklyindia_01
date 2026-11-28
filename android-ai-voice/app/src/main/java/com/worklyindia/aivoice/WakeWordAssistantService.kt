@@ -44,7 +44,7 @@ class WakeWordAssistantService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent.action == ACTION_STOP) {
+        if (intent?.action == ACTION_STOP) {
             stopAssistant()
             return START_NOT_STICKY
         }
