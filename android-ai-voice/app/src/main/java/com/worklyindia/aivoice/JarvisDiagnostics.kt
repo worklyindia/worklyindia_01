@@ -1,5 +1,7 @@
 package com.worklyindia.aivoice
 
+// Keep this file covered by the ChatWork Android pull-request build.
+
 import android.content.Context
 import android.os.Build
 import java.io.File
