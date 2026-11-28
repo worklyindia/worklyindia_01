@@ -23,6 +23,7 @@ jobs:
       KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
       KAGGLE_KERNEL_SLUG: ${{ secrets.KAGGLE_KERNEL_SLUG }}
+      KERNEL_REF: ${{ secrets.KAGGLE_USERNAME }}/${{ secrets.KAGGLE_KERNEL_SLUG }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -85,13 +86,37 @@ jobs:
           print("Notebook validated; TPU execution will now be requested.")
           PY
 
+      - name: Wait for any existing Kaggle TPU session to release
+        working-directory: kaggle/workly-tpu
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Kaggle permits only one batch TPU session per account. If this kernel
+          # is still queued/running from an earlier attempt, wait instead of
+          # repeatedly submitting pushes that Kaggle will reject.
+          for attempt in $(seq 1 30); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "Existing Kaggle kernel status $attempt/30: $status"
+            if grep -Eiq 'KernelWorkerStatus\.(QUEUED|RUNNING)' <<<"$status"; then
+              sleep 60
+              continue
+            fi
+            break
+          done
+          status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+          if grep -Eiq 'KernelWorkerStatus\.(QUEUED|RUNNING)' <<<"$status"; then
+            echo "::error::An earlier Kaggle kernel is still using the TPU after 30 minutes. Stop that session in Kaggle Notebooks, then rerun this workflow."
+            exit 1
+          fi
+          echo "No active queued/running session detected; TPU request can proceed."
+
       - name: Push notebook and request Kaggle TPU execution
         working-directory: kaggle/workly-tpu
         shell: bash
         run: |
           set -euo pipefail
           accepted=false
-          max_attempts=9
+          max_attempts=3
           for attempt in $(seq 1 "$max_attempts"); do
             set +e
             push_output="$(kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8 2>&1)"
@@ -110,8 +135,8 @@ jobs:
 
             if grep -Eiq 'Maximum batch TPU session count of 1 reached' <<<"$push_output"; then
               if [[ "$attempt" -lt "$max_attempts" ]]; then
-                echo "::warning::Kaggle TPU session capacity is full (attempt $attempt/$max_attempts). Waiting 5 minutes before retrying."
-                sleep 300
+                echo "::warning::Kaggle TPU session capacity is full (attempt $attempt/$max_attempts). Waiting 10 minutes before retrying."
+                sleep 600
                 continue
               fi
               echo "::error::Kaggle TPU capacity remained full after $max_attempts attempts. No TPU session was started."
