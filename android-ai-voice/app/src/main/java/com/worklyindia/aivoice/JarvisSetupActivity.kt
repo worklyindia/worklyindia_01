@@ -31,14 +31,15 @@ class JarvisSetupActivity:Activity(){
   val scroll=ScrollView(this);val c=LinearLayout(this).apply{orientation=1;setPadding(dp(16),dp(12),dp(16),dp(28))};scroll.addView(c);root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
   c.addView(section("1. AI Reply"));c.addView(hint("Local Qwen is disabled for JARVIS. Select Groq or Gemini and enter your own API key."))
   provider=spinner(listOf("Groq" to "groq","Google AI Studio · Gemini" to "gemini"),cfg.provider);c.addView(provider,match())
-  api=EditText(this).apply{hint=if(cfg.apiKey.isBlank())"Paste API key" else "API key saved securely · enter to replace";inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;setSingleLine(true);setTextColor(ink)};c.addView(api,match())
+  api=EditText(this).apply{hint=if(cfg.apiKey.isBlank())"Paste API key" else "Saved API key · leave blank to keep or enter a new key";inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;setSingleLine(true);setTextColor(ink)};c.addView(api,match())
+  c.addView(hint(if(cfg.apiKey.isBlank())"No API key saved for this account yet." else "API key saved securely for ${cfg.provider.uppercase()}. Leave this field blank to keep it."))
   c.addView(section("2. Text To Voice"));tts=spinner(langs,cfg.ttsLanguage);c.addView(tts,match());c.addView(hint("Downloaded voice model: Sherpa-ONNX iTantra-compatible VITS · Hindi / English / Gujarati"))
   c.addView(section("3. Voice To Text"));stt=spinner(langs,cfg.sttLanguage);c.addView(stt,match());c.addView(hint("Downloaded speech model: AI4Bharat IndicConformer INT8 · Hindi / English / Gujarati"))
-  c.addView(button("Open Download Model page"){startActivity(Intent(this,SpeechDownloadsActivity::class.java))},match())
+  c.addView(hint("Download and test speech models from Download Model on the ChatWork home page. Only completed and tested models can be activated."))
   c.addView(section("4. JARVIS status"));status=TextView(this).apply{textSize=14f;setTextColor(muted);setPadding(dp(12),dp(12),dp(12),dp(12));text=msg?:if(cfg.active||WakeWordAssistantService.isRunning)"JARVIS is active or starting. Check its persistent notification." else "Not active. Save your key and download the selected models.";setBackgroundColor(surface)};c.addView(status,match())
   c.addView(button("Save AI & model settings"){save(true)},match())
   active=button(if(cfg.active||WakeWordAssistantService.isRunning)"Deactivate JARVIS" else "Active JARVIS"){if(isActive())deactivateConfirm() else activate()};c.addView(active,match())
-  c.addView(hint("Settings are saved per signed-in Workly account in private app storage. API key is encrypted with Android Keystore."))
+  c.addView(hint("Settings are saved for this signed-in Workly account on this device. The API key is encrypted with Android Keystore; leave its field blank to keep the saved key."))
   setContentView(root)
  }
  private fun save(show:Boolean):Boolean{val key=api.text?.toString()?.trim().orEmpty();if(key.isBlank()&&JarvisSettingsStore.read(this).apiKey.isBlank()){status.text="Add your ${providerValue().uppercase()} API key first.";return false}
