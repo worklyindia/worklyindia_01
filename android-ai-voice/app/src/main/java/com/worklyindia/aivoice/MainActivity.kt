@@ -129,7 +129,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
         root.addView(TextView(this).apply {
-            text = "Download Model"
+            text = "AI Model Downloads · Qwen"
             textSize = 19f
             gravity = Gravity.CENTER
             setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
