@@ -8,6 +8,7 @@ on:
       - feature/chatwork-chat-page-messenger-ui
       - feature/workly-ai-voice-server-app
       - feat/voice-settings-connection-call-history
+      - fix/jarvis-crash-diagnostics
     paths:
       - "android-ai-voice/**"
       - ".github/workflows/chatwork-android.yml"
