@@ -11,13 +11,15 @@ import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.firebase.messaging.FirebaseMessaging
-import com.airbnb.lottie.LottieAnimationView
-import com.airbnb.lottie.LottieDrawable
+import com.dotlottie.dlplayer.Mode
+import com.lottiefiles.dotlottie.core.model.Config
+import com.lottiefiles.dotlottie.core.util.DotLottieSource
+import com.lottiefiles.dotlottie.core.widget.DotLottieAnimation
 
 /** ChatWork Home screen with the Flow 1 Lottie animation. */
 class MainActivity : Activity() {
     private var dark = false
-    private var signalAnimationView: LottieAnimationView? = null
+    private var signalAnimationView: DotLottieAnimation? = null
     private val bg get() = if (dark) 0xFF0B1220.toInt() else 0xFFF4F7FF.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,14 +65,19 @@ class MainActivity : Activity() {
             setOnClickListener { startActivity(Intent(this@MainActivity, JarvisSetupActivity::class.java)) }
         }, LinearLayout.LayoutParams(-1, dp(58)))
         // Center animation occupies the free space between system bars and bottom action.
-        val signalAnimation = LottieAnimationView(this).apply {
-            setAnimation("ai animation Flow 1.json")
-            repeatCount = LottieDrawable.INFINITE
-            repeatMode = LottieDrawable.RESTART
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+        val signalAnimation = DotLottieAnimation(this).apply {
             setPadding(dp(18), dp(12), dp(18), dp(12))
             setBackgroundColor(bg)
-            contentDescription = "Animated signal"
+            contentDescription = "ChatWork animated home graphic"
+            val config = Config.Builder()
+                .source(DotLottieSource.Url(FLOW_ANIMATION_URL))
+                .autoplay(true)
+                .loop(true)
+                .speed(1f)
+                .useInterpolation(true)
+                .playMode(Mode.Forward)
+                .build()
+            load(config)
         }
         signalAnimationView = signalAnimation
         root.addView(signalAnimation, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -175,21 +182,24 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        signalAnimationView?.resumeAnimation()
+        signalAnimationView?.play()
     }
 
     override fun onPause() {
-        signalAnimationView?.pauseAnimation()
+        signalAnimationView?.pause()
         super.onPause()
     }
 
     override fun onDestroy() {
-        signalAnimationView?.cancelAnimation()
+        signalAnimationView?.stop()
         signalAnimationView = null
         super.onDestroy()
     }
 
-    companion object { private const val REQUEST_NOTIFICATIONS = 2101 }
+    companion object {
+        private const val REQUEST_NOTIFICATIONS = 2101
+        private const val FLOW_ANIMATION_URL = "https://lottie.host/f2c66669-8a52-477c-86bc-61812191aa6e/0lxZXRiQDV.lottie"
+    }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
