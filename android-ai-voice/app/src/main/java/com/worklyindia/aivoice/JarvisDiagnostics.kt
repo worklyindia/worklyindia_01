@@ -6,6 +6,7 @@ import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -26,6 +27,13 @@ object JarvisDiagnostics {
                     file.writeText(file.readLines().takeLast(1200).joinToString("\n") + "\n")
                 val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
                 val safe = (detail ?: "").replace(Regex("(?i)(api[_ -]?key|authorization|bearer)\\s*[:=]\\s*[^\\s,;]+"), "[REDACTED]")
+                // Send bounded, redacted JARVIS lifecycle breadcrumbs to Crashlytics.
+                // Never send prompts, user messages, or API keys.
+                runCatching {
+                    val crashlytics = FirebaseCrashlytics.getInstance()
+                    crashlytics.log("JARVIS_EVENT=" + event + if (safe.isNotBlank()) " · " + safe.take(3000) else "")
+                    crashlytics.setCustomKey("jarvis_last_event", event.take(64))
+                }
                 file.appendText("[" + stamp + "] " + event + (if (safe.isNotBlank()) " · " + safe else "") + "\n")
             }
         }
