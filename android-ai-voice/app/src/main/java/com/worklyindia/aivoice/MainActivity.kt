@@ -56,7 +56,7 @@ class MainActivity : Activity() {
         }
 
         root.addView(TextView(this).apply {
-            text = "JARVIS Active · Setup"; textSize = 18f; gravity = Gravity.CENTER
+            text = "JARVIS"; textSize = 18f; gravity = Gravity.CENTER
             setTextColor(if (dark) 0xFFFFFFFF.toInt() else 0xFF2878F0.toInt())
             setTypeface(typeface, android.graphics.Typeface.BOLD); setPadding(dp(12), dp(12), dp(12), dp(12))
             isClickable = true; isFocusable = true
