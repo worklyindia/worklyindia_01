@@ -92,9 +92,8 @@ class WakeWordAssistantService : Service() {
             val ttsPack = SpeechModelCatalog.itantraVits(ttsLanguage)
             check(OfflineSpeechEngineFactory.isReady(this, sttPack)) { "Download AI4Bharat IndicConformer ${sttLanguage.uppercase(Locale.ROOT)} first." }
             check(speechManager.snapshot(ttsPack).state == SpeechPackDownloadManager.State.COMPLETE) { "Download iTantra VITS ${ttsLanguage.uppercase(Locale.ROOT)} first." }
-            check(speechManager.isModelTested(ttsPack)) { "Test iTantra VITS ${ttsLanguage.uppercase(Locale.ROOT)} before activation." }
             val wakePack = SpeechModelCatalog.chatWorkWakeWord()
-            check(WakeWordEngineFactory.isReady(this) && speechManager.isModelTested(wakePack)) { "Download and test the Hey ChatWork wake-word model first." }
+            check(WakeWordEngineFactory.isReady(this)) { "Download the Hey ChatWork wake-word model first." }
             publishStatus(STATUS_LOADING, "Testing ${jarvisConfig.provider.uppercase(Locale.ROOT)} AI connection…")
             JarvisSettingsStore.generateReply(this, "Reply with exactly READY.", jarvisConfig)
             check(running.get()) { "Hey ChatWork listening was stopped." }
