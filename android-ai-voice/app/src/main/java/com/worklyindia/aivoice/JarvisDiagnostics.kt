@@ -31,7 +31,7 @@ object JarvisDiagnostics {
                 // Never send prompts, user messages, or API keys.
                 runCatching {
                     val crashlytics = FirebaseCrashlytics.getInstance()
-                    crashlytics.log("JARVIS_EVENT=" + event + if (safe.isNotBlank()) " · " + safe.take(3000) else "")
+                    crashlytics.log("JARVIS_EVENT=" + event + (if (safe.isNotBlank()) " · " + safe.take(3000) else ""))
                     crashlytics.setCustomKey("jarvis_last_event", event.take(64))
                 }
                 file.appendText("[" + stamp + "] " + event + (if (safe.isNotBlank()) " · " + safe else "") + "\n")
