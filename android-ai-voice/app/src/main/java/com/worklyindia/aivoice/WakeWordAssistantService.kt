@@ -513,7 +513,6 @@ class WakeWordAssistantService : Service() {
                 this, 3, Intent(this, WakeWordAssistantService::class.java).setAction(ACTION_SHARE_ERROR),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            notification
             builderWithCore
                 .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_save, "Copy Error", copyIntent).build())
                 .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_share, "Share Error", shareIntent).build())
