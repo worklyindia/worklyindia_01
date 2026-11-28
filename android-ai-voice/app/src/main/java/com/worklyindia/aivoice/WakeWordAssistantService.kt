@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.MediaPlayer
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
@@ -79,7 +80,7 @@ class WakeWordAssistantService : Service() {
     private fun runAssistantLoop() {
         var wakeSession: WakeWordEngineFactory.Session? = null
         var speech: OfflineSpeechRecognizer? = null
-        var tts: IndicTinyTtsEngine? = null
+        var tts: SherpaVitsTtsEngine? = null
         var ai: OfflineAiEngine? = null
         var audio: AudioRecord? = null
         try {
@@ -93,12 +94,12 @@ class WakeWordAssistantService : Service() {
 
             val speechManager = SpeechPackDownloadManager(this)
             val sttPack = SpeechModelCatalog.indicConformer(language)
-            val ttsPack = SpeechModelCatalog.indicTinyTts(language)
+            val ttsPack = SpeechModelCatalog.itantraVits(language)
             check(OfflineSpeechEngineFactory.isReady(this, sttPack)) {
                 "Download IndicConformer ${language.uppercase(Locale.ROOT)} from Download Models first."
             }
             check(speechManager.snapshot(ttsPack).state == SpeechPackDownloadManager.State.COMPLETE) {
-                "Download Indic Tiny TTS ${language.uppercase(Locale.ROOT)} from Download Models first."
+                "Download iTantra VITS ${language.uppercase(Locale.ROOT)} from Download Models first."
             }
             val wakePack = SpeechModelCatalog.chatWorkWakeWord()
             check(WakeWordEngineFactory.isReady(this)) {
@@ -139,7 +140,7 @@ class WakeWordAssistantService : Service() {
             val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
             speech = activeSpeechRecognizer
             check(running.get()) { "Hey ChatWork listening was stopped." }
-            val activeTtsEngine = IndicTinyTtsEngine.create(this, language)
+            val activeTtsEngine = SherpaVitsTtsEngine.create(this, ttsPack)
             tts = activeTtsEngine
             check(running.get()) { "Hey ChatWork listening was stopped." }
             val activeWakeSession = WakeWordEngineFactory.open(this)
@@ -192,7 +193,7 @@ class WakeWordAssistantService : Service() {
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
                                 updateNotification("Speaking offline · ${language.uppercase(Locale.ROOT)}")
-                                activeTtsEngine.speak(answer)
+                                speakWithVits(activeTtsEngine, answer)
                                 discardPlaybackAudio(activeAudio, buffer)
                             } else {
                                 updateNotification("No speech recognized · Listening for Hey ChatWork")
@@ -244,6 +245,26 @@ class WakeWordAssistantService : Service() {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             }
             isRunning = false
+        }
+    }
+
+    /** Generate and play the selected iTantra VITS voice without Android TTS fallback. */
+    private fun speakWithVits(engine: SherpaVitsTtsEngine, text: String) {
+        val output = java.io.File(cacheDir, "hey_chatwork_reply_${System.currentTimeMillis()}.wav")
+        var player: MediaPlayer? = null
+        try {
+            engine.synthesizeToWav(text, output)
+            if (!running.get()) return
+            val media = MediaPlayer().apply {
+                setDataSource(output.absolutePath)
+                prepare()
+            }
+            player = media
+            media.start()
+            while (running.get() && media.isPlaying) Thread.sleep(60L)
+        } finally {
+            player?.let { runCatching { it.stop() }; runCatching { it.release() } }
+            output.delete()
         }
     }
 
