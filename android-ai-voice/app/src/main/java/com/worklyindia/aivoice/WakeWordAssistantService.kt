@@ -1,6 +1,8 @@
 package com.worklyindia.aivoice
 
 import android.app.ActivityManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -50,9 +52,28 @@ class WakeWordAssistantService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_STOP) {
-            stopAssistant()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopAssistant()
+                return START_NOT_STICKY
+            }
+            ACTION_COPY_ERROR -> {
+                val report = JarvisDiagnostics.buildReport(this)
+                (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager)
+                    .setPrimaryClip(ClipData.newPlainText("JARVIS Error", report))
+                return START_NOT_STICKY
+            }
+            ACTION_SHARE_ERROR -> {
+                val report = JarvisDiagnostics.buildReport(this)
+                val share = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "ChatWork · JARVIS Error Report")
+                    putExtra(Intent.EXTRA_TEXT, report)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(Intent.createChooser(share, "Share JARVIS error").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return START_NOT_STICKY
+            }
         }
         stopRequested = false
         JarvisDiagnostics.record(this, "START_COMMAND", "action=" + (intent?.action ?: "null") + "; startId=" + startId)
@@ -458,15 +479,41 @@ class WakeWordAssistantService : Service() {
         )
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, CHANNEL_ID)
             else Notification.Builder(this)
-        return builder
+        val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        val isError = prefs.getString(KEY_STATUS, null) == STATUS_ERROR
+        val errorText = prefs.getString(KEY_ERROR, null).orEmpty()
+        val builderWithCore = builder
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("ChatWork · Hey ChatWork")
-            .setContentText(message)
+            .setContentTitle(if (isError) "ChatWork · JARVIS error" else "ChatWork · Hey ChatWork")
+            .setContentText(if (isError) errorText.ifBlank { message } else message)
             .setContentIntent(openIntent)
             .setOngoing(true)
+            .setAutoCancel(false)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "Stop listening", stopIntent).build())
-            .build()
+        // FLAG_NO_CLEAR + FLAG_ONGOING_EVENT keep the foreground notification
+        // from being dismissed by a horizontal swipe while JARVIS is enabled.
+        val notification = builderWithCore.build().apply {
+            flags = flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT
+        }
+        return if (isError) {
+            val copyIntent = PendingIntent.getService(
+                this, 2, Intent(this, WakeWordAssistantService::class.java).setAction(ACTION_COPY_ERROR),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val shareIntent = PendingIntent.getService(
+                this, 3, Intent(this, WakeWordAssistantService::class.java).setAction(ACTION_SHARE_ERROR),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            notification
+            builderWithCore
+                .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_save, "Copy Error", copyIntent).build())
+                .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_share, "Share Error", shareIntent).build())
+                .build().apply { flags = flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT }
+        } else {
+            builderWithCore
+                .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "Turn JARVIS off", stopIntent).build())
+                .build().apply { flags = flags or Notification.FLAG_NO_CLEAR or Notification.FLAG_ONGOING_EVENT }
+        }
     }
 
     private fun publishStatus(state: String, message: String, error: String? = null) {
@@ -511,6 +558,8 @@ class WakeWordAssistantService : Service() {
 
     companion object {
         const val ACTION_STOP = "com.worklyindia.aivoice.action.STOP_WAKE_ASSISTANT"
+        const val ACTION_COPY_ERROR = "com.worklyindia.aivoice.action.COPY_JARVIS_ERROR"
+        const val ACTION_SHARE_ERROR = "com.worklyindia.aivoice.action.SHARE_JARVIS_ERROR"
         const val PREFS = "chatwork_wake_word"
         const val KEY_ACTIVE = "active"
         const val KEY_LANGUAGE = "language"
