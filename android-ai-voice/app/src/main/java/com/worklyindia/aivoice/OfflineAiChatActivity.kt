@@ -678,6 +678,9 @@ class OfflineAiChatActivity : Activity() {
                 showConversationHistory(anchor)
                 true
             }
+            menu.add("Export JARVIS diagnostic report").setOnMenuItemClickListener {
+                exportJarvisDiagnostics(); true
+            }
             menu.add("Export conversation").setOnMenuItemClickListener {
                 exportConversation(); true
             }
@@ -703,6 +706,16 @@ class OfflineAiChatActivity : Activity() {
         }
     }
 
+
+    private fun exportJarvisDiagnostics() {
+        val report = JarvisDiagnostics.buildReport(this)
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "ChatWork JARVIS diagnostic report")
+            putExtra(Intent.EXTRA_TEXT, report)
+        }
+        startActivity(Intent.createChooser(share, "Share JARVIS diagnostic report"))
+    }
 
     private fun exportConversation() {
         if (conversationHistory.isBlank()) {

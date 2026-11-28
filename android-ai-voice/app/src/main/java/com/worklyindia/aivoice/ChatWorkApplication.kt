@@ -11,6 +11,8 @@ import android.os.Bundle
 class ChatWorkApplication : Application(), Application.ActivityLifecycleCallbacks {
     override fun onCreate() {
         super.onCreate()
+        JarvisDiagnostics.installUncaughtHandler(this)
+        JarvisDiagnostics.record(this, "APP_PROCESS_CREATED")
         registerActivityLifecycleCallbacks(this)
     }
 
