@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/chatwork-chat-page-messenger-ui
       - feature/workly-ai-voice-server-app
       - feat/voice-settings-connection-call-history
     paths:
