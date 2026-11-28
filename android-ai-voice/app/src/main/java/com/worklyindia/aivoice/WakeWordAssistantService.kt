@@ -1,6 +1,5 @@
 package com.worklyindia.aivoice
 
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -30,6 +29,7 @@ class WakeWordAssistantService : Service() {
     @Volatile private var recorder: AudioRecord? = null
     @Volatile private var activeAi: OfflineAiEngine? = null
     @Volatile private var cpuWakeLock: PowerManager.WakeLock? = null
+    @Volatile private var preserveUserOptInOnDestroy = false
 
     override fun onCreate() {
         super.onCreate()
@@ -37,11 +37,14 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) {
+        // Android may recreate a sticky foreground service after reclaiming the app
+        // process. Resume only when the user had explicitly left the assistant enabled.
+        if (intent == null && !getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_ACTIVE, false)) {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent.action == ACTION_STOP) {
+        if (intent?.action == ACTION_STOP) {
             stopAssistant()
             return START_NOT_STICKY
         }
@@ -55,16 +58,22 @@ class WakeWordAssistantService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (error: Exception) {
+            val reason = error.message ?: error.javaClass.simpleName
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_ACTIVE, false)
+                .putString(KEY_LAST_ERROR, reason)
+                .apply()
             running.set(false)
             isRunning = false
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             stopSelf()
-            throw error
+            return START_NOT_STICKY
         }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         acquireCpuWakeLock()
         worker.execute { runAssistantLoop() }
-        return START_NOT_STICKY
+        // Keep the user-enabled foreground assistant eligible for system restart.
+        // A null restart intent is handled above using the persisted opt-in flag.
+        return START_STICKY
     }
 
     private fun runAssistantLoop() {
@@ -100,37 +109,26 @@ class WakeWordAssistantService : Service() {
             }
 
             val modelManager = QwenModelManager(this)
-            val memory = ActivityManager.MemoryInfo()
-            (getSystemService(ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
-            val modelDirectory = modelManager.file(modelManager.models.first()).parentFile ?: filesDir
-            val budget = AssistantModelPolicy.readBudget(this, modelDirectory)
-            val candidates = modelManager.models.map { model ->
-                AssistantModelPolicy.Candidate(
-                    id = model.id,
-                    displayName = model.title,
-                    expectedBytes = model.size,
-                    minimumAvailableRamBytes = model.minFreeRam,
-                    minimumFreeStorageBytes = 256L * 1024L * 1024L,
-                    enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
-                )
+            // A READY model has already passed the app's model test. Honour the
+            // user's selected model instead of rejecting it with a second,
+            // overly conservative RAM estimate that differs from normal chat.
+            val readyModels = modelManager.models.filter {
+                modelManager.snapshot(it).state == QwenModelManager.State.READY
             }
-            val recommendation = AssistantModelPolicy.recommend(
-                candidates = candidates,
-                budget = budget,
-                reserveRamBytes = 1_200L * 1024L * 1024L,
-                reserveStorageBytes = 256L * 1024L * 1024L
-            )
+            check(readyModels.isNotEmpty()) {
+                "Download and successfully test a Qwen model in ChatWork before enabling Hey ChatWork."
+            }
             val savedModelId = getSharedPreferences("workly_qwen_models", MODE_PRIVATE)
                 .getString("selected_model_id", null)
-            val chosenCandidate = recommendation.candidate
             val chosen = if (savedModelId != null) {
-                check(chosenCandidate?.id == savedModelId) {
-                    "The selected Qwen model does not fit the wake assistant memory budget. Choose a smaller tested model in ChatWork first."
-                }
-                modelManager.models.first { it.id == savedModelId }
+                readyModels.firstOrNull { it.id == savedModelId }
+                    ?: throw IllegalStateException("Your selected Qwen model is not downloaded and tested. Select a READY model in ChatWork Model Downloads.")
             } else {
-                chosenCandidate?.let { item -> modelManager.models.firstOrNull { it.id == item.id } }
-                    ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
+                val memory = android.app.ActivityManager.MemoryInfo()
+                (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(memory)
+                modelManager.recommendedModel(memory.availMem)
+                    .takeIf { candidate -> readyModels.any { it.id == candidate.id } }
+                    ?: readyModels.minBy { it.size }
             }
             val activeAiEngine = OfflineAiEngine()
             ai = activeAiEngine
@@ -207,12 +205,30 @@ class WakeWordAssistantService : Service() {
                     }
                 }
             }
-        } catch (error: Exception) {
-            if (running.get()) updateNotification("Assistant stopped · ${error.message ?: "Model or microphone error"}")
+        } catch (error: OutOfMemoryError) {
+            val failureMessage = "Not enough free memory to load the selected Qwen model. Close other apps and retry, or select a smaller tested model."
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_LAST_ERROR, failureMessage)
+                .putBoolean(KEY_ACTIVE, false)
+                .apply()
+            updateNotification("Assistant needs attention · $failureMessage")
             running.set(false)
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             isRunning = false
-            stopSelf()
+        } catch (error: Exception) {
+            val failureMessage = error.message ?: error.javaClass.simpleName
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putString(KEY_LAST_ERROR, failureMessage)
+                .putBoolean(KEY_ACTIVE, false)
+                .apply()
+            updateNotification("Assistant needs attention · $failureMessage")
+            running.set(false)
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_ACTIVE, false)
+                .putString(KEY_LAST_ERROR, failureMessage)
+                .apply()
+            isRunning = false
+            // Keep the foreground notification visible with the failure reason.
+            // The user can stop it or retry from Assistant Tools.
         } finally {
             running.set(false)
             recorder = null
@@ -224,7 +240,9 @@ class WakeWordAssistantService : Service() {
             runCatching { ai?.unload() }
             activeAi = null
             releaseCpuWakeLock()
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            if (!preserveUserOptInOnDestroy) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+            }
             isRunning = false
         }
     }
@@ -268,8 +286,13 @@ class WakeWordAssistantService : Service() {
         return samples.toFloatArray()
     }
 
-    private fun stopAssistant() {
+    private fun stopAssistant(clearUserOptIn: Boolean = true) {
         running.set(false)
+        if (clearUserOptIn) {
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                .putBoolean(KEY_ACTIVE, false)
+                .apply()
+        }
         runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
         releaseCpuWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -302,7 +325,7 @@ class WakeWordAssistantService : Service() {
 
     private fun buildNotification(message: String): Notification {
         val openIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, OfflineAiChatActivity::class.java),
+            this, 0, Intent(this, AssistantToolsActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val stopIntent = PendingIntent.getService(
@@ -328,8 +351,15 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onDestroy() {
-        stopAssistant()
-        // Let the worker finish its native unload before publishing isRunning=false in finally.
+        // Android can destroy the service while reclaiming the process. Preserve
+        // the explicit user opt-in so START_STICKY can recreate the listener.
+        preserveUserOptInOnDestroy = true
+        running.set(false)
+        runCatching { recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
+        releaseCpuWakeLock()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        // Do not call stopSelf() here: the system must remain free to recreate
+        // this sticky service when it reclaims the app process.
         worker.shutdown()
         super.onDestroy()
     }
@@ -341,6 +371,7 @@ class WakeWordAssistantService : Service() {
         const val PREFS = "chatwork_wake_word"
         const val KEY_ACTIVE = "active"
         const val KEY_LANGUAGE = "language"
+        const val KEY_LAST_ERROR = "last_start_error"
         @Volatile var isRunning: Boolean = false
             private set
         private const val CHANNEL_ID = "chatwork_wake_assistant"

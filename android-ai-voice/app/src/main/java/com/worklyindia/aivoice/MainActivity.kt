@@ -79,6 +79,27 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
 
         root.addView(TextView(this).apply {
+            text = "AI Chat · Voice Test"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(if (dark) 0xFFFFFFFF.toInt() else 0xFF1769C2.toInt())
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            isClickable = true
+            isFocusable = true
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) 0xFF1B3555.toInt() else 0xFFE3F0FF.toInt())
+                cornerRadius = dp(14).toFloat()
+            }
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, OfflineAiChatActivity::class.java)
+                    .putExtra(OfflineAiChatActivity.EXTRA_VOICE_TEST_MODE, true))
+            }
+        }, LinearLayout.LayoutParams(-1, dp(64)).apply {
+            setMargins(dp(16), dp(8), dp(16), dp(8))
+        })
+
+        root.addView(TextView(this).apply {
             text = "Text To Voice"
             textSize = 19f
             gravity = Gravity.CENTER
@@ -107,7 +128,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
         root.addView(TextView(this).apply {
-            text = "AI Assistant"
+            text = "ChatWork Assistant Tools"
             textSize = 19f
             gravity = Gravity.CENTER
             setTextColor(if (dark) 0xFF7EA7FF.toInt() else 0xFF2878F0.toInt())
@@ -117,7 +138,7 @@ class MainActivity : Activity() {
             isFocusable = true
             background = null
             setOnClickListener {
-                startActivity(Intent(this@MainActivity, OfflineAiChatActivity::class.java))
+                startActivity(Intent(this@MainActivity, AssistantToolsActivity::class.java))
             }
         }, LinearLayout.LayoutParams(-1, dp(58)))
 
