@@ -35,11 +35,11 @@ object JarvisSettingsStore {
  fun setActive(c:Context,v:Boolean)=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putBoolean(k(c,"active"),v).apply()
  fun generateReply(c:Context,prompt:String,cfg:Config):String {
   check(cfg.apiKey.isNotBlank()){"Save your ${cfg.provider.uppercase()} API key in JARVIS Setup."}
-  val gem=cfg.provider=="gemini";val url=if(gem)"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${cfg.apiKey}" else "https://api.groq.com/openai/v1/chat/completions"
+  val gem=cfg.provider=="gemini";val url=if(gem)"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${cfg.apiKey}" else "https://api.groq.com/openai/v1/chat/completions"
   val h=(URL(url).openConnection() as HttpURLConnection).apply{requestMethod="POST";connectTimeout=20000;readTimeout=60000;doOutput=true;setRequestProperty("Content-Type","application/json");if(!gem)setRequestProperty("Authorization","Bearer ${cfg.apiKey}")}
   try {
    val body=if(gem)JSONObject().put("contents",org.json.JSONArray().put(JSONObject().put("role","user").put("parts",org.json.JSONArray().put(JSONObject().put("text",prompt.take(12000)))))).put("generationConfig",JSONObject().put("temperature",0.5).put("maxOutputTokens",700))
-   else JSONObject().put("model","llama-3.3-70b-versatile").put("messages",org.json.JSONArray().put(JSONObject().put("role","system").put("content","You are JARVIS, ChatWork's concise multilingual assistant. Reply in the user's language.")).put(JSONObject().put("role","user").put("content",prompt.take(12000)))).put("temperature",0.5).put("max_tokens",700)
+   else JSONObject().put("model","openai/gpt-oss-20b").put("messages",org.json.JSONArray().put(JSONObject().put("role","system").put("content","You are JARVIS, ChatWork's concise multilingual assistant. Reply in the user's language.")).put(JSONObject().put("role","user").put("content",prompt.take(12000)))).put("temperature",0.5).put("max_tokens",700)
    h.outputStream.use{it.write(body.toString().toByteArray())};val code=h.responseCode
    val raw=(if(code in 200..299)h.inputStream else h.errorStream)?.bufferedReader()?.use{it.readText()}.orEmpty();val o=runCatching{JSONObject(raw)}.getOrElse{JSONObject()}
    check(code in 200..299){o.optJSONObject("error")?.optString("message")?.ifBlank{"AI provider HTTP $code"}?:o.optString("message").ifBlank{"AI provider HTTP $code"}}
