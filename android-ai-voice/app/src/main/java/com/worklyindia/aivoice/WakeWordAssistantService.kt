@@ -134,6 +134,7 @@ class WakeWordAssistantService : Service() {
             val buffer = ShortArray(1600)
             val session = activeWakeSession
             var firstAudioFrame = true
+            var firstWakeDecode = true
             while (running.get()) {
                 val count = activeAudio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                 if (count < 0) {
@@ -172,14 +173,13 @@ class WakeWordAssistantService : Service() {
                 if (firstAudioFrame) JarvisDiagnostics.record(this, "WAKE_ACCEPT_WAVEFORM_BEGIN", "samples=" + count)
                 session.stream.acceptWaveform(samples, sampleRate = WakeWordEngineFactory.SAMPLE_RATE)
                 if (firstAudioFrame) JarvisDiagnostics.record(this, "WAKE_ACCEPT_WAVEFORM_OK")
-                var firstDecode = true
                 while (session.spotter.isReady(session.stream)) {
-                    if (firstDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_DECODE_BEGIN")
+                    if (firstWakeDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_DECODE_BEGIN")
                     session.spotter.decode(session.stream)
-                    if (firstDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_DECODE_OK")
+                    if (firstWakeDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_DECODE_OK")
                     val detected = session.spotter.getResult(session.stream).keyword
-                    if (firstDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_RESULT_OK", "keywordDetected=" + detected.isNotBlank())
-                    firstDecode = false
+                    if (firstWakeDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_RESULT_OK", "keywordDetected=" + detected.isNotBlank())
+                    firstWakeDecode = false
                     if (detected.isNotBlank()) {
                         session.spotter.reset(session.stream)
                         updateNotification("Hey ChatWork detected · Speak now")
