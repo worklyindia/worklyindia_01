@@ -19,6 +19,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
+import org.json.JSONObject
 
 /**
  * Explicitly user-started foreground microphone service.
@@ -142,17 +143,54 @@ class WakeWordAssistantService : Service() {
                 ?.takeIf { !budget.lowMemory && it.enabled &&
                     it.minimumAvailableRamBytes <= budget.availableRamBytes }
             val chosenCandidate = savedCandidate ?: recommendation.candidate
-                ?: throw IllegalStateException("No tested Qwen model fits the live memory budget. ${recommendation.reason}")
-            val chosen = modelManager.models.firstOrNull { it.id == chosenCandidate.id }
-                ?: throw IllegalStateException("The recommended Qwen model is missing from the model catalog.")
-            if (savedCandidate == null && savedModelId != chosen.id) {
-                modelPrefs.edit().putString("selected_model_id", chosen.id).apply()
+            var activeAiEngine: OfflineAiEngine? = null
+            if (chosenCandidate != null) {
+                val chosen = modelManager.models.firstOrNull { it.id == chosenCandidate.id }
+                if (chosen != null) {
+                    if (savedCandidate == null && savedModelId != chosen.id) {
+                        modelPrefs.edit().putString("selected_model_id", chosen.id).apply()
+                    }
+                    publishStatus(STATUS_LOADING, "Trying on-device " + chosen.title + "…")
+                    val localEngine = OfflineAiEngine()
+                    try {
+                        if (localEngine.loadModel(modelManager.file(chosen))) {
+                            val smokeReply = localEngine.generate("Reply with exactly: READY.")
+                            if (smokeReply.isNotBlank()) {
+                                activeAiEngine = localEngine
+                                ai = localEngine
+                                activeAi = localEngine
+                            } else {
+                                localEngine.unload()
+                            }
+                        } else {
+                            localEngine.unload()
+                        }
+                    } catch (_: Exception) {
+                        runCatching { localEngine.unload() }
+                    }
+                }
             }
-            publishStatus(STATUS_LOADING, "Loading " + chosen.title + " into memory…")
-            val activeAiEngine = OfflineAiEngine()
-            ai = activeAiEngine
-            activeAi = activeAiEngine
-            check(activeAiEngine.loadModel(modelManager.file(chosen))) { "Could not load ${chosen.title}." }
+
+            // Local Qwen stays first choice. If it is absent, out of memory, or
+            // fails its startup smoke test, use the authenticated Supabase voice
+            // endpoint. Its server-side free-only chain tries configured providers
+            // (including Groq) without ever shipping provider keys in the APK.
+            val deviceToken = SecureDeviceTokenStore.read(this)
+            if (activeAiEngine == null) {
+                check(!deviceToken.isNullOrBlank()) {
+                    "No tested Qwen model fits this phone (" + recommendation.reason + "). Pair your Workly India account to use the Supabase/Groq fallback."
+                }
+                publishStatus(STATUS_LOADING, "Checking Supabase/Groq AI fallback…")
+                val languageTag = when (language) { "hi" -> "hi-IN"; "gu" -> "gu-IN"; else -> "en-IN" }
+                val probe = VoiceRelayApi.post(
+                    "ai-voice-chat",
+                    JSONObject().put("text", "Reply with exactly READY.").put("languageTag", languageTag),
+                    deviceToken = deviceToken
+                )
+                check(probe.statusCode in 200..299 && probe.body.optString("reply").isNotBlank()) {
+                    probe.body.optString("error").ifBlank { "Supabase/Groq AI fallback is not ready. Check the Workly AI provider keys and internet connection." }
+                }
+            }
             check(running.get()) { "Hey ChatWork listening was stopped." }
 
             publishStatus(STATUS_LOADING, "Loading offline speech recognition…")
@@ -222,8 +260,22 @@ class WakeWordAssistantService : Service() {
                             if (userText.isNotBlank()) {
                                 history.append("User: ").append(userText).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
-                                updateNotification("ChatWork is thinking offline…")
-                                val answer = activeAiEngine.generate(history.toString())
+                                val localEngine = activeAiEngine
+                                updateNotification(if (localEngine != null) "ChatWork is thinking on this phone…" else "ChatWork is thinking with Supabase/Groq…")
+                                val answer = if (localEngine != null) {
+                                    try {
+                                        localEngine.generate(history.toString())
+                                    } catch (localError: Exception) {
+                                        runCatching { localEngine.unload() }
+                                        ai = null
+                                        activeAi = null
+                                        activeAiEngine = null
+                                        updateNotification("Local Qwen unavailable · switching to Supabase/Groq…")
+                                        cloudAiReply(history.toString(), deviceToken, language)
+                                    }
+                                } else {
+                                    cloudAiReply(history.toString(), deviceToken, language)
+                                }
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
                                 updateNotification("Speaking with iTantra VITS · ${language.uppercase(Locale.ROOT)}")
@@ -266,6 +318,26 @@ class WakeWordAssistantService : Service() {
                 publishStatus(STATUS_STOPPED, "Hey ChatWork is stopped.")
             }
             isRunning = false
+        }
+    }
+
+    private fun cloudAiReply(prompt: String, deviceToken: String?, language: String): String {
+        check(!deviceToken.isNullOrBlank()) {
+            "Supabase/Groq fallback needs a paired Workly India account. Sign in from ChatWork and try again."
+        }
+        val languageTag = when (language) { "hi" -> "hi-IN"; "gu" -> "gu-IN"; else -> "en-IN" }
+        val response = VoiceRelayApi.post(
+            "ai-voice-chat",
+            JSONObject().put("text", prompt.take(12_000)).put("languageTag", languageTag),
+            deviceToken = deviceToken
+        )
+        if (response.statusCode !in 200..299) {
+            throw IllegalStateException(
+                response.body.optString("error").ifBlank { "Supabase/Groq AI request failed (HTTP " + response.statusCode + ")." }
+            )
+        }
+        return response.body.optString("reply").trim().ifBlank {
+            throw IllegalStateException("Supabase/Groq AI returned an empty reply.")
         }
     }
 
