@@ -133,6 +133,7 @@ class WakeWordAssistantService : Service() {
             history.append("System: You are JARVIS, ChatWork’s calm, concise voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers clear and brief, and ask before any consequential action. You cannot control phone settings, read private device data, or perform actions outside this conversation.\n")
             val buffer = ShortArray(1600)
             val session = activeWakeSession
+            var firstAudioFrame = true
             while (running.get()) {
                 val count = activeAudio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                 if (count < 0) {
@@ -164,11 +165,21 @@ class WakeWordAssistantService : Service() {
                     continue
                 }
                 if (count == 0) continue
+                if (firstAudioFrame) {
+                    JarvisDiagnostics.record(this, "WAKE_AUDIO_READ_FIRST", "samples=" + count)
+                }
                 val samples = FloatArray(count) { buffer[it] / 32768.0f }
+                if (firstAudioFrame) JarvisDiagnostics.record(this, "WAKE_ACCEPT_WAVEFORM_BEGIN", "samples=" + count)
                 session.stream.acceptWaveform(samples, sampleRate = WakeWordEngineFactory.SAMPLE_RATE)
+                if (firstAudioFrame) JarvisDiagnostics.record(this, "WAKE_ACCEPT_WAVEFORM_OK")
+                var firstDecode = true
                 while (session.spotter.isReady(session.stream)) {
+                    if (firstDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_DECODE_BEGIN")
                     session.spotter.decode(session.stream)
+                    if (firstDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_DECODE_OK")
                     val detected = session.spotter.getResult(session.stream).keyword
+                    if (firstDecode) JarvisDiagnostics.record(this, "WAKE_SPOTTER_RESULT_OK", "keywordDetected=" + detected.isNotBlank())
+                    firstDecode = false
                     if (detected.isNotBlank()) {
                         session.spotter.reset(session.stream)
                         updateNotification("Hey ChatWork detected · Speak now")
@@ -197,6 +208,7 @@ class WakeWordAssistantService : Service() {
                         updateNotification("Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${sttLanguage.uppercase(Locale.ROOT)} · On-device")
                     }
                 }
+                firstAudioFrame = false
             }
         } catch (error: Exception) {
             JarvisDiagnostics.record(this, "ASSISTANT_LOOP_EXCEPTION", error.stackTraceToString())
