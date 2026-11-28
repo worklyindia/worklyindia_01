@@ -28,7 +28,7 @@ class JarvisSetupActivity:Activity(){
  private val packs by lazy{SpeechPackDownloadManager(this)}
  private val ink get()=ChatWorkTheme.color(this,0xFF142033.toInt());private val muted get()=ChatWorkTheme.color(this,0xFF65748B.toInt());private val bg get()=ChatWorkTheme.color(this,0xFFF4F7FB.toInt());private val surface get()=ChatWorkTheme.color(this,0xFFFFFFFF.toInt())
  override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);ChatWorkTheme.applyWindow(this);render()}
- override fun onResume(){super.onResume();if(::status.isInitialized)refreshAvailability()}
+ override fun onResume(){super.onResume();JarvisCrashBreadcrumbs.reportIfUnclean(this);if(::status.isInitialized)refreshAvailability()}
  private fun render(){
   val cfg=JarvisSettingsStore.read(this);selectedStt=cfg.sttLanguages.toCollection(linkedSetOf());selectedTts=cfg.ttsLanguages.toCollection(linkedSetOf());selectedTtsModel=cfg.ttsModel
   val root=LinearLayout(this).apply{orientation=1;setBackgroundColor(bg)}
