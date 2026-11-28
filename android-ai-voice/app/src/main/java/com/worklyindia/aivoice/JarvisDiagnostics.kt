@@ -89,6 +89,30 @@ object JarvisDiagnostics {
                     }
                 }
                 record(context, "ANDROID_PREVIOUS_PROCESS_EXIT", details.toString())
+
+                // Android reports native crashes after the process has died. Convert each
+                // newly observed native crash/ANR into a Crashlytics non-fatal event on
+                // next launch, because no in-process handler can report the original crash.
+                // This is diagnostic metadata, not the original native tombstone/stack.
+                if (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                    exit.reason == ApplicationExitInfo.REASON_ANR) {
+                    runCatching {
+                        val prefs = context.getSharedPreferences("jarvis_crash_reporting", Context.MODE_PRIVATE)
+                        val key = "last_reported_exit_timestamp"
+                        val lastReported = prefs.getLong(key, 0L)
+                        if (exit.timestamp > lastReported) {
+                            FirebaseCrashlytics.getInstance().recordException(
+                                IllegalStateException("Previous ChatWork process exit: " + details.toString().take(3000))
+                            )
+                            prefs.edit().putLong(key, exit.timestamp).apply()
+                            record(context, "PREVIOUS_PROCESS_EXIT_SENT_TO_CRASHLYTICS",
+                                "reason=" + reason + "; time=" + exit.timestamp)
+                        }
+                    }.onFailure {
+                        record(context, "PREVIOUS_PROCESS_EXIT_CRASHLYTICS_FAILED",
+                            it.javaClass.simpleName + ": " + (it.message ?: "unknown"))
+                    }
+                }
             }
         }.onFailure {
             record(context, "ANDROID_EXIT_INFO_UNAVAILABLE", it.javaClass.simpleName + ": " + (it.message ?: "unknown"))
