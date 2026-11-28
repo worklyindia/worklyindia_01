@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { translationStorage } from '@/lib/translationStorage';
+import { supabase } from '@/integrations/supabase/client';
 
 interface WhatsAppTranslateDialogProps {
   open: boolean;
@@ -94,135 +95,6 @@ export default function WhatsAppTranslateDialog({
     return 'en';
   };
 
-  const tryMyMemory = async (text: string, sourceLang: string, targetLang: string): Promise<string> => {
-    console.log('[WhatsApp Translation] Trying MyMemory API:', { text: text.substring(0, 50), sourceLang, targetLang });
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    
-    try {
-      const apiUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`;
-      const response = await fetch(apiUrl, { signal: controller.signal });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`MyMemory API failed with status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.responseStatus !== 200) {
-        throw new Error(data.responseDetails || 'MyMemory translation failed');
-      }
-
-      return data.responseData.translatedText;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
-    }
-  };
-
-  const tryLingva = async (text: string, sourceLang: string, targetLang: string): Promise<string> => {
-    console.log('[WhatsApp Translation] Trying Lingva API:', { text: text.substring(0, 50), sourceLang, targetLang });
-    
-    const instances = [
-      'https://lingva.thedaviddelta.com',
-      'https://lingva.lunar.icu',
-      'https://translate.plausibility.cloud'
-    ];
-    
-    let lastError: Error | null = null;
-    
-    for (const instance of instances) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      
-      try {
-        const apiUrl = `${instance}/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(text)}`;
-        const response = await fetch(apiUrl, { signal: controller.signal });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          lastError = new Error(`Instance failed with status ${response.status}`);
-          continue;
-        }
-        
-        const data = await response.json();
-        
-        if (data.translation) {
-          return data.translation;
-        }
-        
-        lastError = new Error('No translation in response');
-      } catch (error) {
-        clearTimeout(timeoutId);
-        lastError = error as Error;
-        continue;
-      }
-    }
-    
-    throw lastError || new Error('All Lingva instances failed');
-  };
-
-  const tryLibreTranslate = async (text: string, sourceLang: string, targetLang: string): Promise<string> => {
-    console.log('[WhatsApp Translation] Trying LibreTranslate API:', { text: text.substring(0, 50), sourceLang, targetLang });
-    
-    const servers = [
-      'https://translate.argosopentech.com/translate',
-      'https://translate.fedilab.app/translate',
-      'https://trans.zillyhuhn.com/translate'
-    ];
-    
-    let lastError: Error | null = null;
-    
-    for (const server of servers) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      try {
-        const response = await fetch(server, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            q: text,
-            source: sourceLang,
-            target: targetLang,
-            format: 'text'
-          }),
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (response.status === 429) {
-          lastError = new Error('Rate limit exceeded');
-          continue;
-        }
-        
-        if (!response.ok) {
-          lastError = new Error(`Server failed with status ${response.status}`);
-          continue;
-        }
-        
-        const data = await response.json();
-        
-        if (data.translatedText) {
-          return data.translatedText;
-        }
-        
-        lastError = new Error('No translatedText in response');
-      } catch (error) {
-        clearTimeout(timeoutId);
-        lastError = error as Error;
-        continue;
-      }
-    }
-    
-    throw lastError || new Error('All LibreTranslate servers failed');
-  };
-
   const handleTranslate = async (langCode: string) => {
     if (!langCode || !messageContent) return;
 
@@ -235,55 +107,32 @@ export default function WhatsAppTranslateDialog({
       const sourceLang = detectLanguage(messageContent);
       setDetectedLang(sourceLang);
 
-      // Check cache first
       const cached = translationStorage.getTranslation(messageContent, sourceLang, langCode);
-      
       if (cached) {
-        console.log('[WhatsApp Translation] ⚡ Using cached translation');
         setTranslatedText(cached.translated);
         successHaptic();
         toast.success('Translation complete');
-        setIsTranslating(false);
         return;
       }
 
-      console.log('[WhatsApp Translation] Cache miss, calling APIs...');
-      let result = '';
-      let lastError: Error | null = null;
-      let lastApiName = '';
+      const { data, error } = await supabase.functions.invoke('ai-career-chat/translate', {
+        body: {
+          text: messageContent,
+          sourceLang: 'auto',
+          targetLang: langCode,
+        },
+      });
 
-      const apis = [
-        { name: 'MyMemory', fn: tryMyMemory },
-        { name: 'Lingva', fn: tryLingva },
-        { name: 'LibreTranslate', fn: tryLibreTranslate }
-      ];
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      const result = String(data?.translatedText || '').trim();
+      if (!result) throw new Error('Translation service returned an empty result');
 
-      for (const api of apis) {
-        try {
-          console.log(`[WhatsApp Translation] Attempting ${api.name} API...`);
-          result = await api.fn(messageContent, sourceLang, langCode);
-          console.log(`[WhatsApp Translation] ✅ ${api.name} API succeeded`);
-          break;
-        } catch (error) {
-          console.error(`[WhatsApp Translation] ❌ ${api.name} API failed:`, error);
-          lastError = error as Error;
-          lastApiName = api.name;
-          continue;
-        }
-      }
-
-      if (!result) {
-        const errorMsg = `All translation APIs failed. Last error from ${lastApiName}: ${lastError?.message || 'Unknown error'}`;
-        console.error(`[WhatsApp Translation] ${errorMsg}`);
-        throw new Error(errorMsg);
-      }
-
-      // Save to cache
       translationStorage.saveTranslation({
         cacheKey: translationStorage.generateCacheKey(messageContent, sourceLang, langCode),
         original: messageContent,
         translated: result,
-        sourceLang,
+        sourceLang: data?.detectedLanguage || sourceLang,
         targetLang: langCode,
         timestamp: new Date().toISOString()
       });
@@ -292,7 +141,7 @@ export default function WhatsAppTranslateDialog({
       successHaptic();
       toast.success('Translation complete');
     } catch (error) {
-      console.error('[WhatsApp Translation] All attempts failed:', error);
+      console.error('[WhatsApp Translation] Self-hosted translation failed:', error);
       const errorMsg = error instanceof Error ? error.message : 'Translation failed';
       setErrorMessage(errorMsg);
       toast.error(errorMsg);
