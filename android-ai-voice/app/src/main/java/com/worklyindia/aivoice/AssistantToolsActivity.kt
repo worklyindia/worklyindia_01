@@ -45,12 +45,9 @@ class AssistantToolsActivity : Activity() {
         addButton("Review / edit / delete / clear memory") { reviewMemory() }
         addButton("Import multiple text files / PDFs (up to 5)") { chooseFile() }
         addButton("Manage imported documents") { manageImportedDocuments() }
-        addButton("AI Agent - Plan & Approval History") { startActivity(Intent(this, ChatWorkAgentActivity::class.java)) }
         addButton("Schedule phone reminder") { scheduleReminder() }
         addButton("Manage / cancel reminders") { manageReminders() }
         addButton("Add event to phone calendar") { addCalendarEvent() }
-        addButton("Mobile Control") { startActivity(Intent(this, MobileControlActivity::class.java)) }
-        addButton("Open an installed app") { showApps() }
         addButton("Back") { finish() }
         setContentView(root)
         when {
@@ -498,19 +495,4 @@ class AssistantToolsActivity : Activity() {
             }.show()
     }
 
-    private fun showApps() {
-        val pm = packageManager
-        val apps = pm.queryIntentActivities(
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
-        ).sortedBy { it.loadLabel(pm).toString().lowercase() }
-        val labels = apps.map { it.loadLabel(pm).toString() }.toTypedArray()
-        AlertDialog.Builder(this).setTitle("Choose installed app")
-            .setItems(labels) { _, index ->
-                val launch = pm.getLaunchIntentForPackage(apps[index].activityInfo.packageName)
-                if (launch != null) {
-                    try { startActivity(launch) }
-                    catch (_: Exception) { Toast.makeText(this, "Unable to open app.", Toast.LENGTH_SHORT).show() }
-                }
-            }.setNegativeButton("Cancel", null).show()
-    }
 }

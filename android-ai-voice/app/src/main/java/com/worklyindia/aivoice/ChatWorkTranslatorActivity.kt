@@ -149,6 +149,7 @@ class ChatWorkTranslatorActivity : Activity() {
             }
         }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(8) })
         setContentView(root)
+        intent.getStringExtra("chatwork.translate.text")?.takeIf { it.isNotBlank() }?.let { sourceText.setText(it) }
     }
 
     private fun label(value: String) = TextView(this).apply {

@@ -1,9 +1,11 @@
 name: ChatWork Android
+# Rebuild native APK for website-matched ChatWork conversation UI.
 
 on:
   push:
     branches:
       - main
+      - feature/chatwork-chat-page-messenger-ui
       - feature/workly-ai-voice-server-app
       - feat/voice-settings-connection-call-history
     paths:

@@ -13,6 +13,7 @@ import android.content.res.Configuration
 import android.os.Bundle
 import android.os.SystemClock
 import android.os.Build
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -21,14 +22,33 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ImageView
 import android.widget.PopupMenu
+import android.app.Dialog
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
+import android.text.style.BackgroundColorSpan
+import android.graphics.Typeface
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.drawable.ColorDrawable
+import android.text.TextWatcher
+import android.text.StaticLayout
+import android.text.Layout
+import android.text.Editable
 import java.util.Locale
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.util.concurrent.Executors
 
 class OfflineAiChatActivity : Activity() {
+    private val JARVIS_PREFS = "chatwork_jarvis_settings"
+    private val KEY_JARVIS_VOICE_REPLIES = "voice_replies_enabled"
     private val worker = Executors.newSingleThreadExecutor()
     private val modelManager by lazy { QwenModelManager(this) }
     private lateinit var qwenModelPicker: Spinner
@@ -39,6 +59,10 @@ class OfflineAiChatActivity : Activity() {
     private var tinyTtsEngine: IndicTinyTtsEngine? = null
     private var activeAudioRecord: AudioRecord? = null
     @Volatile private var offlineRecording = false
+    @Volatile private var cancelOfflineRecording = false
+    @Volatile private var stopOfflineRecordingRequested = false
+    private lateinit var recordingWaveform: View
+    private var recordingUiActive = false
     private val languages = listOf(
         VoiceLanguage("Hindi · हिन्दी", "hi-IN", Locale.forLanguageTag("hi-IN")),
         VoiceLanguage("English · India", "en-IN", Locale.forLanguageTag("en-IN")),
@@ -49,9 +73,21 @@ class OfflineAiChatActivity : Activity() {
     private lateinit var promptInput: EditText
     private lateinit var sendButton: Button
     private lateinit var micButton: Button
+    private lateinit var composerShell: LinearLayout
+    private lateinit var composer: LinearLayout
+    private lateinit var composerRow: LinearLayout
+    private lateinit var moreButton: ImageView
+    private lateinit var headerMoreButton: ImageView
+    private lateinit var thinkHarderChip: TextView
+    private var composerExpanded = false
+    private var composerImeVisible = false
+    private var thinkHarderEnabled = false
     private lateinit var status: TextView
+    private lateinit var modelLabel: TextView
     private lateinit var chatScroll: ScrollView
     private val conversationHistory = StringBuilder()
+    private var greetingPane: View? = null
+    private var currentConversationId: String = java.util.UUID.randomUUID().toString()
     private var dark = false
     @Volatile private var modelLoadInProgress = false
     private var ignoreInitialModelSelection = true
@@ -69,10 +105,11 @@ class OfflineAiChatActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         buildUi()
+        restoreLastConversation()
         loadModel()
     }
 
-    private val bg get() = if (dark) 0xFF101827.toInt() else 0xFFF4F7FB.toInt()
+    private val bg get() = if (dark) 0xFF0B1222.toInt() else 0xFFFFFFFF.toInt()
     private val surface get() = if (dark) 0xFF1B293B.toInt() else 0xFFFFFFFF.toInt()
     private val primaryText get() = if (dark) 0xFFE8EEF7.toInt() else 0xFF142033.toInt()
     private val secondaryText get() = if (dark) 0xFFB5C1D1.toInt() else 0xFF65748B.toInt()
@@ -86,48 +123,12 @@ class OfflineAiChatActivity : Activity() {
             clipToPadding = false
         }
 
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(4), 0, dp(4))
-        }
-        header.addView(Button(this).apply {
-            text = "‹"
-            textSize = 30f
-            isAllCaps = false
-            setTextColor(primaryText)
-            setBackgroundColor(bg)
-            contentDescription = "Back"
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(TextView(this).apply {
-            text = "⚡  Usage"
-            textSize = 19f
-            setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(Button(this).apply {
-            text = "⋮"
-            textSize = 24f
-            isAllCaps = false
-            setTextColor(primaryText)
-            setBackgroundColor(bg)
-            contentDescription = "Chat settings"
-            setOnClickListener { showChatOptions(this) }
-        }, LinearLayout.LayoutParams(dp(44), dp(48)))
-        root.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
-
-        status = TextView(this).apply {
-            text = "Checking offline AI model…"
-            textSize = 12f
-            setTextColor(secondaryText)
-            setPadding(dp(8), dp(3), dp(8), dp(7))
-            maxLines = 2
-        }
-        root.addView(status, LinearLayout.LayoutParams(-1, -2))
-
+        // Keep model selection available to the existing settings flow, but out of
+        // the conversation canvas so the chat matches a clean messenger layout.
         qwenModelPicker = Spinner(this).apply {
             adapter = readableSpinnerAdapter(modelManager.models)
             isEnabled = false
+            visibility = View.GONE
             onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -136,9 +137,9 @@ class OfflineAiChatActivity : Activity() {
                         return
                     }
                     val selected = modelManager.models[position]
+                    qwenModelPicker.visibility = View.GONE
                     selectedQwenModel = selected
-                    val selectedState = modelManager.snapshot(selected).state
-                    val selectedReady = selectedState == QwenModelManager.State.READY
+                    val selectedReady = modelManager.snapshot(selected).state == QwenModelManager.State.READY
                     if (selectedReady && !modelLoadInProgress && selected.id != loadedModelId) {
                         getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit()
                             .putString("selected_model_id", selected.id).apply()
@@ -146,11 +147,6 @@ class OfflineAiChatActivity : Activity() {
                     } else {
                         sendButton.isEnabled = engine.isLoaded && selectedReady && selected.id == loadedModelId
                         sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
-                        if (!selectedReady) status.text = if (selectedState == QwenModelManager.State.NEEDS_TEST) {
-                            "Run Test Model for this downloaded Qwen model before using it."
-                        } else {
-                            "Download this Qwen model from Download Models before using it."
-                        }
                     }
                 }
             }
@@ -158,89 +154,497 @@ class OfflineAiChatActivity : Activity() {
 
         root.addView(qwenModelPicker, LinearLayout.LayoutParams(-1, dp(42)))
 
+        status = TextView(this).apply {
+            text = "Offline AI"
+            textSize = 12f
+            setTextColor(secondaryText)
+            visibility = View.GONE
+        }
+        // Keep model status available internally without rendering a title/header label.
+        modelLabel = TextView(this).apply { visibility = View.GONE }
+        fun headerIcon(drawable: Int, description: String, action: () -> Unit) = ImageView(this).apply {
+            setImageResource(drawable)
+            setColorFilter(primaryText)
+            contentDescription = description
+            scaleType = ImageView.ScaleType.CENTER
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+            elevation = 0f
+            setOnClickListener { action() }
+        }
+        // Transparent, same-canvas header: back on the left and overflow on the right.
+        val chatHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        chatHeader.addView(headerIcon(R.drawable.ic_chatwork_back, "Back") { finish() },
+            LinearLayout.LayoutParams(dp(48), dp(48)))
+        headerMoreButton = headerIcon(android.R.drawable.ic_menu_more, "More chat options") {
+            showChatOptions(headerMoreButton)
+        }.apply {
+            scaleType = ImageView.ScaleType.CENTER
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+        }
+        chatHeader.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+        chatHeader.addView(headerMoreButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        root.addView(chatHeader, LinearLayout.LayoutParams(-1, dp(48)))
+        status.setPadding(dp(16), dp(4), dp(16), dp(4))
+        root.addView(status, LinearLayout.LayoutParams(-1, -2))
+
         chatScroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            setPadding(dp(2), dp(6), dp(2), dp(10))
+            setPadding(dp(10), dp(2), dp(10), dp(12))
             chatMessages = LinearLayout(this@OfflineAiChatActivity).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(2), dp(4), dp(2), dp(8))
+                setPadding(dp(1), dp(4), dp(1), dp(8))
             }
             addView(chatMessages, ViewGroup.LayoutParams(-1, -2))
         }
         root.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        addMessage("Welcome to Workly AI. Ask me in Hindi, English or Gujarati. Your chat runs locally on this phone.", false)
+        showGreetingPane()
 
-        val composer = LinearLayout(this).apply {
+        // Website chat has no separate welcome/date card.
+
+        composerShell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(7), dp(5), dp(7), dp(5))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.TRANSPARENT)
+                setStroke(dp(1), if (dark) 0xFF40516B.toInt() else 0xFFCBD5E1.toInt())
+                cornerRadius = dp(26).toFloat()
+            }
+        }
+        thinkHarderChip = TextView(this).apply {
+            text = "✦  Think harder     ×"
+            textSize = 12f
+            setTextColor(accent)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(if (dark) 0x332D8CFF else 0x1A1769C2)
+                cornerRadius = dp(18).toFloat()
+            }
+            visibility = View.GONE
+            contentDescription = "Think harder enabled. Tap to turn off."
+            setOnClickListener {
+                thinkHarderEnabled = false
+                visibility = View.GONE
+            }
+        }
+        composer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        composerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(4), dp(5), dp(4))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(surface)
-                setStroke(dp(1), if (dark) 0xFF344257.toInt() else 0xFFD8E0EA.toInt())
-                cornerRadius = dp(32).toFloat()
-            }
         }
-        val moreButton = Button(this).apply {
-            text = "+"
-            textSize = 27f
-            isAllCaps = false
-            setTextColor(secondaryText)
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            contentDescription = "More chat options"
-            setOnClickListener { showChatOptions(this) }
+        moreButton = ImageView(this).apply {
+            setImageResource(R.drawable.ic_chatwork_add)
+            setColorFilter(primaryText)
+            contentDescription = "More options and attachments"
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setOnClickListener { showAttachmentSheet() }
         }
-        composer.addView(moreButton, LinearLayout.LayoutParams(dp(42), dp(48)))
         promptInput = EditText(this).apply {
-            hint = "Message…"
-            textSize = 16f
+            hint = "Message..."
+            textSize = 15f
+            typeface = android.graphics.Typeface.DEFAULT
             minLines = 1
-            maxLines = 4
+            maxLines = 6
             setTextColor(primaryText)
             setHintTextColor(secondaryText)
-            setPadding(dp(5), dp(9), dp(5), dp(9))
+            setPadding(dp(2), dp(7), dp(2), dp(7))
             background = null
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
-            setOnEditorActionListener { _, actionId, _ ->
-                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendPrompt(); true } else false
-            }
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_NONE or
+                android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+            isVerticalScrollBarEnabled = true
         }
-        composer.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f))
         micButton = Button(this).apply {
-            text = "🎙"
-            textSize = 20f
-            isAllCaps = false
-            setTextColor(primaryText)
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            contentDescription = "Voice input"
-            setOnClickListener { if (offlineRecording) stopOfflineVoiceInput() else startDownloadedVoiceInput() }
+            visibility = View.GONE
+            isEnabled = false
+            contentDescription = "Voice input removed from composer"
         }
-        composer.addView(micButton, LinearLayout.LayoutParams(dp(44), dp(48)))
+        recordingWaveform = VoiceWaveformView()
         sendButton = Button(this).apply {
-            text = "➤"
-            textSize = 22f
-            isAllCaps = false
+            text = ""
+            gravity = Gravity.CENTER
+            minWidth = 0; minHeight = 0; minimumWidth = 0; minimumHeight = 0
+            setPadding(0, 0, 0, 0)
+            compoundDrawablePadding = 0
             setTextColor(0xFFFFFFFF.toInt())
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(accent)
-                shape = android.graphics.drawable.GradientDrawable.OVAL
-            }
+            background = createSendButtonBackground()
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            includeFontPadding = false
             isEnabled = false
             alpha = 0.55f
             contentDescription = "Send message"
-            setOnClickListener { sendPrompt() }
+            setOnClickListener { if (promptInput.text.isNotBlank()) sendPrompt() }
         }
-        composer.addView(sendButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
-        root.addView(composer, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(5)
-            bottomMargin = dp(6)
+        promptInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                updateComposerLayout(s?.toString().orEmpty())
+                val hasText = !s.isNullOrBlank()
+                updateComposerAction(hasText)
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+        updateComposerLayout("")
+        updateComposerAction(false)
+        composerShell.addView(thinkHarderChip, LinearLayout.LayoutParams(-2, -2).apply {
+            bottomMargin = dp(5)
+        })
+        composerShell.addView(composer, LinearLayout.LayoutParams(-1, -2))
+        root.addView(composerShell, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dp(12); rightMargin = dp(12); topMargin = dp(5); bottomMargin = dp(6)
         })
         setContentView(root)
+        // Edge-to-edge windows must explicitly move the composer above the IME.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            composerImeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            // ChatWorkTheme.applyContentInsets() already applies the status-bar top inset
+            // to the Activity content host. Applying bars.top here again pushed the
+            // conversation header too far down; only own the IME/bottom inset here.
+            view.setPadding(bars.left, 0, bars.right, maxOf(bars.bottom, ime.bottom))
+            if (ime.bottom > 0) chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
+        promptInput.setOnFocusChangeListener { _, focused ->
+            if (focused) composerShell.postDelayed({ chatScroll.fullScroll(View.FOCUS_DOWN) }, 180)
+        }
+    }
+
+    private fun createSendButtonBackground(): android.graphics.drawable.LayerDrawable {
+        val circle = android.graphics.drawable.GradientDrawable().apply {
+            setColor(0xFF0A84FF.toInt())
+            shape = android.graphics.drawable.GradientDrawable.OVAL
+        }
+        val arrow = androidx.core.content.ContextCompat.getDrawable(
+            this@OfflineAiChatActivity, R.drawable.ic_chatwork_send_up
+        )!!.mutate()
+        return android.graphics.drawable.LayerDrawable(arrayOf(circle, arrow)).apply {
+            setLayerGravity(1, Gravity.CENTER)
+            setLayerWidth(1, dp(22))
+            setLayerHeight(1, dp(22))
+        }
+    }
+
+    private fun updateComposerAction(hasText: Boolean) {
+        sendButton.background = createSendButtonBackground()
+        sendButton.contentDescription = "Send message"
+        sendButton.isEnabled = hasText && engine.isLoaded
+        sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
+    }
+
+    private fun showAttachmentSheet() {
+        val dialog = Dialog(this)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(26))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(surface); cornerRadii = floatArrayOf(dp(24).toFloat(),dp(24).toFloat(),dp(24).toFloat(),dp(24).toFloat(),0f,0f,0f,0f)
+            }
+        }
+        val handle = View(this).apply { setBackgroundColor(secondaryText); alpha = .45f }
+        panel.addView(handle, LinearLayout.LayoutParams(dp(52), dp(5)).apply { gravity = Gravity.CENTER; bottomMargin = dp(16) })
+        panel.addView(TextView(this).apply { text = "Attach"; textSize = 18f; setTypeface(null, Typeface.BOLD); setTextColor(primaryText) }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(14) })
+        val tiles = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; }
+        fun tile(emoji: String, label: String, action: () -> Unit) {
+            val item = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(8), dp(12), dp(8), dp(8)); isClickable = true; isFocusable = true }
+            val icon = TextView(this).apply { text = emoji; textSize = 27f; gravity = Gravity.CENTER; setTextColor(primaryText); background = android.graphics.drawable.GradientDrawable().apply { setColor(if (dark) 0xFF30435E.toInt() else 0xFFEAF1FA.toInt()); cornerRadius = dp(20).toFloat() } }
+            item.addView(icon, LinearLayout.LayoutParams(dp(64), dp(64)))
+            item.addView(TextView(this).apply { text = label; textSize = 13f; setTextColor(primaryText); gravity = Gravity.CENTER }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+            item.setOnClickListener { dialog.dismiss(); action() }
+            tiles.addView(item, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        tile("📷", "Camera") { runCatching { startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE)) }.onFailure { status.text = "Camera is not available on this device." } }
+        tile("🖼️", "Photos") { openAttachmentPicker("image/*") }
+        tile("📄", "Files") { openAttachmentPicker("*/*") }
+        panel.addView(tiles)
+        dialog.setContentView(panel)
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setLayout(-1, -2); setGravity(Gravity.BOTTOM)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            attributes = attributes.apply { dimAmount = .42f }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, -2)
+    }
+
+    private fun openAttachmentPicker(type: String) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); this.type = type; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true) }
+        runCatching { startActivityForResult(intent, REQUEST_ATTACHMENT) }.onFailure { status.text = "Could not open attachments." }
+    }
+
+    private fun cancelOfflineVoiceInput() {
+        cancelOfflineRecording = true
+        offlineRecording = false
+        runCatching { activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } }
+        setRecordingUi(false)
+        status.text = "Recording cancelled."
+    }
+
+    private fun setRecordingUi(active: Boolean) {
+        recordingUiActive = active
+        if (!::composer.isInitialized) return
+        (promptInput.parent as? ViewGroup)?.removeView(promptInput)
+        (recordingWaveform.parent as? ViewGroup)?.removeView(recordingWaveform)
+        if (active) {
+            composer.removeAllViews(); composerRow.removeAllViews()
+            moreButton.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            moreButton.contentDescription = "Cancel recording"
+            composerRow.addView(moreButton, LinearLayout.LayoutParams(dp(36), dp(36)))
+            composerRow.addView(micButton, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(4) })
+            composerRow.addView(recordingWaveform, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginStart = dp(8) })
+            composer.addView(composerRow)
+            micButton.setCompoundDrawablesWithIntrinsicBounds(android.R.drawable.ic_media_pause, 0, 0, 0)
+            micButton.contentDescription = "Stop recording"
+            sendButton.setOnClickListener { stopOfflineVoiceInput() }
+            updateComposerAction(false)
+        } else {
+            moreButton.setImageResource(R.drawable.ic_chatwork_add)
+            moreButton.contentDescription = "More options and attachments"
+            micButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_chatwork_mic, 0, 0, 0)
+            micButton.contentDescription = "Voice input"
+            sendButton.setOnClickListener { if (promptInput.text.isNullOrBlank()) startDownloadedVoiceInput() else sendPrompt() }
+            updateComposerLayout(promptInput.text?.toString().orEmpty())
+            updateComposerAction(!promptInput.text.isNullOrBlank())
+        }
+    }
+
+    /** Mirrors the website AI chat composer: inline for short text, stacked once it wraps. */
+    private fun updateComposerLayout(value: String) {
+        val screenWidth = resources.displayMetrics.widthPixels
+        val inlineControls = dp(36 * 3 + 8 + 8 + 4)
+        val availableInlineWidth = (screenWidth - dp(24 + 16) - inlineControls).coerceAtLeast(dp(48))
+        val shouldExpand = if (value.isBlank()) {
+            false
+        } else {
+            val measured = StaticLayout.Builder.obtain(
+                value, 0, value.length, promptInput.paint, availableInlineWidth
+            ).setAlignment(Layout.Alignment.ALIGN_NORMAL).setIncludePad(false).build()
+            measured.lineCount > 1
+        }
+        if (shouldExpand == composerExpanded && composer.childCount > 0) return
+
+        // Reparenting EditText between inline/stacked layouts can clear focus and
+        // dismiss the soft keyboard while the user is typing. Preserve both the
+        // cursor and the visible-IME state across the layout change.
+        val keepInputFocus = promptInput.hasFocus()
+        val keepKeyboardOpen = keepInputFocus && composerImeVisible
+        val cursorPosition = promptInput.selectionStart.coerceAtLeast(0)
+        composerExpanded = shouldExpand
+
+        (promptInput.parent as? ViewGroup)?.removeView(promptInput)
+        (moreButton.parent as? ViewGroup)?.removeView(moreButton)
+        (micButton.parent as? ViewGroup)?.removeView(micButton)
+        (sendButton.parent as? ViewGroup)?.removeView(sendButton)
+        composer.removeAllViews()
+        composerRow.removeAllViews()
+
+        val controlSize = dp(36)
+        composerRow.addView(moreButton, LinearLayout.LayoutParams(dp(40), dp(44)))
+        if (composerExpanded) {
+            composerRow.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(4) })
+            composer.addView(promptInput, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(3)
+            })
+            composer.addView(composerRow, LinearLayout.LayoutParams(-1, -2))
+        } else {
+            composerRow.addView(promptInput, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                marginStart = dp(2)
+            })
+            composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply {
+                marginStart = dp(4)
+            })
+            composer.addView(composerRow, LinearLayout.LayoutParams(-1, -2))
+        }
+        promptInput.maxLines = 6
+        promptInput.requestLayout()
+
+        if (keepInputFocus) {
+            promptInput.requestFocus()
+            promptInput.post {
+                val safeCursor = cursorPosition.coerceAtMost(promptInput.text?.length ?: 0)
+                runCatching { promptInput.setSelection(safeCursor) }
+                if (keepKeyboardOpen) {
+                    val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                    imm?.showSoftInput(promptInput, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                }
+            }
+        }
+    }
+
+    private fun startNewConversation() {
+        conversationHistory.clear()
+        currentConversationId = java.util.UUID.randomUUID().toString()
+        chatMessages.removeAllViews()
+        thinkingBubble = null
+        greetingPane = null
+        showGreetingPane()
+        promptInput.setText("")
+        status.text = "New chat"
+    }
+
+    private fun saveCurrentConversation() {
+        val history = conversationHistory.toString()
+        if (history.isBlank()) return
+        val prefs = getSharedPreferences("chatwork_conversations_v1", MODE_PRIVATE)
+        val sessions = runCatching { org.json.JSONArray(prefs.getString("sessions", "[]")) }
+            .getOrElse { org.json.JSONArray() }
+        val title = Regex("(?m)^User: (.+)$").find(history)?.groupValues?.get(1)
+            ?.take(48) ?: "ChatWork conversation"
+        val item = org.json.JSONObject()
+            .put("id", currentConversationId)
+            .put("title", title)
+            .put("history", history)
+            .put("updatedAt", System.currentTimeMillis())
+        var replaced = false
+        for (i in 0 until sessions.length()) {
+            if (sessions.optJSONObject(i)?.optString("id") == currentConversationId) {
+                sessions.put(i, item)
+                replaced = true
+                break
+            }
+        }
+        if (!replaced) sessions.put(item)
+        val bounded = org.json.JSONArray()
+        val start = (sessions.length() - 40).coerceAtLeast(0)
+        for (i in start until sessions.length()) bounded.put(sessions.getJSONObject(i))
+        prefs.edit().putString("sessions", bounded.toString())
+            .putString("last_session_id", currentConversationId).apply()
+    }
+
+    private fun restoreLastConversation() {
+        val prefs = getSharedPreferences("chatwork_conversations_v1", MODE_PRIVATE)
+        val id = prefs.getString("last_session_id", null) ?: return
+        val sessions = runCatching { org.json.JSONArray(prefs.getString("sessions", "[]")) }
+            .getOrElse { return }
+        val item = (0 until sessions.length()).mapNotNull { sessions.optJSONObject(it) }
+            .firstOrNull { it.optString("id") == id } ?: return
+        currentConversationId = id
+        conversationHistory.clear()
+        conversationHistory.append(item.optString("history"))
+        renderSavedConversation(conversationHistory.toString())
+    }
+
+    private fun renderSavedConversation(history: String) {
+        chatMessages.removeAllViews()
+        greetingPane = null
+        val markers = Regex("(?m)^(User|Assistant): ")
+        val matches = markers.findAll(history).toList()
+        matches.forEachIndexed { index, match ->
+            val start = match.range.last + 1
+            val end = matches.getOrNull(index + 1)?.range?.first ?: history.length
+            val content = history.substring(start, end).trimEnd()
+            if (content.isNotBlank()) addMessage(content, match.groupValues[1] == "User")
+        }
+        if (matches.isEmpty()) showGreetingPane()
+    }
+
+    private fun showConversationHistory(anchor: View) {
+        val prefs = getSharedPreferences("chatwork_conversations_v1", MODE_PRIVATE)
+        val sessions = runCatching { org.json.JSONArray(prefs.getString("sessions", "[]")) }
+            .getOrElse { org.json.JSONArray() }
+        val items = (0 until sessions.length()).mapNotNull { sessions.optJSONObject(it) }
+            .sortedByDescending { it.optLong("updatedAt") }
+        if (items.isEmpty()) {
+            android.widget.Toast.makeText(this, "No saved conversations yet", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = items.map { item ->
+            val date = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                .format(java.util.Date(item.optLong("updatedAt")))
+            "${item.optString("title", "Conversation")}  ·  $date"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Recent chats")
+            .setItems(labels) { _, which ->
+                saveCurrentConversation()
+                val selected = items[which]
+                currentConversationId = selected.optString("id")
+                conversationHistory.clear()
+                conversationHistory.append(selected.optString("history"))
+                renderSavedConversation(conversationHistory.toString())
+                prefs.edit().putString("last_session_id", currentConversationId).apply()
+                status.text = "Conversation opened"
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showGreetingPane() {
+        if (chatMessages.childCount > 0) return
+        val pane = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(18), dp(42), dp(18), dp(28))
+        }
+        pane.addView(TextView(this).apply {
+            text = "✦"; textSize = 38f; gravity = Gravity.CENTER
+            setTextColor(accent); setPadding(0, 0, 0, dp(14))
+        }, LinearLayout.LayoutParams(-1, -2))
+        pane.addView(TextView(this).apply {
+            text = "What can I help with?"; textSize = 25f; gravity = Gravity.CENTER
+            setTypeface(Typeface.DEFAULT, Typeface.BOLD); setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(-1, -2))
+        pane.addView(TextView(this).apply {
+            text = "Ask anything. ChatWork AI runs locally on this phone."
+            textSize = 14f; gravity = Gravity.CENTER; setTextColor(secondaryText)
+            setPadding(dp(12), dp(10), dp(12), dp(24))
+        }, LinearLayout.LayoutParams(-1, -2))
+        val suggestions = listOf(
+            "Explain a topic" to "Explain quantum computing in simple words",
+            "Write something" to "Help me write a professional message",
+            "Translate text" to "Translate this text into Hindi",
+            "Get ideas" to "Give me creative ideas for a new project"
+        )
+        suggestions.forEach { (label, prompt) ->
+            val chip = TextView(this).apply {
+                text = "✧   $label"; textSize = 15f; setTextColor(primaryText)
+                setPadding(dp(16), dp(13), dp(16), dp(13))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(surface)
+                    setStroke(dp(1), if (dark) 0xFF334155.toInt() else 0xFFE2E8F0.toInt())
+                    cornerRadius = dp(18).toFloat()
+                }
+                setOnClickListener {
+                    promptInput.setText(prompt)
+                    promptInput.setSelection(promptInput.text.length)
+                    promptInput.requestFocus()
+                }
+            }
+            pane.addView(chip, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(7); bottomMargin = dp(2)
+            })
+        }
+        chatMessages.addView(pane, LinearLayout.LayoutParams(-1, -2))
+        greetingPane = pane
     }
 
     private fun showChatOptions(anchor: View) {
         PopupMenu(this, anchor).apply {
+            menu.add(if (thinkHarderEnabled) "Disable Think harder" else "Think harder").setOnMenuItemClickListener {
+                thinkHarderEnabled = !thinkHarderEnabled
+                thinkHarderChip.visibility = if (thinkHarderEnabled) View.VISIBLE else View.GONE
+                true
+            }
+            menu.add("Download / test models").setOnMenuItemClickListener {
+                startActivity(Intent(this@OfflineAiChatActivity, SpeechDownloadsActivity::class.java)); true
+            }
             menu.add("Create / Edit Image").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, ChatWorkImageActivity::class.java)); true
             }
@@ -249,6 +653,30 @@ class OfflineAiChatActivity : Activity() {
             }
             menu.add("Settings").setOnMenuItemClickListener {
                 startActivity(Intent(this@OfflineAiChatActivity, SettingsActivity::class.java)); true
+            }
+            val voiceRepliesEnabled = getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE)
+                .getBoolean(KEY_JARVIS_VOICE_REPLIES, true)
+            menu.add(if (voiceRepliesEnabled) "JARVIS voice replies · On" else "JARVIS voice replies · Off")
+                .setOnMenuItemClickListener {
+                    val next = !getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE)
+                        .getBoolean(KEY_JARVIS_VOICE_REPLIES, true)
+                    getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE).edit()
+                        .putBoolean(KEY_JARVIS_VOICE_REPLIES, next).apply()
+                    android.widget.Toast.makeText(
+                        this@OfflineAiChatActivity,
+                        if (next) "JARVIS voice replies enabled." else "JARVIS voice replies disabled.",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    true
+                }
+            menu.add("New chat").setOnMenuItemClickListener {
+                saveCurrentConversation()
+                startNewConversation()
+                true
+            }
+            menu.add("Chat history").setOnMenuItemClickListener {
+                showConversationHistory(anchor)
+                true
             }
             menu.add("Export conversation").setOnMenuItemClickListener {
                 exportConversation(); true
@@ -259,14 +687,14 @@ class OfflineAiChatActivity : Activity() {
             val wakeEnabled = WakeWordAssistantService.isRunning
             qwenModelPicker.isEnabled = !wakeEnabled
             if (wakeEnabled) {
-                menu.add("Disable Hey ChatWork").setOnMenuItemClickListener {
+                menu.add("Disable JARVIS hands-free · Hey ChatWork").setOnMenuItemClickListener {
                     stopService(Intent(this@OfflineAiChatActivity, WakeWordAssistantService::class.java))
                     status.text = "Stopping Hey ChatWork microphone service…"
                     waitForWakeServiceStop()
                     true
                 }
             } else {
-                menu.add("Enable Hey ChatWork").setOnMenuItemClickListener {
+                menu.add("Enable JARVIS hands-free · Hey ChatWork").setOnMenuItemClickListener {
                     chooseWakeWordLanguage()
                     true
                 }
@@ -302,27 +730,11 @@ class OfflineAiChatActivity : Activity() {
                 conversationHistory.clear()
                 chatMessages.removeAllViews()
                 thinkingBubble = null
+                currentConversationId = java.util.UUID.randomUUID().toString()
+                showGreetingPane()
                 status.text = "Conversation cleared. Local saved memories are unchanged."
             }
             .show()
-    }
-
-    @Deprecated("Legacy result callback for document export compatibility")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_EXPORT_CONVERSATION || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        val exportText = "ChatWork offline conversation\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\n\n" +
-            conversationHistory.toString()
-        try {
-            contentResolver.openOutputStream(uri, "w")?.use { output ->
-                output.write(exportText.toByteArray(Charsets.UTF_8))
-                output.flush()
-            } ?: throw IllegalStateException("Could not open the selected destination.")
-            status.text = "Conversation exported to the location you selected."
-        } catch (failure: Exception) {
-            status.text = "Conversation export failed: ${failure.message ?: failure.javaClass.simpleName}"
-        }
     }
 
     private fun chooseWakeWordLanguage() {
@@ -332,8 +744,8 @@ class OfflineAiChatActivity : Activity() {
         val saved = prefs.getString(WakeWordAssistantService.KEY_LANGUAGE, "hi") ?: "hi"
         var selected = codes.indexOf(saved).coerceAtLeast(0)
         AlertDialog.Builder(this)
-            .setTitle("Enable Hey ChatWork")
-            .setMessage("When enabled, ChatWork continuously listens for the English wake phrase using a visible microphone notification. Wake detection, speech recognition, AI replies and voice output run on this phone. You can stop listening at any time from the notification.")
+            .setTitle("Enable JARVIS hands-free mode")
+            .setMessage("When enabled, JARVIS listens for the trained “Hey ChatWork” wake phrase using a visible microphone notification. Speech recognition, AI replies and voice output run on this phone. This is optional, uses the microphone only while enabled, and can be stopped from the notification at any time.")
             .setSingleChoiceItems(labels, selected) { _, which -> selected = which }
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Continue") { _, _ ->
@@ -352,8 +764,10 @@ class OfflineAiChatActivity : Activity() {
         if (!OfflineSpeechEngineFactory.isReady(this, SpeechModelCatalog.indicConformer(language))) {
             missing.add("IndicConformer ${language.uppercase(Locale.ROOT)} · Voice to Text")
         }
-        if (speechManager.snapshot(SpeechModelCatalog.indicTinyTts(language)).state != SpeechPackDownloadManager.State.COMPLETE) {
-            missing.add("Indic Tiny TTS ${language.uppercase(Locale.ROOT)} · Text to Voice")
+        val vitsPack = SpeechModelCatalog.itantraVits(language)
+        if (speechManager.snapshot(vitsPack).state != SpeechPackDownloadManager.State.COMPLETE ||
+            !speechManager.isModelTested(vitsPack)) {
+            missing.add("Download and Test iTantra VITS ${language.uppercase(Locale.ROOT)} · Text to Voice")
         }
         val qwenManager = QwenModelManager(this)
         if (qwenManager.models.none { qwenManager.snapshot(it).state == QwenModelManager.State.READY }) {
@@ -378,10 +792,34 @@ class OfflineAiChatActivity : Activity() {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         if (permissions.isNotEmpty()) {
-            requestPermissions(permissions.toTypedArray(), REQUEST_WAKE_ASSISTANT)
+            val permissionPrefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
+            val alreadyRequested = permissionPrefs.getBoolean("wake_permissions_requested", false)
+            val permanentlyDenied = alreadyRequested && permissions.any {
+                !shouldShowRequestPermissionRationale(it)
+            }
+            if (permanentlyDenied) {
+                showWakePermissionSettingsDialog()
+            } else {
+                permissionPrefs.edit().putBoolean("wake_permissions_requested", true).apply()
+                requestPermissions(permissions.toTypedArray(), REQUEST_WAKE_ASSISTANT)
+            }
         } else {
             startWakeWordService()
         }
+    }
+
+    private fun showWakePermissionSettingsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Allow permissions for Hey ChatWork")
+            .setMessage("Android is not showing the permission popup because microphone or notification access was previously blocked. Open ChatWork app settings, allow Microphone and Notifications, then return and enable Hey ChatWork again.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Open App Settings") { _, _ ->
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = android.net.Uri.fromParts("package", packageName, null)
+                }
+                startActivity(intent)
+            }
+            .show()
     }
 
     private fun waitForWakeServiceStop(attempt: Int = 0) {
@@ -389,32 +827,87 @@ class OfflineAiChatActivity : Activity() {
             val prefs = getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE)
             val requested = prefs.getBoolean(WakeWordAssistantService.KEY_ACTIVE, false)
             val active = WakeWordAssistantService.isRunning
+            val state = prefs.getString(WakeWordAssistantService.KEY_STATUS, WakeWordAssistantService.STATUS_STARTING)
+            val message = prefs.getString(WakeWordAssistantService.KEY_STATUS_MESSAGE, "Starting Hey ChatWork…")
+            val error = prefs.getString(WakeWordAssistantService.KEY_ERROR, null)
             if (active) {
-                if (attempt < 20) waitForWakeServiceStop(attempt + 1)
-            } else if (requested && attempt < 4) {
-                // Allow up to two seconds for Android to create the foreground service.
+                qwenModelPicker.isEnabled = false
+                status.text = if (state == WakeWordAssistantService.STATUS_LISTENING) "Hey ChatWork is active · ${message ?: "Listening for the wake phrase."}" else message ?: "Preparing offline voice models…"
+                status.visibility = View.VISIBLE
                 waitForWakeServiceStop(attempt + 1)
-            } else {
+            } else if (state == WakeWordAssistantService.STATUS_ERROR) {
                 prefs.edit().putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
                 qwenModelPicker.isEnabled = true
+                status.text = "Hey ChatWork could not start: ${error ?: message ?: "Check microphone permission and downloaded models."}"
+                status.visibility = View.VISIBLE
+                if (!engine.isLoaded && !modelLoadInProgress) loadModel()
+            } else if (requested) {
+                // Model downloads/loading can take longer than 10 seconds on-device.
+                // Keep observing the foreground service instead of clearing its request
+                // while STT/TTS/Qwen initialization is still running.
+                qwenModelPicker.isEnabled = false
+                status.text = message ?: "Preparing offline voice models…"
+                status.visibility = View.VISIBLE
+                waitForWakeServiceStop(attempt + 1)
+            } else {
+                qwenModelPicker.isEnabled = true
+                if (state == WakeWordAssistantService.STATUS_STOPPED) {
+                    status.text = "Hey ChatWork is stopped."
+                    status.visibility = View.VISIBLE
+                } else if (requested) {
+                    status.text = "Android did not start the Hey ChatWork microphone service. Check Microphone and Notifications permissions, then try again."
+                    status.visibility = View.VISIBLE
+                }
                 if (!engine.isLoaded && !modelLoadInProgress) loadModel()
             }
         }, 500L)
     }
     private fun startWakeWordService() {
-        try {
-            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
-                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true).apply()
-            val intent = Intent(this, WakeWordAssistantService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
-            qwenModelPicker.isEnabled = false
-            status.text = "Starting Hey ChatWork foreground microphone service…"
-            waitForWakeServiceStop()
-        } catch (error: Exception) {
-            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
-                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
-            qwenModelPicker.isEnabled = true
-            status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+        if (WakeWordAssistantService.isRunning) {
+            status.text = "Hey ChatWork is already running."
+            status.visibility = View.VISIBLE
+            return
+        }
+        // The chat Activity and the foreground assistant must not hold separate
+        // native Qwen contexts at the same time. Queue this after any in-flight
+        // chat model load, release that context, then start the microphone service.
+        sendButton.isEnabled = false
+        sendButton.alpha = 0.55f
+        qwenModelPicker.isEnabled = false
+        status.text = "Preparing Hey ChatWork… Releasing the chat model before loading the voice assistant."
+        status.visibility = View.VISIBLE
+        worker.execute {
+            try {
+                if (engine.isLoaded) engine.unload()
+                runOnUiThread {
+                    try {
+                        getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                            .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true)
+                            .putString(WakeWordAssistantService.KEY_STATUS, WakeWordAssistantService.STATUS_STARTING)
+                            .putString(WakeWordAssistantService.KEY_STATUS_MESSAGE, "Starting Android microphone service…")
+                            .remove(WakeWordAssistantService.KEY_ERROR).apply()
+                        val intent = Intent(this, WakeWordAssistantService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+                        status.text = "Starting Hey ChatWork… Keep ChatWork open while Android starts the microphone service. Check the notification for the listening status."
+                        status.visibility = View.VISIBLE
+                        waitForWakeServiceStop()
+                    } catch (error: Exception) {
+                        getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                            .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+                        qwenModelPicker.isEnabled = true
+                        status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+                        status.visibility = View.VISIBLE
+                        if (!modelLoadInProgress) loadModel()
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    qwenModelPicker.isEnabled = true
+                    status.text = "Could not release the chat model: ${error.message ?: "unknown model error"}"
+                    status.visibility = View.VISIBLE
+                    if (!modelLoadInProgress) loadModel()
+                }
+            }
         }
     }
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
@@ -439,7 +932,8 @@ class OfflineAiChatActivity : Activity() {
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         qwenModelPicker.isEnabled = false
-        status.text = "Checking Qwen model and phone memory…"
+        status.text = ""
+        status.visibility = View.GONE
         worker.execute {
             try {
                 val memoryInfo = ActivityManager.MemoryInfo()
@@ -455,26 +949,35 @@ class OfflineAiChatActivity : Activity() {
                         displayName = model.title,
                         expectedBytes = model.size,
                         minimumAvailableRamBytes = model.minFreeRam,
-                        minimumFreeStorageBytes = 256L * 1024L * 1024L,
-                        enabled = modelManager.snapshot(model).state == QwenModelManager.State.READY
+                        // The model is already downloaded; runtime selection must not
+                        // reject it because of a post-download free-storage reserve.
+                        minimumFreeStorageBytes = 0L,
+                        enabled = modelManager.snapshot(model).state in setOf(
+                            QwenModelManager.State.READY, QwenModelManager.State.NEEDS_TEST
+                        )
                     )
                 }
                 val recommendation = AssistantModelPolicy.recommend(
                     candidates = downloadedCandidates,
                     budget = budget,
-                    reserveRamBytes = 512L * 1024L * 1024L,
-                    reserveStorageBytes = 256L * 1024L * 1024L
+                    // minFreeRam is the per-model runtime threshold. Avoid a second
+                    // global reserve that can reject the only installed model.
+                    reserveRamBytes = 0L,
+                    reserveStorageBytes = 0L
                 )
                 // Keep a saved model only if it still fits the live RAM budget.
                 // Otherwise choose the largest downloaded model that fits with safety reserves.
                 val savedReady = savedModel?.takeIf {
                     recommendation.candidate?.id == it.id &&
-                        modelManager.snapshot(it).state == QwenModelManager.State.READY
+                        modelManager.snapshot(it).state in setOf(
+                            QwenModelManager.State.READY, QwenModelManager.State.NEEDS_TEST
+                        )
                 }
                 val adaptiveChoice = recommendation.candidate?.let { candidate ->
                     modelManager.models.firstOrNull { it.id == candidate.id }
                 }
-                val chosen = savedReady ?: adaptiveChoice ?: recommended
+                val chosen = savedReady ?: adaptiveChoice
+                    ?: throw IllegalStateException("No downloaded AI model is ready for this phone. Open Downloads, install a compatible Qwen model, then return to ChatWork.")
                 getSharedPreferences("workly_qwen_models", MODE_PRIVATE).edit().putString("selected_model_id", chosen.id).apply()
                 selectedQwenModel = chosen
                 runOnUiThread {
@@ -483,30 +986,47 @@ class OfflineAiChatActivity : Activity() {
                     status.text = "Available RAM: %.1f GB · Recommended: ${recommended.title}".format(java.util.Locale.US, memoryInfo.availMem / 1_000_000_000.0)
                 }
                 val modelState = modelManager.snapshot(chosen).state
-                check(modelState == QwenModelManager.State.READY) {
-                    "${chosen.title} download is not verified. Open Downloads and wait until it shows Ready."
+                check(modelState == QwenModelManager.State.READY || modelState == QwenModelManager.State.NEEDS_TEST) {
+                    "${chosen.title} is not fully downloaded. Open Downloads and finish the download."
                 }
                 check(memoryInfo.availMem >= chosen.minFreeRam) {
                     "Not enough free RAM for ${chosen.title}. Choose a smaller Qwen model or close other apps."
                 }
                 check(engine.loadModel(modelManager.file(chosen))) {
-                    "Qwen could not load. Free memory may be insufficient; try a smaller model."
+                    "${chosen.title} could not load. Free memory may be insufficient; try a smaller model."
                 }
+                // Confirm actual generation before enabling the composer. A file that
+                // merely opens in llama.cpp is not enough to prove chat will work.
+                val smokeReply = engine.generate("Reply with exactly: ChatWork is ready.")
+                check(smokeReply.isNotBlank() &&
+                    !smokeReply.contains("could not generate a response", ignoreCase = true)) {
+                    "${chosen.title} loaded but could not generate a chat reply. Test another downloaded model."
+                }
+                modelManager.markTested(chosen, true)
                 runOnUiThread {
                     loadedModelId = chosen.id
                     modelLoadInProgress = false
-                    status.text = "Ready · ${chosen.title} · local AI replies enabled"
-                    sendButton.isEnabled = true
-                    sendButton.alpha = 1f
+                    status.text = ""
+                    status.visibility = View.GONE
+                    modelLabel.text = "AI Assistant · ${chosen.title} · Ready"
+                    sendButton.isEnabled = engine.isLoaded && !promptInput.text.isNullOrBlank()
+                    sendButton.alpha = if (sendButton.isEnabled) 1f else 0.55f
                     qwenModelPicker.isEnabled = !WakeWordAssistantService.isRunning
                 }
             } catch (error: Exception) {
                 runOnUiThread {
                     loadedModelId = null
                     modelLoadInProgress = false
-                    status.text = "Model not ready · ${error.message ?: "Offline AI could not start."}"
+                    status.text = error.message ?: "Downloaded AI model could not be loaded."
+                    status.visibility = View.VISIBLE
+                    modelLabel.text = "AI Assistant · Model unavailable — check Downloads"
                     sendButton.isEnabled = false
                     qwenModelPicker.isEnabled = true
+                    android.widget.Toast.makeText(
+                        this@OfflineAiChatActivity,
+                        error.message ?: "Downloaded AI model could not be loaded",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }
@@ -538,11 +1058,20 @@ class OfflineAiChatActivity : Activity() {
             return
         }
         promptInput.setText("")
+        greetingPane?.let { chatMessages.removeView(it) }
+        greetingPane = null
         addMessage(prompt, true)
-        thinkingBubble = addMessage("Thinking…", false)
+        conversationHistory.append("User: ").append(prompt).append("\n")
+        if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
+        saveCurrentConversation()
+        thinkingBubble = addMessage("✦  Thinking…", false)
+        thinkingBubble?.animate()?.alpha(0.72f)?.setDuration(650)?.withEndAction {
+            thinkingBubble?.animate()?.alpha(1f)?.setDuration(650)?.start()
+        }?.start()
         sendButton.isEnabled = false
         sendButton.alpha = 0.55f
         status.text = "Generating a reply on this phone…"
+        status.visibility = View.VISIBLE
         val memoryItems = getSharedPreferences("chatwork_user_memory", MODE_PRIVATE).getString("items", "").orEmpty().trim()
         val importedDocs = importedDocumentContext()
         val legacyFileContext = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
@@ -550,8 +1079,12 @@ class OfflineAiChatActivity : Activity() {
         val chosenFile = importedDocs.ifBlank { legacyFileContext }
         val memoryContext = if (memoryItems.isNotBlank()) "User-approved saved memory (use only if relevant):\n$memoryItems\n\n" else ""
         val fileContext = if (chosenFile.isNotBlank()) "User-selected file content:\n$chosenFile\n\n" else ""
-        val contextPrompt = memoryContext + fileContext + (if (conversationHistory.isEmpty()) prompt else
-            "Previous conversation:\n$conversationHistory\nCurrent message:\n$prompt")
+        val thinkingInstruction = if (thinkHarderEnabled) {
+            "Think carefully through the problem before answering. Check important details and provide a clear, well-structured answer with a concise summary of the reasoning. Do not expose private internal reasoning.\n\n"
+        } else ""
+        val systemInstruction = "You are ChatWork, a helpful, accurate, conversational AI assistant. Answer the user's latest message directly. Understand the user's language and reply in the same language (Hindi/Hinglish, Gujarati, or English as appropriate). Never invent personal details. Never output training artifacts, role labels such as User:, Assistant:, Assist:, or repeat the conversation transcript. Use prior messages only as context. If the request is unclear, ask one short clarification. Give a useful answer with simple wording and appropriate detail.\n\n"
+        val contextPrompt = systemInstruction + thinkingInstruction + memoryContext + fileContext +
+            "Conversation so far (latest user message is the final User turn; answer it only):\\n$conversationHistory"
         val usedModelId = loadedModelId ?: selectedQwenModel?.id
         val usedModel = modelManager.models.firstOrNull { it.id == usedModelId }
         worker.execute {
@@ -559,7 +1092,7 @@ class OfflineAiChatActivity : Activity() {
             val answer = try {
                 engine.generate(contextPrompt) { partial ->
                     runOnUiThread {
-                        thinkingBubble?.text = partial
+                        thinkingBubble?.text = if (partial.isNotBlank()) "$partial  ▍" else "✦  Thinking…"
                         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
                     }
                 }.trim().ifBlank {
@@ -584,8 +1117,9 @@ class OfflineAiChatActivity : Activity() {
                     )
                 }
             }
-            conversationHistory.append("User: ").append(prompt).append("\nAssistant: ").append(answer).append("\n")
+            conversationHistory.append("Assistant: ").append(answer).append("\n")
             if (conversationHistory.length > 9000) conversationHistory.delete(0, conversationHistory.length - 9000)
+            saveCurrentConversation()
             runOnUiThread {
                 if (!answer.startsWith("AI reply failed:") && chosenFile.isNotBlank()) {
                     val filePrefs = getSharedPreferences("chatwork_assistant_tools", MODE_PRIVATE)
@@ -595,6 +1129,7 @@ class OfflineAiChatActivity : Activity() {
                 }
                 replaceThinking(answer)
                 status.text = "Reply completed in ${elapsedSeconds}s"
+                status.visibility = View.GONE
                 sendButton.isEnabled = engine.isLoaded
                 sendButton.alpha = if (engine.isLoaded) 1f else 0.55f
                 if (!answer.startsWith("AI reply failed:")) speakAnswer(answer)
@@ -621,9 +1156,14 @@ class OfflineAiChatActivity : Activity() {
         }
         val minBuffer = AudioRecord.getMinBufferSize(OfflineSpeechRecognizer.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (minBuffer <= 0) { status.text = "This phone does not support 16 kHz microphone recording."; return }
+        cancelOfflineRecording = false
+        stopOfflineRecordingRequested = false
         offlineRecording = true
-        micButton.text = "■ Stop recording"
-        status.text = "Recording offline with downloaded ${pack.title} · ${pack.languageCode}. Tap Stop when finished."
+        runOnUiThread {
+            status.text = "Preparing voice recognition…"
+            micButton.isEnabled = false
+            sendButton.isEnabled = false
+        }
         worker.execute {
             var recorder: AudioRecord? = null
             var speech: OfflineSpeechRecognizer? = null
@@ -635,16 +1175,32 @@ class OfflineAiChatActivity : Activity() {
                 check(audio.state == AudioRecord.STATE_INITIALIZED) { "Could not initialize microphone." }
                 activeAudioRecord = audio
                 audio.startRecording()
+                check(audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "Microphone did not enter recording state." }
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        setRecordingUi(true)
+                        micButton.isEnabled = true
+                        sendButton.isEnabled = true
+                        status.text = "Listening… Tap Stop when you finish speaking."
+                    }
+                }
                 val buffer = ShortArray(4096)
                 val samples = ArrayList<Float>(OfflineSpeechRecognizer.SAMPLE_RATE * 15)
                 val maxSamples = OfflineSpeechRecognizer.SAMPLE_RATE * 60
                 while (offlineRecording && samples.size < maxSamples) {
-                    val count = audio.read(buffer, 0, buffer.size)
-                    if (count > 0) for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
-                    else if (count < 0) throw IllegalStateException("Microphone read failed ($count).")
+                    val count = audio.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                    if (count > 0) {
+                        for (i in 0 until count) samples.add(buffer[i] / 32768.0f)
+                    } else if (count < 0 && offlineRecording) {
+                        throw IllegalStateException("Microphone read failed ($count).")
+                    } else if (count < 0) {
+                        break
+                    }
                 }
+                val wasCancelled = cancelOfflineRecording
                 offlineRecording = false
                 runCatching { if (audio.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
+                if (wasCancelled) return@execute
                 check(samples.isNotEmpty()) { "No audio was recorded. Tap Voice and speak." }
                 runOnUiThread { status.text = "Transcribing offline with downloaded ${pack.title}…" }
                 val speechStartedAt = SystemClock.elapsedRealtime()
@@ -657,12 +1213,12 @@ class OfflineAiChatActivity : Activity() {
                         promptInput.setText(result); promptInput.setSelection(promptInput.text.length)
                         status.text = "Offline speech recognized using downloaded model. Tap Send to ask Workly AI."
                     } else status.text = "No speech recognized. Speak clearly and try again."
-                    micButton.text = "🎙"; micButton.isEnabled = true
+                    setRecordingUi(false); micButton.isEnabled = true
                 }
             } catch (error: Exception) {
                 runOnUiThread {
                     status.text = "Downloaded speech model error: ${error.message ?: "offline recognition failed"}"
-                    micButton.text = "🎙"; micButton.isEnabled = true
+                    setRecordingUi(false); micButton.isEnabled = true
                 }
             } finally {
                 offlineRecording = false; activeAudioRecord = null
@@ -672,16 +1228,17 @@ class OfflineAiChatActivity : Activity() {
     }
 
     private fun stopOfflineVoiceInput() {
+        cancelOfflineRecording = false
+        stopOfflineRecordingRequested = true
         offlineRecording = false
-        runCatching {
-            activeAudioRecord?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
-        }
-        micButton.isEnabled = false
+        // Do not stop AudioRecord from the UI thread: that can abort a blocking read
+        // before the worker has collected the buffered PCM samples. Let the read loop exit.
         status.text = "Stopping microphone and transcribing…"
     }
 
     /** Uses downloaded Indic Tiny TTS only; never Android/mobile TTS. */
     private fun speakAnswer(value: String) {
+        if (!getSharedPreferences(JARVIS_PREFS, MODE_PRIVATE).getBoolean(KEY_JARVIS_VOICE_REPLIES, true)) return
         val language = selectedLanguage(value)
         val code = when { language.tag.startsWith("hi") -> "hi"; language.tag.startsWith("gu") -> "gu"; else -> "en" }
         val pack = SpeechModelCatalog.indicTinyTts(code)
@@ -701,6 +1258,37 @@ class OfflineAiChatActivity : Activity() {
                 runOnUiThread { status.text = "Spoken using downloaded Indic Tiny TTS · ${code.uppercase()}." }
             } catch (error: Exception) {
                 runOnUiThread { status.text = "Downloaded text-to-speech model error: ${error.message ?: "audio generation failed"}. No mobile TTS fallback was used." }
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_EXPORT_CONVERSATION && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            val exportText = "ChatWork offline conversation\nExported: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date())}\n\n" +
+                conversationHistory.toString()
+            try {
+                contentResolver.openOutputStream(uri, "w")?.use { output ->
+                    output.write(exportText.toByteArray(Charsets.UTF_8))
+                    output.flush()
+                } ?: throw IllegalStateException("Could not open the selected destination.")
+                status.text = "Conversation exported to the location you selected."
+            } catch (failure: Exception) {
+                status.text = "Conversation export failed: ${failure.message ?: failure.javaClass.simpleName}"
+            }
+            return
+        }
+        if (requestCode == REQUEST_ATTACHMENT && resultCode == RESULT_OK && data != null) {
+            val uris = mutableListOf<android.net.Uri>()
+            data.clipData?.let { clip -> for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let(uris::add) }
+            data.data?.let { if (uris.isEmpty()) uris.add(it) }
+            if (uris.isNotEmpty()) {
+                val names = uris.mapNotNull { uri ->
+                    runCatching { contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } }.getOrNull()
+                }
+                status.text = "Selected: ${names.joinToString().ifBlank { uris.size.toString() + " attachment(s)" }}. Text extraction is available through Assistant Tools → Files."
+                uris.forEach { uri -> runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
             }
         }
     }
@@ -733,38 +1321,122 @@ class OfflineAiChatActivity : Activity() {
     }
 
     private fun addMessage(value: String, fromUser: Boolean): TextView {
+        val messageColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (fromUser) Gravity.END else Gravity.START
+            setPadding(dp(2), dp(7), dp(2), dp(7))
+        }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = if (fromUser) Gravity.END else Gravity.START
-            setPadding(dp(2), dp(3), dp(2), dp(3))
         }
         val bubble = TextView(this).apply {
-            text = value
-            textSize = 16f
-            typeface = android.graphics.Typeface.create("sans-serif", android.graphics.Typeface.NORMAL)
-            setTextColor(if (fromUser) 0xFFFFFFFF.toInt() else primaryText)
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
-            setLineSpacing(dp(2).toFloat(), 1.04f)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (fromUser) 0xFF1769C2.toInt() else surface)
-                cornerRadius = dp(19).toFloat()
+            text = if (fromUser) value else formatMarkdown(value)
+            textSize = if (fromUser) 15.5f else 16f
+            typeface = android.graphics.Typeface.DEFAULT
+            setTextColor(primaryText)
+            setPadding(if (fromUser) dp(17) else dp(15), if (fromUser) dp(12) else dp(13),
+                if (fromUser) dp(17) else dp(15), if (fromUser) dp(12) else dp(13))
+            maxWidth = (resources.displayMetrics.widthPixels * if (fromUser) 0.88f else 0.96f).toInt()
+            setLineSpacing(dp(5).toFloat(), 1.04f)
+            background = if (fromUser) android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(0xFF2878F0.toInt(), 0xFF6658D9.toInt())
+            ).apply {
+                cornerRadii = floatArrayOf(
+                    dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(), dp(22).toFloat(),
+                    dp(7).toFloat(), dp(7).toFloat(), dp(22).toFloat(), dp(22).toFloat()
+                )
+                setStroke(dp(1), 0x557DBBFF)
+            } else null
+            if (fromUser) setTextColor(0xFFFFFFFF.toInt())
+            else setPadding(0, dp(5), 0, dp(5))
+        }
+        row.addView(bubble, LinearLayout.LayoutParams(-2, -2).apply { if (fromUser) marginStart = dp(44) else marginEnd = dp(2) })
+        messageColumn.addView(row, LinearLayout.LayoutParams(-1, -2))
+        if (!fromUser) {
+            // AI replies are plain page text: no timestamp, feedback or share toolbar.
+            /*
+            val meta = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.START; setPadding(0, dp(5), 0, 0) }
+            val timestamp = java.text.SimpleDateFormat("dd MMMM yyyy hh:mm:ss a", Locale.getDefault()).format(java.util.Date())
+            meta.addView(TextView(this).apply { text = timestamp; textSize = 12f; typeface = android.graphics.Typeface.DEFAULT; setTextColor(secondaryText) }, LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = dp(5) })
+            val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            fun actionIcon(drawable: Int, label: String, onTap: () -> Unit) = ImageView(this).apply {
+                setImageResource(drawable); setColorFilter(secondaryText); contentDescription = label; scaleType = ImageView.ScaleType.CENTER
+                setPadding(dp(3), dp(4), dp(3), dp(4))
+                alpha = 0.88f
+                setOnClickListener {
+                    animate().scaleX(0.92f).scaleY(0.92f).setDuration(80L).withEndAction {
+                        animate().scaleX(1f).scaleY(1f).setDuration(100L).start()
+                    }.start()
+                    onTap()
+                }
             }
+            actions.addView(actionIcon(R.drawable.ic_chat_copy, "Copy message") {
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ChatWork message", bubble.text))
+                android.widget.Toast.makeText(this@OfflineAiChatActivity, "Message copied", android.widget.Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(dp(32), dp(28)))
+            actions.addView(actionIcon(R.drawable.ic_chat_thumb_up, "Like response") {
+                val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
+                prefs.edit().putString("last_feedback", "positive").putLong("last_feedback_at", System.currentTimeMillis()).apply()
+                android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(dp(32), dp(28)))
+            actions.addView(actionIcon(R.drawable.ic_chat_thumb_down, "Dislike response") {
+                val prefs = getSharedPreferences("chatwork_message_feedback", MODE_PRIVATE)
+                prefs.edit().putString("last_feedback", "negative").putLong("last_feedback_at", System.currentTimeMillis()).apply()
+                android.widget.Toast.makeText(this@OfflineAiChatActivity, "Thanks for your feedback", android.widget.Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(dp(36), dp(30)))
+            actions.addView(actionIcon(R.drawable.ic_chatwork_mic, "Read aloud") { speakAnswer(bubble.text.toString()) }, LinearLayout.LayoutParams(dp(32), dp(28)))
+            actions.addView(actionIcon(android.R.drawable.ic_menu_share, "Share response") {
+                val share = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, bubble.text.toString())
+                }
+                startActivity(Intent.createChooser(share, "Share ChatWork response"))
+            }, LinearLayout.LayoutParams(dp(32), dp(28)))
+            meta.addView(actions, LinearLayout.LayoutParams(-1, -2)); messageColumn.addView(meta, LinearLayout.LayoutParams(-1, -2))
+            */
+        } else {
+            messageColumn.addView(TextView(this).apply {
+                text = java.text.SimpleDateFormat("hh:mm a", Locale.getDefault()).format(java.util.Date())
+                textSize = 12f
+                setTextColor(secondaryText)
+                gravity = Gravity.END
+                setPadding(0, dp(4), dp(5), 0)
+            }, LinearLayout.LayoutParams(-1, -2))
         }
-        val params = LinearLayout.LayoutParams(-2, -2).apply {
-            if (fromUser) marginStart = dp(42) else marginEnd = dp(28)
-        }
-        row.addView(bubble, params)
-        chatMessages.addView(row, LinearLayout.LayoutParams(-1, -2))
+        chatMessages.addView(messageColumn, LinearLayout.LayoutParams(-1, -2))
+        messageColumn.alpha = 0f
+        messageColumn.translationY = dp(8).toFloat()
+        messageColumn.animate().alpha(1f).translationY(0f).setDuration(230L).start()
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
         return bubble
     }
-
     private fun replaceThinking(answer: String) {
         val bubble = thinkingBubble
-        if (bubble != null) bubble.text = answer else addMessage(answer, false)
+        if (bubble != null) bubble.text = formatMarkdown(answer) else addMessage(answer, false)
         thinkingBubble = null
         chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun formatMarkdown(source: String): CharSequence {
+        val normalized = source
+            .replace(Regex("(?m)^#{1,6}\\s+"), "")
+            .replace(Regex("(?m)^\\s*[-*]\\s+"), "• ")
+            .replace(Regex("(?m)^\\s*\\d+\\.\\s+"), "• ")
+        val out = SpannableStringBuilder(normalized)
+        Regex("\\*\\*(.+?)\\*\\*").findAll(normalized).forEach { match ->
+            out.setSpan(StyleSpan(Typeface.BOLD), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        Regex("(?<!\\*)\\*([^*\\n]+)\\*(?!\\*)").findAll(normalized).forEach { match ->
+            out.setSpan(StyleSpan(Typeface.ITALIC), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        Regex("\\x60([^\\x60]+)\\x60").findAll(normalized).forEach { match ->
+            out.setSpan(TypefaceSpan("monospace"), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            out.setSpan(BackgroundColorSpan(if (dark) 0xFF263449.toInt() else 0xFFF0F2F5.toInt()), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return out
     }
 
     private fun text(value: String, size: Int, color: Int) = TextView(this).apply {
@@ -794,7 +1466,16 @@ class OfflineAiChatActivity : Activity() {
         else if (requestCode == REQUEST_WAKE_ASSISTANT && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
             startWakeWordService()
         } else if (requestCode == REQUEST_WAKE_ASSISTANT) {
-            status.text = "Hey ChatWork needs microphone and notification permissions to show its active listening status."
+            status.text = if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                "Microphone permission is required for Hey ChatWork."
+            } else {
+                "Notification permission is required to show when Hey ChatWork is listening."
+            }
+            status.visibility = View.VISIBLE
+            val stillDenied = mutableListOf<String>()
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) stillDenied.add(Manifest.permission.RECORD_AUDIO)
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) stillDenied.add(Manifest.permission.POST_NOTIFICATIONS)
+            if (stillDenied.any { !shouldShowRequestPermissionRationale(it) }) showWakePermissionSettingsDialog()
         }
     }
 
@@ -808,9 +1489,25 @@ class OfflineAiChatActivity : Activity() {
         super.onDestroy()
     }
 
+    private inner class VoiceWaveformView : View(this@OfflineAiChatActivity) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF0A84FF.toInt(); strokeWidth = dp(3).toFloat(); strokeCap = Paint.Cap.ROUND }
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val count = 25; val gap = width.toFloat() / (count + 1); val phase = (SystemClock.uptimeMillis() / 110L).toInt()
+            for (i in 0 until count) {
+                val wave = kotlin.math.abs(kotlin.math.sin((i + phase) * .48)).toFloat()
+                val h = dp(5) + wave * dp(24)
+                val x = gap * (i + 1)
+                canvas.drawLine(x, height / 2f - h / 2f, x, height / 2f + h / 2f, paint)
+            }
+            if (recordingUiActive) postInvalidateDelayed(90)
+        }
+    }
+
     companion object {
         private const val REQUEST_AUDIO = 5101
         private const val REQUEST_WAKE_ASSISTANT = 5103
         private const val REQUEST_EXPORT_CONVERSATION = 5105
+        private const val REQUEST_ATTACHMENT = 5106
     }
 }

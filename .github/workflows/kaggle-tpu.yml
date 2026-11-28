@@ -1,0 +1,213 @@
+name: Workly India Kaggle TPU
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tpu:
+        description: "Run the Kaggle notebook on TPU (otherwise save a new version only)"
+        required: true
+        type: boolean
+        default: false
+  push:
+    branches:
+      - feature/chatwork-chat-page-messenger-ui
+    paths:
+      - "kaggle/workly-tpu/**"
+      - ".github/workflows/kaggle-tpu.yml"
+
+permissions:
+  contents: read
+
+# Keep notebook publishing separate from long-running TPU verification.
+# A TPU run must not block normal code pushes from publishing the latest notebook.
+concurrency:
+  group: workly-kaggle-tpu-${{ github.event_name == 'workflow_dispatch' && inputs.run_tpu && 'execute' || 'publish' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish Workly TPU notebook to Kaggle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+      KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+      KAGGLE_KERNEL_SLUG: ${{ secrets.KAGGLE_KERNEL_SLUG }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate Kaggle secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KAGGLE_API_TOKEN" || { echo "::error::Add KAGGLE_API_TOKEN in GitHub Actions secrets."; exit 1; }
+          test -n "$KAGGLE_USERNAME" || { echo "::error::Add KAGGLE_USERNAME in GitHub Actions secrets."; exit 1; }
+          test -n "$KAGGLE_KERNEL_SLUG" || { echo "::error::Add KAGGLE_KERNEL_SLUG in GitHub Actions secrets."; exit 1; }
+          echo "Kaggle secret names are present (values are never printed)."
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Kaggle CLI
+        run: python -m pip install --upgrade six kaggle
+
+      - name: Build valid Kaggle notebook and metadata
+        working-directory: kaggle/workly-tpu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet nbformat
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import nbformat
+
+          username = os.environ["KAGGLE_USERNAME"].strip()
+          slug = os.environ["KAGGLE_KERNEL_SLUG"].strip()
+          if not username or not slug or "/" in slug:
+              raise SystemExit("KAGGLE_USERNAME or KAGGLE_KERNEL_SLUG is invalid.")
+
+          source = Path("workly_tpu.py").read_text(encoding="utf-8")
+          notebook = nbformat.v4.new_notebook(
+              cells=[nbformat.v4.new_code_cell(source)],
+              metadata={
+                  "kernelspec": {
+                      "display_name": "Python 3",
+                      "language": "python",
+                      "name": "python3"
+                  },
+                  "language_info": {"name": "python"}
+              }
+          )
+          nbformat.validate(notebook)
+          nbformat.write(notebook, "workly_tpu.ipynb")
+          # Validate the exact JSON payload before handing it to Kaggle.
+          json.loads(Path("workly_tpu.ipynb").read_text(encoding="utf-8"))
+
+          metadata = {
+              "id": f"{username}/{slug}",
+              "title": "Workly India TPU Lab",
+              "code_file": "workly_tpu.ipynb",
+              "language": "python",
+              "kernel_type": "notebook",
+              "is_private": True,
+              "enable_gpu": False,
+              "enable_internet": True,
+              "machine_shape": "TpuV5E8",
+              "dataset_sources": [],
+              "kernel_sources": [],
+              "competition_sources": [],
+              "model_sources": []
+          }
+          Path("kernel-metadata.json").write_text(
+              json.dumps(metadata, indent=2), encoding="utf-8"
+          )
+          print("Validated notebook JSON and Kaggle metadata.")
+          PY
+
+      - name: Publish and optionally run on Kaggle TPU
+        working-directory: kaggle/workly-tpu
+        shell: bash
+        env:
+          RUN_TPU: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tpu }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUN_TPU" == "true" ]]; then
+            kaggle kernels push --path . --timeout 32400 --accelerator TpuV5E8
+          else
+            kaggle kernels push --path . --no-run
+          fi
+
+      - name: Wait for TPU run and verify smoke-test output
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.run_tpu }}
+        working-directory: kaggle/workly-tpu
+        shell: bash
+        env:
+          KERNEL_REF: ${{ secrets.KAGGLE_USERNAME }}/${{ secrets.KAGGLE_KERNEL_SLUG }}
+        run: |
+          set -euo pipefail
+          echo "Waiting up to 30 minutes for Kaggle TPU execution..."
+          completed=false
+          for attempt in $(seq 1 60); do
+            status="$(kaggle kernels status "$KERNEL_REF" 2>&1 || true)"
+            echo "Kaggle status check $attempt/60: $status"
+            if grep -Eiq '(^|[^A-Z])COMPLETE([^A-Z]|$)' <<<"$status"; then
+              completed=true
+              break
+            fi
+            if grep -Eiq 'ERROR|FAILED|CANCELLED' <<<"$status"; then
+              echo "::error::Kaggle reported a failed TPU kernel run."
+              kaggle kernels logs "$KERNEL_REF" || true
+              exit 1
+            fi
+            sleep 30
+          done
+          if [[ "$completed" != "true" ]]; then
+            echo "::error::Timed out waiting for Kaggle TPU execution. Check Kaggle kernel status and logs."
+            kaggle kernels logs "$KERNEL_REF" || true
+            exit 1
+          fi
+
+          kaggle kernels logs "$KERNEL_REF"
+          mkdir -p ../../kaggle-tpu-output
+          kaggle kernels output "$KERNEL_REF" --path ../../kaggle-tpu-output --force --file-pattern 'workly-tpu-result\.json$'
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          candidates = list(Path("../../kaggle-tpu-output").rglob("workly-tpu-result.json"))
+          if not candidates:
+              raise SystemExit("Kaggle run completed but workly-tpu-result.json was not found.")
+          result = json.loads(candidates[0].read_text(encoding="utf-8"))
+          if result.get("status") != "TPU_SMOKE_TEST_PASSED":
+              raise SystemExit(f"Unexpected TPU result status: {result.get('status')!r}")
+          print("Verified TPU smoke test:", json.dumps(result, indent=2))
+          with open("../../kaggle-tpu-result-summary.txt", "w", encoding="utf-8") as f:
+              f.write(json.dumps(result, indent=2))
+          PY
+
+      - name: Build TPU benchmark summary
+        if: always()
+        shell: bash
+        env:
+          KERNEL_REF: ${{ secrets.KAGGLE_USERNAME }}/${{ secrets.KAGGLE_KERNEL_SLUG }}
+        run: |
+          {
+            echo "## Workly India Kaggle TPU report"
+            echo "- Notebook target: ${KERNEL_REF}"
+            echo "- Accelerator requested: TPU v5e-8"
+            echo "- Kaggle quota remaining: not available from this notebook/CLI report; check Kaggle account settings."
+            echo "- Qwen model tokens/sec: not measured until a compatible Qwen TPU inference pipeline is added."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ -f kaggle-tpu-result-summary.txt ]]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          r = json.loads(Path("kaggle-tpu-result-summary.txt").read_text())
+          def show(label, key, suffix=""):
+              value = r.get(key)
+              print(f"- {label}: {value if value is not None else 'not reported'}{suffix if value is not None else ''}")
+          print("\n### TPU execution")
+          show("Result", "status")
+          show("Device", "device")
+          show("Elapsed time", "elapsed_minutes", " minutes")
+          show("Benchmark duration", "benchmark_seconds", " seconds")
+          show("Matrix operations/sec", "matrix_operations_per_second")
+          show("Approx. matrix throughput", "approx_matrix_tflops", " TFLOP/s")
+          show("XLA memory info (bytes)", "xla_memory_info_bytes")
+          show("Model inference", "model_inference_status")
+          show("Model tokens/sec", "model_inference_tokens_per_second")
+          PY
+          else
+            echo "- TPU result: no result JSON was downloaded (not run, queued, or failed)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload TPU report artifact
+        if: always() && hashFiles('kaggle-tpu-result-summary.txt') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: workly-kaggle-tpu-report
+          path: kaggle-tpu-result-summary.txt
+          if-no-files-found: warn
