@@ -2,6 +2,8 @@ package com.worklyindia.aivoice
 
 // Keep this file covered by the ChatWork Android pull-request build.
 
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import java.io.File
@@ -26,6 +28,59 @@ object JarvisDiagnostics {
                 val safe = (detail ?: "").replace(Regex("(?i)(api[_ -]?key|authorization|bearer)\\s*[:=]\\s*[^\\s,;]+"), "[REDACTED]")
                 file.appendText("[" + stamp + "] " + event + (if (safe.isNotBlank()) " · " + safe else "") + "\n")
             }
+        }
+    }
+
+    /**
+     * Android keeps the previous process exit reason outside the app process.
+     * Read it on the next launch so native crashes and LMK kills are distinguishable
+     * even when no Java/Kotlin uncaught exception handler can run.
+     */
+    fun recordPreviousProcessExit(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        runCatching {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val exits = manager.getHistoricalProcessExitReasons(context.packageName, 0, 5)
+            exits.forEach { exit ->
+                val reason = when (exit.reason) {
+                    ApplicationExitInfo.REASON_ANR -> "ANR"
+                    ApplicationExitInfo.REASON_CRASH -> "JAVA_CRASH"
+                    ApplicationExitInfo.REASON_CRASH_NATIVE -> "NATIVE_CRASH"
+                    ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+                    ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
+                    ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+                    ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+                    ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+                    ApplicationExitInfo.REASON_FREEZER -> "FREEZER"
+                    ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE -> "PACKAGE_STATE_CHANGE"
+                    ApplicationExitInfo.REASON_PACKAGE_UPDATED -> "PACKAGE_UPDATED"
+                    ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "PERMISSION_CHANGE"
+                    ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INITIALIZATION_FAILURE"
+                    ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+                    else -> "OTHER_${exit.reason}"
+                }
+                val details = StringBuilder()
+                    .append("reason=").append(reason)
+                    .append("; status=").append(exit.status)
+                    .append("; process=").append(exit.processName)
+                    .append("; time=").append(exit.timestamp)
+                    .append("; pssKb=").append(exit.pss)
+                    .append("; rssKb=").append(exit.rss)
+                    .append("; description=").append(exit.description ?: "none")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                     exit.reason == ApplicationExitInfo.REASON_ANR)) {
+                    runCatching {
+                        exit.traceInputStream?.use { stream ->
+                            val trace = stream.readBytes().toString(Charsets.UTF_8).take(12000)
+                            if (trace.isNotBlank()) details.append("; trace=").append(trace)
+                        }
+                    }
+                }
+                record(context, "ANDROID_PREVIOUS_PROCESS_EXIT", details.toString())
+            }
+        }.onFailure {
+            record(context, "ANDROID_EXIT_INFO_UNAVAILABLE", it.javaClass.simpleName + ": " + (it.message ?: "unknown"))
         }
     }
 
