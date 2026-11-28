@@ -8,19 +8,15 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
-import android.view.View
-import android.graphics.Canvas
-import android.graphics.Movie
-import android.graphics.Paint
-import android.graphics.RectF
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.firebase.messaging.FirebaseMessaging
+import com.airbnb.lottie.LottieAnimationView
 
-/** ChatWork Home screen with the bundled Mr3W GIF animation. */
+/** ChatWork Home screen with the bundled JARVIS Lottie animation. */
 class MainActivity : Activity() {
     private var dark = false
-    private var signalAnimationView: AssetGifView? = null
+    private var signalAnimationView: LottieAnimationView? = null
     private val bg get() = if (dark) 0xFF0B1220.toInt() else 0xFFF4F7FF.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,9 +62,12 @@ class MainActivity : Activity() {
             setOnClickListener { startActivity(Intent(this@MainActivity, JarvisSetupActivity::class.java)) }
         }, LinearLayout.LayoutParams(-1, dp(58)))
         // Center animation occupies the free space between system bars and bottom action.
-        val signalAnimation = AssetGifView(this, "Mr3W.gif").apply {
+        val signalAnimation = LottieAnimationView(this).apply {
+            setAnimation("AI_Chatwork_Jarvis_3D_GIF_v5.json")
+            repeatCount = com.airbnb.lottie.LottieDrawable.INFINITE
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
             setPadding(dp(18), dp(12), dp(18), dp(12))
-            contentDescription = "ChatWork animated home graphic"
+            contentDescription = "ChatWork JARVIS 3D animated home graphic"
         }
         signalAnimationView = signalAnimation
         root.addView(signalAnimation, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -157,7 +156,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(64)))
 
         setContentView(root)
-        signalAnimation.startAnimation()
+        signalAnimation.playAnimation()
         // Direct-channel update notices open the official download in the browser.
         // The app never requests permission to silently install another APK.
         if (BuildConfig.FLAVOR == "direct") {
@@ -173,7 +172,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        signalAnimationView?.startAnimation()
+        signalAnimationView?.resumeAnimation()
     }
 
     override fun onPause() {
@@ -182,7 +181,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        signalAnimationView?.stopAnimation()
+        signalAnimationView?.cancelAnimation()
         signalAnimationView = null
         super.onDestroy()
     }
@@ -194,59 +193,3 @@ class MainActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }
 
-
-/** Lightweight, offline GIF renderer for the bundled Home screen animation. */
-private class AssetGifView(context: android.content.Context, assetName: String) : View(context) {
-    private val gif: Movie? = runCatching {
-        context.assets.open(assetName).use { Movie.decodeStream(it) }
-    }.getOrNull()
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val destination = RectF()
-    private var startedAt = 0L
-    private var running = false
-
-    fun startAnimation() {
-        if (gif == null || running) return
-        running = true
-        startedAt = android.os.SystemClock.uptimeMillis()
-        invalidate()
-    }
-
-    fun pauseAnimation() {
-        running = false
-        invalidate()
-    }
-
-    fun stopAnimation() {
-        running = false
-        startedAt = 0L
-        invalidate()
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        val movie = gif ?: return
-        val frameWidth = movie.width().toFloat()
-        val frameHeight = movie.height().toFloat()
-        if (frameWidth <= 0f || frameHeight <= 0f || width <= 0 || height <= 0) return
-
-        val availableWidth = (width - paddingLeft - paddingRight).coerceAtLeast(1).toFloat()
-        val availableHeight = (height - paddingTop - paddingBottom).coerceAtLeast(1).toFloat()
-        val scale = minOf(availableWidth / frameWidth, availableHeight / frameHeight)
-        val drawWidth = frameWidth * scale
-        val drawHeight = frameHeight * scale
-        val left = paddingLeft + (availableWidth - drawWidth) / 2f
-        val top = paddingTop + (availableHeight - drawHeight) / 2f
-        destination.set(left, top, left + drawWidth, top + drawHeight)
-
-        val duration = movie.duration().takeIf { it > 0 } ?: 1000
-        val elapsed = if (running) (android.os.SystemClock.uptimeMillis() - startedAt).coerceAtLeast(0L) else 0L
-        movie.setTime((elapsed % duration).toInt())
-        canvas.save()
-        canvas.clipRect(paddingLeft, paddingTop, width - paddingRight, height - paddingBottom)
-        movie.draw(canvas, destination.left, destination.top, paint)
-        canvas.restore()
-
-        if (running) postInvalidateDelayed(16L)
-    }
-}
