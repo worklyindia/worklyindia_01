@@ -116,7 +116,7 @@ jobs:
         id: build-release
         if: steps.signing.outputs.enabled == 'true'
         working-directory: android-ai-voice
-        run: gradle --no-daemon assembleDirectRelease
+        run: gradle --no-daemon assembleDirectRelease uploadCrashlyticsSymbolFileDirectRelease
 
       - name: Build preview APK (not update-compatible)
         id: build-preview
@@ -128,7 +128,7 @@ jobs:
         id: build-playstore-bundle
         if: steps.signing.outputs.enabled == 'true'
         working-directory: android-ai-voice
-        run: gradle --no-daemon bundlePlayStoreRelease
+        run: gradle --no-daemon bundlePlayStoreRelease uploadCrashlyticsSymbolFilePlayStoreRelease
 
       - name: Verify and rename Google Play App Bundle
         id: verify-playstore-bundle
