@@ -27,13 +27,16 @@ import org.json.JSONObject
  */
 class WakeWordAssistantService : Service() {
     private val running = AtomicBoolean(false)
-    private val worker = Executors.newSingleThreadExecutor()
+    @Volatile private var worker = Executors.newSingleThreadExecutor()
     @Volatile private var recorder: AudioRecord? = null
     @Volatile private var cpuWakeLock: PowerManager.WakeLock? = null
     @Volatile private var stopRequested = false
 
     override fun onCreate() {
         super.onCreate()
+        // A sticky service can be recreated after Android destroys its process.
+        // Always give the new service instance a live worker executor.
+        if (worker.isShutdown || worker.isTerminated) worker = Executors.newSingleThreadExecutor()
         createNotificationChannel()
     }
 
@@ -455,16 +458,20 @@ class WakeWordAssistantService : Service() {
         // Android can destroy a service while reclaiming process resources. Do not
         // interpret that lifecycle callback as the user's Deactivate action:
         // preserve the saved active choice so START_STICKY can recreate the service.
-        stopRequested = stopRequested || !JarvisSettingsStore.read(this).active
+        // This instance is going away. Prevent its worker's finally block from
+        // scheduling a retry on a service that Android has already destroyed.
+        // Keep the persisted user choice so START_STICKY can create a fresh instance.
+        stopRequested = true
         running.set(false)
         runCatching {
             recorder?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
         }
         recorder = null
         releaseCpuWakeLock()
-        // Let native sessions close on the worker; explicit Deactivate already clears
-        // the saved active flag inside stopAssistant().
-        worker.shutdown()
+        // Stop this instance's worker. If Android recreates the sticky service,
+        // onCreate() supplies a fresh executor; never queue retries from this instance.
+        worker.shutdownNow()
+        isRunning = false
         super.onDestroy()
     }
 
