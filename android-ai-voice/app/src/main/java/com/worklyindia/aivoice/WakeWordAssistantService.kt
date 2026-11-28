@@ -56,7 +56,7 @@ class WakeWordAssistantService : Service() {
         }
         stopRequested = false
         JarvisDiagnostics.record(this, "START_COMMAND", "action=" + (intent?.action ?: "null") + "; startId=" + startId)
-        if (!running.compareAndSet(false, true)) return START_STICKY
+        if (!running.compareAndSet(false, true)) return START_NOT_STICKY
         isRunning = true
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true)
             .putString(KEY_STATUS, STATUS_STARTING).putString(KEY_STATUS_MESSAGE, "Starting Hey ChatWork…")
@@ -80,7 +80,7 @@ class WakeWordAssistantService : Service() {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         acquireCpuWakeLock()
         worker.execute { runAssistantLoop() }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun runAssistantLoop() {
