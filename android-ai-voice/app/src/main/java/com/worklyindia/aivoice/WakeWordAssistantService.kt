@@ -549,6 +549,8 @@ internal object JarvisCrashBreadcrumbs {
     private const val KEY_DETAIL = "last_detail"
     private const val KEY_AT = "last_stage_at"
     private const val KEY_REPORTED_AT = "reported_stage_at"
+    private const val KEY_REPORT_ERROR = "last_report_error"
+    private const val KEY_REPORT_ATTEMPT_AT = "last_report_attempt_at"
 
     fun recordStage(context: android.content.Context, stage: String, detail: String = "") {
         val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
@@ -568,6 +570,7 @@ internal object JarvisCrashBreadcrumbs {
             .putBoolean(KEY_ACTIVE, false)
             .putString(KEY_STAGE, "clean_stop")
             .putLong(KEY_AT, System.currentTimeMillis())
+            .remove(KEY_REPORT_ERROR)
             .commit()
     }
 
@@ -577,14 +580,29 @@ internal object JarvisCrashBreadcrumbs {
         val prefs = app.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
         if (!prefs.getBoolean(KEY_ACTIVE, false)) return
         val stageAt = prefs.getLong(KEY_AT, 0L)
-        if (stageAt <= 0L || System.currentTimeMillis() - stageAt < 20_000L) return
+        val now = System.currentTimeMillis()
+        if (stageAt <= 0L || now - stageAt < 20_000L) return
         if (prefs.getLong(KEY_REPORTED_AT, 0L) == stageAt) return
-        val token = SecureDeviceTokenStore.read(app) ?: return
+        // Avoid parallel uploads and retry no more than once every 30 seconds.
+        if (now - prefs.getLong(KEY_REPORT_ATTEMPT_AT, 0L) < 30_000L) return
+
         val stage = prefs.getString(KEY_STAGE, "unknown") ?: "unknown"
         val detail = prefs.getString(KEY_DETAIL, "").orEmpty()
         val device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"
         val reportDetail = "last_stage=$stage; stage_time_ms=$stageAt; device=$device; app_version=${BuildConfig.VERSION_NAME}; detail=$detail"
-        Thread {
+
+        val token = SecureDeviceTokenStore.read(app)
+        if (token.isNullOrBlank()) {
+            val reason = "Device token missing or unreadable; crash breadcrumb retained locally."
+            prefs.edit().putString(KEY_REPORT_ERROR, reason).putLong(KEY_REPORT_ATTEMPT_AT, now).commit()
+            android.util.Log.e("JarvisCrashBreadcrumbs", reason)
+            return
+        }
+
+        // Persist the attempt before starting the background request so repeated onResume
+        // calls cannot launch duplicate uploads.
+        prefs.edit().putLong(KEY_REPORT_ATTEMPT_AT, now).commit()
+        Thread({
             try {
                 VoiceRelayApi.reportDiagnostic(
                     token,
@@ -593,10 +611,16 @@ internal object JarvisCrashBreadcrumbs {
                     reportDetail,
                     "sherpa-onnx-wake-word"
                 )
-                prefs.edit().putLong(KEY_REPORTED_AT, stageAt).commit()
-            } catch (_: Exception) {
-                // Keep the breadcrumb pending so a later app launch can retry.
+                prefs.edit()
+                    .putLong(KEY_REPORTED_AT, stageAt)
+                    .remove(KEY_REPORT_ERROR)
+                    .commit()
+                android.util.Log.i("JarvisCrashBreadcrumbs", "Crash breadcrumb uploaded for stage=$stage")
+            } catch (error: Exception) {
+                val reason = "${error.javaClass.simpleName}: ${error.message ?: "diagnostic upload failed"}".take(300)
+                prefs.edit().putString(KEY_REPORT_ERROR, reason).commit()
+                android.util.Log.e("JarvisCrashBreadcrumbs", "Upload failed; breadcrumb retained for retry: $reason")
             }
-        }.start()
+        }, "jarvis-crash-report").start()
     }
 }
