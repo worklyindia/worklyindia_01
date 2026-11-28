@@ -1,48 +1,62 @@
 package com.worklyindia.aivoice
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaPlayer
+import android.media.MediaRecorder
 import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import android.view.Gravity
-import android.view.View
-import android.widget.Button
+import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import java.util.Locale
+import com.airbnb.lottie.LottieAnimationView
+import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
-/** Manual, user-started JARVIS voice test. Does not start the always-on wake-word service. */
-class JarvisCallActivity : Activity(), TextToSpeech.OnInitListener {
+/**
+ * Hands-free foreground voice conversation. Uses the exact downloaded STT/TTS
+ * packs selected in JARVIS Setup; it does not start the background wake-word service.
+ */
+class JarvisCallActivity : Activity() {
     private val executor = Executors.newSingleThreadExecutor()
-    private var recognizer: SpeechRecognizer? = null
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
-    private var callEnded = false
+    private val ended = AtomicBoolean(false)
+    private val turnRunning = AtomicBoolean(false)
+    @Volatile private var activeRecorder: AudioRecord? = null
+    private var player: MediaPlayer? = null
     private lateinit var status: TextView
     private lateinit var transcript: TextView
     private lateinit var reply: TextView
-    private lateinit var mic: Button
-    private var history = StringBuilder("System: You are JARVIS, ChatWork’s concise multilingual voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers brief, and do not claim to control phone settings.\n")
+    private lateinit var animation: LottieAnimationView
+    private val history = StringBuilder(
+        "System: You are JARVIS, ChatWork's concise multilingual voice assistant. " +
+            "Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user's language, " +
+            "keep spoken answers brief, and do not claim to control phone settings.\\n"
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = 0xFF080F1D.toInt()
         window.navigationBarColor = 0xFF080F1D.toInt()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         buildUi()
-        tts = TextToSpeech(this, this)
+
         val cfg = JarvisSettingsStore.read(this)
         if (cfg.apiKey.isBlank()) {
-            status.text = "JARVIS setup incomplete · Save your Groq or Gemini API key first."
-            mic.isEnabled = false
+            status.text = "JARVIS Setup incomplete. Save your AI provider API key first."
+            return
+        }
+        status.text = "Preparing selected speech models…"
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_MIC)
         } else {
-            status.text = "Ready · ${cfg.provider.uppercase(Locale.ROOT)} · ${cfg.sttLanguage.uppercase(Locale.ROOT)}"
+            startListening()
         }
     }
 
@@ -50,62 +64,67 @@ class JarvisCallActivity : Activity(), TextToSpeech.OnInitListener {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(22), dp(24), dp(22), dp(20))
+            setPadding(dp(18), dp(12), dp(18), dp(16))
             setBackgroundColor(0xFF080F1D.toInt())
         }
         root.addView(TextView(this).apply {
-            text = "JARVIS VOICE"
+            text = "CHATWORK"
             textSize = 13f
-            letterSpacing = .18f
+            letterSpacing = .2f
             setTextColor(0xFF8EA7C9.toInt())
-        })
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, dp(30)))
+
+        animation = LottieAnimationView(this).apply {
+            setAnimation("AI_Chatwork_Jarvis_3D_GIF_v5.json")
+            repeatCount = com.airbnb.lottie.LottieDrawable.INFINITE
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            contentDescription = "ChatWork JARVIS 3D animated logo"
+        }
+        root.addView(animation, LinearLayout.LayoutParams(-1, 0, 1.15f))
+
         root.addView(TextView(this).apply {
             text = "ChatWork"
-            textSize = 30f
+            textSize = 28f
+            gravity = Gravity.CENTER
             setTextColor(-1)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setPadding(0, dp(5), 0, dp(6))
-        })
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+
         status = TextView(this).apply {
-            text = "Preparing voice session…"
+            text = "Starting voice session…"
             textSize = 14f
             gravity = Gravity.CENTER
             setTextColor(0xFF9DB1CC.toInt())
-            setPadding(0, dp(8), 0, dp(20))
+            setPadding(dp(8), dp(8), dp(8), dp(14))
         }
         root.addView(status)
-        root.addView(View(this).apply { setBackgroundColor(0xFF17263B.toInt()) },
-            LinearLayout.LayoutParams(dp(190), dp(1)))
-        mic = Button(this).apply {
-            text = "🎙\n\nTap to speak"
-            textSize = 18f
-            isAllCaps = false
-            setTextColor(-1)
-            setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xFF2563EB.toInt()))
-            setOnClickListener { startListening() }
-        }
-        root.addView(mic, LinearLayout.LayoutParams(dp(190), dp(190)).apply {
-            gravity = Gravity.CENTER
-            topMargin = dp(34)
-            bottomMargin = dp(22)
-        })
-        transcript = bodyText("You: Your speech will appear here.")
-        reply = bodyText("JARVIS: Your AI reply will appear here.")
+
         val scrollContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(transcript)
-            addView(reply)
+            addView(makeBodyText("You: Waiting for your voice…").also { transcript = it })
+            addView(makeBodyText("ChatWork: Your reply will appear here.").also { reply = it })
         }
-        root.addView(ScrollView(this).apply { addView(scrollContent) }, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(Button(this).apply {
-            text = "End voice chat"
+        root.addView(ScrollView(this).apply { addView(scrollContent) },
+            LinearLayout.LayoutParams(-1, 0, 1f))
+
+        root.addView(TextView(this).apply {
+            text = "Listening automatically · Speak naturally · No microphone button needed"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF8EA7C9.toInt())
+            setPadding(0, dp(10), 0, dp(10))
+        })
+        root.addView(android.widget.Button(this).apply {
+            text = "End ChatWork Call"
             isAllCaps = false
             setOnClickListener { finishCall() }
-        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(14) })
+        }, LinearLayout.LayoutParams(-1, dp(50)))
         setContentView(root)
+        animation.playAnimation()
     }
 
-    private fun bodyText(value: String) = TextView(this).apply {
+    private fun makeBodyText(value: String) = TextView(this).apply {
         text = value
         textSize = 16f
         setTextColor(0xFFE4ECF7.toInt())
@@ -115,117 +134,227 @@ class JarvisCallActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun startListening() {
-        if (callEnded) return
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 4401)
-            return
-        }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            status.text = "Speech recognition service is not available on this phone."
-            return
-        }
+        if (ended.get() || isFinishing || !turnRunning.compareAndSet(false, true)) return
         val cfg = JarvisSettingsStore.read(this)
-        val locale = when (cfg.sttLanguage) { "gu" -> "gu-IN"; "hi" -> "hi-IN"; else -> "en-IN" }
-        recognizer?.destroy()
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
-            sr.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    status.text = "Listening… Speak now"
-                    mic.text = "🔴\n\nListening…"
-                }
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() { status.text = "Thinking with ${cfg.provider.uppercase(Locale.ROOT)}…" }
-                override fun onError(error: Int) {
-                    status.text = "Speech recognition error ($error). Tap to try again."
-                    mic.text = "🎙\n\nTap to speak"
-                }
-                override fun onResults(results: Bundle?) {
-                    val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
-                    mic.text = "🎙\n\nTap to speak"
-                    if (spoken.isBlank()) {
-                        status.text = "No speech detected. Tap to try again."
-                        return
-                    }
-                    transcript.text = "You: $spoken"
-                    history.append("User: ").append(spoken).append("\n")
-                    status.text = "JARVIS is thinking…"
-                    executor.execute {
-                        try {
-                            val answer = JarvisSettingsStore.generateReply(this@JarvisCallActivity, history.toString(), cfg)
-                            history.append("Assistant: ").append(answer).append("\n")
-                            runOnUiThread {
-                                if (callEnded) return@runOnUiThread
-                                reply.text = "JARVIS: $answer"
-                                status.text = "JARVIS replied · Tap the microphone to continue."
-                                speak(answer, cfg.ttsLanguage)
-                            }
-                        } catch (e: Exception) {
-                            runOnUiThread {
-                                if (!callEnded) status.text = "AI error: ${e.message ?: "Request failed"}"
-                            }
+        status.text = "Listening automatically · Speak now"
+        executor.execute {
+            try {
+                val samples = captureUntilSilence()
+                if (ended.get()) return@execute
+                if (samples.isEmpty()) {
+                    turnRunning.set(false)
+                    runOnUiThread {
+                        if (!ended.get()) {
+                            status.text = "I didn't hear anything. Listening again…"
+                            status.postDelayed({ startListening() }, 600L)
                         }
                     }
+                    return@execute
                 }
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, locale)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+
+                val recognizer = OfflineSpeechEngineFactory.openIndicConformer(this, cfg.sttLanguage)
+                val spoken = try { recognizer.transcribe(samples) } finally { recognizer.close() }
+                if (ended.get()) return@execute
+                if (spoken.isBlank()) {
+                    turnRunning.set(false)
+                    runOnUiThread {
+                        if (!ended.get()) {
+                            status.text = "Speech not clear. Please speak again…"
+                            status.postDelayed({ startListening() }, 600L)
+                        }
+                    }
+                    return@execute
+                }
+
+                history.append("User: ").append(spoken).append("\\n")
+                runOnUiThread {
+                    if (!ended.get()) {
+                        transcript.text = "You: $spoken"
+                        status.text = "ChatWork is thinking…"
+                    }
+                }
+
+                val answer = JarvisSettingsStore.generateReply(this, history.toString(), cfg)
+                history.append("Assistant: ").append(answer).append("\\n")
+                if (ended.get()) return@execute
+                val audioFile = synthesizeWithSelectedModel(answer, cfg.ttsModel, cfg.ttsLanguage)
+                turnRunning.set(false)
+                runOnUiThread {
+                    if (!ended.get()) {
+                        reply.text = "ChatWork: $answer"
+                        playReply(audioFile)
+                    }
+                }
+            } catch (error: Throwable) {
+                turnRunning.set(false)
+                runOnUiThread {
+                    if (!ended.get()) {
+                        status.text = "Voice error: ${error.message ?: error.javaClass.simpleName}"
+                    }
+                }
             }
-            sr.startListening(intent)
         }
     }
 
-    private fun speak(text: String, language: String) {
-        val locale = when (language) {
-            "gu" -> Locale.forLanguageTag("gu-IN")
-            "hi" -> Locale.forLanguageTag("hi-IN")
-            else -> Locale.forLanguageTag("en-IN")
+    @SuppressLint("MissingPermission")
+    private fun captureUntilSilence(): FloatArray {
+        val sampleRate = OfflineSpeechRecognizer.SAMPLE_RATE
+        val minBuffer = AudioRecord.getMinBufferSize(
+            sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+        )
+        check(minBuffer > 0) { "This phone does not support 16 kHz microphone recording (code $minBuffer)." }
+        val recorder = AudioRecord(
+            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            sampleRate,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            maxOf(minBuffer, 4096)
+        )
+        check(recorder.state == AudioRecord.STATE_INITIALIZED) {
+            recorder.release()
+            "Microphone could not start. Check Android microphone permission."
         }
-        val engine = tts
-        if (!ttsReady || engine == null) {
-            status.text = "JARVIS replied · Android voice is still loading."
-            return
+        activeRecorder = recorder
+        val captured = ArrayList<Short>(sampleRate * 8)
+        val buffer = ShortArray(2048)
+        var speechStarted = false
+        var silenceSamples = 0
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        try {
+            recorder.startRecording()
+            while (!ended.get()) {
+                val count = recorder.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
+                if (count <= 0) break
+                var energy = 0.0
+                for (i in 0 until count) energy += buffer[i].toDouble() * buffer[i].toDouble()
+                val rms = kotlin.math.sqrt(energy / count)
+                for (i in 0 until count) captured.add(buffer[i])
+                if (rms >= VOICE_RMS_THRESHOLD) {
+                    speechStarted = true
+                    silenceSamples = 0
+                } else if (speechStarted) {
+                    silenceSamples += count
+                    if (silenceSamples >= sampleRate * SILENCE_SECONDS) break
+                }
+                if (captured.size >= sampleRate * MAX_UTTERANCE_SECONDS) break
+                if (!speechStarted &&
+                    android.os.SystemClock.elapsedRealtime() - startedAt >= NO_SPEECH_TIMEOUT_MS) break
+            }
+        } finally {
+            activeRecorder = null
+            runCatching { recorder.stop() }
+            recorder.release()
         }
-        if (engine.isLanguageAvailable(locale) < TextToSpeech.LANG_AVAILABLE) {
-            status.text = "JARVIS replied · This phone has no installed ${language.uppercase(Locale.ROOT)} voice."
-            return
-        }
-        engine.language = locale
-        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis-call-${System.currentTimeMillis()}")
+        if (!speechStarted || captured.size < sampleRate / 4) return FloatArray(0)
+        return FloatArray(captured.size) { captured[it].toFloat() / Short.MAX_VALUE.toFloat() }
     }
 
-    override fun onInit(result: Int) { ttsReady = result == TextToSpeech.SUCCESS }
+    private fun synthesizeWithSelectedModel(text: String, model: String, language: String): File {
+        val manager = SpeechPackDownloadManager(this)
+        val pack = when (model) {
+            "indic" -> SpeechModelCatalog.indicTinyTts(language)
+            "kokoro" -> SpeechModelCatalog.kokoro82m()
+            else -> SpeechModelCatalog.itantraVits(language)
+        }
+        check(manager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) {
+            "Selected Text To Voice model is not fully downloaded: ${pack.title}. Open JARVIS Setup."
+        }
+        val output = File(cacheDir, "chatwork_call_${System.currentTimeMillis()}.wav")
+        when (model) {
+            "indic" -> IndicTinyTtsEngine.create(this, language).use { engine ->
+                engine.synthesizeToWav(text, output)
+            }
+            "kokoro" -> {
+                val voice = if (language == "hi") "hf_alpha" else "af_heart"
+                KokoroTtsEngine(this).use { engine ->
+                    engine.synthesizeToWav(pack, manager.modelDirectory(pack), text, voice, output)
+                }
+            }
+            else -> SherpaVitsTtsEngine.create(this, pack).use { engine ->
+                engine.synthesizeToWav(text, output)
+            }
+        }
+        check(output.isFile && output.length() > 44L) {
+            "Selected Text To Voice model generated no playable audio."
+        }
+        return output
+    }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    private fun playReply(file: File) {
+        if (ended.get()) return
+        status.text = "Speaking with your selected voice model…"
+        player?.release()
+        player = MediaPlayer().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            setDataSource(file.absolutePath)
+            setOnPreparedListener { mp ->
+                if (ended.get()) {
+                    mp.release()
+                } else {
+                    mp.start()
+                    status.text = "ChatWork is speaking…"
+                }
+            }
+            setOnCompletionListener { mp ->
+                mp.release()
+                if (player === mp) player = null
+                if (!ended.get()) {
+                    status.text = "Listening automatically…"
+                    status.postDelayed({ startListening() }, 350L)
+                }
+            }
+            setOnErrorListener { mp, what, extra ->
+                mp.release()
+                if (player === mp) player = null
+                if (!ended.get()) status.text = "Audio playback failed ($what/$extra)."
+                true
+            }
+            prepareAsync()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 4401 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startListening()
-        else if (requestCode == 4401) status.text = "Microphone permission is required for voice chat."
+        if (requestCode == REQUEST_MIC) {
+            if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startListening()
+            else status.text = "Microphone permission is required for a hands-free call."
+        }
     }
 
     private fun finishCall() {
-        callEnded = true
-        recognizer?.cancel()
-        recognizer?.destroy()
-        recognizer = null
-        tts?.stop()
+        if (!ended.compareAndSet(false, true)) return
+        runCatching { activeRecorder?.stop() }
+        player?.release()
+        player = null
+        animation.cancelAnimation()
         finish()
     }
 
     override fun onDestroy() {
-        callEnded = true
-        recognizer?.destroy()
-        tts?.stop()
-        tts?.shutdown()
+        ended.set(true)
+        runCatching { activeRecorder?.stop() }
+        player?.release()
+        player = null
+        animation.cancelAnimation()
         executor.shutdownNow()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         super.onDestroy()
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val REQUEST_MIC = 4401
+        private const val VOICE_RMS_THRESHOLD = 550.0
+        private const val SILENCE_SECONDS = 1.1
+        private const val MAX_UTTERANCE_SECONDS = 18
+        private const val NO_SPEECH_TIMEOUT_MS = 8_000L
+    }
 }
