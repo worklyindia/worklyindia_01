@@ -23,7 +23,7 @@ class JarvisSetupActivity:Activity(){
  private data class Language(val code:String,val label:String)
  private val sttCatalog=listOf(Language("as","Assamese"),Language("bn","Bengali"),Language("brx","Bodo"),Language("doi","Dogri"),Language("gu","Gujarati"),Language("hi","Hindi"),Language("kn","Kannada"),Language("kok","Konkani"),Language("ks","Kashmiri"),Language("mai","Maithili"),Language("ml","Malayalam"),Language("mni","Manipuri"),Language("mr","Marathi"),Language("ne","Nepali"),Language("or","Odia"),Language("pa","Punjabi"),Language("sa","Sanskrit"),Language("sat","Santali"),Language("sd","Sindhi"),Language("ta","Tamil"),Language("te","Telugu"),Language("ur","Urdu"),Language("en","English"))
  private val ttsCatalog=listOf(Language("gu","Gujarati · ગુજરાતી"),Language("hi","Hindi · हिन्दी"),Language("en","English · India"))
- private lateinit var provider:Spinner;private lateinit var api:EditText;private lateinit var sttSummary:TextView;private lateinit var ttsSummary:TextView;private lateinit var status:TextView;private lateinit var active:Button
+ private lateinit var provider:Spinner;private lateinit var api:EditText;private lateinit var sttSummary:TextView;private lateinit var ttsSummary:TextView;private lateinit var status:TextView;private lateinit var active:Button;private lateinit var sttModel:Spinner;private lateinit var ttsModel:Spinner
  private var selectedStt=linkedSetOf<String>();private var selectedTts=linkedSetOf<String>()
  private val packs by lazy{SpeechPackDownloadManager(this)}
  private val ink get()=ChatWorkTheme.color(this,0xFF142033.toInt());private val muted get()=ChatWorkTheme.color(this,0xFF65748B.toInt());private val bg get()=ChatWorkTheme.color(this,0xFFF4F7FB.toInt());private val surface get()=ChatWorkTheme.color(this,0xFFFFFFFF.toInt())
@@ -40,10 +40,16 @@ class JarvisSetupActivity:Activity(){
   provider=spinner(listOf("Groq" to "groq","Google AI Studio · Gemini" to "gemini"),cfg.provider);c.addView(provider,match())
   api=EditText(this).apply{hint=if(cfg.apiKey.isBlank())"Enter API key" else "API key saved · enter a new key only to replace";inputType=android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;setSingleLine(true);setTextColor(ink);setHintTextColor(muted)};c.addView(api,match())
   c.addView(hint(if(cfg.apiKey.isBlank())"No API key saved." else "Saved securely with Android Keystore. The key is hidden; leave blank to keep it."))
-  c.addView(section("2. Text To Voice"));c.addView(hint("Model: iTantra VITS · Sherpa-ONNX. Choose from language models already downloaded on this phone."))
+  c.addView(section("2. Text To Voice"))
+  c.addView(hint("Select a downloaded voice model first. Only complete iTantra VITS packs supported by the current offline voice engine are listed."))
+  ttsModel=Spinner(this);c.addView(ttsModel,match())
+  c.addView(hint("Downloaded languages for the selected model:"))
   ttsSummary=TextView(this).apply{setTextColor(ink);textSize=15f;setPadding(dp(10),dp(12),dp(10),dp(12));setBackgroundColor(surface)};c.addView(ttsSummary,match())
   c.addView(button("Select downloaded Text To Voice languages"){chooseLanguages(false)},match())
-  c.addView(section("3. Voice To Text"));c.addView(hint("Model: AI4Bharat IndicConformer INT8. Choose one or more downloaded language packs."))
+  c.addView(section("3. Voice To Text"))
+  c.addView(hint("Select the downloaded speech recognition model."))
+  sttModel=Spinner(this);c.addView(sttModel,match())
+  c.addView(hint("Downloaded languages for the selected model:"))
   sttSummary=TextView(this).apply{setTextColor(ink);textSize=15f;setPadding(dp(10),dp(12),dp(10),dp(12));setBackgroundColor(surface)};c.addView(sttSummary,match())
   c.addView(button("Select downloaded Voice To Text languages"){chooseLanguages(true)},match())
   c.addView(section("4. JARVIS status"));status=TextView(this).apply{textSize=14f;setTextColor(muted);setPadding(dp(12),dp(12),dp(12),dp(12));setBackgroundColor(surface)};c.addView(status,match())
@@ -52,23 +58,30 @@ class JarvisSetupActivity:Activity(){
   c.addView(hint("Settings are stored on this device for the signed-in account. The API key is encrypted with Android Keystore. Selected languages are saved and restored when this page is reopened."))
   setContentView(root);refreshAvailability()
  }
- private fun availableStt()=sttCatalog.filter{runCatching{val p=SpeechModelCatalog.indicConformer(it.code);packs.snapshot(p).state==SpeechPackDownloadManager.State.COMPLETE&&OfflineSpeechEngineFactory.isReady(this,p)}.getOrDefault(false)}
- private fun availableTts()=ttsCatalog.filter{runCatching{packs.snapshot(SpeechModelCatalog.itantraVits(it.code)).state==SpeechPackDownloadManager.State.COMPLETE}.getOrDefault(false)}
+ private fun availableStt()=sttCatalog.filter{runCatching{val p=SpeechModelCatalog.indicConformer(it.code);packs.snapshot(p).files.all{f->f.state==SpeechPackDownloadManager.State.COMPLETE}&&OfflineSpeechEngineFactory.isReady(this,p)}.getOrDefault(false)}
+ private fun availableTts()=ttsCatalog.filter{runCatching{val p=SpeechModelCatalog.itantraVits(it.code);packs.snapshot(p).files.all{f->f.state==SpeechPackDownloadManager.State.COMPLETE}}.getOrDefault(false)}
  private fun refreshAvailability(){
   if(!::status.isInitialized)return
   val a=availableStt();val b=availableTts()
   selectedStt.retainAll(a.map{it.code}.toSet());selectedTts.retainAll(b.map{it.code}.toSet())
   if(selectedStt.isEmpty()&&a.isNotEmpty())selectedStt.add(a.first().code)
   if(selectedTts.isEmpty()&&b.isNotEmpty())selectedTts.add(b.first().code)
-  sttSummary.text=selectionText(sttCatalog,selectedStt,a,"No downloaded Voice To Text language models found.")
-  ttsSummary.text=selectionText(ttsCatalog,selectedTts,b,"No downloaded Text To Voice language models found.")
+  bindModelSpinner(sttModel,if(a.isEmpty()) emptyList() else listOf("AI4Bharat IndicConformer INT8 · Downloaded"))
+  bindModelSpinner(ttsModel,b.map{ "iTantra VITS · ${it.label} · Downloaded" }.distinct())
+  sttSummary.text=selectionText(sttCatalog,selectedStt,a,"No complete downloaded IndicConformer language packs found.")
+  ttsSummary.text=selectionText(ttsCatalog,selectedTts,b,"No complete downloaded iTantra VITS language packs found. Check Download Models: voice archive and shared espeak-ng data must both finish.")
   val cfg=JarvisSettingsStore.read(this)
   status.text=when{
    cfg.apiKey.isBlank()->"API key not saved. Enter your provider key and save settings."
-   a.isEmpty()||b.isEmpty()->"Download the required speech models from the Download Model section on the ChatWork home page, then return here."
+   a.isEmpty()||b.isEmpty()->"Download at least one complete model pack for both speech directions, then return here. A partially downloaded pack is not selectable."
    !WakeWordEngineFactory.isReady(this)->"Hey ChatWork wake-word model is not downloaded or is incomplete. Download it from Download Models first."
    else->"Ready to save and activate. Selected STT: ${selectedStt.joinToString()} · TTS: ${selectedTts.joinToString()}."
   }
+ }
+ private fun bindModelSpinner(spinner:Spinner,labels:List<String>){
+  val shown=if(labels.isEmpty())listOf("No downloaded model available") else labels
+  spinner.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,shown)
+  spinner.isEnabled=labels.isNotEmpty()
  }
  private fun selectionText(all:List<Language>,selected:Set<String>,available:List<Language>,empty:String):String{
   if(available.isEmpty())return empty
