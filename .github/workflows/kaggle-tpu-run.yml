@@ -5,6 +5,7 @@ on:
     branches:
       - feature/chatwork-chat-page-messenger-ui
     paths:
+      - "kaggle/workly-tpu/**"
       - ".github/workflows/kaggle-tpu-run.yml"
 
 permissions:
