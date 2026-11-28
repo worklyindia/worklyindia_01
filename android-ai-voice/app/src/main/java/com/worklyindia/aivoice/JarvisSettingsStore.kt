@@ -30,7 +30,7 @@ object JarvisSettingsStore {
  fun save(c:Context,provider:String,key:String,stt:String,tts:String) {
   require(provider in setOf("groq","gemini")&&stt in setOf("hi","en","gu")&&tts in setOf("hi","en","gu"))
   val e=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(k(c,"provider"),provider).putString(k(c,"stt"),stt).putString(k(c,"tts"),tts)
-  if(key.isNotBlank())e.putString(k(c,"key"),encrypt(key.trim()));e.apply()
+  if(key.isNotBlank())e.putString(k(c,"key"),encrypt(key.trim()));check(e.commit()) { "Could not persist JARVIS settings to app storage." }
  }
  fun setActive(c:Context,v:Boolean)=c.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putBoolean(k(c,"active"),v).apply()
  fun generateReply(c:Context,prompt:String,cfg:Config):String {
