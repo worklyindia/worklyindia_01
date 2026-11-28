@@ -48,7 +48,7 @@ object JarvisDiagnostics {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         runCatching {
             val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            val exits = manager.getHistoricalProcessExitReasons(context.packageName, 0, 5)
+            val exits = manager.getHistoricalProcessExitReasons(context.packageName, 0, 5).sortedBy { it.timestamp }
             exits.forEach { exit ->
                 val reason = when (exit.reason) {
                     ApplicationExitInfo.REASON_ANR -> "ANR"
@@ -89,6 +89,14 @@ object JarvisDiagnostics {
                     }
                 }
                 record(context, "ANDROID_PREVIOUS_PROCESS_EXIT", details.toString())
+
+                // Queue fatal process exits for Supabase upload on the next app launch.
+                // WorkManager keeps the report locally until the server acknowledges it.
+                if (exit.reason == ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                    exit.reason == ApplicationExitInfo.REASON_ANR ||
+                    exit.reason == ApplicationExitInfo.REASON_CRASH) {
+                    JarvisCrashReportOutbox.enqueue(context, exit.timestamp, reason, exit.status, details.toString())
+                }
 
                 // Android reports native crashes after the process has died. Convert each
                 // newly observed native crash/ANR into a Crashlytics non-fatal event on
