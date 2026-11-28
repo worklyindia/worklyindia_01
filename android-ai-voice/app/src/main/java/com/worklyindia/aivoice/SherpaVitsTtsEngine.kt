@@ -1,6 +1,9 @@
 package com.worklyindia.aivoice
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
@@ -38,6 +41,60 @@ class SherpaVitsTtsEngine private constructor(
         writeWav(output, audio.samples, audio.sampleRate)
         check(output.isFile && output.length() > 44L) { "VITS could not write the generated WAV audio." }
         return output
+    }
+
+    /** Preserve the existing wake-word assistant's synchronous speech API. */
+    fun speak(text: String, speed: Float = 1.0f) {
+        check(!closed.get()) { "VITS voice engine is closed." }
+        require(text.isNotBlank()) { "Enter text to speak." }
+        require(speed in 0.5f..2.0f) { "Speech speed must be between 0.5x and 2x." }
+        val voice = tts.lang().takeIf { it.isNotBlank() } ?: packLanguageFallback
+        val phonemes = phonemize(text, voice)
+        val config = GenerationConfig(sid = 0, speed = speed)
+        config.phonemeCodepoints = phonemes
+        val audio = tts.generateWithConfig(text = "", config = config)
+        require(audio.samples.isNotEmpty() && audio.sampleRate > 0) {
+            "The VITS model returned empty audio. Check the selected voice pack language."
+        }
+        val minBuffer = AudioTrack.getMinBufferSize(
+            audio.sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
+        )
+        check(minBuffer > 0) { "VITS audio output is unsupported (code $minBuffer)." }
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            .setAudioFormat(AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(audio.sampleRate)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+            .setBufferSizeInBytes(maxOf(minBuffer * 2, 8192))
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build()
+        try {
+            check(track.state == AudioTrack.STATE_INITIALIZED) { "VITS audio output could not initialize." }
+            track.play()
+            val pcm = ShortArray(audio.samples.size) {
+                (audio.samples[it].coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+            }
+            var offset = 0
+            while (offset < pcm.size) {
+                check(!closed.get()) { "VITS speech playback was stopped." }
+                val written = track.write(pcm, offset, pcm.size - offset, AudioTrack.WRITE_BLOCKING)
+                check(written > 0) { "VITS audio output write failed (code $written)." }
+                offset += written
+            }
+            val deadline = android.os.SystemClock.elapsedRealtime() + pcm.size * 1000L / audio.sampleRate + 3000L
+            while (track.playState == AudioTrack.PLAYSTATE_PLAYING &&
+                track.playbackHeadPosition.toLong() < pcm.size &&
+                android.os.SystemClock.elapsedRealtime() < deadline
+            ) Thread.sleep(20L)
+        } finally {
+            runCatching { track.pause() }
+            runCatching { track.flush() }
+            runCatching { track.stop() }
+            track.release()
+        }
     }
 
     override fun close() {
