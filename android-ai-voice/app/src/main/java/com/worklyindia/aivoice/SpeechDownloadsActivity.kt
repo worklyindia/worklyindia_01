@@ -98,6 +98,10 @@ class SpeechDownloadsActivity : Activity() {
         addSpeechPack(list,"iTantra VITS · English","Sherpa-ONNX · Piper Lessac · offline voice",SpeechModelCatalog.itantraVits("en"))
         addSpeechPack(list,"Kokoro-82M · Hindi & English","Hindi and English · selectable female and male voices · approximately 295 MB · offline LiteRT",SpeechModelCatalog.kokoro82m())
         
+        list.addView(label("LOCAL AI CHAT MODELS · QWEN",16,if(dark) 0xFF82B1FF.toInt() else 0xFF245FC7.toInt(),true).apply { setPadding(dp(2),dp(22),dp(2),dp(8)) })
+        list.addView(label("Download a Qwen model to use in Local AI Chat. These models are separate from JARVIS, which continues to use your selected Groq or Gemini API.",13,secondary,false).apply { setPadding(dp(2),0,dp(2),dp(10)) })
+        qwenManager.models.forEach { model -> addQwenCard(list, model) }
+
         list.addView(label("ON-DEVICE AI · MOBILE ONLY",16,primary,true).apply { setPadding(dp(2),dp(22),dp(2),dp(8)) })
         addLocalOnlyCard(list,"Image Generation","No verified lightweight image model is configured for this phone. Image generation stays unavailable until a compatible on-device model is integrated.")
         addLocalOnlyCard(list,"Wan 2.1 Text-to-Video 1.3B","Not supported on this phone: Wan needs a multi-gigabyte model pack and substantially more RAM. Download is disabled to prevent storage and memory failures.")
