@@ -14,7 +14,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
 
-/** Centered animated signal home screen with a fixed Download Model action. */
+/** ChatWork Home screen with the Flow 1 Lottie animation. */
 class MainActivity : Activity() {
     private var dark = false
     private var signalAnimationView: LottieAnimationView? = null
@@ -64,7 +64,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(58)))
         // Center animation occupies the free space between system bars and bottom action.
         val signalAnimation = LottieAnimationView(this).apply {
-            setAnimation("Signals.json")
+            setAnimation("ai animation Flow 1.json")
             repeatCount = LottieDrawable.INFINITE
             repeatMode = LottieDrawable.RESTART
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
