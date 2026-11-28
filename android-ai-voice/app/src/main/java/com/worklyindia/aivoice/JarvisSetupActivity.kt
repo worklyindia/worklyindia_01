@@ -61,7 +61,9 @@ class JarvisSetupActivity:Activity(){
  private fun availableStt()=sttCatalog.filter{runCatching{val p=SpeechModelCatalog.indicConformer(it.code);packs.snapshot(p).files.all{f->f.state==SpeechPackDownloadManager.State.COMPLETE}&&OfflineSpeechEngineFactory.isReady(this,p)}.getOrDefault(false)}
  private fun ttsPack(code:String)=when(selectedTtsModel){"indic"->SpeechModelCatalog.indicTinyTts(code);"kokoro"->SpeechModelCatalog.kokoro82m();else->SpeechModelCatalog.itantraVits(code)}
  private fun ttsLanguagesForModel()=if(selectedTtsModel=="kokoro")listOf(Language("hi","Hindi · हिन्दी"),Language("en","English")) else ttsCatalog
- private fun availableTts()=ttsLanguagesForModel().filter{runCatching{val p=ttsPack(it.code);packs.snapshot(p).files.all{f->f.state==SpeechPackDownloadManager.State.COMPLETE}}.getOrDefault(false)}
+ private fun isTtsPackReady(model:String,code:String)=runCatching{val p=when(model){"indic"->SpeechModelCatalog.indicTinyTts(code);"kokoro"->SpeechModelCatalog.kokoro82m();else->SpeechModelCatalog.itantraVits(code)};packs.snapshot(p).files.all{it.state==SpeechPackDownloadManager.State.COMPLETE}}.getOrDefault(false)
+  private fun availableTtsModels()=listOf("itantra","indic","kokoro").filter{model->(if(model=="kokoro")listOf("hi","en") else listOf("gu","hi","en")).any{code->isTtsPackReady(model,code)}}
+  private fun availableTts()=ttsLanguagesForModel().filter{isTtsPackReady(selectedTtsModel,it.code)}
  private fun refreshAvailability(){
   if(!::status.isInitialized)return
   val a=availableStt();val b=availableTts()
@@ -69,10 +71,13 @@ class JarvisSetupActivity:Activity(){
   if(selectedStt.isEmpty()&&a.isNotEmpty())selectedStt.add(a.first().code)
   if(selectedTts.isEmpty()&&b.isNotEmpty())selectedTts.add(b.first().code)
   bindModelSpinner(sttModel,if(a.isEmpty()) emptyList() else listOf("AI4Bharat IndicConformer INT8 · Downloaded"))
-  val choices=listOf("iTantra VITS" to "itantra","Indic Tiny TTS" to "indic","Kokoro-82M" to "kokoro")
-  ttsModel.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,choices.map{it.first})
-  ttsModel.setSelection(choices.indexOfFirst{it.second==selectedTtsModel}.coerceAtLeast(0))
-  ttsModel.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener{override fun onNothingSelected(p:android.widget.AdapterView<*>?){};override fun onItemSelected(p:android.widget.AdapterView<*>?,v:View?,position:Int,id:Long){selectedTtsModel=choices[position].second;val ready=availableTts().map{it.code}.toSet();selectedTts.retainAll(ready);if(selectedTts.isEmpty()&&ready.isNotEmpty())selectedTts.add(ready.first());if(::ttsSummary.isInitialized)ttsSummary.text=selectionText(ttsCatalog,selectedTts,availableTts(),"No downloaded language pack for this model.")}}
+  val labels=mapOf("itantra" to "iTantra VITS","indic" to "Indic Tiny TTS","kokoro" to "Kokoro-82M")
+  val choices=availableTtsModels()
+  if(selectedTtsModel !in choices && choices.isNotEmpty())selectedTtsModel=choices.first()
+  ttsModel.adapter=ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,if(choices.isEmpty())listOf("No downloaded TTS model") else choices.map{labels[it]?:it})
+  ttsModel.isEnabled=choices.isNotEmpty()
+  ttsModel.setSelection(choices.indexOf(selectedTtsModel).coerceAtLeast(0))
+  ttsModel.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener{override fun onNothingSelected(p:android.widget.AdapterView<*>?){};override fun onItemSelected(p:android.widget.AdapterView<*>?,v:View?,position:Int,id:Long){if(choices.isEmpty())return;selectedTtsModel=choices[position];val ready=availableTts().map{it.code}.toSet();selectedTts.retainAll(ready);if(selectedTts.isEmpty()&&ready.isNotEmpty())selectedTts.add(ready.first());if(::ttsSummary.isInitialized)ttsSummary.text=selectionText(ttsCatalog,selectedTts,availableTts(),"No downloaded language pack for this model.")}}
   sttSummary.text=selectionText(sttCatalog,selectedStt,a,"No complete downloaded IndicConformer language packs found.")
   ttsSummary.text=selectionText(ttsCatalog,selectedTts,b,"No complete downloaded language pack found for the selected TTS model.")
   val cfg=JarvisSettingsStore.read(this)
