@@ -764,8 +764,10 @@ class OfflineAiChatActivity : Activity() {
         if (!OfflineSpeechEngineFactory.isReady(this, SpeechModelCatalog.indicConformer(language))) {
             missing.add("IndicConformer ${language.uppercase(Locale.ROOT)} · Voice to Text")
         }
-        if (speechManager.snapshot(SpeechModelCatalog.indicTinyTts(language)).state != SpeechPackDownloadManager.State.COMPLETE) {
-            missing.add("Indic Tiny TTS ${language.uppercase(Locale.ROOT)} · Text to Voice")
+        val vitsPack = SpeechModelCatalog.itantraVits(language)
+        if (speechManager.snapshot(vitsPack).state != SpeechPackDownloadManager.State.COMPLETE ||
+            !speechManager.isModelTested(vitsPack)) {
+            missing.add("Download and Test iTantra VITS ${language.uppercase(Locale.ROOT)} · Text to Voice")
         }
         val qwenManager = QwenModelManager(this)
         if (qwenManager.models.none { qwenManager.snapshot(it).state == QwenModelManager.State.READY }) {

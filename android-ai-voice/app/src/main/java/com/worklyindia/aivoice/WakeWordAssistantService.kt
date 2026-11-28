@@ -74,7 +74,7 @@ class WakeWordAssistantService : Service() {
     private fun runAssistantLoop() {
         var wakeSession: WakeWordEngineFactory.Session? = null
         var speech: OfflineSpeechRecognizer? = null
-        var tts: IndicTinyTtsEngine? = null
+        var tts: SherpaVitsTtsEngine? = null
         var ai: OfflineAiEngine? = null
         var audio: AudioRecord? = null
         try {
@@ -89,12 +89,15 @@ class WakeWordAssistantService : Service() {
 
             val speechManager = SpeechPackDownloadManager(this)
             val sttPack = SpeechModelCatalog.indicConformer(language)
-            val ttsPack = SpeechModelCatalog.indicTinyTts(language)
+            val ttsPack = SpeechModelCatalog.itantraVits(language)
             check(OfflineSpeechEngineFactory.isReady(this, sttPack)) {
                 "Download IndicConformer ${language.uppercase(Locale.ROOT)} from Download Models first."
             }
             check(speechManager.snapshot(ttsPack).state == SpeechPackDownloadManager.State.COMPLETE) {
-                "Download Indic Tiny TTS ${language.uppercase(Locale.ROOT)} from Download Models first."
+                "Download iTantra VITS ${language.uppercase(Locale.ROOT)} from Download Models first."
+            }
+            check(speechManager.isModelTested(ttsPack)) {
+                "Run Test Model for iTantra VITS ${language.uppercase(Locale.ROOT)} before enabling JARVIS."
             }
             val wakePack = SpeechModelCatalog.chatWorkWakeWord()
             check(WakeWordEngineFactory.isReady(this)) {
@@ -156,8 +159,8 @@ class WakeWordAssistantService : Service() {
             val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, language)
             speech = activeSpeechRecognizer
             check(running.get()) { "Hey ChatWork listening was stopped." }
-            publishStatus(STATUS_LOADING, "Loading offline voice output…")
-            val activeTtsEngine = IndicTinyTtsEngine.create(this, language)
+            publishStatus(STATUS_LOADING, "Loading iTantra VITS voice output…")
+            val activeTtsEngine = SherpaVitsTtsEngine.create(this, ttsPack)
             tts = activeTtsEngine
             check(running.get()) { "Hey ChatWork listening was stopped." }
             publishStatus(STATUS_LOADING, "Loading Hey ChatWork wake-word model…")
@@ -223,7 +226,7 @@ class WakeWordAssistantService : Service() {
                                 val answer = activeAiEngine.generate(history.toString())
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
-                                updateNotification("Speaking offline · ${language.uppercase(Locale.ROOT)}")
+                                updateNotification("Speaking with iTantra VITS · ${language.uppercase(Locale.ROOT)}")
                                 activeTtsEngine.speak(answer)
                                 discardPlaybackAudio(activeAudio, buffer)
                             } else {

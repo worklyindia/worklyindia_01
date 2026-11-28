@@ -462,6 +462,7 @@ class SpeechDownloadsActivity : Activity() {
                     val output = File(cacheDir, "itantra_vits_test_${System.currentTimeMillis()}.wav")
                     try {
                         SherpaVitsTtsEngine.create(this, pack).use { it.synthesizeToWav(textToSpeak, output) }
+                        speechManager.markModelTested(pack, true)
                         ModelUsageTracker.record(this, pack.id, pack.title, "tts", "Model test", startedAt, textToSpeak.length, output.length())
                         runOnUiThread {
                             if (isFinishing || !output.isFile) return@runOnUiThread
@@ -474,6 +475,7 @@ class SpeechDownloadsActivity : Activity() {
                             }
                         }
                     } catch (error: Throwable) {
+                        speechManager.markModelTested(pack, false)
                         runOnUiThread {
                             Toast.makeText(this, error.message ?: "VITS test failed.", Toast.LENGTH_LONG).show()
                         }
