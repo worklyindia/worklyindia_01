@@ -277,17 +277,15 @@ class WakeWordAssistantService : Service() {
 
     private fun playJarvisWav(file: java.io.File) {
         check(file.isFile && file.length()>44L) { "Selected TTS model did not generate audio." }
-        val latch=java.util.concurrent.CountDownLatch(1)
         val player=android.media.MediaPlayer()
         try {
             player.setDataSource(file.absolutePath)
-            player.setOnCompletionListener { latch.countDown() }
-            player.setOnErrorListener { _,_,_ -> latch.countDown(); true }
             player.prepare()
             player.start()
-            check(latch.await(180,java.util.concurrent.TimeUnit.SECONDS)) { "Voice playback timed out." }
+            val deadline=SystemClock.elapsedRealtime()+180_000L
+            while(player.isPlaying && SystemClock.elapsedRealtime()<deadline) Thread.sleep(100L)
+            check(SystemClock.elapsedRealtime()<deadline) { "Voice playback timed out." }
         } finally { runCatching{player.stop()};player.release();file.delete() }
-    }
     }
 
     /** Create and start a fresh 16 kHz voice-recognition recorder. */
