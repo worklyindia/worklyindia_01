@@ -23,7 +23,7 @@ import org.json.JSONObject
 
 /**
  * Explicitly user-started foreground microphone service.
- * All wake-word, STT, LLM and TTS processing stays on-device.
+ * Wake-word and speech recognition run on-device; AI replies use the user's selected cloud API.
  */
 class WakeWordAssistantService : Service() {
     private val running = AtomicBoolean(false)
@@ -73,9 +73,7 @@ class WakeWordAssistantService : Service() {
 
     private fun runAssistantLoop() {
         var wakeSession: WakeWordEngineFactory.Session? = null
-        var speech: OfflineSpeechRecognizer? = null
-        var tts: SherpaVitsTtsEngine? = null
-        var audio: AudioRecord? = null
+                var audio: AudioRecord? = null
         try {
             publishStatus(STATUS_LOADING, "Checking downloaded voice and AI models…")
             check(running.get()) { "Hey ChatWork listening was stopped." }
@@ -85,26 +83,26 @@ class WakeWordAssistantService : Service() {
             val jarvisConfig = JarvisSettingsStore.read(this)
             check(jarvisConfig.active) { "JARVIS is deactivated. Open JARVIS Active · Setup to activate it." }
             check(jarvisConfig.apiKey.isNotBlank()) { "Save a Groq or Google AI Studio (Gemini) API key in JARVIS Setup." }
-            val sttLanguage = jarvisConfig.sttLanguage
-            val ttsLanguage = jarvisConfig.ttsLanguage
+            val sttLanguages = jarvisConfig.sttLanguages
+            val ttsLanguages = jarvisConfig.ttsLanguages
+            val sttLanguage = sttLanguages.first()
+            val ttsLanguage = ttsLanguages.first()
             val speechManager = SpeechPackDownloadManager(this)
-            val sttPack = SpeechModelCatalog.indicConformer(sttLanguage)
-            val ttsPack = SpeechModelCatalog.itantraVits(ttsLanguage)
-            check(OfflineSpeechEngineFactory.isReady(this, sttPack)) { "Download AI4Bharat IndicConformer ${sttLanguage.uppercase(Locale.ROOT)} first." }
-            check(speechManager.snapshot(ttsPack).state == SpeechPackDownloadManager.State.COMPLETE) { "Download iTantra VITS ${ttsLanguage.uppercase(Locale.ROOT)} first." }
+            sttLanguages.forEach { code ->
+                val pack = SpeechModelCatalog.indicConformer(code)
+                check(OfflineSpeechEngineFactory.isReady(this, pack)) { "Download AI4Bharat IndicConformer ${code.uppercase(Locale.ROOT)} first." }
+            }
+            ttsLanguages.forEach { code ->
+                val pack = SpeechModelCatalog.itantraVits(code)
+                check(speechManager.snapshot(pack).state == SpeechPackDownloadManager.State.COMPLETE) { "Download iTantra VITS ${code.uppercase(Locale.ROOT)} first." }
+            }
             val wakePack = SpeechModelCatalog.chatWorkWakeWord()
             check(WakeWordEngineFactory.isReady(this)) { "Download the Hey ChatWork wake-word model first." }
             publishStatus(STATUS_LOADING, "Testing ${jarvisConfig.provider.uppercase(Locale.ROOT)} AI connection…")
             JarvisSettingsStore.generateReply(this, "Reply with exactly READY.", jarvisConfig)
             check(running.get()) { "Hey ChatWork listening was stopped." }
 
-            publishStatus(STATUS_LOADING, "Loading AI4Bharat IndicConformer ${sttLanguage.uppercase(Locale.ROOT)}…")
-            val activeSpeechRecognizer = OfflineSpeechEngineFactory.openIndicConformer(this, sttLanguage)
-            speech = activeSpeechRecognizer
-            check(running.get()) { "Hey ChatWork listening was stopped." }
-            publishStatus(STATUS_LOADING, "Loading iTantra VITS ${ttsLanguage.uppercase(Locale.ROOT)} voice output…")
-            val activeTtsEngine = SherpaVitsTtsEngine.create(this, ttsPack)
-            tts = activeTtsEngine
+            publishStatus(STATUS_LOADING, "Preparing selected speech languages…")
             check(running.get()) { "Hey ChatWork listening was stopped." }
             publishStatus(STATUS_LOADING, "Loading Hey ChatWork wake-word model…")
             val activeWakeSession = WakeWordEngineFactory.open(this)
@@ -113,7 +111,7 @@ class WakeWordAssistantService : Service() {
 
             var activeAudio = createWakeWordRecorder()
             audio = activeAudio
-            publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · STT ${sttLanguage.uppercase(Locale.ROOT)} · TTS ${ttsLanguage.uppercase(Locale.ROOT)}")
+            publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · STT ${sttLanguages.joinToString()} · TTS ${ttsLanguages.joinToString()}")
 
             val history = StringBuilder()
             history.append("System: You are JARVIS, ChatWork’s calm, concise voice assistant. Understand Hindi, Hinglish, Gujarati and English. Reply naturally in the user’s language, keep spoken answers clear and brief, and ask before any consequential action. You cannot control phone settings, read private device data, or perform actions outside this conversation.\n")
@@ -146,7 +144,7 @@ class WakeWordAssistantService : Service() {
                         "Microphone could not reconnect after 5 attempts: ${lastFailure?.message ?: "recording was interrupted"}"
                     )
                     audio = activeAudio
-                    publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${sttLanguage.uppercase(Locale.ROOT)} · On-device")
+                    publishStatus(STATUS_LISTENING, "Listening for ${WakeWordEngineFactory.WAKE_PHRASE} · ${sttLanguages.joinToString()} · On-device")
                     continue
                 }
                 if (count == 0) continue
@@ -161,7 +159,8 @@ class WakeWordAssistantService : Service() {
                         val commandSamples = captureCommand(activeAudio, buffer)
                         if (commandSamples.isNotEmpty()) {
                             updateNotification("Converting your speech offline…")
-                            val userText = activeSpeechRecognizer.transcribe(commandSamples)
+                            val (userText, recognizedLanguage) = transcribeSelectedLanguages(commandSamples, sttLanguages)
+                            if (userText.isNotBlank()) updateNotification("Recognized speech · ${recognizedLanguage.uppercase(Locale.ROOT)}")
                             if (userText.isNotBlank()) {
                                 history.append("User: ").append(userText).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
@@ -169,8 +168,8 @@ class WakeWordAssistantService : Service() {
                                 val answer = JarvisSettingsStore.generateReply(this, history.toString(), jarvisConfig)
                                 history.append("Assistant: ").append(answer).append("\n")
                                 if (history.length > MAX_HISTORY_CHARS) history.delete(0, history.length - MAX_HISTORY_CHARS)
-                                updateNotification("Speaking with iTantra VITS · ${ttsLanguage.uppercase(Locale.ROOT)}")
-                                activeTtsEngine.speak(answer)
+                                updateNotification("Speaking with selected iTantra VITS voice…")
+                                speakWithSelectedLanguage(answer, ttsLanguages)
                                 discardPlaybackAudio(activeAudio, buffer)
                             } else {
                                 updateNotification("No speech recognized · Listening for Hey ChatWork")
@@ -200,9 +199,7 @@ class WakeWordAssistantService : Service() {
             runCatching { if (audio?.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
             runCatching { audio?.release() }
             runCatching { wakeSession?.close() }
-            runCatching { speech?.close() }
-            runCatching { tts?.close() }
-            releaseCpuWakeLock()
+                        releaseCpuWakeLock()
             JarvisSettingsStore.setActive(this, false)
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
             if (getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_STATUS, null) != STATUS_ERROR) {
@@ -210,6 +207,54 @@ class WakeWordAssistantService : Service() {
             }
             isRunning = false
         }
+    }
+
+    /** Run each user-selected downloaded STT model and choose the transcript whose script matches its language. */
+    private fun transcribeSelectedLanguages(samples: FloatArray, languages: List<String>): Pair<String, String> {
+        val candidates = languages.mapNotNull { code ->
+            runCatching {
+                val recognizer = OfflineSpeechEngineFactory.openIndicConformer(this, code)
+                val text = try { recognizer.transcribe(samples) } finally { recognizer.close() }
+                if (text.isBlank()) null else Triple(code, text, scriptMatchScore(code, text))
+            }.getOrNull()
+        }
+        val best = candidates.maxByOrNull { it.third }
+        return if (best == null) "" to languages.first() else best.second to best.first
+    }
+
+    /** Prefer the transcript written in the selected language's expected script. */
+    private fun scriptMatchScore(language: String, text: String): Int {
+        val codePoints = text.codePoints().toArray()
+        if (codePoints.isEmpty()) return 0
+        fun count(range: IntRange) = codePoints.count { it in range }
+        val expected = when (language) {
+            "gu" -> count(0x0A80..0x0AFF)
+            "hi", "mr", "ne", "sa", "kok", "brx", "doi", "mai", "sat" -> count(0x0900..0x097F)
+            "bn", "as" -> count(0x0980..0x09FF)
+            "pa" -> count(0x0A00..0x0A7F)
+            "or" -> count(0x0B00..0x0B7F)
+            "ta" -> count(0x0B80..0x0BFF)
+            "te" -> count(0x0C00..0x0C7F)
+            "kn" -> count(0x0C80..0x0CFF)
+            "ml" -> count(0x0D00..0x0D7F)
+            "ur", "ks", "sd" -> count(0x0600..0x06FF)
+            "en" -> codePoints.count { it in 0x0041..0x007A || it in 0x0041..0x005A }
+            "mni" -> count(0xABC0..0xABFF)
+            else -> 0
+        }
+        return expected * 100 / codePoints.size
+    }
+
+    /** Select a downloaded voice matching the script of the AI response. */
+    private fun speakWithSelectedLanguage(text: String, languages: List<String>) {
+        val preferred = when {
+            text.any { it.code in 0x0A80..0x0AFF } -> "gu"
+            text.any { it.code in 0x0900..0x097F } -> "hi"
+            else -> "en"
+        }
+        val language = preferred.takeIf { it in languages } ?: languages.first()
+        val engine = SherpaVitsTtsEngine.create(this, SpeechModelCatalog.itantraVits(language))
+        try { engine.speak(text) } finally { engine.close() }
     }
 
     /** Create and start a fresh 16 kHz voice-recognition recorder. */
