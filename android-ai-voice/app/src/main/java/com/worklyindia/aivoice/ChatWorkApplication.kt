@@ -12,6 +12,7 @@ class ChatWorkApplication : Application(), Application.ActivityLifecycleCallback
     override fun onCreate() {
         super.onCreate()
         JarvisDiagnostics.installUncaughtHandler(this)
+        JarvisDiagnostics.recordPreviousProcessExit(this)
         JarvisDiagnostics.record(this, "APP_PROCESS_CREATED")
         registerActivityLifecycleCallbacks(this)
     }
