@@ -63,6 +63,9 @@ object JarvisCrashReportOutbox {
             JarvisDiagnostics.record(context, "SUPABASE_CRASH_REPORT_QUEUED",
                 "reason=" + reason + "; timestamp=" + timestamp + "; event=" + eventId)
             schedule(context)
+        }.onFailure {
+            JarvisDiagnostics.record(context, "SUPABASE_CRASH_REPORT_QUEUE_FAILED",
+                it.javaClass.simpleName + ": " + (it.message ?: "unknown"))
         }
     }
 
@@ -72,12 +75,26 @@ object JarvisCrashReportOutbox {
             ?.sortedBy { it.name }
             .orEmpty()
 
+    /** Re-enqueue any durable reports on every app process start, even if a prior enqueue failed. */
+    fun schedulePending(context: Context) {
+        val pendingCount = pendingFiles(context).size
+        if (pendingCount == 0) return
+        JarvisDiagnostics.record(context, "SUPABASE_CRASH_REPORT_PENDING_FOUND", "count=" + pendingCount)
+        schedule(context)
+    }
+
     internal fun schedule(context: Context) {
-        val request = OneTimeWorkRequestBuilder<JarvisCrashReportUploadWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        runCatching {
+            val request = OneTimeWorkRequestBuilder<JarvisCrashReportUploadWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(UNIQUE_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        }.onFailure {
+            JarvisDiagnostics.record(context, "SUPABASE_CRASH_REPORT_SCHEDULE_FAILED",
+                it.javaClass.simpleName + ": " + (it.message ?: "unknown") +
+                    "; pending=" + pendingFiles(context).size)
+        }
     }
 }
 
