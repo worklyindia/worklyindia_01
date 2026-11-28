@@ -861,24 +861,51 @@ class OfflineAiChatActivity : Activity() {
         }, 500L)
     }
     private fun startWakeWordService() {
-        try {
-            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
-                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true)
-                .putString(WakeWordAssistantService.KEY_STATUS, WakeWordAssistantService.STATUS_STARTING)
-                .putString(WakeWordAssistantService.KEY_STATUS_MESSAGE, "Starting Android microphone service…")
-                .remove(WakeWordAssistantService.KEY_ERROR).apply()
-            val intent = Intent(this, WakeWordAssistantService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
-            qwenModelPicker.isEnabled = false
-            status.text = "Starting Hey ChatWork… Keep ChatWork open while Android starts the microphone service. Check the notification for the listening status."
+        if (WakeWordAssistantService.isRunning) {
+            status.text = "Hey ChatWork is already running."
             status.visibility = View.VISIBLE
-            waitForWakeServiceStop()
-        } catch (error: Exception) {
-            getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
-                .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
-            qwenModelPicker.isEnabled = true
-            status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
-            status.visibility = View.VISIBLE
+            return
+        }
+        // The chat Activity and the foreground assistant must not hold separate
+        // native Qwen contexts at the same time. Queue this after any in-flight
+        // chat model load, release that context, then start the microphone service.
+        sendButton.isEnabled = false
+        sendButton.alpha = 0.55f
+        qwenModelPicker.isEnabled = false
+        status.text = "Preparing Hey ChatWork… Releasing the chat model before loading the voice assistant."
+        status.visibility = View.VISIBLE
+        worker.execute {
+            try {
+                if (engine.isLoaded) engine.unload()
+                runOnUiThread {
+                    try {
+                        getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                            .putBoolean(WakeWordAssistantService.KEY_ACTIVE, true)
+                            .putString(WakeWordAssistantService.KEY_STATUS, WakeWordAssistantService.STATUS_STARTING)
+                            .putString(WakeWordAssistantService.KEY_STATUS_MESSAGE, "Starting Android microphone service…")
+                            .remove(WakeWordAssistantService.KEY_ERROR).apply()
+                        val intent = Intent(this, WakeWordAssistantService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+                        status.text = "Starting Hey ChatWork… Keep ChatWork open while Android starts the microphone service. Check the notification for the listening status."
+                        status.visibility = View.VISIBLE
+                        waitForWakeServiceStop()
+                    } catch (error: Exception) {
+                        getSharedPreferences(WakeWordAssistantService.PREFS, MODE_PRIVATE).edit()
+                            .putBoolean(WakeWordAssistantService.KEY_ACTIVE, false).apply()
+                        qwenModelPicker.isEnabled = true
+                        status.text = "Could not start Hey ChatWork: ${error.message ?: "permission or Android restriction"}"
+                        status.visibility = View.VISIBLE
+                        if (!modelLoadInProgress) loadModel()
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    qwenModelPicker.isEnabled = true
+                    status.text = "Could not release the chat model: ${error.message ?: "unknown model error"}"
+                    status.visibility = View.VISIBLE
+                    if (!modelLoadInProgress) loadModel()
+                }
+            }
         }
     }
     private fun <T> readableSpinnerAdapter(items: List<T>): ArrayAdapter<T> =
