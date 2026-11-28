@@ -36,6 +36,7 @@
             android:foregroundServiceType="dataSync" />
         <service
             android:name=".WakeWordAssistantService"
+            android:process=":jarvis_wake"
             android:exported="false"
             android:stopWithTask="false"
             android:foregroundServiceType="microphone" />
