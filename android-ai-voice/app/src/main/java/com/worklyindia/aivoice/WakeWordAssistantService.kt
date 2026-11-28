@@ -37,11 +37,13 @@ class WakeWordAssistantService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) {
+        // Android may recreate a sticky foreground service with a null Intent.
+        // Resume only when the user has not explicitly deactivated JARVIS.
+        if (intent == null && !JarvisSettingsStore.read(this).active) {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent.action == ACTION_STOP) {
+        if (intent?.action == ACTION_STOP) {
             stopAssistant()
             return START_NOT_STICKY
         }
@@ -68,7 +70,7 @@ class WakeWordAssistantService : Service() {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, true).apply()
         acquireCpuWakeLock()
         worker.execute { runAssistantLoop() }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     private fun runAssistantLoop() {
@@ -190,23 +192,41 @@ class WakeWordAssistantService : Service() {
             // Keep the foreground notification visible on startup/runtime failure.
             // The notification reports the real error and offers an explicit Stop action;
             // never leave a failed microphone session looking like active listening.
+            // Keep the user's active choice. A transient API/model/audio failure must
+            // not silently deactivate JARVIS or remove its foreground notification.
             running.set(false)
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
-            JarvisSettingsStore.setActive(this, false)
-            isRunning = false
         } finally {
-            running.set(false)
             recorder = null
             runCatching { if (audio?.recordingState == AudioRecord.RECORDSTATE_RECORDING) audio.stop() }
             runCatching { audio?.release() }
             runCatching { wakeSession?.close() }
-                        releaseCpuWakeLock()
-            JarvisSettingsStore.setActive(this, false)
-            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
-            if (getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_STATUS, null) != STATUS_ERROR) {
-                publishStatus(STATUS_STOPPED, "Hey ChatWork is stopped.")
+            val shouldRetry = JarvisSettingsStore.read(this).active && !isDestroyed
+            if (shouldRetry) {
+                isRunning = true
+                running.set(true)
+                publishStatus(STATUS_STARTING, "JARVIS reconnecting · microphone and AI service retrying…")
+                // Queue a fresh session on the same worker after native resources close.
+                runCatching {
+                    worker.execute {
+                        try { Thread.sleep(2500L) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
+                        if (running.get() && JarvisSettingsStore.read(this).active) runAssistantLoop()
+                    }
+                }.onFailure {
+                    running.set(false)
+                    isRunning = false
+                    releaseCpuWakeLock()
+                    publishStatus(STATUS_ERROR, "JARVIS could not restart.", it.message)
+                }
+            } else {
+                running.set(false)
+                releaseCpuWakeLock()
+                JarvisSettingsStore.setActive(this, false)
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ACTIVE, false).apply()
+                if (getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_STATUS, null) != STATUS_ERROR) {
+                    publishStatus(STATUS_STOPPED, "Hey ChatWork is stopped.")
+                }
+                isRunning = false
             }
-            isRunning = false
         }
     }
 
